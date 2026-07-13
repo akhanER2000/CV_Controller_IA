@@ -1,0 +1,29 @@
+# Render Blueprint — https://render.com/docs/blueprint-spec
+# Despliega la app Next.js como servicio web en Render.
+# (Alternativa/paralelo a Vercel. Ver DEPLOY.md para la topología recomendada.)
+#
+# Las variables marcadas `sync: false` se rellenan en el panel de Render, no aquí
+# (nunca commitees secretos). La SUPABASE_SERVICE_ROLE_KEY es secreta.
+
+services:
+  - type: web
+    name: corpus-web
+    runtime: node
+    plan: starter
+    region: oregon
+    branch: main
+    buildCommand: npm ci && npm run build
+    startCommand: npm run start
+    healthCheckPath: /auth
+    autoDeploy: true
+    envVars:
+      - key: NODE_VERSION
+        value: "20"
+      - key: NEXT_PUBLIC_SITE_URL
+        sync: false
+      - key: NEXT_PUBLIC_SUPABASE_URL
+        sync: false
+      - key: NEXT_PUBLIC_SUPABASE_ANON_KEY
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
