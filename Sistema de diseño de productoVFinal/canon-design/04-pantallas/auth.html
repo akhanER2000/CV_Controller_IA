@@ -1,0 +1,1041 @@
+<!DOCTYPE html>
+<html lang="es" data-theme="obsidian">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Corpus · Entrar</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500;600&family=Playfair+Display:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+--deep:#050508;--bg:#0B0B0D;--surface:#141418;--surface-2:#1C1C22;--sunken:#0E0E11;
+--text:#F5F5F2;--muted:#B4B4AD;--subtle:#82827B;
+--border:rgba(255,255,255,.08);--border-strong:rgba(255,255,255,.16);--border-gold:rgba(231,194,79,.55);
+--g100:#F6E2A2;--g300:#E7C24F;--g500:#D4AF37;--g700:#8A6414;--g900:#5C450F;--ink-on-gold:#1A1206;--danger:#C4453A;
+--sans:"Geist",system-ui,sans-serif;--mono:"Geist Mono",monospace;--disp:"Playfair Display",Georgia,serif;--ease:cubic-bezier(.16,1,.3,1);}
+*{box-sizing:border-box}html{background:var(--deep)}
+body{margin:0;background:var(--deep);color:var(--text);font-family:var(--sans);font-size:15px;line-height:1.5;-webkit-font-smoothing:antialiased;min-height:100vh}
+a{color:var(--g300);text-decoration:none}a:hover{color:var(--g100)}
+:focus-visible{outline:none;box-shadow:0 0 0 2px var(--deep),0 0 0 4px var(--g300);border-radius:6px}
+
+.shell{position:relative;z-index:1;min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:48px 24px}
+.brand{font-family:var(--disp);font-weight:600;font-size:26px;color:var(--g500);letter-spacing:-.01em}
+.eyebrow{font:500 12px/1 var(--mono);text-transform:uppercase;letter-spacing:.3em;color:var(--subtle)}
+.h-atmo{font-family:var(--disp);font-weight:500;letter-spacing:-.02em;line-height:1.04;margin:0}
+.lede{color:var(--muted);max-width:52ch}
+.card{position:relative;z-index:1;width:100%;max-width:400px;background:rgba(20,20,24,.72);-webkit-backdrop-filter:blur(16px) saturate(1.3);backdrop-filter:blur(16px) saturate(1.3);border:1px solid var(--border);border-radius:12px;padding:32px}
+.field{display:flex;flex-direction:column;gap:6px;margin-bottom:14px}
+.field label{font-size:12px;color:var(--muted);font-weight:500}
+.input{height:44px;background:var(--sunken);border:1px solid var(--border-strong);border-radius:6px;color:var(--text);font:inherit;font-size:14px;padding:0 13px}
+.input::placeholder{color:var(--subtle)}
+.input:focus{outline:none;border-color:var(--g300);box-shadow:0 0 0 3px rgba(231,194,79,.16)}
+.oauth{display:flex;flex-direction:column;gap:9px}
+.obtn{height:44px;border:1px solid var(--border-strong);background:var(--surface);color:var(--text);border-radius:6px;font:600 13px var(--sans);cursor:pointer;display:flex;align-items:center;justify-content:center;gap:9px}
+.obtn:hover{border-color:var(--border-gold)}
+.divider-or{display:flex;align-items:center;gap:12px;color:var(--subtle);font:500 11px var(--mono);text-transform:uppercase;letter-spacing:.1em;margin:18px 0}
+.divider-or::before,.divider-or::after{content:"";flex:1;height:1px;background:var(--border)}
+.trust{font-size:12px;color:var(--subtle);text-align:center;margin-top:20px}
+.trust b{color:var(--muted);font-weight:500}
+/* botón forge (anatomía §3.4, en oro) */
+.forge{position:relative;display:inline-flex;border-radius:8px;width:100%}
+.forge::before{content:"";position:absolute;inset:-6px;z-index:0;background:var(--g500);border-radius:12px;opacity:.12;filter:blur(14px)}
+.forge .btn{position:relative;z-index:1;overflow:hidden;width:100%;background:var(--deep);color:var(--g300);border:1px solid var(--g700);border-radius:6px;height:44px;display:inline-flex;align-items:center;justify-content:center;gap:8px;font:600 14px var(--sans);cursor:pointer}
+.forge .btn::before{content:"";position:absolute;top:50%;left:0;right:0;height:1px;opacity:.5;background:linear-gradient(90deg,transparent 10%,var(--g500) 50%,transparent 90%)}
+.forge:hover .btn{color:var(--text);border-color:var(--g500);box-shadow:0 12px 40px rgba(212,175,55,.15)}
+@media (prefers-reduced-motion:no-preference){
+  .forge::before,.forge .btn,.forge .btn::before{transition:.5s var(--ease)}
+  .forge:hover::before{opacity:.3;filter:blur(20px)}
+  .forge:hover .btn{transform:translateY(-2px)}
+  .forge:hover .btn::before{opacity:1;height:2px;top:35%;box-shadow:0 0 20px var(--g500),0 0 40px rgba(212,175,55,.3)}
+}
+@media (max-width:1024px){.shell{padding:40px 20px}}
+@media (max-width:390px){.shell{padding:28px 16px}.card{padding:24px}}
+
+.eyebrow{opacity:1}
+.h-atmo .ln{display:block;opacity:1}
+@media (prefers-reduced-motion:no-preference){
+@keyframes sectionEyebrow{0%{opacity:0;letter-spacing:.6em}100%{opacity:1;letter-spacing:.3em}}
+@keyframes wordReveal{0%{opacity:0;filter:blur(6px);transform:translateY(24px)}100%{opacity:1;filter:blur(0);transform:translateY(0)}}
+.eyebrow{animation:sectionEyebrow .9s var(--ease) both}
+.h-atmo .ln{opacity:0;animation:wordReveal .9s var(--ease) both}
+.h-atmo .ln:nth-child(1){animation-delay:.08s}.h-atmo .ln:nth-child(2){animation-delay:.24s}
+}
+</style>
+<style>/* ===== canon-motion.css ===== */
+/* ============================================================================
+   CANON · canon-motion.css
+   La librería de movimiento del producto. NO es una descripción: es el código.
+   Depende de los tokens de 02-sistema/tokens.css (--dur-*, --ease-*, --gold-*).
+
+   Reglas:
+   · Solo se anima transform, opacity y filter. Nunca width/height/top/box-shadow.
+   · Cada animación tiene su equivalencia sin movimiento (§ reduce al final).
+   · La escala de ceremonia (0..3) determina la duración. Ver canon-motion.md.
+   ============================================================================ */
+
+/* ── Fallback de tokens: si se abre este archivo aislado, sigue funcionando ── */
+:root{
+  --dur-instant:80ms; --dur-fast:140ms; --dur-base:220ms;
+  --dur-slow:360ms;   --dur-deliberate:640ms;
+  --ease-standard:cubic-bezier(.2,0,0,1);
+  --ease-decelerate:cubic-bezier(0,0,0,1);
+  --ease-accelerate:cubic-bezier(.3,0,1,1);
+  --ease-spring:cubic-bezier(.34,1.24,.64,1);
+
+  /* Ritmo del escalonado (ceremonia 3) */
+  --stagger-step:40ms;    /* retraso entre hermanos */
+  --stagger-max:24;       /* tope de items animados; el resto entra de golpe */
+}
+
+/* ============================================================================
+   CEREMONIA 0 · INSTANTÁNEO (0–80 ms)
+   Acciones que el usuario repite decenas de veces al día.
+   Solo color y opacidad. Cero desplazamiento. Cero espera.
+   ============================================================================ */
+
+.c-interactive{
+  transition:
+    color         var(--dur-instant) var(--ease-standard),
+    background-color var(--dur-instant) var(--ease-standard),
+    border-color  var(--dur-instant) var(--ease-standard),
+    opacity       var(--dur-instant) var(--ease-standard);
+}
+
+/* ── El hairline dorado como SISTEMA DE ESTADOS (no un adorno) ──
+   Sustituye a los fondos de color. Un borde, no un relleno. */
+.c-hairline{
+  position:relative;
+  border:1px solid var(--border);
+  transition:border-color var(--dur-fast) var(--ease-standard);
+}
+.c-hairline:hover        { border-color:var(--border-strong,rgba(255,255,255,.16)); }
+.c-hairline[data-state="active"],
+.c-hairline[data-state="selected"]{ border-color:var(--border-gold,rgba(231,194,79,.55)); }
+
+/* El glow sutil SOLO en el elemento activo. Nunca en más de uno por vista. */
+.c-hairline[data-state="active"]::after{
+  content:""; position:absolute; inset:-1px; border-radius:inherit; pointer-events:none;
+  box-shadow:0 0 0 1px var(--border-gold), 0 0 12px -2px rgba(212,175,55,.28);
+  opacity:0; animation:c-glow-in var(--dur-base) var(--ease-decelerate) forwards;
+}
+@keyframes c-glow-in{ to{ opacity:1 } }
+
+/* ── Override presente: la arista dorada IZQUIERDA. Se ve sin leer. ── */
+.c-override{ box-shadow:inset 2px 0 0 0 var(--gold-500,#D4AF37); }
+
+/* ── Foco visible SIEMPRE. Nunca outline:none sin reemplazo. ── */
+.c-focusable:focus-visible{
+  outline:2px solid var(--focus-ring,#E7C24F);
+  outline-offset:2px;
+  border-radius:4px;
+}
+
+/* ============================================================================
+   CEREMONIA 1 · CONFIRMACIÓN (120–200 ms)
+   Aceptar un item, añadirlo a la variante, revertir un override.
+   ============================================================================ */
+
+/* Un item aceptado en staging: se asienta. Un solo pulso, sin rebote payaso. */
+@keyframes c-confirm{
+  0%  { transform:scale(1);     background-color:transparent; }
+  35% { transform:scale(1.012); background-color:rgba(212,175,55,.10); }
+  100%{ transform:scale(1);     background-color:transparent; }
+}
+.c-confirm{ animation:c-confirm var(--dur-base) var(--ease-spring); }
+
+/* Un item que sale de la lista (descartado / quitado de la variante) */
+@keyframes c-dismiss{
+  to{ opacity:0; transform:translateX(8px) scale(.98); }
+}
+.c-dismiss{ animation:c-dismiss var(--dur-fast) var(--ease-accelerate) forwards; }
+
+/* ============================================================================
+   CEREMONIA 1 · dividerDraw — LA HAIRLINE QUE SE DIBUJA
+   Bajo cada encabezado de sección. Enseña la estructura la PRIMERA vez.
+   Nunca dos veces en la misma sesión (lo garantiza canon-motion.js).
+   ============================================================================ */
+
+.c-divider{
+  position:relative; height:1px; background:var(--border);
+  overflow:hidden;
+}
+.c-divider::after{
+  content:""; position:absolute; inset:0;
+  background:linear-gradient(90deg,
+    var(--gold-500,#D4AF37) 0%,
+    var(--gold-700,#8A6414) 45%,
+    transparent 100%);
+  transform:scaleX(0); transform-origin:left center;
+}
+.c-divider.is-drawn::after{
+  animation:c-divider-draw var(--dur-deliberate) var(--ease-decelerate) forwards;
+}
+@keyframes c-divider-draw{ to{ transform:scaleX(1) } }
+
+/* ============================================================================
+   CEREMONIA 3 · EL MOMENTO ESTELAR
+   El escalonado de items al terminar la ingesta. Ver tu carrera aparecer,
+   item por item, ES el producto entero en tres segundos.
+   Se dispara con .c-stagger en el contenedor (canon-motion.js pone los delays).
+   ============================================================================ */
+
+.c-stagger > .c-stagger-item{
+  opacity:0;
+  transform:translateY(12px);
+}
+.c-stagger.is-running > .c-stagger-item{
+  animation:c-rise var(--dur-slow) var(--ease-decelerate) forwards;
+  animation-delay:var(--d,0ms);
+}
+@keyframes c-rise{
+  to{ opacity:1; transform:translateY(0); }
+}
+/* Los items por encima de --stagger-max entran de golpe: con 100 items,
+   escalonarlos todos dura un minuto y deja de ser magia para ser tortura. */
+.c-stagger.is-running > .c-stagger-item.c-no-stagger{
+  animation:c-rise var(--dur-fast) var(--ease-decelerate) forwards;
+  animation-delay:0ms;
+}
+
+/* ── Contador que sube mientras la IA extrae. Honesto: cuenta lo real. ── */
+.c-tick{ font-family:var(--font-mono); font-variant-numeric:tabular-nums; }
+
+/* ============================================================================
+   CEREMONIA 3 · EL ÚNICO SHIMMER DEL PRODUCTO
+   Cuando la IA termina de extraer. Una vez. En ningún otro sitio.
+   Un shimmer que aparece dos veces deja de ser un momento y pasa a ser un tic.
+   ============================================================================ */
+
+@keyframes c-shimmer{
+  0%  { transform:translateX(-120%); }
+  100%{ transform:translateX(120%); }
+}
+.c-shimmer{ position:relative; overflow:hidden; }
+.c-shimmer.is-firing::before{
+  content:""; position:absolute; inset:0; pointer-events:none;
+  background:linear-gradient(105deg,
+    transparent 30%,
+    rgba(246,226,162,.00) 42%,
+    rgba(246,226,162,.22) 50%,
+    rgba(246,226,162,.00) 58%,
+    transparent 70%);
+  animation:c-shimmer 1100ms var(--ease-standard) 1;
+}
+
+/* ============================================================================
+   CEREMONIA 2 · ★ EL BLUR-IN DEL TOGGLE "CÓMO LO LEE EL ATS"
+   El efecto más caro del producto, y el que lo define.
+   El PDF se desenfoca, pierde el color, y del desenfoque resuelve el texto
+   crudo del parser. No es decoración: es la metáfora. Así te ve la máquina.
+   ============================================================================ */
+
+.c-xray{ position:relative; isolation:isolate; }
+
+.c-xray__doc,
+.c-xray__raw{
+  transition:
+    opacity   var(--dur-slow) var(--ease-standard),
+    filter    var(--dur-slow) var(--ease-standard),
+    transform var(--dur-slow) var(--ease-standard);
+}
+
+/* Estado normal: el documento, nítido y en color. El texto crudo, oculto. */
+.c-xray__doc{ opacity:1; filter:blur(0) saturate(1); transform:scale(1); }
+.c-xray__raw{
+  opacity:0; filter:blur(10px) saturate(0); transform:scale(1.01);
+  position:absolute; inset:0; pointer-events:none;
+  font-family:var(--font-mono); color:var(--text-muted);
+  white-space:pre-wrap; overflow:auto;
+}
+
+/* Estado rayos-X: el documento se desviste. */
+.c-xray[data-mode="raw"] .c-xray__doc{
+  opacity:0; filter:blur(12px) saturate(0); transform:scale(.995);
+}
+.c-xray[data-mode="raw"] .c-xray__raw{
+  opacity:1; filter:blur(0) saturate(1); transform:scale(1);
+  pointer-events:auto;
+}
+
+/* ============================================================================
+   CEREMONIA 2 · Transiciones de panel / vista
+   ============================================================================ */
+
+@keyframes c-panel-in{
+  from{ opacity:0; transform:translateY(8px); }
+  to  { opacity:1; transform:translateY(0);   }
+}
+.c-panel-in{ animation:c-panel-in var(--dur-base) var(--ease-decelerate); }
+
+/* ============================================================================
+   ESTADOS DE IA — la espera es real (5–40 s). Diséñala, no la castigues.
+   ============================================================================ */
+
+/* Pensando: respiración lenta. Nunca un spinner girando: gira = "colgado". */
+@keyframes c-breathe{
+  0%,100%{ opacity:.45 } 50%{ opacity:1 }
+}
+.c-thinking{ animation:c-breathe 1600ms var(--ease-standard) infinite; }
+
+/* Skeleton mientras se extrae: barrido de oro apagadísimo, no gris de Bootstrap */
+@keyframes c-skeleton{
+  to{ background-position:200% 0 }
+}
+.c-skeleton{
+  background:linear-gradient(90deg,
+    var(--surface,#141418) 0%,
+    rgba(212,175,55,.06) 50%,
+    var(--surface,#141418) 100%);
+  background-size:200% 100%;
+  animation:c-skeleton 1400ms linear infinite;
+  border-radius:4px; color:transparent!important;
+}
+
+/* Propuesta de IA pendiente de revisión: pulso MUY leve en la arista.
+   No pide atención a gritos: la pide con educación. */
+@keyframes c-pending{
+  0%,100%{ border-color:var(--border) }
+  50%    { border-color:var(--border-gold,rgba(231,194,79,.55)) }
+}
+.c-pending{ animation:c-pending 2400ms var(--ease-standard) infinite; }
+
+/* NO VERIFICADO — el estado más importante del producto.
+   Nunca solo color: lleva SIEMPRE texto e icono. */
+.c-unverified{
+  border-left:2px dashed var(--danger,#C4453A);
+  padding-left:10px;
+}
+
+/* ============================================================================
+   FONDO VIVO — SOLO en la pantalla de espera de la ingesta.
+   Único sitio del producto donde algo se mueve sin que el usuario lo pida:
+   no hay contenido con el que interferir y la espera es real.
+   Un tono. Oro sobre obsidiana. Nada de la nebulosa multicolor de la referencia.
+   ============================================================================ */
+
+@keyframes c-drift{
+  0%  { transform:translate3d(-6%,-4%,0) scale(1.05) rotate(0deg);   }
+  50% { transform:translate3d( 4%, 3%,0) scale(1.15) rotate(6deg);   }
+  100%{ transform:translate3d(-6%,-4%,0) scale(1.05) rotate(0deg);   }
+}
+.c-aurora{
+  position:absolute; inset:0; overflow:hidden; pointer-events:none; z-index:0;
+}
+.c-aurora::before,
+.c-aurora::after{
+  content:""; position:absolute; width:70%; aspect-ratio:1; border-radius:50%;
+  filter:blur(90px);
+}
+.c-aurora::before{
+  top:-15%; left:-10%;
+  background:radial-gradient(circle, rgba(212,175,55,.16) 0%, transparent 65%);
+  animation:c-drift 26s ease-in-out infinite;
+}
+.c-aurora::after{
+  bottom:-20%; right:-10%;
+  background:radial-gradient(circle, rgba(231,194,79,.09) 0%, transparent 65%);
+  animation:c-drift 34s ease-in-out infinite reverse;
+}
+
+/* ============================================================================
+   SCROLL-REVEAL — PROHIBIDO EN LA APP.
+   Una herramienta no revela su contenido al hacer scroll. Si tengo 200 items
+   y cada uno hace fade-in al entrar en viewport, NO PUEDO TRABAJAR.
+   Permitido solo en documentos largos de lectura (ajustes, "cómo funciona").
+   ============================================================================ */
+
+.c-doc .c-reveal{ opacity:0; transform:translateY(10px); }
+.c-doc .c-reveal.is-in{
+  animation:c-rise var(--dur-base) var(--ease-decelerate) forwards;
+}
+
+/* ============================================================================
+   PREFERS-REDUCED-MOTION — sin excepciones.
+   Cada animación pierde el MOVIMIENTO, nunca la INFORMACIÓN.
+   ============================================================================ */
+
+@media (prefers-reduced-motion: reduce){
+  *,*::before,*::after{
+    animation-duration:.001ms!important;
+    animation-iteration-count:1!important;
+    transition-duration:.001ms!important;
+    scroll-behavior:auto!important;
+  }
+  /* El contenido escalonado: aparece. Sin subir, sin retraso. */
+  .c-stagger > .c-stagger-item{ opacity:1!important; transform:none!important; }
+  /* La hairline: está dibujada. No se dibuja. */
+  .c-divider::after{ transform:scaleX(1)!important; }
+  /* El blur-in: corte limpio. Comunica lo mismo sin desenfoque. */
+  .c-xray__doc,.c-xray__raw{ filter:none!important; transform:none!important; }
+  /* El shimmer: no existe. El cambio de estado ya se ve por otra vía. */
+  .c-shimmer.is-firing::before{ display:none!important; }
+  /* Pensando: opacidad fija, legible. */
+  .c-thinking{ opacity:.75!important; }
+  /* Skeleton: bloque quieto. */
+  .c-skeleton{ animation:none!important; background:var(--surface,#141418)!important; }
+  /* Pendiente: la arista, dorada y fija. */
+  .c-pending{ border-color:var(--border-gold,rgba(231,194,79,.55))!important; }
+  /* Aurora: quieta. */
+  .c-aurora::before,.c-aurora::after{ animation:none!important; }
+}
+
+</style>
+<style>/* ===== canon-aurora.css ===== */
+/* ============================================================================
+   CANON · canon-aurora.css   —  v3, CALIBRADO EN NAVEGADOR REAL
+   El sistema de VENTANAS, MUROS Y VELOS. Esto es lo que hace que el humo
+   se VEA donde debe y NO ESTORBE donde no debe.
+
+   ── POR QUÉ NO SE VEÍA (v2) ──────────────────────────────────────────────
+   No era el shader. Lo ejecuté en GPU y leí los píxeles: luminancia máxima
+   73/255, 53% de píxeles visibles. El shader pintaba humo perfectamente.
+   EL VELO SE LO COMÍA:
+       .c-scrim--radial  →  rgba(5,5,8, .86)   ← 86% de negro encima
+       73 * (1 - 0.86)   =   10/255            ← invisible
+   Más los degradados de borde de 120px, que tapaban media sección.
+   Verificado con captura comparativa: velo .86 = negro · velo .25 = humo.
+
+   ── EL MECANISMO (forense de la referencia) ──────────────────────────────
+   No hay un "blackout" encima del humo. Es al revés:
+     1. El humo vive en una capa FIJA al fondo (z-index: 0).
+     2. El contenedor de página es OPACO (#050508). Eso lo TAPA.
+     3. Algunas secciones se declaran TRANSPARENTES → son VENTANAS.
+   Verificado sección por sección en su página:
+     🔓 Hero · 🧱 Audience · 🧱 Transmutation · 🔓 Features · 🔓 Speed ·
+     🧱 Proof · 🔓 Pricing · 🧱 Philosophy · 🔓 Compare · 🔓 Calculator
+   Al bajar, el humo APARECE Y DESAPARECE. El fondo respira.
+   Y donde hay trabajo que leer, HAY MURO.
+   ============================================================================ */
+
+/* ── 0 · ★ EL DIAL MAESTRO ────────────────────────────────────────────────
+   La referencia aplica opacity:0.15 a TODA la capa del canvas (verificado:
+   three.js r183, contenedor fixed, opacity 0.15). Es el mando de intensidad.
+   Un solo número gobierna cuánto humo hay en todo el producto.               */
+:root{
+  --aurora-strength: 0.55;   /* 0 = apagado · 0.35 discreto · 0.55 ★ · 0.8 fuerte */
+}
+
+/* ── 1 · LA CAPA DEL HUMO ─────────────────────────────────────────────────── */
+.c-aurora-gl{
+  position:fixed; inset:0;
+  z-index:0;
+  pointer-events:none;              /* nunca intercepta un clic */
+  overflow:hidden;
+  opacity:var(--aurora-strength);   /* ← el dial */
+}
+
+/* Sin WebGL2 o con reduce-motion → degradado estático, mismos metales, cero GPU */
+.c-aurora-gl.is-static{
+  background:
+    radial-gradient(58% 48% at 18% 12%, rgba(212,175,55,.16), transparent 70%),
+    radial-gradient(45% 40% at 78% 30%, rgba(184,115,51,.11), transparent 70%),
+    radial-gradient(50% 45% at 60% 88%, rgba(173,182,194,.08), transparent 70%),
+    var(--bg,#0B0B0D);
+}
+
+/* ── 2 · EL MURO — donde hay trabajo que leer ─────────────────────────────── */
+/* El contenido denso va SIEMPRE sobre muro. El humo no compite con el trabajo. */
+.c-wall{
+  position:relative; z-index:1;
+  background:var(--obsidian-deep,#050508);
+}
+
+/* ── 3 · LA VENTANA — donde el humo asoma ─────────────────────────────────── */
+.c-window{
+  position:relative; z-index:1;
+  background:transparent;           /* ← el humo de la capa fija se ve aquí */
+}
+
+/* Difuminado en los bordes: el humo no "corta" en seco contra el muro.
+   ⚠️ 64px, NO 120px. Con 120 y una sección corta, los dos degradados se
+   solapaban y tapaban la sección entera. Ese fue el segundo asesino del humo. */
+.c-window::before,
+.c-window::after{
+  content:""; position:absolute; left:0; right:0; height:64px;
+  pointer-events:none; z-index:0;
+}
+.c-window::before{ top:0;    background:linear-gradient(to bottom, var(--obsidian-deep,#050508), transparent); }
+.c-window::after { bottom:0; background:linear-gradient(to top,    var(--obsidian-deep,#050508), transparent); }
+
+/* ── 4 · EL VELO (scrim) — cuando hay TEXTO encima del humo ───────────────── */
+/* ★ VALORES CALIBRADOS MIRANDO CAPTURAS REALES, no a ojo.
+   Regla: usa siempre el MÍNIMO que deje leer cómodamente.
+   El humo tiene una luminancia máxima de 73/255 — no aguanta un velo pesado. */
+.c-scrim{ position:relative; z-index:1; }
+.c-scrim::before{
+  content:""; position:absolute; inset:0; z-index:-1; pointer-events:none;
+  background:rgba(5,5,8,.28);            /* ★ era .55 → invisibilizaba el humo */
+}
+.c-scrim--light::before { background:rgba(5,5,8,.15); }   /* casi nada */
+.c-scrim--heavy::before { background:rgba(5,5,8,.45); }   /* texto denso */
+
+/* Velo radial: oscurece bajo el texto y deja los bordes limpios.
+   El mejor para un titular centrado sobre humo. */
+.c-scrim--radial::before{
+  background:radial-gradient(65% 75% at 50% 50%,
+    rgba(5,5,8,.55),                     /* ★ era .86 → negro total */
+    rgba(5,5,8,.18) 70%,
+    transparent);
+}
+
+/* ── 5 · PANEL — la superficie sobre la que se trabaja ────────────────────── */
+/* Vidrio ahumado. Deja intuir el humo detrás SIN comerse una sola letra.
+   Es lo que permite tener un dashboard legible Y un fondo vivo a la vez. */
+.c-panel{
+  position:relative; z-index:1;
+  background:rgba(20,20,24,.72);
+  backdrop-filter:blur(14px) saturate(1.1);
+  -webkit-backdrop-filter:blur(14px) saturate(1.1);
+  border:1px solid var(--border,rgba(255,255,255,.08));
+  border-radius:12px;
+}
+/* Panel sólido: listas densas y el editor. CERO transparencia.
+   Con 200 items que leer, el humo detrás es ruido. Punto. */
+.c-panel--solid{
+  background:var(--surface,#141418);
+  backdrop-filter:none; -webkit-backdrop-filter:none;
+}
+@supports not (backdrop-filter: blur(1px)){
+  .c-panel{ background:rgba(20,20,24,.94); }
+}
+
+/* ── 6 · REGLA DE ORO ─────────────────────────────────────────────────────── */
+/*
+   ✅ VENTANA (humo visible):  login · onboarding · espera de la ingesta ·
+                               dashboard VACÍO del día 1 · cabeceras de sección
+   🧱 MURO (humo tapado):      master con 200 items · editor de variante ·
+                               staging · tailoring · el documento
+                               → donde hay trabajo, el trabajo gana. Siempre.
+*/
+
+@media (prefers-reduced-motion: reduce){
+  .c-aurora-gl canvas{ display:none; }
+}
+
+</style>
+</head>
+<body>
+<canvas class="c-aurora-gl" aria-hidden="true"></canvas>
+<main class="shell c-window">
+  <div style="text-align:center;margin-bottom:26px">
+    <div class="brand">Corpus</div>
+    <p class="eyebrow" style="margin:14px 0 0">El sistema de registro de tu carrera</p>
+  </div>
+  <div class="card">
+    <h1 class="h-atmo" style="font-size:27px;margin-bottom:20px"><span class="ln">Tu carrera,</span><span class="ln">en un solo registro.</span></h1>
+    <div class="field"><label for="e">Email</label><input class="input c-focusable" id="e" type="email" placeholder="tucorreo@ejemplo.cl"></div>
+    <div class="field"><label for="p">Contraseña</label><input class="input c-focusable" id="p" type="password" placeholder="••••••••"></div>
+    <div style="margin:6px 0 4px"><span class="forge"><button class="btn">Entrar</button></span></div>
+    <div style="text-align:right;margin-top:10px"><a href="#" style="font-size:12px">¿Olvidaste tu contraseña?</a></div>
+    <div class="divider-or">o</div>
+    <div class="oauth">
+      <button class="obtn c-focusable"><span style="font:600 13px var(--mono);color:var(--muted)">G</span> Continuar con Google</button>
+      <button class="obtn c-focusable"><span style="font:600 12px var(--mono);color:var(--muted)">GH</span> Continuar con GitHub</button>
+    </div>
+    <p style="font-size:11.5px;color:var(--subtle);margin:12px 2px 0">GitHub también conecta tus repos como evidencia.</p>
+  </div>
+  <p class="trust"><b>La descarga de tu PDF es siempre gratis. Cancelas en un clic.</b><br>¿Primera vez? <a href="#">Crea tu registro.</a></p>
+</main>
+<script>/* ===== canon-motion.js ===== */
+/* ============================================================================
+   CANON · canon-motion.js
+   El motor de las animaciones que necesitan lógica (no solo CSS).
+   Vanilla, sin dependencias, ~2 KB. Copiar tal cual en cada pantalla del diseño.
+   En producción (Next.js), esta misma lógica se porta a hooks — pero la API
+   y los nombres de clase NO CAMBIAN. Ese es el contrato con ingeniería.
+   ============================================================================ */
+(() => {
+  'use strict';
+
+  const REDUCED = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  /* ── Guarda de "una sola vez por sesión" ──────────────────────────────────
+     La hairline se dibuja la PRIMERA vez que la sección aparece. Nunca más.
+     Una animación que se repite deja de enseñar y empieza a estorbar.        */
+  const seen = new Set();
+  const once = (key) => { if (seen.has(key)) return false; seen.add(key); return true; };
+
+  /* ══════════════════════════════════════════════════════════════════════════
+     1 · dividerDraw — la hairline dorada, al entrar en viewport, UNA vez
+     Uso:  <div class="c-divider" data-divider="experiencia"></div>
+     ══════════════════════════════════════════════════════════════════════════ */
+  const dividers = document.querySelectorAll('.c-divider');
+  if (dividers.length) {
+    if (REDUCED) {
+      dividers.forEach(d => d.classList.add('is-drawn'));   // ya dibujada
+    } else {
+      const io = new IntersectionObserver((entries) => {
+        entries.forEach(e => {
+          if (!e.isIntersecting) return;
+          const key = e.target.dataset.divider || e.target.id || Math.random();
+          if (once('div:' + key)) e.target.classList.add('is-drawn');
+          io.unobserve(e.target);
+        });
+      }, { threshold: 0.6 });
+      dividers.forEach(d => io.observe(d));
+    }
+  }
+
+  /* ══════════════════════════════════════════════════════════════════════════
+     2 · ★ EL ESCALONADO — el momento estelar del producto
+     Los items se pueblan al terminar la ingesta. Ver tu carrera aparecer,
+     item por item, ES el producto en tres segundos.
+
+     Uso:  CANON.stagger(document.querySelector('#staging-list'))
+     El contenedor lleva .c-stagger y los hijos .c-stagger-item
+     ══════════════════════════════════════════════════════════════════════════ */
+  function stagger(container, { step = 40, max = 24 } = {}) {
+    if (!container) return;
+    const items = container.querySelectorAll('.c-stagger-item');
+    items.forEach((el, i) => {
+      if (i < max) {
+        el.style.setProperty('--d', `${i * step}ms`);   // retraso incremental
+      } else {
+        el.classList.add('c-no-stagger');               // el resto, de golpe
+      }
+    });
+    // doble rAF: garantiza que el navegador pinta el estado inicial
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      container.classList.add('is-running');
+    }));
+  }
+
+  /* ══════════════════════════════════════════════════════════════════════════
+     3 · EL ÚNICO SHIMMER — cuando la IA termina de extraer. Una vez.
+     Se autolimita: si alguien lo llama dos veces, la segunda no hace nada.
+     ══════════════════════════════════════════════════════════════════════════ */
+  function shimmer(el, key = 'global') {
+    if (!el || REDUCED) return;
+    if (!once('shimmer:' + key)) {
+      console.warn('[CANON] El shimmer ya se disparó. Hay UNO por producto.');
+      return;
+    }
+    el.classList.add('is-firing');
+    el.addEventListener('animationend', () => el.classList.remove('is-firing'), { once: true });
+  }
+
+  /* ══════════════════════════════════════════════════════════════════════════
+     4 · ★ EL TOGGLE RAYOS-X — "Cómo lo lee el ATS"
+     El PDF se desenfoca, pierde el color, y del desenfoque resuelve el texto
+     crudo del parser. Es la metáfora del producto: así te ve la máquina.
+
+     Uso:  <div class="c-xray" data-mode="doc">
+             <div class="c-xray__doc">…el CV renderizado…</div>
+             <pre class="c-xray__raw">…el texto REAL extraído del PDF…</pre>
+           </div>
+           <button data-xray-toggle="#preview" aria-pressed="false">…</button>
+     ══════════════════════════════════════════════════════════════════════════ */
+  document.querySelectorAll('[data-xray-toggle]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const target = document.querySelector(btn.dataset.xrayToggle);
+      if (!target) return;
+      const raw = target.dataset.mode !== 'raw';
+      target.dataset.mode = raw ? 'raw' : 'doc';
+      btn.setAttribute('aria-pressed', String(raw));
+      announce(raw
+        ? 'Mostrando el texto que extrae el ATS de tu PDF'
+        : 'Mostrando el documento');
+    });
+  });
+
+  /* ══════════════════════════════════════════════════════════════════════════
+     5 · CONTADOR HONESTO — sube contando lo que de verdad se encontró.
+     Nunca un porcentaje inventado. Si no sabes cuánto falta, di qué haces.
+     ══════════════════════════════════════════════════════════════════════════ */
+  function countTo(el, to, ms = 600) {
+    if (!el) return;
+    if (REDUCED) { el.textContent = to; return; }
+    const from = parseInt(el.textContent, 10) || 0;
+    const t0 = performance.now();
+    const tick = (t) => {
+      const p = Math.min(1, (t - t0) / ms);
+      el.textContent = Math.round(from + (to - from) * (1 - Math.pow(1 - p, 3)));
+      if (p < 1) requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+  }
+
+  /* ══════════════════════════════════════════════════════════════════════════
+     6 · CONFIRMAR / DESCARTAR — ceremonia 1
+     ══════════════════════════════════════════════════════════════════════════ */
+  function confirm(el) {
+    if (!el || REDUCED) return;
+    el.classList.remove('c-confirm');
+    void el.offsetWidth;                       // reinicia la animación
+    el.classList.add('c-confirm');
+  }
+  function dismiss(el, after) {
+    if (!el) return;
+    if (REDUCED) { after && after(); el.remove(); return; }
+    el.classList.add('c-dismiss');
+    el.addEventListener('animationend', () => { after && after(); el.remove(); }, { once: true });
+  }
+
+  /* ══════════════════════════════════════════════════════════════════════════
+     7 · ACCESIBILIDAD — los estados de IA se ANUNCIAN.
+     Una animación que solo se ve deja fuera a quien usa lector de pantalla.
+     ══════════════════════════════════════════════════════════════════════════ */
+  let live = document.getElementById('canon-live');
+  if (!live) {
+    live = document.createElement('div');
+    live.id = 'canon-live';
+    live.setAttribute('aria-live', 'polite');
+    live.setAttribute('aria-atomic', 'true');
+    live.style.cssText =
+      'position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap';
+    document.body.appendChild(live);
+  }
+  function announce(msg) { live.textContent = msg; }
+
+  /* ══════════════════════════════════════════════════════════════════════════
+     8 · SCROLL-REVEAL — solo dentro de .c-doc. En la app está PROHIBIDO.
+     ══════════════════════════════════════════════════════════════════════════ */
+  const reveals = document.querySelectorAll('.c-doc .c-reveal');
+  if (reveals.length && !REDUCED) {
+    const io2 = new IntersectionObserver((entries) => {
+      entries.forEach(e => {
+        if (!e.isIntersecting) return;
+        e.target.classList.add('is-in');
+        io2.unobserve(e.target);
+      });
+    }, { threshold: 0.25 });
+    reveals.forEach(r => io2.observe(r));
+  }
+
+  window.CANON = { stagger, shimmer, countTo, confirm, dismiss, announce, REDUCED };
+})();
+
+</script>
+<script>/* ===== canon-aurora.js ===== */
+/* ============================================================================
+   CANON · canon-aurora.js  —  v2 "Los tres metales conductores"
+   El fondo vivo: shader WebGL2, fBm + domain warping, REACTIVO AL RATÓN.
+
+   ── DE DÓNDE SALE (forense de la referencia, verificado en el navegador) ──
+   · El humo es un <canvas> WEBGL2 en un div fixed·inset:0·z-index:0·pointer-events:none
+   · Su buffer es de 300×150 px escalado a 1920 → el humo no tiene bordes duros,
+     nadie nota la baja resolución, y la GPU casi no trabaja. Copiamos el truco.
+   · El "blackout": el contenedor de página es OPACO (#050508) y las secciones
+     ALTERNAN entre opacas (tapan el humo) y transparentes (VENTANAS al humo).
+     Ese es el mecanismo que hace que no estorbe. Ver canon-aurora.css.
+
+   ── QUÉ ES NUESTRO Y NO SUYO ──
+   Ellos: 4 acentos (esmeralda, púrpura, carmesí, oro) — una nebulosa.
+   Nosotros: LOS TRES METALES CONDUCTORES — oro, cobre, plata.
+   No es una paleta arbitraria: el concepto original ya lo dice —
+   "el oro: en electrónica, el metal con que se bañan los contactos críticos
+    porque conduce sin corroerse". Oro, cobre y plata SON los conductores.
+   La metáfora no se importa: se extiende.
+
+   ⚠️ DISCIPLINA: los tres metales viven SOLO aquí, en la atmósfera.
+      En la UI, el oro sigue siendo el ÚNICO acento interactivo.
+      Atmósfera ≠ señal. Si el cobre empieza a significar algo, se rompe el sistema.
+
+   API:
+     CANON.aurora.mount()
+     CANON.aurora.setActive(true|false)   // la IA trabaja → el humo se agita
+     CANON.aurora.pause() / .resume()     // pausar mientras el usuario escribe
+   ============================================================================ */
+(() => {
+  'use strict';
+
+  const REDUCED = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  /* ── LOS TRES METALES CONDUCTORES (+ el sustrato) ────────────────────────── */
+  const OBSIDIAN = [0.020, 0.020, 0.031];   // #050508  el sustrato
+  const GOLD     = [0.831, 0.686, 0.216];   // #D4AF37  oro de marca
+  const COPPER   = [0.722, 0.451, 0.200];   // #B87333  cobre — el metal cálido
+  const SILVER   = [0.678, 0.714, 0.761];   // #ADB6C2  plata — el metal frío
+
+  const TRAILS = 16;                        // puntos de estela del ratón
+
+  const VERT = `#version 300 es
+  in vec2 p; void main(){ gl_Position = vec4(p, 0.0, 1.0); }`;
+
+  const FRAG = `#version 300 es
+  precision highp float;
+  out vec4 fragColor;
+
+  uniform vec2  uRes;
+  uniform float uTime;
+  uniform float uIntensity;          // 0 calma · 1 la IA trabaja
+  uniform vec2  uMouse;              // ratón suavizado, en coords de shader
+  uniform float uMouseVel;           // velocidad del ratón → cuánta estela deja
+  uniform vec3  uTrail[${TRAILS}];   // (x, y, vida 0..1) — la estela que se apaga
+  uniform vec3  uObsidian;
+  uniform vec3  uGold;
+  uniform vec3  uCopper;
+  uniform vec3  uSilver;
+
+  float hash(vec2 p){
+    p = fract(p * vec2(123.34, 456.21));
+    p += dot(p, p + 45.32);
+    return fract(p.x * p.y);
+  }
+  float noise(vec2 p){
+    vec2 i = floor(p), f = fract(p);
+    vec2 u = f * f * (3.0 - 2.0 * f);
+    return mix(mix(hash(i+vec2(0,0)), hash(i+vec2(1,0)), u.x),
+               mix(hash(i+vec2(0,1)), hash(i+vec2(1,1)), u.x), u.y);
+  }
+  float fbm(vec2 p){
+    float v = 0.0, a = 0.5;
+    mat2 rot = mat2(0.80, 0.60, -0.60, 0.80);
+    for (int i = 0; i < 5; i++){ v += a * noise(p); p = rot * p * 2.02; a *= 0.5; }
+    return v;
+  }
+
+  void main(){
+    // ZOOM 0.85 (no 1.35): volutas grandes y lentas, como la referencia.
+    // Con 1.35 salían burbujas pequeñas: parecía camuflaje, no humo.
+    vec2 uv = (gl_FragCoord.xy * 2.0 - uRes) / min(uRes.x, uRes.y);
+    uv *= 0.85;
+
+    float t = uTime * (0.020 + 0.030 * uIntensity);
+
+    // ═══ LA ESTELA DEL RATÓN ════════════════════════════════════════════════
+    // Cada punto reciente del cursor empuja el dominio y calienta el metal.
+    // Se apagan solos (vida → 0): el humo "recuerda" por dónde pasaste.
+    vec2  push = vec2(0.0);   // desplazamiento que la estela imprime al ruido
+    float heat = 0.0;         // calor: enciende el metal
+    for (int i = 0; i < ${TRAILS}; i++){
+      vec3  tr   = uTrail[i];
+      float life = tr.z;
+      if (life <= 0.001) continue;
+      vec2  d    = uv - tr.xy;
+      float dist = length(d);
+      float fall = exp(-dist * dist * 7.0);      // gaussiana: halo suave, sin borde
+      push += normalize(d + 1e-5) * fall * life * 0.28;
+      heat += fall * life;
+    }
+    // el cursor vivo empuja más si se mueve rápido
+    float mdist = length(uv - uMouse);
+    float mfall = exp(-mdist * mdist * 5.0);
+    heat += mfall * (0.35 + uMouseVel * 0.9);
+
+    // ═══ DOMAIN WARPING — el ruido se alimenta de sí mismo ═══════════════════
+    // La estela entra AQUÍ, en el dominio: no pinta encima, DEFORMA EL HUMO.
+    // Por eso se siente como humo de verdad y no como un foco pegado al cursor.
+    vec2 w = uv + push;
+
+    vec2 q = vec2(fbm(w + t * 0.5),
+                  fbm(w + vec2(5.2, 1.3) - t * 0.4));
+
+    vec2 r = vec2(fbm(w + 4.0*q + vec2(1.7, 9.2) + t * 0.30),
+                  fbm(w + 4.0*q + vec2(8.3, 2.8) - t * 0.25));
+
+    float f = fbm(w + 4.0*r);
+
+    // ═══ ★ NORMALIZAR. EL BUG QUE DEJABA LA PANTALLA NEGRA. ═════════════════
+    // El fBm de 5 octavas NO sale en 0..1. Medido sobre el campo real:
+    //   p25=0.165 · p50=0.217 · p95=0.342 · max=0.605
+    // La versión anterior arrancaba la curva en 0.42 → NINGÚN píxel la cruzaba.
+    // El humo era negro sobre negro. Remapeamos al rango que de verdad ocupa.
+    float fn = clamp((f - 0.05) / 0.37, 0.0, 1.0);
+
+    // ═══ LOS METALES ════════════════════════════════════════════════════════
+    // Calibrado renderizando el campo y MIRÁNDOLO, no a ojo.
+    // Sigue siendo escaso: la mediana de mezcla es 0.004 — el 85% es obsidiana.
+    float veil     = pow(smoothstep(0.30, 1.00, fn), 1.5);
+    float filament = smoothstep(0.72, 0.88, fn) * (1.0 - smoothstep(0.88, 1.00, fn));
+
+    // Qué metal aflora depende de la torsión del dominio (length(q)),
+    // también normalizada:
+    //   humo quieto  → plata  (frío, en reposo)
+    //   humo torcido → cobre  (calor)
+    //   la cresta    → oro    (el conductor)
+    float torsion = clamp((length(q) - 0.15) / 0.40, 0.0, 1.0);
+    vec3 metal = mix(uSilver, uCopper, smoothstep(0.25, 0.75, torsion));
+    metal      = mix(metal,   uGold,   smoothstep(0.55, 1.00, torsion + heat * 0.32));
+
+    vec3 col = uObsidian;
+    col = mix(col, metal,  veil     * (0.28 + 0.12 * uIntensity + heat * 0.18));
+    col = mix(col, uGold,  filament * (0.18 + 0.10 * uIntensity + heat * 0.20));
+
+    // el rastro del cursor: un rescoldo, no un foco. Muy contenido.
+    col += uGold * heat * 0.020;
+
+    // viñeta: el centro respira, los bordes se apagan. El texto vive en el centro.
+    vec2 vuv = uv / 0.85;
+    float vig = 1.0 - 0.42 * dot(vuv * 0.75, vuv * 0.75);
+    col *= clamp(vig, 0.0, 1.0);
+
+    // grano: obligatorio en negros, mata el banding
+    col += (hash(gl_FragCoord.xy + uTime) - 0.5) * 0.012;
+
+    fragColor = vec4(col, 1.0);
+  }`;
+
+  const instances = [];
+  let running = true;
+
+  /* ── Ratón global (una sola escucha para todas las instancias) ───────────── */
+  const mouse = { x: 0, y: 0, tx: 0, ty: 0, vel: 0 };
+  const trail = Array.from({ length: TRAILS }, () => ({ x: 0, y: 0, life: 0 }));
+  let trailHead = 0, lastEmit = 0;
+
+  const ZOOM = 0.85;   // ⚠️ DEBE coincidir con el `uv *= 0.85` del shader,
+                       //    o la estela aparece desplazada del cursor.
+
+  if (!REDUCED) {
+    addEventListener('pointermove', (e) => {
+      const w = innerWidth, h = innerHeight, m = Math.min(w, h);
+      // mismas coords que el shader
+      mouse.tx = ((e.clientX * 2 - w) / m) * ZOOM;
+      mouse.ty = (((h - e.clientY) * 2 - h) / m) * ZOOM;
+
+      const now = performance.now();
+      if (now - lastEmit > 34) {            // ~30 Hz de emisión: estela suave, sin saturar
+        lastEmit = now;
+        const p = trail[trailHead];
+        p.x = mouse.tx; p.y = mouse.ty; p.life = 1;
+        trailHead = (trailHead + 1) % TRAILS;
+      }
+    }, { passive: true });
+  }
+
+  function compile(gl, type, src){
+    const s = gl.createShader(type);
+    gl.shaderSource(s, src); gl.compileShader(s);
+    if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) {
+      console.error('[CANON aurora]', gl.getShaderInfoLog(s)); return null;
+    }
+    return s;
+  }
+
+  function mountOne(host){
+    if (host.dataset.mounted) return;
+    host.dataset.mounted = '1';
+
+    if (REDUCED) { host.classList.add('is-static'); return; }
+
+    const canvas = document.createElement('canvas');
+    canvas.setAttribute('aria-hidden','true');
+    canvas.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;display:block';
+    host.appendChild(canvas);
+
+    const gl = canvas.getContext('webgl2', { antialias:false, alpha:false, powerPreference:'low-power' });
+    if (!gl) { host.classList.add('is-static'); return; }
+
+    const prog = gl.createProgram();
+    const vs = compile(gl, gl.VERTEX_SHADER, VERT);
+    const fs = compile(gl, gl.FRAGMENT_SHADER, FRAG);
+    if (!vs || !fs) { host.classList.add('is-static'); return; }
+    gl.attachShader(prog, vs); gl.attachShader(prog, fs); gl.linkProgram(prog);
+    if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) {
+      console.error('[CANON aurora] link:', gl.getProgramInfoLog(prog));
+      host.classList.add('is-static'); return;
+    }
+    gl.useProgram(prog);
+
+    const buf = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+    const loc = gl.getAttribLocation(prog, 'p');
+    gl.enableVertexAttribArray(loc);
+    gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
+
+    const U = {
+      res:   gl.getUniformLocation(prog,'uRes'),
+      time:  gl.getUniformLocation(prog,'uTime'),
+      inten: gl.getUniformLocation(prog,'uIntensity'),
+      mouse: gl.getUniformLocation(prog,'uMouse'),
+      mvel:  gl.getUniformLocation(prog,'uMouseVel'),
+      trail: gl.getUniformLocation(prog,'uTrail'),
+      obs:   gl.getUniformLocation(prog,'uObsidian'),
+      gold:  gl.getUniformLocation(prog,'uGold'),
+      copper:gl.getUniformLocation(prog,'uCopper'),
+      silver:gl.getUniformLocation(prog,'uSilver'),
+    };
+    gl.uniform3fv(U.obs,    OBSIDIAN);
+    gl.uniform3fv(U.gold,   GOLD);
+    gl.uniform3fv(U.copper, COPPER);
+    gl.uniform3fv(U.silver, SILVER);
+
+    /* ★ EL TRUCO: buffer a ~1/4 de resolución (tope 560px). El humo no tiene
+       bordes duros; al escalar nadie lo nota y la GPU apenas trabaja.
+       (La referencia usa 300x150 para una pantalla de 1920.) */
+    const SCALE = 0.28, MAXW = 560;
+    function resize(){
+      const r = host.getBoundingClientRect();
+      const w = Math.max(2, Math.min(MAXW, Math.round(r.width * SCALE)));
+      const h = Math.max(2, Math.round(r.height * SCALE));
+      if (canvas.width !== w || canvas.height !== h){
+        canvas.width = w; canvas.height = h;
+        gl.viewport(0,0,w,h);
+        gl.useProgram(prog);
+        gl.uniform2f(U.res, w, h);
+      }
+    }
+    resize();
+    new ResizeObserver(resize).observe(host);
+
+    const flat = new Float32Array(TRAILS * 3);
+
+    instances.push({
+      intensity: host.dataset.aurora === 'active' ? 1 : 0,
+      target:    host.dataset.aurora === 'active' ? 1 : 0,
+      draw(t){
+        this.intensity += (this.target - this.intensity) * 0.02;
+        gl.useProgram(prog);
+        gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+        gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
+        gl.uniform1f(U.time,  t);
+        gl.uniform1f(U.inten, this.intensity);
+        gl.uniform2f(U.mouse, mouse.x, mouse.y);
+        gl.uniform1f(U.mvel,  mouse.vel);
+        for (let i = 0; i < TRAILS; i++){
+          flat[i*3]     = trail[i].x;
+          flat[i*3 + 1] = trail[i].y;
+          flat[i*3 + 2] = trail[i].life;
+        }
+        gl.uniform3fv(U.trail, flat);
+        gl.drawArrays(gl.TRIANGLES, 0, 3);
+      }
+    });
+  }
+
+  /* -- Bucle unico, 30 fps. Es una deriva lenta: 60 fps quema bateria sin
+        que se note ninguna diferencia. ------------------------------------- */
+  let last = 0;
+  const FRAME = 1000 / 30;
+  function loop(now){
+    requestAnimationFrame(loop);
+    if (!running || document.hidden) return;      // pestana oculta -> cero trabajo
+    if (now - last < FRAME) return;
+    last = now;
+
+    // suavizado del raton + velocidad
+    const px = mouse.x, py = mouse.y;
+    mouse.y += (mouse.ty - mouse.y) * 0.12;
+    const d = Math.hypot(mouse.x - px, mouse.y - py);
+    mouse.vel += (Math.min(1, d * 9) - mouse.vel) * 0.15;
+
+    // la estela se apaga sola
+    for (const p of trail) if (p.life > 0) p.life = Math.max(0, p.life - 0.016);
+
+    const t = now * 0.001;
+    for (const i of instances) i.draw(t);
+  }
+  requestAnimationFrame(loop);
+  document.addEventListener('visibilitychange', () => { last = 0; });
+
+  const aurora = {
+    mount(root = document){ root.querySelectorAll('.c-aurora-gl').forEach(mountOne); },
+    pause(){ running = false; },
+    resume(){ running = true; },
+    setActive(on){ for (const i of instances) i.target = on ? 1 : 0; },
+    get reduced(){ return REDUCED; }
+  };
+
+  window.CANON = Object.assign(window.CANON || {}, { aurora });
+  if (document.readyState !== 'loading') aurora.mount();
+  else document.addEventListener('DOMContentLoaded', () => aurora.mount());
+})();
+
+</script>
+<script>
+(function(){try{if(window.CANON&&CANON.aurora&&CANON.aurora.mount)CANON.aurora.mount();}catch(e){}
+if(window.CANON&&CANON.aurora&&CANON.aurora.setActive)CANON.aurora.setActive(false);
+})();
+</script>
+</body>
+</html>

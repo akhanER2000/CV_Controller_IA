@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="es" data-theme="obsidian">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Corpus · 04 · Editor de variante</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500;600&family=Playfair+Display:wght@500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#0B0B0D;--surface:#141418;--surface-2:#1C1C22;--sunken:#0E0E11;
+  --text:#F5F5F2;--muted:#B4B4AD;--subtle:#82827B;
+  --border:rgba(255,255,255,.08);--border-strong:rgba(255,255,255,.16);--border-gold:rgba(231,194,79,.55);
+  --g100:#F6E2A2;--g300:#E7C24F;--g500:#D4AF37;--g700:#8A6414;--ink-on-gold:#1A1206;
+  --sans:"Geist",system-ui,sans-serif;--mono:"Geist Mono",monospace;--disp:"Playfair Display",Georgia,serif;
+  --r-sm:4px;--r-md:6px;--r-lg:8px;
+  --dur-instant:80ms;--dur-fast:140ms;--dur-base:220ms;--dur-slow:360ms;
+  --ease-standard:cubic-bezier(.2,0,0,1);--ease-decel:cubic-bezier(0,0,0,1);
+}
+*{box-sizing:border-box}
+html{background:#08080A}
+body{margin:0;background:#08080A;color:var(--text);font-family:var(--sans);font-size:14px;line-height:1.45;-webkit-font-smoothing:antialiased}
+.desk{padding:40px;display:flex;flex-direction:column;gap:14px;align-items:center}
+.framelabel{width:1440px;font:500 12px/1 var(--mono);text-transform:uppercase;letter-spacing:.12em;color:var(--subtle);display:flex;gap:10px;align-items:center}
+.framelabel .tag{background:var(--g700);color:#fff;padding:4px 8px;border-radius:4px;letter-spacing:.06em}
+.hintline{width:1440px;font-size:12.5px;color:var(--subtle)}
+.hintline b{color:var(--g300)}
+.frame{width:1440px;height:928px;background:var(--bg);border:1px solid var(--border-strong);border-radius:12px;overflow:hidden;display:flex;box-shadow:0 20px 60px rgba(0,0,0,.5)}
+
+/* collapsed sidebar */
+.side{width:60px;flex:none;background:var(--surface);border-right:1px solid var(--border);display:flex;flex-direction:column;align-items:center;padding:14px 0;gap:6px}
+.side .mk{font-family:var(--disp);font-weight:600;font-size:20px;color:var(--g500);margin-bottom:10px}
+.side a{width:38px;height:38px;border-radius:var(--r-md);display:flex;align-items:center;justify-content:center;color:var(--muted)}
+.side a svg{width:17px;height:17px;stroke:currentColor;fill:none;stroke-width:1.6}
+.side a.on{background:rgba(231,194,79,.12);color:var(--g300)}
+.side a:hover{background:var(--surface-2);color:var(--text)}
+.side .sp{flex:1}
+.ava{width:30px;height:30px;border-radius:50%;background:linear-gradient(135deg,var(--g700),var(--g500));color:var(--ink-on-gold);display:flex;align-items:center;justify-content:center;font:600 12px var(--sans)}
+
+.main{flex:1;display:flex;flex-direction:column;min-width:0}
+
+/* editor topbar */
+.etop{flex:none;border-bottom:1px solid var(--border);padding:12px 20px;display:flex;align-items:center;gap:18px}
+.back{display:flex;align-items:center;gap:7px;font:500 12px var(--mono);color:var(--muted);white-space:nowrap}
+.vtitle{display:flex;flex-direction:column;gap:3px;min-width:0}
+.vtitle .nm{font-weight:600;font-size:15px}
+.vtitle .lang{font:500 10px var(--mono);color:var(--subtle);letter-spacing:.06em;text-transform:uppercase}
+.ttl-field{flex:1;max-width:440px;min-width:200px}
+.ttl-field .lab{font:500 9.5px var(--mono);text-transform:uppercase;letter-spacing:.1em;color:var(--g500);margin-bottom:3px;display:flex;gap:6px;align-items:center}
+.ttl-field .lab .why{color:var(--subtle);letter-spacing:.04em}
+.ttl-field input{width:100%;background:var(--sunken);border:1px solid var(--border-strong);border-radius:var(--r-md);color:var(--text);font:600 13px var(--sans);padding:7px 11px;height:34px}
+.ttl-field input:focus{outline:none;border-color:var(--g300);box-shadow:0 0 0 3px rgba(231,194,79,.18)}
+.pages{display:flex;align-items:center;gap:8px;font:500 12px var(--mono);color:var(--muted);white-space:nowrap}
+.pagechip{display:inline-flex;align-items:center;gap:5px;padding:4px 9px;border:1px solid var(--border-strong);border-radius:999px}
+.pagechip.ok{border-color:var(--border-gold);color:var(--g300)}
+.pagechip .d{width:6px;height:6px;border-radius:50%;background:var(--g500)}
+.autosave{font:500 11px var(--mono);color:var(--subtle);white-space:nowrap}
+.spacer{flex:1}
+.btn{height:32px;padding:0 13px;border-radius:var(--r-md);border:1px solid var(--border-strong);background:var(--surface);color:var(--text);font:600 12px var(--sans);cursor:pointer;display:inline-flex;align-items:center;gap:6px;white-space:nowrap}
+.btn:hover{border-color:var(--border-gold)}
+.btn.gold{background:var(--g500);border-color:var(--g500);color:var(--ink-on-gold)}
+.btn.ghost{background:transparent}
+
+/* 3 panels */
+.panels{flex:1;display:flex;min-height:0}
+.pane{display:flex;flex-direction:column;min-height:0;min-width:0}
+.pane.master{width:31%;border-right:1px solid var(--border)}
+.pane.variant{width:35%;border-right:1px solid var(--border)}
+.pane.preview{flex:1}
+.phead{flex:none;display:flex;align-items:center;justify-content:space-between;padding:11px 16px;border-bottom:1px solid var(--border)}
+.phead .lbl{font:500 10.5px var(--mono);text-transform:uppercase;letter-spacing:.12em;color:var(--subtle)}
+.pbody{flex:1;overflow:auto;padding:12px 14px}
+
+/* master library */
+.search{height:32px;background:var(--sunken);border:1px solid var(--border-strong);border-radius:var(--r-md);color:var(--subtle);font-size:12.5px;padding:0 11px;display:flex;align-items:center;gap:8px;margin-bottom:12px}
+.msec{margin-bottom:16px}
+.msec > h4{position:relative;font:600 10.5px var(--sans);text-transform:uppercase;letter-spacing:.1em;color:var(--muted);margin:0 0 9px;padding-bottom:7px}
+.msec > h4::after{content:"";position:absolute;left:0;bottom:0;width:100%;height:1px;background:var(--border-gold);transform:scaleX(0);transform-origin:left;animation:dividerDraw .55s var(--ease-decel) forwards}
+.msec:nth-child(2) > h4::after{animation-delay:.05s}
+.msec:nth-child(3) > h4::after{animation-delay:.15s}
+.msec:nth-child(4) > h4::after{animation-delay:.25s}
+@keyframes dividerDraw{to{transform:scaleX(1)}}
+.mitem{display:flex;gap:9px;padding:8px 9px;border-radius:var(--r-sm);cursor:default;align-items:flex-start}
+.mitem:hover{background:var(--surface-2)}
+.mitem .add{flex:none;width:20px;height:20px;border-radius:5px;border:1px solid var(--border-strong);color:var(--subtle);display:flex;align-items:center;justify-content:center;font-size:14px;cursor:pointer;line-height:1}
+.mitem.inuse .add{background:rgba(231,194,79,.14);border-color:var(--border-gold);color:var(--g300)}
+.mitem .mt{font-size:12.5px;color:var(--muted);line-height:1.4}
+.mitem .num{font-family:var(--mono);color:var(--text)}
+.pdot{display:inline-flex;align-items:center;gap:5px;font:500 10px var(--mono);color:var(--subtle);margin-top:4px}
+.pdot .dt{width:6px;height:6px;border-radius:50%}
+.dt.ver{background:var(--g500)}.dt.par{background:var(--g700)}.dt.un{background:transparent;border:1px solid var(--border-strong)}
+
+/* variant composition */
+.vsum{background:var(--surface-2);border:1px solid var(--border);border-radius:var(--r-md);padding:10px 12px;margin-bottom:14px}
+.vsum .k{font:500 9.5px var(--mono);text-transform:uppercase;letter-spacing:.1em;color:var(--subtle)}
+.vsum p{margin:6px 0 0;font-size:12.5px;color:var(--muted);line-height:1.5}
+.vgrp{margin-bottom:8px}
+.vgrp .gh{font:600 10.5px var(--sans);text-transform:uppercase;letter-spacing:.1em;color:var(--muted);margin:10px 0 7px}
+.vrow{display:flex;gap:8px;align-items:flex-start;padding:9px 10px;border:1px solid var(--border);border-radius:var(--r-md);margin-bottom:7px;background:var(--surface);position:relative}
+.vrow.sel{border-color:var(--g300)}
+.vrow.override{border-left:2px solid var(--g500)}
+.vrow.hidden-i{opacity:.45}
+.vrow .grip{flex:none;color:var(--subtle);cursor:grab;font-size:13px;line-height:1.3;letter-spacing:-1px}
+.vrow .vt{flex:1;font-size:12.5px;color:var(--text);line-height:1.45}
+.vrow .num{font-family:var(--mono)}
+.vrow .eye{flex:none;color:var(--subtle);cursor:pointer;font-size:12px}
+.ovr{margin-top:6px;font:500 10.5px var(--mono);color:var(--g300);display:flex;gap:10px}
+.ovr button{background:none;border:none;color:var(--g300);font:inherit;cursor:pointer;padding:0;text-decoration:underline;text-underline-offset:2px}
+.ovr .orig{color:var(--subtle);text-decoration:none}
+
+/* preview / ATS */
+.pane.preview .phead{gap:10px}
+.seg{display:inline-flex;background:var(--sunken);border:1px solid var(--border-strong);border-radius:var(--r-md);padding:2px}
+.seg button{border:none;background:none;color:var(--muted);font:600 11.5px var(--sans);padding:5px 11px;border-radius:4px;cursor:pointer;white-space:nowrap}
+.seg button.on{background:var(--surface-2);color:var(--g300)}
+.viewport{position:relative;flex:1;overflow:hidden;background:var(--sunken)}
+.layer{position:absolute;inset:0;overflow:auto;transition:opacity var(--dur-slow) var(--ease-standard),filter var(--dur-slow) var(--ease-standard)}
+.layer-pdf{opacity:1;filter:blur(0) saturate(1)}
+.layer-ats{opacity:0;filter:blur(12px);pointer-events:none}
+.viewport.show-ats .layer-pdf{opacity:0;filter:blur(12px) saturate(0);pointer-events:none}
+.viewport.show-ats .layer-ats{opacity:1;filter:blur(0)}
+
+/* mini CV (preview) */
+.doc{margin:18px auto;width:420px;background:#fff;color:#17171A;padding:26px 30px;border-radius:2px;box-shadow:0 8px 30px rgba(0,0,0,.4);font-family:var(--sans)}
+.doc .nm{font-family:var(--disp);font-weight:600;font-size:20px;color:#8A6414;line-height:1.05}
+.doc .tt{font-weight:600;font-size:11px;color:#17171A;margin-top:5px}
+.doc .ct{font-family:var(--mono);font-size:7px;color:#45454A;margin-top:6px;line-height:1.5}
+.doc h5{font:600 8px var(--sans);text-transform:uppercase;letter-spacing:.1em;color:#17171A;margin:14px 0 5px;padding-bottom:3px;border-bottom:.5px solid rgba(23,23,26,.3)}
+.doc p.s{margin:0;font-size:8.5px;line-height:1.5;color:#24242A}
+.doc .role{font-weight:600;font-size:9px;color:#17171A;margin-top:8px;display:flex;justify-content:space-between}
+.doc .role .dt{font-family:var(--mono);font-weight:400;font-size:7.5px;color:#6E6E72}
+.doc .org{font-size:7.5px;color:#45454A;margin-top:1px}
+.doc ul{margin:4px 0 0;padding-left:12px}
+.doc li{font-size:8px;line-height:1.45;color:#24242A;margin-bottom:2px}
+.doc .num{font-family:var(--mono);font-weight:500;color:#17171A;font-size:7.5px}
+.pgtabs{position:absolute;top:12px;right:14px;display:flex;gap:5px;z-index:2}
+.pgtabs span{font:500 10px var(--mono);color:var(--subtle);background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:3px 7px}
+.pgtabs span.on{color:var(--g300);border-color:var(--border-gold)}
+
+/* ATS layer */
+.ats{padding:26px 30px;font-family:var(--mono);font-size:11px;line-height:1.65;color:#C9C9C4;white-space:pre-wrap}
+.ats .caption{color:var(--subtle);font-size:10px;margin-bottom:16px;padding-bottom:10px;border-bottom:1px dashed var(--border);white-space:normal}
+.ats .h{color:#fff;font-weight:600}
+
+@keyframes pulse{0%,100%{opacity:.3}50%{opacity:1}}
+.pulse{width:7px;height:7px;border-radius:50%;background:var(--g300);animation:pulse 1.4s ease-in-out infinite;display:inline-block}
+
+@media (prefers-reduced-motion:reduce){
+  *{animation:none!important}
+  .layer{transition:none!important}
+  .msec > h4::after{transform:scaleX(1)}
+}
+</style>
+</head>
+<body>
+<div class="desk">
+  <div class="framelabel"><span class="tag">/app/variants/[id]</span> Editor de variante · 3 paneles · 1440</div>
+  <div class="hintline">Interactivo: haz clic en <b>“Cómo lo lee el ATS”</b> (panel derecho) para ver el <b>blur-in</b> — el PDF se desenfoca y resuelve el texto plano del parser. Las hairlines de sección (panel izquierdo) <b>se dibujan solas</b> al cargar.</div>
+
+  <div class="frame">
+    <aside class="side">
+      <div class="mk">C</div>
+      <a href="#"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg></a>
+      <a href="#"><svg viewBox="0 0 24 24"><path d="M6 3h9l4 4v14H6z"/><path d="M9 12h7M9 16h7"/></svg></a>
+      <a href="#"><svg viewBox="0 0 24 24"><path d="M12 3v6M6 21a6 6 0 0 1 12 0"/><circle cx="12" cy="9" r="3"/></svg></a>
+      <a class="on" href="#"><svg viewBox="0 0 24 24"><path d="M4 7l8-4 8 4-8 4z"/><path d="M4 12l8 4 8-4M4 17l8 4 8-4"/></svg></a>
+      <div class="sp"></div>
+      <span class="ava">MF</span>
+    </aside>
+
+    <div class="main">
+      <div class="etop">
+        <span class="back">← Variantes</span>
+        <div class="vtitle"><span class="nm">Backend — 2 páginas</span><span class="lang">ES · borrador</span></div>
+        <div class="ttl-field">
+          <div class="lab">Título objetivo <span class="why">· 10,6× entrevistas si coincide con el aviso</span></div>
+          <input value="Backend Engineer (Ingeniero de Software Senior)">
+        </div>
+        <div class="pages"><span class="pagechip ok"><span class="d"></span>2 páginas</span></div>
+        <span class="autosave">✓ guardado</span>
+        <div class="spacer"></div>
+        <button class="btn ghost">Adaptar a un aviso</button>
+        <button class="btn gold">Exportar PDF</button>
+      </div>
+
+      <div class="panels">
+
+        <!-- ===== MASTER ===== -->
+        <section class="pane master">
+          <div class="phead"><span class="lbl">Master · biblioteca</span><span class="lbl" style="color:var(--subtle)">todo lo que has hecho</span></div>
+          <div class="pbody">
+            <div class="search"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/></svg>Filtrar por skill, empresa, fecha…</div>
+
+            <div class="msec">
+              <h4>Experiencia</h4>
+              <div class="mitem inuse"><span class="add">✓</span><div><div class="mt">Rediseñé la API de pagos y reduje la latencia p99 de <span class="num">850 ms</span> a <span class="num">180 ms</span>…</div><span class="pdot"><span class="dt ver"></span>CV · verificado</span></div></div>
+              <div class="mitem inuse"><span class="add">✓</span><div><div class="mt">Sostuve <span class="num">99,95%</span> de uptime procesando <span class="num">CLP 12.000M</span> mensuales…</div><span class="pdot"><span class="dt ver"></span>CV · verificado</span></div></div>
+              <div class="mitem"><span class="add">+</span><div><div class="mt">Lideré un equipo de <span class="num">4</span> ingenieros y mentoré a <span class="num">2</span> juniors…</div><span class="pdot"><span class="dt par"></span>LinkedIn · parcial</span></div></div>
+              <div class="mitem inuse"><span class="add">✓</span><div><div class="mt">Reduje el costo de infraestructura <span class="num">30%</span> (<span class="num">USD 8.000</span>/mes)…</div><span class="pdot"><span class="dt ver"></span>CV · verificado</span></div></div>
+              <div class="mitem"><span class="add">+</span><div><div class="mt">Escalé el catálogo a <span class="num">40.000</span> usuarios concurrentes (Cornershop)…</div><span class="pdot"><span class="dt ver"></span>CV · verificado</span></div></div>
+            </div>
+
+            <div class="msec">
+              <h4>Aptitudes</h4>
+              <div class="mitem inuse"><span class="add">✓</span><div><div class="mt">Go · Python · TypeScript · SQL</div><span class="pdot"><span class="dt ver"></span>GitHub · verificado</span></div></div>
+              <div class="mitem inuse"><span class="add">✓</span><div><div class="mt">Kubernetes (EKS) · Docker · Terraform · AWS</div><span class="pdot"><span class="dt par"></span>parcial</span></div></div>
+              <div class="mitem"><span class="add">+</span><div><div class="mt">Elasticsearch</div><span class="pdot"><span class="dt un"></span>sin verificar</span></div></div>
+            </div>
+
+            <div class="msec">
+              <h4>Proyectos</h4>
+              <div class="mitem"><span class="add">+</span><div><div class="mt">pago-conciliador · <span class="num">320</span> estrellas · <span class="num">4</span> empresas</div><span class="pdot"><span class="dt ver"></span>GitHub · verificado</span></div></div>
+              <div class="mitem"><span class="add">+</span><div><div class="mt">Charla: “Latencia p99 en sistemas de pago”</div><span class="pdot"><span class="dt ver"></span>escrito a mano</span></div></div>
+            </div>
+
+            <div class="msec">
+              <h4>Educación</h4>
+              <div class="mitem inuse"><span class="add">✓</span><div><div class="mt">Ingeniería Civil en Computación · U. de Chile</div><span class="pdot"><span class="dt ver"></span>CV · verificado</span></div></div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ===== ESTA VARIANTE ===== -->
+        <section class="pane variant">
+          <div class="phead"><span class="lbl">Esta variante · composición</span><span class="lbl" style="color:var(--subtle)">⠿ reordenar · 👁 ocultar</span></div>
+          <div class="pbody">
+            <div class="vsum"><span class="k">Resumen · ángulo Backend</span><p>Ingeniero de software con <span style="font-family:var(--mono)">8</span> años construyendo sistemas de pagos y back-ends de alta concurrencia…</p></div>
+
+            <div class="vgrp">
+              <div class="gh">Experiencia — Fintual</div>
+              <div class="vrow sel"><span class="grip">⠿</span><span class="vt">Rediseñé la API de pagos y reduje la latencia p99 de <span class="num">850 ms</span> a <span class="num">180 ms</span>, migrando un monolito Django a <span class="num">6</span> servicios en Go.</span><span class="eye">👁</span></div>
+              <div class="vrow override"><span class="grip">⠿</span><div style="flex:1"><span class="vt">Sostuve <span class="num">99,95%</span> de uptime en pagos, <span class="num">3</span> años sin pérdida de datos.</span><div class="ovr"><span>override en esta variante</span><button>ver original</button><button>revertir</button></div></div><span class="eye">👁</span></div>
+              <div class="vrow"><span class="grip">⠿</span><span class="vt">Reduje el costo de infraestructura <span class="num">30%</span> (<span class="num">USD 8.000</span>/mes) con autoescalado por colas en EKS.</span><span class="eye">👁</span></div>
+              <div class="vrow hidden-i"><span class="grip">⠿</span><span class="vt">Implementé un pipeline de conciliación (&lt; <span class="num">5</span> min)…</span><span class="eye">◠</span></div>
+            </div>
+
+            <div class="vgrp">
+              <div class="gh">Aptitudes técnicas</div>
+              <div class="vrow"><span class="grip">⠿</span><span class="vt"><b style="font-weight:600">Lenguajes:</b> Go, Python, TypeScript, SQL</span><span class="eye">👁</span></div>
+              <div class="vrow"><span class="grip">⠿</span><span class="vt"><b style="font-weight:600">Infra:</b> Kubernetes (EKS), Docker, Terraform, AWS</span><span class="eye">👁</span></div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ===== PREVIEW / ATS ===== -->
+        <section class="pane preview">
+          <div class="phead">
+            <div class="seg" role="tablist">
+              <button id="tab-pdf" class="on" onclick="setView('pdf')">Vista PDF</button>
+              <button id="tab-ats" onclick="setView('ats')">Cómo lo lee el ATS</button>
+            </div>
+            <span class="lbl" id="viewhint">píxel por píxel = el PDF</span>
+          </div>
+          <div class="viewport" id="viewport">
+            <div class="pgtabs"><span class="on">pág 1</span><span>pág 2</span></div>
+            <!-- capa PDF -->
+            <div class="layer layer-pdf">
+              <div class="doc">
+                <div class="nm">Matías Fuentes Aguilar</div>
+                <div class="tt">Backend Engineer (Ingeniero de Software Senior)</div>
+                <div class="ct">Email: matias.fuentes@correo-ejemplo.cl · Teléfono: +56 9 6123 4567 · Ubicación: Providencia, Región Metropolitana · LinkedIn: linkedin.com/in/mfuentes-demo</div>
+                <h5>Resumen</h5>
+                <p class="s">Ingeniero de software con <span class="num">8</span> años construyendo sistemas de pagos y back-ends de alta concurrencia. Reduje la latencia p99 de <span class="num">850 ms</span> a <span class="num">180 ms</span> y sostuve <span class="num">99,95%</span> de uptime procesando <span class="num">CLP 12.000M</span> mensuales.</p>
+                <h5>Aptitudes técnicas</h5>
+                <p class="s"><b>Lenguajes:</b> Go, Python, TypeScript, SQL<br><b>Infraestructura:</b> Kubernetes (EKS), Docker, Terraform, AWS</p>
+                <h5>Experiencia</h5>
+                <div class="role"><span>Senior Backend Engineer</span><span class="dt">ene 2021 – Presente</span></div>
+                <div class="org">Fintual Administradora General de Fondos S.A. · Santiago, Chile</div>
+                <ul>
+                  <li>Rediseñé la API de pagos y reduje la latencia p99 de <span class="num">850 ms</span> a <span class="num">180 ms</span>, migrando a <span class="num">6</span> servicios en Go.</li>
+                  <li>Sostuve <span class="num">99,95%</span> de uptime procesando <span class="num">CLP 12.000M</span> mensuales.</li>
+                  <li>Reduje el costo de infraestructura <span class="num">30%</span> (<span class="num">USD 8.000</span>/mes) en EKS.</li>
+                </ul>
+                <div class="role"><span>Backend Engineer</span><span class="dt">mar 2019 – dic 2020</span></div>
+                <div class="org">Cornershop by Uber · Santiago, Chile</div>
+                <ul>
+                  <li>Escalé el catálogo a <span class="num">40.000</span> usuarios concurrentes con Redis y PostgreSQL.</li>
+                </ul>
+              </div>
+            </div>
+            <!-- capa ATS (texto plano del parser) -->
+            <div class="layer layer-ats">
+              <div class="ats"><span class="caption">Texto que un parser extrae del PDF, en orden de lectura. Geist Mono, monocromo. Si algo se pierde o se desordena, se ve aquí. — Verificación real del run mono: pendiente de CI (react-pdf).</span><span class="h">Matías Fuentes Aguilar</span>
+Backend Engineer (Ingeniero de Software Senior)
+Email: matias.fuentes@correo-ejemplo.cl · Teléfono: +56 9 6123 4567 · Ubicación: Providencia, Región Metropolitana · LinkedIn: linkedin.com/in/mfuentes-demo
+
+<span class="h">RESUMEN</span>
+Ingeniero de software con 8 años construyendo sistemas de pagos y back-ends de alta concurrencia. Reduje la latencia p99 de 850 ms a 180 ms y sostuve 99,95% de uptime procesando CLP 12.000M mensuales.
+
+<span class="h">APTITUDES TÉCNICAS</span>
+Lenguajes: Go, Python, TypeScript, SQL
+Infraestructura: Kubernetes (EKS), Docker, Terraform, AWS
+
+<span class="h">EXPERIENCIA</span>
+Senior Backend Engineer ene 2021 – Presente
+Fintual Administradora General de Fondos S.A. · Santiago, Chile
+Rediseñé la API de pagos y reduje la latencia p99 de 850 ms a 180 ms, migrando a 6 servicios en Go.
+Sostuve 99,95% de uptime procesando CLP 12.000M mensuales.
+Reduje el costo de infraestructura 30% (USD 8.000/mes) en EKS.
+Backend Engineer mar 2019 – dic 2020
+Cornershop by Uber · Santiago, Chile
+Escalé el catálogo a 40.000 usuarios concurrentes con Redis y PostgreSQL.</div>
+            </div>
+          </div>
+        </section>
+
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  function setView(v){
+    var vp = document.getElementById('viewport');
+    var tp = document.getElementById('tab-pdf'), ta = document.getElementById('tab-ats');
+    var hint = document.getElementById('viewhint');
+    if(v === 'ats'){ vp.classList.add('show-ats'); ta.classList.add('on'); tp.classList.remove('on'); hint.textContent = 'texto plano · así te ve la máquina'; }
+    else { vp.classList.remove('show-ats'); tp.classList.add('on'); ta.classList.remove('on'); hint.textContent = 'píxel por píxel = el PDF'; }
+  }
+</script>
+</body>
+</html>

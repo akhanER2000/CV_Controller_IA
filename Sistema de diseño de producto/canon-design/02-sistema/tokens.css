@@ -1,0 +1,292 @@
+/* ============================================================================
+   CANON · Design Tokens
+   Sistema "Oro · Obsidiana · Porcelana" — heredado del portfolio y extendido
+   para una aplicación de trabajo densa.
+
+   - Tema por defecto: OBSIDIANA (oscuro). Se aplica en :root.
+   - Tema claro: PORCELANA. Se activa con [data-theme="porcelain"].
+   - El DOCUMENTO CV vive SIEMPRE en porcelana/tinta (es impresión) — ver 05.
+
+   Convención: los tokens crudos (--gold-*, escalas) no cambian entre temas.
+   Los tokens SEMÁNTICOS (--bg, --text, --link…) sí. Consume SIEMPRE los
+   semánticos en la UI; los crudos solo para construir los semánticos.
+   ============================================================================ */
+
+:root {
+  color-scheme: dark;
+
+  /* ---- Escala de ORO (compartida, no cambia entre temas) ------------------ */
+  --gold-100: #F6E2A2; /* brillos, shimmer, extremo claro de gradientes */
+  --gold-300: #E7C24F; /* oro luminoso · enlaces y focus en OBSIDIANA */
+  --gold-500: #D4AF37; /* ORO DE MARCA · acento/CTA */
+  --gold-700: #8A6414; /* oro profundo · texto/enlaces/focus sobre CLARO */
+  --gold-900: #5C450F; /* bronce · hover de enlaces en claro */
+  --ink-on-gold: #1A1206; /* texto sobre relleno dorado (8.81:1 sobre gold-500) */
+
+  /* ---- Neutros crudos ----------------------------------------------------- */
+  --obsidian-bg: #0B0B0D;
+  --obsidian-surface: #141418;
+  --obsidian-surface-elevated: #1C1C22;
+  --obsidian-text: #F5F5F2;
+  --obsidian-text-muted: #B4B4AD;
+  --obsidian-text-subtle: #82827B;
+
+  --porcelain-bg: #FAFAF7;
+  --porcelain-surface: #FFFFFF;
+  --porcelain-surface-sunken: #F1F1EC;
+  --porcelain-text: #17171A;
+  --porcelain-text-muted: #45454A;
+  --porcelain-text-subtle: #6E6E72;
+
+  /* ---- Estados (derivados del oro y de neutros, no colores nuevos) -------- */
+  /* No usamos rojo/amarillo/verde de semáforo para confianza (§4.4.5).       */
+  /* El DANGER real (destructivo/error de sistema) sí existe, sobrio:         */
+  --danger: #C4453A;          /* solo acciones destructivas y errores duros  */
+  --danger-quiet: #E07A70;    /* variante para texto sobre oscuro            */
+  --success-quiet: #7FA98A;   /* confirmación discreta; NUNCA para "score"   */
+
+  /* ============================================================================
+     TEMA POR DEFECTO — OBSIDIANA (oscuro)
+     ============================================================================ */
+  --bg: var(--obsidian-bg);
+  --surface: var(--obsidian-surface);
+  --surface-elevated: var(--obsidian-surface-elevated);
+  --surface-sunken: #0E0E11;
+
+  --text: var(--obsidian-text);
+  --text-muted: var(--obsidian-text-muted);
+  --text-subtle: var(--obsidian-text-subtle);
+
+  --border: rgba(255, 255, 255, 0.08);
+  --border-strong: rgba(255, 255, 255, 0.16);
+  --border-gold: rgba(231, 194, 79, 0.55); /* el "hairline dorado" de estado */
+
+  --accent: var(--gold-500);
+  --accent-text: var(--gold-300);   /* oro como TEXTO sobre oscuro (luminoso) */
+  --link: var(--gold-300);
+  --link-hover: var(--gold-100);
+  --focus-ring: var(--gold-300);
+  --on-accent: var(--ink-on-gold);  /* texto sobre botón dorado */
+
+  --overlay: rgba(0, 0, 0, 0.6);
+  --shimmer-from: rgba(214, 175, 55, 0);
+  --shimmer-core: rgba(246, 226, 162, 0.85);
+
+  /* Sombras: en oscuro la elevación es sutil (borde + sombra profunda corta) */
+  --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.5);
+  --shadow-2: 0 4px 16px rgba(0, 0, 0, 0.45);
+  --shadow-3: 0 16px 48px rgba(0, 0, 0, 0.55);
+  --shadow-focus: 0 0 0 2px var(--bg), 0 0 0 4px var(--focus-ring);
+
+  /* ==========================================================================
+     TIPOGRAFÍA
+     ========================================================================== */
+  --font-display: "Playfair Display", Georgia, "Times New Roman", serif;
+  --font-sans: "Geist", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "Geist Mono", ui-monospace, "SF Mono", "Roboto Mono", monospace;
+
+  /* Escala modular 1.25 (major third), fluida entre 390px y 1440px.
+     Patrón: clamp(min, calc(min + (max-min)*(100vw-390px)/1050), max) */
+  --fs-display-xl: clamp(48px, calc(48px + 48 * (100vw - 390px) / 1050), 96px);
+  --fs-display:    clamp(40px, calc(40px + 36 * (100vw - 390px) / 1050), 76px);
+  --fs-h1:         clamp(34px, calc(34px + 15 * (100vw - 390px) / 1050), 49px);
+  --fs-h2:         clamp(28px, calc(28px + 11 * (100vw - 390px) / 1050), 39px);
+  --fs-h3:         clamp(24px, calc(24px +  7 * (100vw - 390px) / 1050), 31px);
+  --fs-h4: 25px;   /* Geist 600 — cabeza de tarjeta/panel, no fluida */
+  --fs-h5: 20px;
+  --fs-h6: 16px;
+  --fs-body-lg: 18px;
+  --fs-body: 16px;
+  --fs-body-sm: 14px;
+  --fs-caption: 13px;
+  --fs-overline: 12px;  /* Geist Mono 500, uppercase, +0.14em */
+  --fs-code: 14px;
+
+  --lh-tight: 1.1;
+  --lh-heading: 1.2;
+  --lh-snug: 1.35;
+  --lh-body: 1.55;
+  --lh-relaxed: 1.7;
+
+  --tracking-display: -0.02em;
+  --tracking-heading: -0.01em;
+  --tracking-normal: 0;
+  --tracking-overline: 0.14em;
+  --tracking-mono: 0.01em;
+
+  --fw-regular: 400;
+  --fw-medium: 500;
+  --fw-semibold: 600;
+  --fw-bold: 700;
+
+  /* ==========================================================================
+     ESPACIADO — base 4px (compartido app + editorial)
+     ========================================================================== */
+  --space-0: 0;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --space-12: 48px;
+  --space-16: 64px;
+  --space-20: 80px;
+  --space-24: 96px;
+  --space-32: 128px;
+
+  /* ==========================================================================
+     DENSIDAD — escala nueva para UI de aplicación (§4.4.1)
+     El portfolio respira; el editor no puede. Tres densidades.
+     ========================================================================== */
+  --row-compact: 32px;
+  --row-default: 40px;
+  --row-comfortable: 48px;
+
+  --control-h-sm: 28px;
+  --control-h: 36px;      /* input/select/botón por defecto en la app */
+  --control-h-lg: 44px;   /* mínimo táctil (§7 a11y) — usar en móvil */
+
+  --control-pad-x: 12px;
+  --control-pad-y: 8px;
+  --control-pad-x-sm: 8px;
+
+  --toolbar-h: 48px;
+  --topbar-h: 56px;
+  --sidebar-w: 248px;
+  --sidebar-w-collapsed: 60px;
+
+  --field-gap: 6px;     /* label ↔ control */
+  --group-gap: 16px;    /* entre campos de un formulario */
+  --panel-pad: 20px;    /* padding interior de un panel de app */
+
+  /* Tipografía específica de UI densa (no fluida, px fijos) */
+  --ui-fs: 14px;        /* texto base de la app */
+  --ui-fs-sm: 13px;
+  --ui-fs-xs: 12px;
+  --ui-lh: 1.45;
+
+  /* ==========================================================================
+     RADIOS — modestos y precisos (editorial, no "web app burbujeante")
+     ========================================================================== */
+  --radius-xs: 3px;
+  --radius-sm: 4px;
+  --radius-md: 6px;   /* controles de app por defecto */
+  --radius-lg: 8px;   /* tarjetas, paneles */
+  --radius-xl: 12px;  /* superficies grandes, modales */
+  --radius-pill: 999px;
+
+  /* Grosores de línea (el hairline es un sistema, §4.4.7) */
+  --hairline: 1px;
+  --hairline-gold: 1.5px;
+
+  /* ==========================================================================
+     MOTION (§4.5) — corto, con curva, nunca decorativo
+     ========================================================================== */
+  --dur-instant: 80ms;
+  --dur-fast: 140ms;
+  --dur-base: 220ms;
+  --dur-slow: 360ms;
+  --dur-deliberate: 600ms; /* estados de IA: la espera se diseña, no se sufre */
+
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);      /* entradas/salidas UI */
+  --ease-emphasized: cubic-bezier(0.2, 0, 0, 1);
+  --ease-decelerate: cubic-bezier(0, 0, 0, 1);      /* algo que aparece */
+  --ease-accelerate: cubic-bezier(0.3, 0, 1, 1);    /* algo que se va */
+  --ease-spring: cubic-bezier(0.34, 1.24, 0.64, 1); /* micro-confirmaciones */
+
+  --shimmer-dur: 1100ms; /* el ÚNICO shimmer del producto (fin de extracción) */
+
+  /* ==========================================================================
+     Z-INDEX (escala documentada, sin números mágicos)
+     ========================================================================== */
+  --z-base: 0;
+  --z-sticky: 100;
+  --z-drawer: 200;
+  --z-overlay: 300;
+  --z-modal: 400;
+  --z-toast: 500;
+  --z-tooltip: 600;
+
+  /* ==========================================================================
+     GEOMETRÍA DEL DOCUMENTO CV (referencia; la spec exacta está en 05)
+     ========================================================================== */
+  --cv-page-w: 210mm;
+  --cv-page-h: 297mm;
+  --cv-margin-block: 16mm;
+  --cv-margin-inline: 18mm;
+}
+
+/* ============================================================================
+   TEMA CLARO — PORCELANA
+   ============================================================================ */
+[data-theme="porcelain"] {
+  color-scheme: light;
+
+  --bg: var(--porcelain-bg);
+  --surface: var(--porcelain-surface);
+  --surface-elevated: var(--porcelain-surface);
+  --surface-sunken: var(--porcelain-surface-sunken);
+
+  --text: var(--porcelain-text);
+  --text-muted: var(--porcelain-text-muted);
+  --text-subtle: var(--porcelain-text-subtle);
+
+  --border: rgba(23, 23, 26, 0.08);
+  --border-strong: rgba(23, 23, 26, 0.16);
+  --border-gold: rgba(138, 100, 20, 0.55);
+
+  --accent: var(--gold-500);        /* sobre claro: solo decorativo */
+  --accent-text: var(--gold-700);   /* oro como TEXTO sobre claro = tinta */
+  --link: var(--gold-700);
+  --link-hover: var(--gold-900);
+  --focus-ring: var(--gold-700);
+  --on-accent: var(--ink-on-gold);
+
+  --overlay: rgba(23, 23, 26, 0.35);
+  --shimmer-core: rgba(212, 175, 55, 0.7);
+
+  --shadow-1: 0 1px 2px rgba(23, 23, 26, 0.06);
+  --shadow-2: 0 4px 16px rgba(23, 23, 26, 0.08);
+  --shadow-3: 0 16px 48px rgba(23, 23, 26, 0.12);
+  --shadow-focus: 0 0 0 2px var(--bg), 0 0 0 4px var(--focus-ring);
+}
+
+/* ============================================================================
+   BASE / RESET mínimo recomendado (opcional; la app puede tener el suyo)
+   ============================================================================ */
+*, *::before, *::after { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-sans);
+  font-size: var(--fs-body);
+  line-height: var(--lh-body);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+a { color: var(--link); text-decoration: none; }
+a:hover { color: var(--link-hover); text-decoration: underline; text-underline-offset: 2px; }
+
+:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-focus);
+  border-radius: var(--radius-sm);
+}
+
+/* El oro se comunica también sin color: cuando falta contraste o se imprime,
+   los estados llevan SIEMPRE una segunda señal (borde, texto, icono textual). */
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}

@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html lang="es" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CANON · Demo de movimiento — pruébalo antes de aprobarlo</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&family=Playfair+Display:wght@500;600;700&display=swap" rel="stylesheet">
+<style>
+/* ── TOKENS (extracto real de 02-sistema/tokens.css) ── */
+:root{
+  --gold-100:#F6E2A2; --gold-300:#E7C24F; --gold-500:#D4AF37; --gold-700:#8A6414;
+  --bg:#0B0B0D; --surface:#141418; --surface-elevated:#1C1C22; --surface-sunken:#0E0E11;
+  --text:#F5F5F2; --text-muted:#B4B4AD; --text-subtle:#82827B;
+  --border:rgba(255,255,255,.08); --border-strong:rgba(255,255,255,.16);
+  --border-gold:rgba(231,194,79,.55);
+  --accent:var(--gold-500); --focus-ring:var(--gold-300); --danger:#C6544B;
+  --font-display:"Playfair Display",Georgia,serif;
+  --font-sans:"Geist",system-ui,sans-serif;
+  --font-mono:"Geist Mono",ui-monospace,monospace;
+  --dur-instant:80ms; --dur-fast:140ms; --dur-base:220ms; --dur-slow:360ms; --dur-deliberate:640ms;
+  --ease-standard:cubic-bezier(.2,0,0,1); --ease-decelerate:cubic-bezier(0,0,0,1);
+  --ease-accelerate:cubic-bezier(.3,0,1,1); --ease-spring:cubic-bezier(.34,1.24,.64,1);
+  --stagger-step:40ms;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font-family:var(--font-sans);line-height:1.55;-webkit-font-smoothing:antialiased}
+.wrap{max-width:1120px;margin:0 auto;padding:56px 32px 96px}
+.overline{font:500 12px/1 var(--font-mono);text-transform:uppercase;letter-spacing:.14em;color:var(--text-subtle);margin:0 0 14px}
+h1{font-family:var(--font-display);font-weight:600;font-size:44px;letter-spacing:-.02em;margin:0 0 8px}
+h1 em{font-style:italic;color:var(--gold-500)}
+.lede{color:var(--text-muted);max-width:64ch;margin:0 0 8px}
+h2{font-family:var(--font-display);font-weight:600;font-size:24px;margin:0 0 4px}
+.demo{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:24px;margin-top:16px}
+section{margin-top:56px}
+.hint{font:400 13px/1.5 var(--font-mono);color:var(--text-subtle);margin:6px 0 0}
+.ceremony{display:inline-block;font:500 10px/1 var(--font-mono);letter-spacing:.1em;text-transform:uppercase;padding:5px 8px;border:1px solid var(--border);border-radius:999px;color:var(--text-subtle);margin-left:10px;vertical-align:middle}
+button.btn{font:500 13px var(--font-sans);background:transparent;color:var(--gold-300);border:1px solid var(--border-gold);border-radius:6px;padding:9px 16px;cursor:pointer}
+button.btn:hover{background:rgba(212,175,55,.08)}
+button.btn.solid{background:var(--gold-500);color:#1A1206;border-color:var(--gold-500);font-weight:600}
+.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:14px}
+.item{display:flex;gap:12px;align-items:flex-start;background:var(--surface-elevated);border:1px solid var(--border);border-radius:8px;padding:12px 14px;margin-bottom:8px}
+.item .body{flex:1;min-width:0}
+.item .t{font-size:14px}
+.item .src{font:400 11px/1.4 var(--font-mono);color:var(--text-subtle);margin-top:5px}
+.item .src b{color:var(--gold-700);font-weight:500}
+.badge{font:500 10px/1 var(--font-mono);letter-spacing:.06em;text-transform:uppercase;padding:4px 7px;border-radius:4px;border:1px solid var(--border);color:var(--text-subtle);white-space:nowrap}
+.badge.ok{color:var(--gold-300);border-color:var(--border-gold)}
+.stat{font-family:var(--font-mono);font-size:40px;font-variant-numeric:tabular-nums;color:var(--gold-300)}
+.sec-head{display:flex;align-items:baseline;gap:12px;margin-bottom:0}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+@media(max-width:820px){.grid2{grid-template-columns:1fr}}
+pre{margin:0;font:400 11.5px/1.7 var(--font-mono)}
+.doc{background:#FAFAF7;color:#17171A;border-radius:6px;padding:20px 22px;height:280px;overflow:hidden}
+.doc .nm{font-family:var(--font-display);font-size:22px;font-weight:600;color:#8A6414;margin:0}
+.doc .tt{font-size:12px;color:#45454A;margin:2px 0 10px}
+.doc .ct{font:400 9.5px var(--font-mono);color:#6E6E72;border-bottom:1px solid #E4E4DE;padding-bottom:9px;margin-bottom:11px}
+.doc h4{font-size:9.5px;letter-spacing:.12em;text-transform:uppercase;color:#17171A;margin:0 0 5px;border-bottom:1px solid #17171A;padding-bottom:3px}
+.doc p{font-size:10.5px;margin:0 0 9px;color:#45454A}
+.doc .mono{font-family:var(--font-mono);color:#17171A;font-weight:500}
+.raw{background:var(--surface-sunken);border:1px solid var(--border);border-radius:6px;padding:20px 22px;height:280px;overflow:auto}
+.pill-tick{font:500 12px var(--font-mono);color:var(--text-muted)}
+.aurora-box{position:relative;height:200px;border-radius:10px;overflow:hidden;background:var(--surface-sunken);border:1px solid var(--border);display:grid;place-items:center;text-align:center}
+.aurora-box .inner{position:relative;z-index:1}
+.warn{border-left:2px solid var(--danger);padding-left:14px;color:var(--text-muted);font-size:14px;margin-top:14px}
+footer{margin-top:72px;padding-top:20px;border-top:1px solid var(--border);font:400 12px/1.6 var(--font-mono);color:var(--text-subtle)}
+</style>
+<link rel="stylesheet" href="canon-motion.css">
+</head>
+<body>
+<div class="wrap">
+
+  <p class="overline">CANON · Kit de movimiento — v1</p>
+  <h1>Pruébalo. Si algo molesta a la <em>tercera</em> vez, está mal.</h1>
+  <p class="lede">Cada animación de este demo es la real, con los tokens reales. Dale a los botones
+  varias veces seguidas: así es como se va a sentir usar la herramienta un martes a las 11 de la noche.</p>
+
+  <!-- ════════════════════════════════════════════════════════════════════ -->
+  <section>
+    <div class="sec-head"><h2>1 · El momento estelar</h2><span class="ceremony">Ceremonia 3</span></div>
+    <p class="lede">Termina la ingesta. Ves tu carrera aparecer, item por item. Es el producto entero en tres segundos.</p>
+    <div class="demo c-shimmer" id="staging-card">
+      <div class="row" style="justify-content:space-between;margin-top:0">
+        <div>
+          <span class="stat c-tick" id="counter">0</span>
+          <span class="pill-tick" id="status">items encontrados</span>
+        </div>
+        <button class="btn solid" id="btn-ingest">Simular ingesta</button>
+      </div>
+      <div class="c-divider" data-divider="staging" style="margin:18px 0"></div>
+      <div class="c-stagger" id="staging-list"></div>
+    </div>
+    <p class="hint">↑ Escalonado 40 ms · tope 24 items (el resto entra de golpe) · el shimmer dorado se dispara UNA vez</p>
+  </section>
+
+  <!-- ════════════════════════════════════════════════════════════════════ -->
+  <section>
+    <div class="sec-head"><h2>2 · «Cómo lo lee el ATS»</h2><span class="ceremony">Ceremonia 2</span></div>
+    <p class="lede">El documento se desviste. No es decoración: es la metáfora del producto — así te ve la máquina.</p>
+    <div class="row" style="margin:0 0 14px">
+      <button class="btn" data-xray-toggle="#preview" aria-pressed="false" id="xray-btn">Ver cómo lo lee el ATS</button>
+    </div>
+    <div class="demo" style="padding:16px">
+      <div class="c-xray" id="preview" data-mode="doc" style="position:relative">
+        <div class="c-xray__doc doc">
+          <p class="nm">Matías Fuentes Aguilar</p>
+          <p class="tt">Backend Engineer (Ingeniero de Software Senior)</p>
+          <p class="ct">Email: matias.fuentes@correo-ejemplo.cl · Tel: +56 9 6123 4567 · Providencia, RM · linkedin.com/in/mfuentes-demo</p>
+          <h4>Resumen</h4>
+          <p>Ingeniero de software con <span class="mono">8</span> años construyendo sistemas de pagos de alta concurrencia. Reduje la latencia p99 de <span class="mono">850 ms</span> a <span class="mono">180 ms</span>.</p>
+          <h4>Experiencia</h4>
+          <p><b>Senior Backend Engineer</b> — Fintual Administradora General de Fondos S.A.<br>
+          Rediseñé la API de pagos y reduje la latencia p99 de <span class="mono">850 ms</span> a <span class="mono">180 ms</span>, migrando un monolito Django a <span class="mono">6</span> servicios en Go.<br>
+          Sostuve <span class="mono">99,95%</span> de uptime procesando <span class="mono">CLP 12.000M</span> mensuales.</p>
+        </div>
+        <pre class="c-xray__raw raw">Matías Fuentes Aguilar
+Backend Engineer (Ingeniero de Software Senior)
+Email: matias.fuentes@correo-ejemplo.cl · Teléfono: +56 9 6123 4567
+Ubicación: Providencia, Región Metropolitana
+LinkedIn: linkedin.com/in/mfuentes-demo
+
+RESUMEN
+Ingeniero de software con 8 años construyendo sistemas de pagos
+de alta concurrencia. Reduje la latencia p99 de 850 ms a 180 ms.
+
+EXPERIENCIA
+Senior Backend Engineer          ene 2021 – Presente
+Fintual Administradora General de Fondos S.A. · Santiago, Chile
+Rediseñé la API de pagos y reduje la latencia p99 de 850 ms a
+180 ms, migrando un monolito Django a 6 servicios en Go.
+Sostuve 99,95% de uptime procesando CLP 12.000M mensuales.
+
+✓ Texto seleccionable · 1 columna · orden de lectura correcto
+✓ Contacto en el cuerpo, no en el header</pre>
+      </div>
+    </div>
+    <p class="hint">↑ blur(12px) + saturate(0), 360 ms · con reduce-motion es un corte limpio, sin perder información</p>
+  </section>
+
+  <!-- ════════════════════════════════════════════════════════════════════ -->
+  <section>
+    <div class="sec-head"><h2>3 · Confirmar y descartar</h2><span class="ceremony">Ceremonia 1</span></div>
+    <p class="lede">Aceptar un item en staging. Hazlo cinco veces seguidas: tiene que seguir sintiéndose bien.</p>
+    <div class="demo">
+      <div id="confirm-list">
+        <div class="item c-hairline c-focusable" tabindex="0">
+          <span class="badge ok">● verificado</span>
+          <div class="body">
+            <div class="t">Reduje el costo de infraestructura 30% (USD 8.000/mes) con autoescalado por colas.</div>
+            <div class="src">CV_2023.pdf · pág. 1 · evidencia: <b>«…costo de infraestructura 30%…»</b></div>
+          </div>
+          <button class="btn" data-accept>Aceptar</button>
+          <button class="btn" data-reject>Descartar</button>
+        </div>
+        <div class="item c-hairline c-focusable" tabindex="0">
+          <span class="badge ok">● verificado</span>
+          <div class="body">
+            <div class="t">Lideré un equipo de 4 ingenieros y mentoré a 2 juniors hasta semi-senior en 18 meses.</div>
+            <div class="src">linkedin-captura-2.png · evidencia: <b>«…equipo de 4 ingenieros…»</b></div>
+          </div>
+          <button class="btn" data-accept>Aceptar</button>
+          <button class="btn" data-reject>Descartar</button>
+        </div>
+        <div class="item c-hairline c-focusable c-unverified" tabindex="0">
+          <span class="badge" style="color:#C6544B;border-color:#C6544B">⚠ sin evidencia</span>
+          <div class="body">
+            <div class="t">Experto en arquitecturas cloud-native de misión crítica.</div>
+            <div class="src">Propuesto por IA · <b style="color:#C6544B">no aparece en ninguna fuente</b></div>
+          </div>
+          <button class="btn" data-accept>Aceptar</button>
+          <button class="btn" data-reject>Descartar</button>
+        </div>
+      </div>
+    </div>
+    <p class="hint">↑ El tercero es el estado más importante del producto: la IA propuso algo que no puede demostrar. Nunca solo color: lleva borde punteado, icono y texto.</p>
+  </section>
+
+  <!-- ════════════════════════════════════════════════════════════════════ -->
+  <section>
+    <div class="sec-head"><h2>4 · Estados de IA y hairline dorada</h2><span class="ceremony">Ceremonia 0</span></div>
+    <div class="grid2">
+      <div class="demo">
+        <p class="overline">Estados</p>
+        <div class="item c-hairline" data-state="active"><div class="body"><div class="t">Item activo — hairline dorada</div><div class="src">border-color + glow, 220 ms</div></div></div>
+        <div class="item c-hairline c-override"><div class="body"><div class="t">Con override — arista izquierda</div><div class="src">reescrito solo para esta variante</div></div></div>
+        <div class="item c-hairline c-pending"><div class="body"><div class="t">Propuesta de IA pendiente</div><div class="src">pulso lento en el borde, 2,4 s — pide atención con educación</div></div></div>
+        <div class="item c-hairline"><div class="body"><div class="t c-thinking">Pensando…</div><div class="src">respiración, no spinner. Un spinner que gira = «se colgó».</div></div></div>
+        <div class="item c-hairline"><div class="body"><div class="t"><span class="c-skeleton">Extrayendo experiencia laboral del documento</span></div></div></div>
+      </div>
+      <div class="demo">
+        <p class="overline">Skill con evidencia — el componente que nadie tiene</p>
+        <div class="item c-hairline" style="flex-direction:column;align-items:stretch">
+          <div class="row" style="justify-content:space-between;margin-top:0">
+            <div class="t" style="font-size:16px;font-weight:600">Go</div>
+            <span class="badge ok">● verificado</span>
+          </div>
+          <div class="src" style="margin-top:8px">412 KB · 3 repos · citada en 2 viñetas de experiencia</div>
+          <div class="src" style="margin-top:4px"><b>github.com/usuario/pago-conciliador</b> · +2 más</div>
+        </div>
+        <div class="item c-hairline c-unverified" style="flex-direction:column;align-items:stretch">
+          <div class="row" style="justify-content:space-between;margin-top:0">
+            <div class="t" style="font-size:16px;font-weight:600">Kubernetes</div>
+            <span class="badge" style="color:#C6544B;border-color:#C6544B">⚠ sin evidencia</span>
+          </div>
+          <div class="src" style="margin-top:8px">No aparece en ninguna viñeta, ni en tus repos, ni en tu portfolio.</div>
+          <div class="src" style="margin-top:4px;color:var(--text-muted)">¿Dónde lo usaste?</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ════════════════════════════════════════════════════════════════════ -->
+  <section>
+    <div class="sec-head"><h2>5 · La espera de la ingesta</h2><span class="ceremony">Único fondo vivo</span></div>
+    <p class="lede">El LLM tarda 5–40 s de verdad. Es el único sitio del producto donde algo se mueve sin que se lo pidas:
+    no hay contenido con el que interferir. Un tono. Oro sobre obsidiana.</p>
+    <div class="aurora-box">
+      <div class="c-aurora"></div>
+      <div class="inner">
+        <p class="overline" style="margin-bottom:8px">Leyendo</p>
+        <p class="c-thinking" style="font-family:var(--font-display);font-size:22px;margin:0">Página 2 de 3…</p>
+        <p class="hint" style="margin-top:10px">Encontré 4 experiencias · 23 skills · 2 proyectos</p>
+      </div>
+    </div>
+    <p class="warn"><b>Progreso honesto.</b> Dice <em>qué</em> está haciendo, no un porcentaje inventado.
+    Si no sabemos cuánto falta, la barra vacía es honesta; el 47% falso no lo es.</p>
+  </section>
+
+  <!-- ════════════════════════════════════════════════════════════════════ -->
+  <section>
+    <div class="sec-head"><h2>6 · Lo que NO hacemos</h2></div>
+    <div class="demo">
+      <p style="margin-top:0"><b style="color:var(--danger)">✗ Scroll-reveal en la app.</b>
+      <span style="color:var(--text-muted)">Si mis 200 items del master hacen fade-in al entrar en viewport, no puedo trabajar. El contenido de una herramienta está ahí, ya.</span></p>
+      <p><b style="color:var(--danger)">✗ Fondo de tinta multicolor.</b>
+      <span style="color:var(--text-muted)">Precioso en una landing. Hostil mientras editas. Y viola la regla del oro escaso.</span></p>
+      <p><b style="color:var(--danger)">✗ Texto con gradiente.</b>
+      <span style="color:var(--text-muted)">Nuestro oro es <em>un</em> oro.</span></p>
+      <p style="margin-bottom:0"><b style="color:var(--danger)">✗ Animar al escribir.</b>
+      <span style="color:var(--text-muted)">El editor es sagrado. Nada se mueve mientras el usuario teclea.</span></p>
+    </div>
+  </section>
+
+  <footer>
+    La regla: <b>una animación se gana su lugar si comunica un cambio de estado.</b><br>
+    Cuanto más frecuente es la acción, más corta debe ser — hasta desaparecer.<br>
+    Guardar una viñeta (40 veces/día) = 0 ms. Terminar una ingesta (2 veces en la vida) = el shimmer entero.
+  </footer>
+</div>
+
+<script src="canon-motion.js"></script>
+<script>
+/* ── Simulación de la ingesta: contador honesto + escalonado + shimmer ── */
+const ITEMS = [
+  ['Senior Backend Engineer — Fintual Administradora General de Fondos S.A.','CV_2023.pdf · pág. 1','ok'],
+  ['Rediseñé la API de pagos y reduje la latencia p99 de 850 ms a 180 ms.','CV_2023.pdf · pág. 1','ok'],
+  ['Sostuve 99,95% de uptime procesando CLP 12.000M mensuales.','CV_2023.pdf · pág. 1','ok'],
+  ['Lideré un equipo de 4 ingenieros; mentoré a 2 juniors.','linkedin-captura-2.png','ok'],
+  ['Backend Engineer — Cornershop by Uber','CV_2023.pdf · pág. 2','ok'],
+  ['Escalé el catálogo a 40.000 usuarios concurrentes.','CV_2023.pdf · pág. 2','ok'],
+  ['Go — 412 KB · 3 repos','API de GitHub · dato duro','api'],
+  ['Python — 180 KB · 2 repos','API de GitHub · dato duro','api'],
+  ['PostgreSQL','portfolio · /experiencia','ok'],
+  ['pago-conciliador — 320 ★ en GitHub','API de GitHub · dato duro','api'],
+  ['Ingeniería Civil en Computación — Universidad de Chile','CV_2023.pdf · pág. 2','ok'],
+  ['AWS Certified Solutions Architect (2022)','linkedin-captura-3.png','ok'],
+];
+
+const list = document.getElementById('staging-list');
+const counter = document.getElementById('counter');
+const status = document.getElementById('status');
+const card = document.getElementById('staging-card');
+const btn = document.getElementById('btn-ingest');
+
+btn.addEventListener('click', () => {
+  list.innerHTML = '';
+  list.classList.remove('is-running');
+  counter.textContent = '0';
+  btn.disabled = true;
+
+  const pasos = ['Leyendo CV_2023.pdf…','Transcribiendo capturas…','Consultando la API de GitHub…','Leyendo tu portfolio…'];
+  let i = 0;
+  status.textContent = pasos[0];
+  const t = setInterval(() => { i++; if (i < pasos.length) status.textContent = pasos[i]; }, 550);
+
+  setTimeout(() => {
+    clearInterval(t);
+    ITEMS.forEach(([txt, src, kind]) => {
+      const el = document.createElement('div');
+      el.className = 'item c-stagger-item c-hairline';
+      el.innerHTML = `
+        <span class="badge ${kind==='api'?'ok':'ok'}">${kind==='api'?'◆ dato duro':'● verificado'}</span>
+        <div class="body"><div class="t">${txt}</div><div class="src">${src}</div></div>`;
+      list.appendChild(el);
+    });
+    CANON.stagger(list);
+    CANON.countTo(counter, ITEMS.length, 700);
+    status.textContent = 'items encontrados · revísalos antes de que entren a tu master';
+    CANON.shimmer(card, 'ingesta');
+    CANON.announce(`Extracción completa. ${ITEMS.length} items encontrados, pendientes de tu revisión.`);
+    btn.disabled = false;
+    btn.textContent = 'Repetir (el shimmer ya no vuelve a salir)';
+  }, 2300);
+});
+
+/* ── Aceptar / descartar ── */
+document.getElementById('confirm-list').addEventListener('click', (e) => {
+  const item = e.target.closest('.item'); if (!item) return;
+  if (e.target.hasAttribute('data-accept')) {
+    CANON.confirm(item);
+    item.dataset.state = 'selected';
+    CANON.announce('Item aceptado y añadido a tu master.');
+  }
+  if (e.target.hasAttribute('data-reject')) {
+    CANON.dismiss(item, () => CANON.announce('Item descartado.'));
+  }
+});
+</script>
+</body>
+</html>

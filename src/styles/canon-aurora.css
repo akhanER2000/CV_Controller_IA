@@ -1,0 +1,130 @@
+/* ============================================================================
+   CANON · canon-aurora.css   —  v3, CALIBRADO EN NAVEGADOR REAL
+   El sistema de VENTANAS, MUROS Y VELOS. Esto es lo que hace que el humo
+   se VEA donde debe y NO ESTORBE donde no debe.
+
+   ── POR QUÉ NO SE VEÍA (v2) ──────────────────────────────────────────────
+   No era el shader. Lo ejecuté en GPU y leí los píxeles: luminancia máxima
+   73/255, 53% de píxeles visibles. El shader pintaba humo perfectamente.
+   EL VELO SE LO COMÍA:
+       .c-scrim--radial  →  rgba(5,5,8, .86)   ← 86% de negro encima
+       73 * (1 - 0.86)   =   10/255            ← invisible
+   Más los degradados de borde de 120px, que tapaban media sección.
+   Verificado con captura comparativa: velo .86 = negro · velo .25 = humo.
+
+   ── EL MECANISMO (forense de la referencia) ──────────────────────────────
+   No hay un "blackout" encima del humo. Es al revés:
+     1. El humo vive en una capa FIJA al fondo (z-index: 0).
+     2. El contenedor de página es OPACO (#050508). Eso lo TAPA.
+     3. Algunas secciones se declaran TRANSPARENTES → son VENTANAS.
+   Verificado sección por sección en su página:
+     🔓 Hero · 🧱 Audience · 🧱 Transmutation · 🔓 Features · 🔓 Speed ·
+     🧱 Proof · 🔓 Pricing · 🧱 Philosophy · 🔓 Compare · 🔓 Calculator
+   Al bajar, el humo APARECE Y DESAPARECE. El fondo respira.
+   Y donde hay trabajo que leer, HAY MURO.
+   ============================================================================ */
+
+/* ── 0 · ★ EL DIAL MAESTRO ────────────────────────────────────────────────
+   La referencia aplica opacity:0.15 a TODA la capa del canvas (verificado:
+   three.js r183, contenedor fixed, opacity 0.15). Es el mando de intensidad.
+   Un solo número gobierna cuánto humo hay en todo el producto.               */
+:root{
+  --aurora-strength: 0.55;   /* 0 = apagado · 0.35 discreto · 0.55 ★ · 0.8 fuerte */
+}
+
+/* ── 1 · LA CAPA DEL HUMO ─────────────────────────────────────────────────── */
+.c-aurora-gl{
+  position:fixed; inset:0;
+  z-index:0;
+  pointer-events:none;              /* nunca intercepta un clic */
+  overflow:hidden;
+  opacity:var(--aurora-strength);   /* ← el dial */
+}
+
+/* Sin WebGL2 o con reduce-motion → degradado estático, mismos metales, cero GPU */
+.c-aurora-gl.is-static{
+  background:
+    radial-gradient(58% 48% at 18% 12%, rgba(212,175,55,.16), transparent 70%),
+    radial-gradient(45% 40% at 78% 30%, rgba(184,115,51,.11), transparent 70%),
+    radial-gradient(50% 45% at 60% 88%, rgba(173,182,194,.08), transparent 70%),
+    var(--bg,#0B0B0D);
+}
+
+/* ── 2 · EL MURO — donde hay trabajo que leer ─────────────────────────────── */
+/* El contenido denso va SIEMPRE sobre muro. El humo no compite con el trabajo. */
+.c-wall{
+  position:relative; z-index:1;
+  background:var(--obsidian-deep,#050508);
+}
+
+/* ── 3 · LA VENTANA — donde el humo asoma ─────────────────────────────────── */
+.c-window{
+  position:relative; z-index:1;
+  background:transparent;           /* ← el humo de la capa fija se ve aquí */
+}
+
+/* Difuminado en los bordes: el humo no "corta" en seco contra el muro.
+   ⚠️ 64px, NO 120px. Con 120 y una sección corta, los dos degradados se
+   solapaban y tapaban la sección entera. Ese fue el segundo asesino del humo. */
+.c-window::before,
+.c-window::after{
+  content:""; position:absolute; left:0; right:0; height:64px;
+  pointer-events:none; z-index:0;
+}
+.c-window::before{ top:0;    background:linear-gradient(to bottom, var(--obsidian-deep,#050508), transparent); }
+.c-window::after { bottom:0; background:linear-gradient(to top,    var(--obsidian-deep,#050508), transparent); }
+
+/* ── 4 · EL VELO (scrim) — cuando hay TEXTO encima del humo ───────────────── */
+/* ★ VALORES CALIBRADOS MIRANDO CAPTURAS REALES, no a ojo.
+   Regla: usa siempre el MÍNIMO que deje leer cómodamente.
+   El humo tiene una luminancia máxima de 73/255 — no aguanta un velo pesado. */
+.c-scrim{ position:relative; z-index:1; }
+.c-scrim::before{
+  content:""; position:absolute; inset:0; z-index:-1; pointer-events:none;
+  background:rgba(5,5,8,.28);            /* ★ era .55 → invisibilizaba el humo */
+}
+.c-scrim--light::before { background:rgba(5,5,8,.15); }   /* casi nada */
+.c-scrim--heavy::before { background:rgba(5,5,8,.45); }   /* texto denso */
+
+/* Velo radial: oscurece bajo el texto y deja los bordes limpios.
+   El mejor para un titular centrado sobre humo. */
+.c-scrim--radial::before{
+  background:radial-gradient(65% 75% at 50% 50%,
+    rgba(5,5,8,.55),                     /* ★ era .86 → negro total */
+    rgba(5,5,8,.18) 70%,
+    transparent);
+}
+
+/* ── 5 · PANEL — la superficie sobre la que se trabaja ────────────────────── */
+/* Vidrio ahumado. Deja intuir el humo detrás SIN comerse una sola letra.
+   Es lo que permite tener un dashboard legible Y un fondo vivo a la vez. */
+.c-panel{
+  position:relative; z-index:1;
+  background:rgba(20,20,24,.72);
+  backdrop-filter:blur(14px) saturate(1.1);
+  -webkit-backdrop-filter:blur(14px) saturate(1.1);
+  border:1px solid var(--border,rgba(255,255,255,.08));
+  border-radius:12px;
+}
+/* Panel sólido: listas densas y el editor. CERO transparencia.
+   Con 200 items que leer, el humo detrás es ruido. Punto. */
+.c-panel--solid{
+  background:var(--surface,#141418);
+  backdrop-filter:none; -webkit-backdrop-filter:none;
+}
+@supports not (backdrop-filter: blur(1px)){
+  .c-panel{ background:rgba(20,20,24,.94); }
+}
+
+/* ── 6 · REGLA DE ORO ─────────────────────────────────────────────────────── */
+/*
+   ✅ VENTANA (humo visible):  login · onboarding · espera de la ingesta ·
+                               dashboard VACÍO del día 1 · cabeceras de sección
+   🧱 MURO (humo tapado):      master con 200 items · editor de variante ·
+                               staging · tailoring · el documento
+                               → donde hay trabajo, el trabajo gana. Siempre.
+*/
+
+@media (prefers-reduced-motion: reduce){
+  .c-aurora-gl canvas{ display:none; }
+}

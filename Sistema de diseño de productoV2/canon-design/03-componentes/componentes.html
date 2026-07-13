@@ -1,0 +1,386 @@
+<!DOCTYPE html>
+<html lang="es" data-theme="obsidian">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Corpus · 03 · Componentes</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500;600&family=Playfair+Display:wght@500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#0B0B0D;--surface:#141418;--surface-2:#1C1C22;--sunken:#0E0E11;
+  --text:#F5F5F2;--muted:#B4B4AD;--subtle:#82827B;
+  --border:rgba(255,255,255,.08);--border-strong:rgba(255,255,255,.16);--border-gold:rgba(231,194,79,.55);
+  --g100:#F6E2A2;--g300:#E7C24F;--g500:#D4AF37;--g700:#8A6414;--ink-on-gold:#1A1206;
+  --danger:#C4453A;--danger-q:#E07A70;
+  --sans:"Geist",system-ui,sans-serif;--mono:"Geist Mono",monospace;--disp:"Playfair Display",Georgia,serif;
+  --r-sm:4px;--r-md:6px;--r-lg:8px;--r-xl:12px;
+}
+*{box-sizing:border-box}
+html{background:var(--bg)}
+body{margin:0;background:var(--bg);color:var(--text);font-family:var(--sans);font-size:14px;line-height:1.45;-webkit-font-smoothing:antialiased}
+.wrap{max-width:1180px;margin:0 auto;padding:48px 40px 120px}
+h1,h2,h3{margin:0}
+a{color:var(--g300);text-decoration:none}
+.overline{font:500 11px/1 var(--mono);text-transform:uppercase;letter-spacing:.14em;color:var(--subtle)}
+
+/* header */
+.head{border-bottom:1px solid var(--border);padding-bottom:28px;margin-bottom:14px}
+.wm{font-family:var(--disp);font-weight:600;font-size:26px;color:var(--g500);letter-spacing:-.01em}
+.head h1{font-family:var(--disp);font-weight:600;font-size:34px;letter-spacing:-.01em;margin:14px 0 8px}
+.head p{color:var(--muted);max-width:64ch;margin:0}
+.note{background:var(--surface);border:1px solid var(--border);border-left:2px solid var(--g700);border-radius:var(--r-md);padding:14px 16px;color:var(--muted);font-size:13px;margin:18px 0 0}
+.note b{color:var(--text)}
+
+/* section scaffolding */
+section{margin-top:56px}
+.sh{display:flex;align-items:baseline;gap:12px;border-bottom:1px solid var(--border);padding-bottom:10px;margin-bottom:8px}
+.sh .n{font:500 11px/1 var(--mono);color:var(--g500);letter-spacing:.1em}
+.sh h2{font-family:var(--disp);font-weight:600;font-size:23px;letter-spacing:-.01em}
+.sdesc{color:var(--muted);font-size:13px;max-width:70ch;margin:0 0 22px}
+.grid{display:grid;gap:16px}
+.g2{grid-template-columns:repeat(2,1fr)}.g3{grid-template-columns:repeat(3,1fr)}
+.panel{background:var(--surface);border:1px solid var(--border);border-radius:var(--r-lg);padding:18px}
+.cap{font:500 11px/1 var(--mono);text-transform:uppercase;letter-spacing:.1em;color:var(--subtle);margin-bottom:12px;display:block}
+.stack{display:flex;flex-direction:column;gap:10px}
+.rowwrap{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+
+/* ---------- densidad ---------- */
+.drow{display:flex;align-items:center;gap:12px;padding:0 12px;background:var(--surface-2);border:1px solid var(--border);border-radius:var(--r-sm);color:var(--muted);font-size:13px}
+.drow .k{font:500 11px var(--mono);color:var(--subtle);width:96px}
+.drow.c{height:32px}.drow.d{height:40px}.drow.cm{height:48px}
+
+/* ---------- formularios ---------- */
+.field{display:flex;flex-direction:column;gap:6px;margin-bottom:14px}
+.label{font-size:12px;color:var(--muted);font-weight:500}
+.hint{font-size:11px;color:var(--subtle)}
+.input,.select,.textarea{width:100%;background:var(--sunken);border:1px solid var(--border-strong);border-radius:var(--r-md);color:var(--text);font:inherit;padding:8px 12px;height:36px}
+.textarea{height:auto;min-height:64px;resize:vertical;line-height:1.45}
+.input::placeholder{color:var(--subtle)}
+.input:focus,.select:focus,.textarea:focus{outline:none;border-color:var(--g300);box-shadow:0 0 0 3px rgba(231,194,79,.18)}
+.input.err{border-color:var(--danger)}
+.errmsg{font-size:11px;color:var(--danger-q)}
+.select{appearance:none;background-image:linear-gradient(45deg,transparent 50%,var(--subtle) 50%),linear-gradient(135deg,var(--subtle) 50%,transparent 50%);background-position:calc(100% - 16px) 15px,calc(100% - 11px) 15px;background-size:5px 5px;background-repeat:no-repeat}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{display:inline-flex;align-items:center;gap:6px;height:26px;padding:0 8px 0 10px;background:var(--surface-2);border:1px solid var(--border-strong);border-radius:999px;font-size:12px;color:var(--text)}
+.chip .x{color:var(--subtle);cursor:pointer;font-size:14px;line-height:1}
+.chip.add{border-style:dashed;color:var(--muted);cursor:pointer}
+.combo{position:relative}
+.combo-menu{margin-top:6px;background:var(--surface-2);border:1px solid var(--border-strong);border-radius:var(--r-md);overflow:hidden}
+.combo-menu div{padding:7px 12px;font-size:13px;color:var(--muted);cursor:pointer}
+.combo-menu div:hover,.combo-menu div.on{background:rgba(231,194,79,.12);color:var(--text)}
+.combo-menu .m{font:500 11px var(--mono);color:var(--subtle);float:right}
+.sw{display:inline-flex;align-items:center;gap:10px;font-size:13px;color:var(--muted);cursor:pointer}
+.track{width:40px;height:22px;border-radius:999px;background:var(--surface-2);border:1px solid var(--border-strong);position:relative;transition:background .14s,border-color .14s}
+.track::after{content:"";position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:50%;background:var(--muted);transition:transform .14s,background .14s}
+.sw.on .track{background:rgba(231,194,79,.22);border-color:var(--g300)}
+.sw.on .track::after{transform:translateX(18px);background:var(--g300)}
+.cbx,.rdo{display:flex;align-items:center;gap:9px;font-size:13px;color:var(--muted);cursor:pointer}
+.box{width:16px;height:16px;border:1px solid var(--border-strong);border-radius:4px;background:var(--sunken);display:inline-flex;align-items:center;justify-content:center;font-size:11px;color:var(--ink-on-gold)}
+.cbx.on .box{background:var(--g300);border-color:var(--g300)}
+.rdo .box{border-radius:50%}
+.rdo.on .box{border-color:var(--g300)}
+.rdo.on .box::after{content:"";width:8px;height:8px;border-radius:50%;background:var(--g300)}
+.dr{display:flex;align-items:center;gap:8px}
+.dr .select{width:auto;min-width:78px}
+.dr span{color:var(--subtle)}
+
+/* ---------- niveles de evidencia (sin semáforo) ---------- */
+.ev{display:inline-flex;align-items:center;gap:6px;height:20px;padding:0 8px 0 7px;border-radius:999px;font:500 11px/1 var(--sans);white-space:nowrap;border:1px solid transparent}
+.ev::before{font-size:10px;line-height:1}
+.ev--verified{background:rgba(231,194,79,.14);border-color:var(--border-gold);color:var(--g300)}
+.ev--verified::before{content:"◆"}
+.ev--partial{background:rgba(255,255,255,.05);border-color:var(--border-strong);color:var(--muted)}
+.ev--partial::before{content:"◈";color:var(--g700)}
+.ev--unverified{background:transparent;border:1px dashed var(--border-strong);color:var(--subtle)}
+.ev--unverified::before{content:"○"}
+
+/* ---------- tarjeta de procedencia ---------- */
+.prov{background:var(--surface-2);border:1px solid var(--border);border-radius:var(--r-md);padding:12px 14px}
+.prov .txt{color:var(--text);font-size:13.5px;line-height:1.5}
+.prov .num{font-family:var(--mono);font-weight:500;color:var(--text)}
+.prov .meta{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-top:10px;font-size:12px;color:var(--subtle)}
+.origin{display:inline-flex;align-items:center;gap:6px;font:500 11px var(--mono);color:var(--muted)}
+.origin .tag{padding:1px 6px;border:1px solid var(--border-strong);border-radius:4px;letter-spacing:.03em}
+.evidence{margin-top:10px;border-top:1px solid var(--border);padding-top:9px;font-size:12px;color:var(--muted)}
+.evidence .src{font-family:var(--mono);color:var(--subtle);font-size:11px}
+.evidence q{color:var(--text);font-style:normal}
+.disc{font-size:11px;color:var(--g300);cursor:pointer;background:none;border:none;padding:0;font-family:var(--mono)}
+
+/* ---------- skill con evidencia (★) ---------- */
+.skill{display:flex;flex-direction:column;gap:5px;background:var(--surface-2);border:1px solid var(--border);border-radius:var(--r-md);padding:12px 14px;border-left:2px solid var(--border-gold)}
+.skill.un{border-left-color:var(--border-strong)}
+.skill .top{display:flex;justify-content:space-between;align-items:center;gap:10px}
+.skill .name{font-weight:600;font-size:14px;color:var(--text)}
+.skill .ev-line{font:500 12px var(--mono);color:var(--muted)}
+.skill .ev-line b{color:var(--g300);font-weight:500}
+.skill.un .ev-line{color:var(--subtle)}
+
+/* ---------- fuente conectada ---------- */
+.source{background:var(--surface-2);border:1px solid var(--border);border-radius:var(--r-lg);padding:14px 16px;display:flex;flex-direction:column;gap:8px}
+.source .top{display:flex;align-items:center;gap:12px}
+.badge{width:34px;height:34px;border-radius:var(--r-md);display:flex;align-items:center;justify-content:center;font:600 11px var(--mono);flex:none;background:var(--sunken);border:1px solid var(--border-strong);color:var(--muted)}
+.source .title{font-weight:600;font-size:14px}
+.source .handle{font:500 12px var(--mono);color:var(--subtle)}
+.status{margin-left:auto;display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--muted)}
+.dot{width:7px;height:7px;border-radius:50%;background:var(--g500)}
+.dot.stale{background:var(--subtle)}
+.source .stats{font-size:12.5px;color:var(--muted)}
+.source .new{font-size:12.5px;color:var(--g300);font-weight:500}
+.source .verif{font:500 11px var(--mono);color:var(--subtle);letter-spacing:.04em}
+.btn{height:30px;padding:0 12px;border-radius:var(--r-md);border:1px solid var(--border-strong);background:var(--surface);color:var(--text);font:500 12px var(--sans);cursor:pointer;display:inline-flex;align-items:center;gap:6px}
+.btn:hover{border-color:var(--border-gold)}
+.btn.gold{background:var(--g500);border-color:var(--g500);color:var(--ink-on-gold);font-weight:600}
+.btn.ghost{background:transparent}
+.stars{color:var(--g500);letter-spacing:1px}.stars .off{color:var(--border-strong)}
+
+/* ---------- selector de repos ---------- */
+.repos{border:1px solid var(--border);border-radius:var(--r-lg);overflow:hidden}
+.repos .rh{display:flex;justify-content:space-between;align-items:center;padding:12px 16px;background:var(--surface-2);border-bottom:1px solid var(--border);font-size:12px;color:var(--muted)}
+.repo{display:flex;align-items:center;gap:12px;padding:11px 16px;border-bottom:1px solid var(--border)}
+.repo:last-child{border-bottom:none}
+.repo.off{opacity:.55}
+.repo .lang{width:9px;height:9px;border-radius:50%;flex:none}
+.repo .rn{font-weight:500;font-size:13.5px}
+.repo .rmeta{font:500 11px var(--mono);color:var(--subtle);margin-left:auto;white-space:nowrap}
+.repo .reason{font-size:11px;color:var(--subtle);font-style:italic}
+
+/* ---------- estados de IA ---------- */
+.ai{background:var(--surface-2);border:1px solid var(--border);border-radius:var(--r-md);padding:14px}
+.ai .st{display:flex;align-items:center;gap:9px;font:500 12px var(--mono);text-transform:uppercase;letter-spacing:.08em;color:var(--subtle);margin-bottom:8px}
+.pulse{width:8px;height:8px;border-radius:50%;background:var(--g300);animation:pulse 1.4s ease-in-out infinite}
+@keyframes pulse{0%,100%{opacity:.3;transform:scale(.85)}50%{opacity:1;transform:scale(1)}}
+.ai .body{font-size:13px;color:var(--text)}
+.ai .cnt{font-family:var(--mono);color:var(--g300);font-weight:600}
+.ai.prop{border-left:2px solid var(--border-gold)}
+.ai.acc{border-left:2px solid var(--g500)}
+.ai.rej{opacity:.6}
+.tick{color:var(--g300)}
+
+/* ---------- toggle global IA ---------- */
+.aitoggle{display:flex;align-items:center;justify-content:space-between;gap:16px;background:var(--surface-2);border:1px solid var(--border);border-radius:var(--r-lg);padding:16px 18px}
+
+/* hairline states */
+.hl{padding:12px 14px;background:var(--surface-2);border:1px solid var(--border);border-radius:var(--r-md);font-size:13px;color:var(--muted)}
+.hl.override{border-left:2px solid var(--g500)}
+.hl.pending{border-left:2px solid var(--border-gold)}
+.hl.active{border:1px solid var(--g300)}
+.legend{font-size:11px;color:var(--subtle);margin-top:6px}
+
+@media (max-width:820px){.g2,.g3{grid-template-columns:1fr}.wrap{padding:32px 20px 80px}}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="head">
+    <span class="wm">Corpus</span>
+    <p class="overline" style="margin-top:16px">03 · Componentes · tema Obsidiana</p>
+    <h1>Biblioteca de componentes</h1>
+    <p>Los componentes de la aplicación densa, con sus estados. El oro es escaso e intencional: aquí solo aparece donde significa <b>valor, acción o evidencia verificada</b>. La confianza se comunica con oro + grises + forma + texto — <b>nunca con color solo</b>, nunca con semáforo.</p>
+  </header>
+
+  <!-- ===================== NIVELES DE EVIDENCIA ===================== -->
+  <section>
+    <div class="sh"><span class="n">★</span><h2>Niveles de evidencia</h2></div>
+    <p class="sdesc">El nivel <b>no es un número que el LLM se auto-reporta</b> (eso sería el "ATS score" que condenamos). Deriva de evidencia real: <b>verificado</b> = el fragmento aparece literal en la fuente, o es dato de API, o lo escribió el humano · <b>parcial</b> = coincidencia difusa · <b>sin verificar</b> = sin evidencia rastreable, y la UI lo señala. Regla: <b>la ausencia de oro también comunica</b>. Segunda señal siempre (forma + texto), nunca solo color.</p>
+    <div class="grid g3">
+      <div class="panel"><span class="cap">Verificado</span>
+        <div class="rowwrap"><span class="ev ev--verified">Verificado</span></div>
+        <p class="sdesc" style="margin:12px 0 0">Oro presente. Rombo lleno ◆. El <span style="font-family:var(--mono);font-size:12px">evidenceSnippet</span> aparece literal en la fuente, o viene de una API, o lo escribió el humano.</p>
+      </div>
+      <div class="panel"><span class="cap">Parcial</span>
+        <div class="rowwrap"><span class="ev ev--partial">Parcial</span></div>
+        <p class="sdesc" style="margin:12px 0 0">Oro tenue. Rombo medio ◈. Coincidencia difusa: el fragmento no calza exacto. Merece una mirada antes de aceptar.</p>
+      </div>
+      <div class="panel"><span class="cap">Sin verificar</span>
+        <div class="rowwrap"><span class="ev ev--unverified">Sin verificar</span></div>
+        <p class="sdesc" style="margin:12px 0 0"><b>Cero oro</b>, borde punteado, círculo hueco ○. Sin evidencia rastreable. La UI lo señala; nunca se presenta como hecho.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== PROCEDENCIA ===================== -->
+  <section>
+    <div class="sh"><span class="n">★</span><h2>Tarjeta de item con procedencia</h2></div>
+    <p class="sdesc">Cada item lleva su origen y es <b>legible de un vistazo, nunca acusatorio</b>. El fragmento de evidencia se expande/contrae. Tono informativo, no de juicio.</p>
+    <div class="grid g2">
+      <div class="prov">
+        <div class="txt">Reduje la latencia p99 de la API de pagos de <span class="num">850 ms</span> a <span class="num">180 ms</span>, migrando un monolito Django a <span class="num">6</span> servicios en Go.</div>
+        <div class="meta"><span class="origin"><span class="tag">PDF</span> CV_2023.pdf · pág. 2</span><span class="ev ev--verified">Verificado</span><button class="disc">ocultar evidencia ▲</button></div>
+        <div class="evidence"><span class="src">Fragmento en la fuente:</span> <q>p99 850ms→180ms, 6 microservicios Go/gRPC</q></div>
+      </div>
+      <div class="prov">
+        <div class="txt">Implementé un pipeline de conciliación que detecta descuadres en menos de <span class="num">5</span> minutos.</div>
+        <div class="meta"><span class="origin"><span class="tag">✎</span> escrito a mano</span><span class="ev ev--verified">Verificado</span></div>
+        <div class="legend">Lo escribió el humano → el origen más verificable de todos. Sin evidencia externa que mostrar, y está bien.</div>
+      </div>
+      <div class="prov">
+        <div class="txt">Ingeniero de software con <span class="num">8</span> años construyendo sistemas de pagos y back-ends de alta concurrencia…</div>
+        <div class="meta"><span class="origin"><span class="tag">IA</span> reformulado por IA</span><span class="ev ev--partial">Parcial</span><button class="disc">ver original ▾</button></div>
+        <div class="evidence"><span class="src">Original (tú):</span> <q>Ingeniero backend con amplia experiencia en el rubro fintech, apasionado por los sistemas escalables.</q></div>
+      </div>
+      <div class="prov">
+        <div class="txt">pago-conciliador — <span class="num">320</span> estrellas en GitHub, uso documentado en <span class="num">4</span> empresas.</div>
+        <div class="meta"><span class="origin"><span class="tag">API</span> GitHub</span><span class="ev ev--verified">Verificado</span></div>
+        <div class="evidence"><span class="src">Dato de la API:</span> <q>stargazers_count: 320</q> — sin IA en la extracción, nada que alucinar.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== SKILL CON EVIDENCIA ===================== -->
+  <section>
+    <div class="sh"><span class="n">★★</span><h2>Tarjeta de skill con evidencia</h2></div>
+    <p class="sdesc">El componente nuevo más importante. Una skill deja de ser una afirmación: muestra <b>de dónde sale</b>. Resuelve el problema más difícil del CV técnico (el 32% declara skills que no tiene). Y hace visible el caso incómodo: una skill declarada <b>sin evidencia</b>.</p>
+    <div class="grid g3">
+      <div class="skill"><div class="top"><span class="name">Go</span><span class="ev ev--verified">Verificado</span></div><div class="ev-line"><b>5 repos</b> · <b>412 KB</b> · usada en <b>1 viñeta</b></div></div>
+      <div class="skill"><div class="top"><span class="name">Kubernetes (EKS)</span><span class="ev ev--verified">Verificado</span></div><div class="ev-line">usada en <b>1 viñeta</b> (Fintual)</div></div>
+      <div class="skill"><div class="top"><span class="name">Terraform</span><span class="ev ev--partial">Parcial</span></div><div class="ev-line"><b>2 repos</b> · sin viñeta que la respalde</div></div>
+      <div class="skill un"><div class="top"><span class="name">Elasticsearch</span><span class="ev ev--unverified">Sin verificar</span></div><div class="ev-line">declarado · sin repos, portfolio ni viñetas</div></div>
+      <div class="skill un"><div class="top"><span class="name">DDD</span><span class="ev ev--unverified">Sin verificar</span></div><div class="ev-line">declarado · sin evidencia externa</div></div>
+      <div class="skill"><div class="top"><span class="name">Python</span><span class="ev ev--verified">Verificado</span></div><div class="ev-line"><b>6 repos</b> · <b>221 KB</b></div></div>
+    </div>
+    <p class="note"><b>El freno.</b> La evidencia de GitHub nunca <em>infla</em>: 412 KB de Go no dicen "senior en Go", dicen "412 KB de Go". El nivel es un hecho contable, no un juicio de nivel.</p>
+  </section>
+
+  <!-- ===================== FUENTES CONECTADAS ===================== -->
+  <section>
+    <div class="sh"><span class="n">★</span><h2>Tarjeta de fuente conectada</h2></div>
+    <p class="sdesc">Las fuentes son <b>conexiones vivas</b>, no un historial de subidas. Ordenadas por verificabilidad. Lo nuevo va a staging, no al master — incluso lo que viene de una API, porque la decisión de si va en tu CV es del humano.</p>
+    <div class="grid g2">
+      <div class="source">
+        <div class="top"><span class="badge">GH</span><div><div class="title">GitHub</div><div class="handle">@mfuentes-demo</div></div><span class="status"><span class="dot"></span>conectado</span></div>
+        <div class="stats">Sincronizado hace 2 días · 14 repos considerados, 4 en el master</div>
+        <div class="new">↑ 3 repos nuevos desde la última vez</div>
+        <div class="rowwrap" style="justify-content:space-between;margin-top:2px"><span class="verif"><span class="stars">★★★★★</span> dato duro · sin IA</span><button class="btn ghost">Resincronizar</button></div>
+      </div>
+      <div class="source">
+        <div class="top"><span class="badge">PF</span><div><div class="title">Portfolio</div><div class="handle">mi-sitio.cl</div></div><span class="status"><span class="dot"></span>conectado</span></div>
+        <div class="stats">Sincronizado hace 7 días · 8 proyectos · 2 con contenido actualizado</div>
+        <div class="new">↑ 2 proyectos con novedades</div>
+        <div class="rowwrap" style="justify-content:space-between;margin-top:2px"><span class="verif"><span class="stars">★★★★★</span> primera parte · estructura propia</span><button class="btn ghost">Resincronizar</button></div>
+      </div>
+      <div class="source">
+        <div class="top"><span class="badge">in</span><div><div class="title">LinkedIn</div><div class="handle">3 capturas</div></div><span class="status"><span class="dot stale"></span>desactualizada</span></div>
+        <div class="stats">Última hace 4 meses · 3 capturas procesadas</div>
+        <div class="stats" style="color:var(--subtle)">Tu LinkedIn puede estar desactualizado.</div>
+        <div class="rowwrap" style="justify-content:space-between;margin-top:2px"><span class="verif"><span class="stars">★★★<span class="off">★★</span></span> IA · requiere revisión</span><button class="btn ghost">Subir nuevas</button></div>
+      </div>
+      <div class="source">
+        <div class="top"><span class="badge">PDF</span><div><div class="title">CV_2023.pdf</div><div class="handle">archivo</div></div><span class="status"><span class="dot"></span>procesado</span></div>
+        <div class="stats">41 items · 38 aceptados en el master</div>
+        <div class="rowwrap" style="justify-content:space-between;margin-top:2px"><span class="verif"><span class="stars">★★★<span class="off">★★</span></span> IA · requiere revisión</span><button class="btn ghost">Ver items</button></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== SELECTOR DE REPOS ===================== -->
+  <section>
+    <div class="sh"><span class="n">★</span><h2>Selector de repos de GitHub</h2></div>
+    <p class="sdesc">Un CV no es un volcado de GitHub. El producto <b>propone</b> un default (no-fork · con descripción · commits propios · actividad reciente) y lo muestra <b>revisable, nunca automático</b>. El usuario decide qué es un proyecto real.</p>
+    <div class="repos">
+      <div class="rh"><span>Propuesta revisable — <b style="color:var(--muted)">4 de 14</b> marcados como proyecto real</span><span style="font-family:var(--mono);font-size:11px">tú decides</span></div>
+      <div class="repo"><span class="cbx on"><span class="box">✓</span></span><span class="lang" style="background:#79c0ff"></span><span class="rn">pago-conciliador</span><span class="rmeta">Go · 412 KB · ★ 320</span></div>
+      <div class="repo"><span class="cbx on"><span class="box">✓</span></span><span class="lang" style="background:#79c0ff"></span><span class="rn">latency-lab</span><span class="rmeta">Go · 88 KB · ★ 12</span></div>
+      <div class="repo"><span class="cbx on"><span class="box">✓</span></span><span class="lang" style="background:#3572A5"></span><span class="rn">reco-search</span><span class="rmeta">Python · 154 KB · ★ 5</span></div>
+      <div class="repo"><span class="cbx on"><span class="box">✓</span></span><span class="lang" style="background:#844FBA"></span><span class="rn">infra-templates</span><span class="rmeta">HCL · 34 KB</span></div>
+      <div class="repo off"><span class="cbx"><span class="box"></span></span><span class="lang" style="background:#2b7489"></span><span class="rn">ts-utils</span><span class="reason">sin descripción</span><span class="rmeta">TS · 98 KB</span></div>
+      <div class="repo off"><span class="cbx"><span class="box"></span></span><span class="lang" style="background:#3572A5"></span><span class="rn">advent-of-code-2024</span><span class="reason">ejercicios, no proyecto</span><span class="rmeta">Python · 41 KB</span></div>
+      <div class="repo off"><span class="cbx"><span class="box"></span></span><span class="lang" style="background:#89e051"></span><span class="rn">dotfiles</span><span class="reason">configuración personal</span><span class="rmeta">Shell · 8 KB</span></div>
+      <div class="repo off"><span class="cbx"><span class="box"></span></span><span class="lang" style="background:#79c0ff"></span><span class="rn">kubernetes</span><span class="reason">fork · 0 commits propios</span><span class="rmeta">fork</span></div>
+      <div class="repo off"><span class="cbx"><span class="box"></span></span><span class="lang" style="background:#f1e05a"></span><span class="rn">tutorial-fastapi</span><span class="reason">fork de tutorial</span><span class="rmeta">fork</span></div>
+    </div>
+  </section>
+
+  <!-- ===================== ESTADOS DE IA ===================== -->
+  <section>
+    <div class="sh"><span class="n">·</span><h2>Estados de IA</h2></div>
+    <p class="sdesc">La espera de un LLM son segundos reales (5–40 s). Se diseña como narración, no como spinner de castigo: progreso <b>específico y verdadero</b>, nunca un % falso. Al terminar la extracción, el <b>único shimmer</b> del producto. (Motion completo en <span style="font-family:var(--mono);font-size:12px">02-sistema/motion.md</span>.)</p>
+    <div class="grid g3">
+      <div class="ai"><div class="st"><span class="pulse"></span>Pensando</div><div class="body">Analizando tus fuentes…</div></div>
+      <div class="ai"><div class="st"><span class="pulse"></span>Extrayendo</div><div class="body">Leyendo página <span class="cnt">2</span> de <span class="cnt">3</span> · encontré <span class="cnt">4</span> experiencias, <span class="cnt">23</span> skills</div></div>
+      <div class="ai prop"><div class="st" style="color:var(--g300)">Propuesto · pendiente</div><div class="body">3 items esperan tu revisión en staging</div></div>
+      <div class="ai acc"><div class="st" style="color:var(--g300)"><span class="tick">✓</span> Aceptado</div><div class="body">Añadido al master · procedencia conservada</div></div>
+      <div class="ai rej"><div class="st">Rechazado</div><div class="body">Descartado · no entra al master</div></div>
+      <div class="ai" style="border-style:dashed;background:transparent"><div class="st" style="color:var(--g500)">✦ Extracción lista</div><div class="body">El shimmer dorado recorre las tarjetas nuevas. Una vez. El único del producto.</div></div>
+    </div>
+  </section>
+
+  <!-- ===================== TOGGLE GLOBAL DE IA ===================== -->
+  <section>
+    <div class="sh"><span class="n">·</span><h2>Toggle global de IA · y el modo con IA apagada</h2></div>
+    <p class="sdesc"><b>Ninguna función core exige una llamada al LLM.</b> Crear el master, editar, componer variantes, exportar el PDF, ver "cómo lo lee el ATS" y el chequeo de salud funcionan sin IA. La IA acelera la entrada de datos y sugiere adaptaciones. Nada más.</p>
+    <div class="aitoggle">
+      <div><div style="font-weight:600">Asistencia de IA</div><div class="hint">Extracción desde fuentes y sugerencias de adaptación</div></div>
+      <span class="sw on"><span class="track"></span><span style="font:500 12px var(--mono);color:var(--g300)">ON</span></span>
+    </div>
+    <div class="aitoggle" style="margin-top:12px">
+      <div><div style="font-weight:600;color:var(--muted)">Asistencia de IA</div><div class="hint">Con la IA apagada: ingesta manual, editor, export, "cómo lo lee el ATS" y chequeo <b style="color:var(--muted)">siguen funcionando</b>. No es un modo degradado — es legítimo.</div></div>
+      <span class="sw"><span class="track"></span><span style="font:500 12px var(--mono);color:var(--subtle)">OFF</span></span>
+    </div>
+  </section>
+
+  <!-- ===================== FORMULARIOS ===================== -->
+  <section>
+    <div class="sh"><span class="n">·</span><h2>Formularios</h2></div>
+    <p class="sdesc">Densidad de app (control 36 px, base 14 px). Foco siempre visible con el anillo dorado. Nunca <span style="font-family:var(--mono);font-size:12px">outline:none</span> sin reemplazo.</p>
+    <div class="grid g2">
+      <div class="panel"><span class="cap">Texto · select · textarea</span>
+        <div class="field"><label class="label">Cargo</label><input class="input" value="Senior Backend Engineer"></div>
+        <div class="field"><label class="label">Empresa</label><input class="input" placeholder="Fintual Administradora General de Fondos S.A."></div>
+        <div class="field"><label class="label">Idioma de la variante</label><select class="select"><option>Español</option><option>English</option></select></div>
+        <div class="field"><label class="label">Resumen</label><textarea class="textarea">Ingeniero de software con 8 años…</textarea></div>
+        <div class="field"><label class="label">Email</label><input class="input err" value="matias.fuentes@"><span class="errmsg">Email incompleto</span></div>
+      </div>
+      <div class="panel"><span class="cap">Fechas · toggle · check · radio</span>
+        <div class="field"><label class="label">Periodo (mes / año)</label>
+          <div class="dr"><select class="select"><option>ene</option></select><select class="select"><option>2021</option></select><span>—</span><label class="cbx on" style="margin:0 4px"><span class="box">✓</span>Actual</label></div>
+        </div>
+        <div class="field"><label class="label">Visibilidad en esta variante</label><span class="sw on"><span class="track"></span>Visible</span></div>
+        <div class="field"><label class="label">Secciones a incluir</label>
+          <div class="stack"><label class="cbx on"><span class="box">✓</span>Experiencia</label><label class="cbx on"><span class="box">✓</span>Aptitudes</label><label class="cbx"><span class="box"></span>Publicaciones</label></div>
+        </div>
+        <div class="field"><label class="label">Orden</label>
+          <div class="stack"><label class="rdo on"><span class="box"></span>Cronológico inverso</label><label class="rdo"><span class="box"></span>Funcional</label></div>
+        </div>
+      </div>
+      <div class="panel"><span class="cap">Chips / tags de skills</span>
+        <div class="chips"><span class="chip">Go<span class="x">×</span></span><span class="chip">Python<span class="x">×</span></span><span class="chip">PostgreSQL<span class="x">×</span></span><span class="chip">Kubernetes<span class="x">×</span></span><span class="chip add">+ añadir</span></div>
+      </div>
+      <div class="panel"><span class="cap">Combobox con autocompletado</span>
+        <input class="input" value="Kuber">
+        <div class="combo-menu"><div class="on">Kubernetes <span class="m">EKS</span></div><div>Kubernetes Operators</div><div>Kubeflow</div></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== HAIRLINE DORADO / DENSIDAD ===================== -->
+  <section>
+    <div class="sh"><span class="n">·</span><h2>Hairline dorado como sistema de estados · Densidad</h2></div>
+    <p class="sdesc">En vez de fondos de color, un hairline dorado marca estado (coherente con "el oro escaso"). Y tres densidades para la misma fila según el contexto.</p>
+    <div class="grid g2">
+      <div class="panel"><span class="cap">Estados por hairline</span>
+        <div class="stack">
+          <div class="hl override">Viñeta con <b style="color:var(--text)">override</b> en esta variante · <button class="disc">ver original · revertir</button></div>
+          <div class="hl pending">Propuesto por IA · <b style="color:var(--text)">pendiente de revisión</b></div>
+          <div class="hl active">Elemento con <b style="color:var(--text)">foco / activo</b></div>
+          <div class="hl">Estado neutro (sin hairline)</div>
+        </div>
+        <p class="legend">Cada estado lleva SIEMPRE segunda señal (texto), nunca solo el color del hairline.</p>
+      </div>
+      <div class="panel"><span class="cap">Densidad de fila</span>
+        <div class="stack">
+          <div class="drow c"><span class="k">compact 32px</span>biblioteca del master (100+ items)</div>
+          <div class="drow d"><span class="k">default 40px</span>listas estándar</div>
+          <div class="drow cm"><span class="k">comfort 48px</span>táctil / navegación</div>
+        </div>
+        <p class="legend">En móvil todo control sube a 44px (mínimo táctil).</p>
+      </div>
+    </div>
+  </section>
+
+</div>
+</body>
+</html>

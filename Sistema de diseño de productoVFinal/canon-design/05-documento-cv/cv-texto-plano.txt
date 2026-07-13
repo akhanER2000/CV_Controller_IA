@@ -1,0 +1,53 @@
+Matías Fuentes Aguilar
+Backend Engineer (Ingeniero de Software Senior)
+Email: matias.fuentes@correo-ejemplo.cl · Teléfono: +56 9 6123 4567 · Ubicación: Providencia, Región Metropolitana · LinkedIn: linkedin.com/in/mfuentes-demo · GitHub: github.com/mfuentes-demo
+
+RESUMEN
+Ingeniero de software con 8 años construyendo sistemas de pagos y back-ends de alta concurrencia en fintech y e-commerce. Reduje la latencia p99 de la API de pagos de 850 ms a 180 ms y sostuve 99,95% de uptime procesando CLP 12.000M mensuales. Especializado en Go, Python, PostgreSQL y Kubernetes.
+
+APTITUDES TÉCNICAS
+Lenguajes: Go, Python, TypeScript, SQL
+Backend: gRPC, REST, FastAPI, Django, Node.js
+Datos: PostgreSQL, Redis, Kafka, Elasticsearch
+Infraestructura: Kubernetes (EKS), Docker, Terraform, AWS, GitLab CI/CD
+Prácticas: Arquitectura de microservicios, observabilidad (Prometheus, Grafana), DDD, code review
+
+EXPERIENCIA
+Senior Backend Engineer ene 2021 – Presente
+Fintual Administradora General de Fondos S.A. · Santiago, Chile
+Rediseñé la API de pagos y reduje la latencia p99 de 850 ms a 180 ms, migrando un monolito Django a 6 servicios en Go con gRPC.
+Sostuve 99,95% de uptime procesando CLP 12.000M en transacciones mensuales durante 3 años sin incidentes de pérdida de datos.
+Lideré un equipo de 4 ingenieros y mentoré a 2 desarrolladores junior hasta roles semi-senior en 18 meses.
+Reduje el costo de infraestructura 30% (USD 8.000/mes) con autoescalado por colas y right-sizing de nodos en EKS.
+Implementé un pipeline de conciliación que detecta descuadres en menos de 5 minutos, reemplazando un proceso manual de 2 días.
+Backend Engineer mar 2019 – dic 2020
+Cornershop by Uber · Santiago, Chile
+Escalé el servicio de catálogo para soportar 40.000 usuarios concurrentes en campañas, con caché en Redis y particionado en PostgreSQL.
+Reduje el tiempo de despliegue de 45 min a 6 min al contenerizar 12 servicios y montar CI/CD en GitLab.
+Construí un buscador de productos que subió la tasa de conversión 12% en 2 mercados.
+Software Engineer ene 2017 – feb 2019
+Continuum SpA (consultora) · Santiago, Chile
+Desarrollé integraciones de pago para 7 clientes retail sobre Transbank y Webpay, procesando sobre CLP 3.000M anuales.
+Automaticé reportes financieros que ahorraron 20 horas-persona por semana al área de finanzas.
+Práctica de Ingeniería ene 2016 – dic 2016
+Sonda S.A. · Santiago, Chile
+Migré 15 reportes legados de PL/SQL a un dashboard en React consumido por 200 usuarios internos.
+
+EDUCACIÓN
+Ingeniería Civil en Computación 2011 – 2016
+Universidad de Chile · Santiago, Chile
+Memoria: sistema de detección de fraude en transacciones con gradient boosting (AUC 0,94).
+
+PROYECTOS
+pago-conciliador — librería open source (Go) 2022 – Presente
+github.com/mfuentes-demo/pago-conciliador
+Librería de conciliación de transacciones; 320 estrellas en GitHub y uso documentado en 4 empresas.
+Charla: “Latencia p99 en sistemas de pago” 2023
+Meetup Golang Chile · 180 asistentes
+
+CERTIFICACIONES
+AWS Certified Solutions Architect – Associate (2022)
+Certified Kubernetes Administrator — CKA (2021)
+
+IDIOMAS
+Español (nativo) · Inglés (C1, profesional)

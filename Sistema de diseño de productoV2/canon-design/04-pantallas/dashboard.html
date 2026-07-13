@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="es" data-theme="obsidian">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Corpus · 04 · Dashboard /app</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500;600&family=Playfair+Display:wght@500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#0B0B0D;--surface:#141418;--surface-2:#1C1C22;--sunken:#0E0E11;
+  --text:#F5F5F2;--muted:#B4B4AD;--subtle:#82827B;
+  --border:rgba(255,255,255,.08);--border-strong:rgba(255,255,255,.16);--border-gold:rgba(231,194,79,.55);
+  --g100:#F6E2A2;--g300:#E7C24F;--g500:#D4AF37;--g700:#8A6414;--ink-on-gold:#1A1206;
+  --danger-q:#E07A70;
+  --sans:"Geist",system-ui,sans-serif;--mono:"Geist Mono",monospace;--disp:"Playfair Display",Georgia,serif;
+  --r-sm:4px;--r-md:6px;--r-lg:8px;--r-xl:12px;
+}
+*{box-sizing:border-box}
+html{background:#08080A}
+body{margin:0;background:#08080A;color:var(--text);font-family:var(--sans);font-size:14px;line-height:1.45;-webkit-font-smoothing:antialiased}
+.desk{padding:40px;display:flex;flex-direction:column;gap:48px;align-items:center}
+.framelabel{width:1440px;font:500 12px/1 var(--mono);text-transform:uppercase;letter-spacing:.12em;color:var(--subtle);display:flex;gap:10px;align-items:center;margin-bottom:-32px}
+.framelabel .tag{background:var(--g700);color:#fff;padding:4px 8px;border-radius:4px;letter-spacing:.06em}
+.frame{width:1440px;height:900px;background:var(--bg);border:1px solid var(--border-strong);border-radius:12px;overflow:hidden;display:flex;box-shadow:0 20px 60px rgba(0,0,0,.5)}
+
+/* ---------- sidebar ---------- */
+.side{width:248px;flex:none;background:var(--surface);border-right:1px solid var(--border);display:flex;flex-direction:column;padding:18px 14px}
+.brand{font-family:var(--disp);font-weight:600;font-size:22px;color:var(--g500);letter-spacing:-.01em;padding:6px 10px 18px}
+.nav{display:flex;flex-direction:column;gap:2px}
+.nav a{display:flex;align-items:center;gap:11px;height:38px;padding:0 10px;border-radius:var(--r-md);color:var(--muted);font-size:13.5px;font-weight:500;text-decoration:none}
+.nav a svg{width:16px;height:16px;stroke:currentColor;fill:none;stroke-width:1.6;flex:none}
+.nav a:hover{background:var(--surface-2);color:var(--text)}
+.nav a.on{background:rgba(231,194,79,.12);color:var(--g300)}
+.nav .grp{font:500 10px/1 var(--mono);text-transform:uppercase;letter-spacing:.14em;color:var(--subtle);padding:16px 10px 8px}
+.side .foot{margin-top:auto;display:flex;flex-direction:column;gap:12px;padding-top:14px;border-top:1px solid var(--border)}
+.aimini{display:flex;align-items:center;justify-content:space-between;font-size:12px;color:var(--muted)}
+.track{width:34px;height:19px;border-radius:999px;background:rgba(231,194,79,.22);border:1px solid var(--g300);position:relative}
+.track::after{content:"";position:absolute;top:2px;left:16px;width:13px;height:13px;border-radius:50%;background:var(--g300)}
+.usr{display:flex;align-items:center;gap:10px}
+.ava{width:30px;height:30px;border-radius:50%;background:linear-gradient(135deg,var(--g700),var(--g500));color:var(--ink-on-gold);display:flex;align-items:center;justify-content:center;font:600 12px var(--sans);flex:none}
+.usr .nm{font-size:13px;font-weight:500}.usr .em{font:500 11px var(--mono);color:var(--subtle)}
+
+/* ---------- main ---------- */
+.main{flex:1;display:flex;flex-direction:column;min-width:0}
+.top{height:56px;flex:none;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:16px;padding:0 24px}
+.top h1{font-family:var(--disp);font-weight:600;font-size:19px;letter-spacing:-.01em}
+.search{margin-left:8px;flex:1;min-width:200px;max-width:360px;height:34px;background:var(--sunken);border:1px solid var(--border-strong);border-radius:var(--r-md);color:var(--subtle);font:inherit;font-size:13px;padding:0 12px;display:flex;align-items:center;gap:8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.search svg{flex:none}
+.spacer{flex:1}
+.btn{height:34px;padding:0 14px;border-radius:var(--r-md);border:1px solid var(--border-strong);background:var(--surface);color:var(--text);font:600 13px var(--sans);cursor:pointer;display:inline-flex;align-items:center;gap:7px;white-space:nowrap}
+.btn:hover{border-color:var(--border-gold)}
+.btn.gold{background:var(--g500);border-color:var(--g500);color:var(--ink-on-gold)}
+.btn.sm{height:28px;padding:0 10px;font-size:12px}
+.btn.ghost{background:transparent}
+.content{flex:1;overflow:auto;padding:24px}
+
+/* sync banner */
+.sync{display:flex;align-items:center;gap:14px;background:var(--surface);border:1px solid var(--border);border-left:2px solid var(--g500);border-radius:var(--r-md);padding:13px 16px;margin-bottom:24px}
+.sync .ic{width:26px;height:26px;border-radius:50%;background:rgba(231,194,79,.14);color:var(--g300);display:flex;align-items:center;justify-content:center;font-size:13px;flex:none}
+.sync .t{font-size:13.5px;color:var(--text)}
+.sync .t b{color:var(--g300);font-weight:600}
+.sync .sub{font:500 11px var(--mono);color:var(--subtle)}
+
+/* section */
+.sec{margin-bottom:26px}
+.sechd{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:12px}
+.sechd h2{font-family:var(--disp);font-weight:600;font-size:17px;letter-spacing:-.01em}
+.sechd .link{font:500 12px var(--mono);color:var(--g300);cursor:pointer}
+.sechd .meta{font:500 11px var(--mono);color:var(--subtle);text-transform:uppercase;letter-spacing:.08em}
+
+/* variant cards */
+.vgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+.vcard{background:var(--surface);border:1px solid var(--border);border-radius:var(--r-lg);padding:15px 16px;display:flex;flex-direction:column;gap:10px;min-width:0}
+.vcard.out{border-left:2px solid var(--border-gold)}
+.vcard .vtop{display:flex;align-items:flex-start;justify-content:space-between;gap:8px}
+.vname{font-weight:600;font-size:14px;color:var(--text)}
+.vrole{font:500 11.5px var(--mono);color:var(--subtle);margin-top:3px}
+.pagebadge{font:500 10px var(--mono);color:var(--muted);border:1px solid var(--border-strong);border-radius:4px;padding:2px 6px;white-space:nowrap;flex:none}
+.vstate{display:flex;align-items:center;gap:7px;font-size:12px}
+.vstate .d{width:6px;height:6px;border-radius:50%}
+.st-ok{color:var(--subtle)}.st-ok .d{background:#7FA98A}
+.st-out{color:var(--g300)}.st-out .d{background:var(--g500)}
+.vfoot{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:2px;padding-top:10px;border-top:1px solid var(--border)}
+.vfoot .when{font:500 11px var(--mono);color:var(--subtle)}
+.vactions{display:flex;gap:6px}
+
+/* lower grid */
+.lower{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r-lg);padding:16px 18px}
+.hitem{display:flex;gap:11px;padding:11px 0;border-bottom:1px solid var(--border)}
+.hitem:last-child{border-bottom:none}
+.hitem .hi{width:18px;flex:none;text-align:center;font-size:13px}
+.hi.warn{color:var(--g300)}.hi.info{color:var(--subtle)}
+.hitem .ht{font-size:13px;color:var(--text)}
+.hitem .hc{font:500 11px var(--mono);color:var(--subtle);margin-top:3px}
+.hitem .hgo{font:500 11px var(--mono);color:var(--g300);cursor:pointer;margin-left:auto;white-space:nowrap;align-self:center}
+.hnote{font-size:11.5px;color:var(--subtle);margin-top:12px;line-height:1.5;border-top:1px dashed var(--border);padding-top:10px}
+
+/* source rows */
+.srow{display:flex;align-items:center;gap:12px;padding:11px 0;border-bottom:1px solid var(--border)}
+.srow:last-child{border-bottom:none}
+.badge{width:30px;height:30px;border-radius:var(--r-md);display:flex;align-items:center;justify-content:center;font:600 10px var(--mono);flex:none;background:var(--sunken);border:1px solid var(--border-strong);color:var(--muted)}
+.srow .snm{font-size:13px;font-weight:500}
+.srow .ss{font:500 11px var(--mono);color:var(--subtle)}
+.srow .new{font:500 11px var(--mono);color:var(--g300);margin-left:auto;white-space:nowrap}
+.srow .stale{color:var(--subtle)}
+.stars{color:var(--g500);letter-spacing:.5px;font-size:10px}.stars .off{color:var(--border-strong)}
+
+/* ---------- EMPTY state ---------- */
+.empty{max-width:820px;margin:26px auto 0;text-align:center}
+.empty .eyebrow{font:500 11px var(--mono);text-transform:uppercase;letter-spacing:.14em;color:var(--subtle)}
+.empty h2{font-family:var(--disp);font-weight:600;font-size:30px;letter-spacing:-.01em;margin:14px 0 8px}
+.empty p{color:var(--muted);font-size:15px;max-width:54ch;margin:0 auto 28px}
+.doors{display:grid;grid-template-columns:1fr 1fr;gap:16px;text-align:left}
+.door{background:var(--surface);border:1px solid var(--border-strong);border-radius:var(--r-xl);padding:22px;display:flex;flex-direction:column;gap:12px;min-height:236px}
+.door .dnum{font:500 11px var(--mono);color:var(--g500);letter-spacing:.1em}
+.door h3{font-family:var(--disp);font-weight:600;font-size:20px;letter-spacing:-.01em}
+.door p{font-size:13px;color:var(--muted);margin:0;max-width:none}
+.door .chips{display:flex;flex-wrap:wrap;gap:6px}
+.dchip{font:500 11px var(--mono);color:var(--muted);border:1px solid var(--border-strong);border-radius:999px;padding:3px 9px}
+.door .sel{height:34px;background:var(--sunken);border:1px solid var(--border-strong);border-radius:var(--r-md);color:var(--muted);font:inherit;font-size:13px;padding:0 12px;display:flex;align-items:center}
+.door .dfoot{margin-top:auto}
+.symnote{font-size:12.5px;color:var(--subtle);margin-top:20px}
+.symnote b{color:var(--muted)}
+
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body>
+<div class="desk">
+
+  <!-- =================================================================== -->
+  <!-- FRAME 1 · CON DATOS (denso) · 1440 -->
+  <!-- =================================================================== -->
+  <div class="framelabel"><span class="tag">/app</span> Dashboard · con datos (denso) · 1440</div>
+  <div class="frame">
+    <aside class="side">
+      <div class="brand">Corpus</div>
+      <nav class="nav">
+        <a class="on" href="#"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>Dashboard</a>
+        <a href="#"><svg viewBox="0 0 24 24"><path d="M6 3h9l4 4v14H6z"/><path d="M9 12h7M9 16h7M9 8h3"/></svg>Master</a>
+        <a href="#"><svg viewBox="0 0 24 24"><path d="M12 3v6M6 21a6 6 0 0 1 12 0"/><circle cx="12" cy="9" r="3"/></svg>Fuentes</a>
+        <a href="#"><svg viewBox="0 0 24 24"><path d="M4 7l8-4 8 4-8 4z"/><path d="M4 12l8 4 8-4M4 17l8 4 8-4"/></svg>Variantes</a>
+        <div class="grp">Cuenta</div>
+        <a href="#"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3M6 6l2 2M16 16l2 2M18 6l-2 2M8 16l-2 2"/></svg>Ajustes</a>
+      </nav>
+      <div class="foot">
+        <div class="aimini"><span>Asistencia de IA</span><span class="track"></span></div>
+        <div class="usr"><span class="ava">MF</span><div><div class="nm">Matías Fuentes</div><div class="em">plan Pro</div></div></div>
+      </div>
+    </aside>
+
+    <div class="main">
+      <div class="top">
+        <h1>Dashboard</h1>
+        <div class="search"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/></svg>Buscar en tu carrera…</div>
+        <div class="spacer"></div>
+        <button class="btn ghost">Adaptar a un aviso</button>
+        <button class="btn gold">+ Nueva variante</button>
+      </div>
+      <div class="content">
+
+        <div class="sync">
+          <span class="ic">↻</span>
+          <div><div class="t">Editaste el master hace <b>2 días</b>. <b>4 de 7 variantes</b> están desactualizadas respecto al registro.</div><div class="sub">La sincronización es tuya: revisas qué cambios adoptar en cada variante.</div></div>
+          <div class="spacer"></div>
+          <button class="btn">Revisar las 4</button>
+        </div>
+
+        <div class="sec">
+          <div class="sechd"><h2>Mis variantes</h2><span class="meta">7 variantes · 4 desactualizadas</span></div>
+          <div class="vgrid">
+            <div class="vcard"><div class="vtop"><div><div class="vname">Backend — 2 páginas</div><div class="vrole">Backend Engineer (Ing. Software Senior)</div></div><span class="pagebadge">ES · 2p</span></div><div class="vstate st-ok"><span class="d"></span>Al día</div><div class="vfoot"><span class="when">editada hace 1 día</span><div class="vactions"><button class="btn sm ghost">PDF</button><button class="btn sm">Abrir</button></div></div></div>
+            <div class="vcard out"><div class="vtop"><div><div class="vname">Plataforma — 1 página</div><div class="vrole">Platform Engineer</div></div><span class="pagebadge">ES · 1p</span></div><div class="vstate st-out"><span class="d"></span>Desactualizada</div><div class="vfoot"><span class="when">hace 14 días</span><div class="vactions"><button class="btn sm ghost">PDF</button><button class="btn sm">Abrir</button></div></div></div>
+            <div class="vcard out"><div class="vtop"><div><div class="vname">Backend — 2 pages</div><div class="vrole">Backend Engineer (Senior SWE)</div></div><span class="pagebadge">EN · 2p</span></div><div class="vstate st-out"><span class="d"></span>Desactualizada</div><div class="vfoot"><span class="when">hace 10 días</span><div class="vactions"><button class="btn sm ghost">PDF</button><button class="btn sm">Abrir</button></div></div></div>
+            <div class="vcard out"><div class="vtop"><div><div class="vname">Staff / Tech Lead</div><div class="vrole">Staff Software Engineer</div></div><span class="pagebadge">ES · 2p</span></div><div class="vstate st-out"><span class="d"></span>Desactualizada</div><div class="vfoot"><span class="when">hace 2 meses</span><div class="vactions"><button class="btn sm ghost">PDF</button><button class="btn sm">Abrir</button></div></div></div>
+            <div class="vcard"><div class="vtop"><div><div class="vname">Data / ML</div><div class="vrole">Machine Learning Engineer</div></div><span class="pagebadge">ES · 1p</span></div><div class="vstate st-ok"><span class="d"></span>Al día</div><div class="vfoot"><span class="when">hace 12 días</span><div class="vactions"><button class="btn sm ghost">PDF</button><button class="btn sm">Abrir</button></div></div></div>
+            <div class="vcard out"><div class="vtop"><div><div class="vname">Fintech EU</div><div class="vrole">Backend Engineer — Payments</div></div><span class="pagebadge">EN · 2p</span></div><div class="vstate st-out"><span class="d"></span>Desactualizada</div><div class="vfoot"><span class="when">hace 3 meses</span><div class="vactions"><button class="btn sm ghost">PDF</button><button class="btn sm">Abrir</button></div></div></div>
+            <div class="vcard"><div class="vtop"><div><div class="vname">Startup generalista</div><div class="vrole">Software Engineer</div></div><span class="pagebadge">ES · 1p</span></div><div class="vstate st-ok"><span class="d"></span>Al día</div><div class="vfoot"><span class="when">hace 3 días</span><div class="vactions"><button class="btn sm ghost">PDF</button><button class="btn sm">Abrir</button></div></div></div>
+          </div>
+        </div>
+
+        <div class="lower">
+          <div class="card">
+            <div class="sechd"><h2>Salud del master</h2><span class="meta">4 cosas por revisar</span></div>
+            <div class="hitem"><span class="hi warn">⚠</span><div><div class="ht">3 viñetas sin ninguna cifra</div><div class="hc">Jobscan 2025: 58,2% prioriza el logro medible · sin umbral</div></div><span class="hgo">ver las 3 →</span></div>
+            <div class="hitem"><span class="hi warn">⚠</span><div><div class="ht">Elasticsearch: declarado, sin evidencia en repos, portfolio ni viñetas</div><div class="hc">GitHub 2025: 32% declara skills que no tiene</div></div><span class="hgo">ver →</span></div>
+            <div class="hitem"><span class="hi info">·</span><div><div class="ht">DDD: declarado, sin evidencia externa</div></div><span class="hgo">ver →</span></div>
+            <div class="hitem"><span class="hi info">·</span><div><div class="ht">Tu título por defecto es genérico; alinéalo al aviso en cada variante</div><div class="hc">Jobscan: coincidencia de título = 10,6x entrevistas</div></div><span class="hgo">ver →</span></div>
+            <p class="hnote">Las garantías estructurales (1 columna, sin foto, contacto en el cuerpo, texto real) las cumple la plantilla <b>por construcción</b> — no se listan aquí. Esto solo muestra lo que depende de tu contenido y puede fallar. <b>Sin score.</b></p>
+          </div>
+          <div class="card">
+            <div class="sechd"><h2>Fuentes conectadas</h2><span class="link">Gestionar →</span></div>
+            <div class="srow"><span class="badge">GH</span><div><div class="snm">GitHub · @mfuentes-demo</div><div class="ss"><span class="stars">★★★★★</span> dato duro · sin IA · hace 2 días</div></div><span class="new">↑ 3 nuevos</span></div>
+            <div class="srow"><span class="badge">PF</span><div><div class="snm">Portfolio · mi-sitio.cl</div><div class="ss"><span class="stars">★★★★★</span> primera parte · hace 7 días</div></div><span class="new">↑ 2 novedades</span></div>
+            <div class="srow"><span class="badge">in</span><div><div class="snm">LinkedIn · 3 capturas</div><div class="ss"><span class="stars">★★★<span class="off">★★</span></span> IA · requiere revisión</div></div><span class="new stale">hace 4 meses</span></div>
+            <div class="srow"><span class="badge">PDF</span><div><div class="snm">CV_2023.pdf</div><div class="ss"><span class="stars">★★★<span class="off">★★</span></span> 41 items · 38 aceptados</div></div></div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- =================================================================== -->
+  <!-- FRAME 2 · VACÍO (día 1) · 1440 -->
+  <!-- =================================================================== -->
+  <div class="framelabel"><span class="tag">/app</span> Dashboard · vacío (día 1) · 1440</div>
+  <div class="frame">
+    <aside class="side">
+      <div class="brand">Corpus</div>
+      <nav class="nav">
+        <a class="on" href="#"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>Dashboard</a>
+        <a href="#"><svg viewBox="0 0 24 24"><path d="M6 3h9l4 4v14H6z"/><path d="M9 12h7M9 16h7M9 8h3"/></svg>Master</a>
+        <a href="#"><svg viewBox="0 0 24 24"><path d="M12 3v6M6 21a6 6 0 0 1 12 0"/><circle cx="12" cy="9" r="3"/></svg>Fuentes</a>
+        <a href="#"><svg viewBox="0 0 24 24"><path d="M4 7l8-4 8 4-8 4z"/><path d="M4 12l8 4 8-4M4 17l8 4 8-4"/></svg>Variantes</a>
+        <div class="grp">Cuenta</div>
+        <a href="#"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3M6 6l2 2M16 16l2 2M18 6l-2 2M8 16l-2 2"/></svg>Ajustes</a>
+      </nav>
+      <div class="foot">
+        <div class="aimini"><span>Asistencia de IA</span><span class="track"></span></div>
+        <div class="usr"><span class="ava">MF</span><div><div class="nm">Matías Fuentes</div><div class="em">plan Gratis</div></div></div>
+      </div>
+    </aside>
+
+    <div class="main">
+      <div class="top">
+        <h1>Dashboard</h1>
+        <div class="spacer"></div>
+      </div>
+      <div class="content">
+        <div class="empty">
+          <p class="eyebrow">Tu registro canónico</p>
+          <h2>Aún no hay nada que registrar.</h2>
+          <p>Corpus guarda tu carrera una sola vez; cada CV es una vista de ella. Empieza por una de dos puertas — las dos son de primera clase.</p>
+          <div class="doors">
+            <div class="door">
+              <div class="dnum">PUERTA A</div>
+              <h3>Desde cero, o desde una plantilla de estructura</h3>
+              <p>Empiezas con un master vacío, o partiendo de un andamio de secciones según tu rol (qué espera un backend, qué evidencia pide investigación). <b style="color:var(--muted)">Escribes tú.</b> La IA está disponible, pero apagada. Lo que escribes a mano es el origen <b style="color:var(--muted)">más verificable de todos</b>.</p>
+              <div class="sel">Plantilla: Backend &nbsp;·&nbsp; o empezar vacío ▾</div>
+              <div class="dfoot"><button class="btn">Empezar a escribir</button></div>
+            </div>
+            <div class="door">
+              <div class="dnum">PUERTA B</div>
+              <h3>Con IA, desde tus fuentes</h3>
+              <p>Conecta GitHub y tu portfolio (dato duro, sin IA, gratis), sube tu LinkedIn y tu CV viejo. La IA extrae; <b style="color:var(--muted)">tú confirmas cada item</b> en staging antes de que entre al master.</p>
+              <div class="chips"><span class="dchip">GitHub</span><span class="dchip">Portfolio</span><span class="dchip">LinkedIn</span><span class="dchip">CV / DOCX</span></div>
+              <div class="dfoot"><button class="btn gold">Conectar fuentes</button></div>
+            </div>
+          </div>
+          <p class="symnote"><b>Ninguna puerta es el camino de segunda.</b> La IA acelera la entrada de datos; no es requisito. Todo el producto funciona sin ella.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+</body>
+</html>

@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CANON · CV — 2 páginas (ES) · Matías Fuentes</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500;600&family=Playfair+Display:ital,wght@0,500;0,600;0,700;1,500&display=swap" rel="stylesheet">
+<style>
+/* ============================================================================
+   DOCUMENTO CV — tratamiento HÍBRIDO "un solo gesto"
+   Playfair Display SOLO en el nombre (único gesto editorial = oro escaso).
+   Geist en encabezados y cuerpo; Geist Mono en cifras, fechas y contacto.
+   Una sola columna · sin tablas · sin iconos · sin fotos · contacto en el cuerpo.
+   Todos los tamaños en pt y todos los márgenes en mm (ver 05/ESPECIFICACION.md).
+   ============================================================================ */
+
+/* --- Pantalla: escritorio con la hoja A4 centrada --------------------------- */
+html { background: #E7E5DF; }
+body {
+  margin: 0;
+  padding: 24px 0 48px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 20px;
+  font-family: "Geist", system-ui, sans-serif;
+}
+.hint {
+  font: 500 12px/1.5 "Geist Mono", monospace;
+  color: #6E6E72;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  text-align: center;
+  max-width: 210mm;
+  padding: 0 8px;
+}
+.hint b { color: #8A6414; font-weight: 600; }
+
+/* --- La hoja ---------------------------------------------------------------- */
+.page {
+  position: relative;
+  width: 210mm;
+  min-height: 297mm;
+  box-sizing: border-box;
+  padding: 16mm 18mm;
+  background: #FFFFFF;
+  color: #17171A;
+  box-shadow: 0 4px 24px rgba(23, 23, 26, 0.14);
+  font-size: 10.5pt;
+  line-height: 1.42;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+/* marca de nº de página, solo en pantalla (NO se imprime, no es footer del doc) */
+.page::after {
+  content: attr(data-pageno);
+  position: absolute;
+  bottom: 6mm; right: 18mm;
+  font: 500 8pt "Geist Mono", monospace;
+  color: #B7B7B2;
+}
+
+/* --- Encabezado del documento ---------------------------------------------- */
+.name {
+  font-family: "Playfair Display", Georgia, serif;
+  font-weight: 600;
+  font-size: 25pt;
+  line-height: 1.05;
+  letter-spacing: -0.01em;
+  color: #8A6414;                 /* gold-700 — el ÚNICO oro del documento */
+  margin: 0;
+}
+.target-title {                    /* target_title de la variante — captura el 10,6x */
+  font-family: "Geist", sans-serif;
+  font-weight: 600;
+  font-size: 13pt;
+  letter-spacing: 0.005em;
+  color: #17171A;
+  margin: 2mm 0 0;
+}
+.contact {
+  font-family: "Geist Mono", monospace;
+  font-weight: 400;
+  font-size: 8.5pt;
+  line-height: 1.42;
+  letter-spacing: 0.005em;
+  color: #45454A;
+  margin: 3mm 0 0;
+  max-width: 165mm;
+}
+.contact .sep { color: #B7B7B2; padding: 0 2px; }
+
+/* --- Secciones -------------------------------------------------------------- */
+.section { margin-top: 5mm; }
+.section > h2 {
+  font-family: "Geist", sans-serif;
+  font-weight: 600;
+  font-size: 10.5pt;
+  text-transform: uppercase;
+  letter-spacing: 0.11em;
+  color: #17171A;
+  margin: 0 0 2.4mm;
+  padding-bottom: 1.3mm;
+  border-bottom: 0.4mm solid rgba(23, 23, 26, 0.30);  /* hairline = tipografía, no adorno */
+}
+
+/* Resumen */
+.summary { margin: 0; font-size: 10.5pt; line-height: 1.42; color: #24242A; }
+
+/* Bloques rol / formación (mismo patrón) */
+.entry { margin-bottom: 3mm; }
+.entry:last-child { margin-bottom: 0; }
+.entry-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 6mm;
+}
+.entry-title { font-weight: 600; font-size: 11pt; color: #17171A; }   /* 2º elemento más pesado tras el nombre */
+.entry-dates {
+  flex: none;
+  font-family: "Geist Mono", monospace;
+  font-weight: 400;
+  font-size: 9pt;
+  color: #6E6E72;
+  white-space: nowrap;
+}
+.entry-org { font-size: 9.5pt; color: #45454A; margin-top: 0.5mm; }
+
+.entry ul {
+  margin: 1.4mm 0 0;
+  padding-left: 4.4mm;
+  list-style: disc;             /* marcador CSS: no entra al texto del PDF */
+}
+.entry li {
+  margin-bottom: 0.8mm;
+  font-size: 10pt;
+  line-height: 1.34;
+  color: #24242A;
+  padding-left: 0.5mm;
+}
+.entry li::marker { color: #A9A9A4; }
+
+/* Cifra en monoespaciada: "el mono le da la evidencia".
+   Sin letter-spacing y con espacios normales alrededor → extracción limpia. */
+.num {
+  font-family: "Geist Mono", monospace;
+  font-weight: 500;
+  font-size: 9.5pt;
+  letter-spacing: 0;
+  color: #17171A;
+}
+
+/* Habilidades — texto plano, términos literales (filtro #1 del ATS) */
+.skills { display: flex; flex-direction: column; gap: 1.3mm; }
+.skill-line { font-size: 10pt; line-height: 1.4; color: #24242A; }
+.skill-line .k { font-weight: 600; color: #17171A; }
+
+/* Idiomas / línea simple */
+.plain-line { font-size: 10pt; color: #24242A; }
+
+/* ============================================================================
+   IMPRESIÓN — A4 exacto, sin escritorio, sin cromo del navegador
+   ============================================================================ */
+@page { size: A4; margin: 0; }
+@media print {
+  html { background: #fff; }
+  body { padding: 0; gap: 0; display: block; }
+  .hint { display: none; }
+  .page {
+    box-shadow: none;
+    margin: 0;
+    /* cada .page ocupa una hoja física */
+    page-break-after: always;
+  }
+  .page:last-of-type { page-break-after: auto; }
+  .page::after { display: none; }
+}
+
+@media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+</style>
+</head>
+<body>
+
+<p class="hint">Documento a escala A4 real · tratamiento <b>Híbrido</b> · el oro aparece una sola vez (el nombre) · <b>Ctrl/Cmd + P → Guardar como PDF</b> para verlo en tamaño físico</p>
+
+<!-- ======================= PÁGINA 1 ======================= -->
+<article class="page" data-pageno="1 / 2">
+
+  <header>
+    <h1 class="name">Matías Fuentes Aguilar</h1>
+    <p class="target-title">Backend Engineer (Ingeniero de Software Senior)</p>
+    <p class="contact">Email: matias.fuentes@correo-ejemplo.cl <span class="sep">·</span> Teléfono: +56 9 6123 4567 <span class="sep">·</span> Ubicación: Providencia, Región Metropolitana <span class="sep">·</span> LinkedIn: linkedin.com/in/mfuentes-demo <span class="sep">·</span> GitHub: github.com/mfuentes-demo</p>
+  </header>
+
+  <section class="section">
+    <h2>Resumen</h2>
+    <p class="summary">Ingeniero de software con <span class="num">8</span> años construyendo sistemas de pagos y back-ends de alta concurrencia en fintech y e-commerce. Reduje la latencia p99 de la API de pagos de <span class="num">850 ms</span> a <span class="num">180 ms</span> y sostuve <span class="num">99,95%</span> de uptime procesando <span class="num">CLP 12.000M</span> mensuales. Especializado en Go, Python, PostgreSQL y Kubernetes.</p>
+  </section>
+
+  <section class="section">
+    <h2>Aptitudes técnicas</h2>
+    <div class="skills">
+      <p class="skill-line"><span class="k">Lenguajes:</span> Go, Python, TypeScript, SQL</p>
+      <p class="skill-line"><span class="k">Backend:</span> gRPC, REST, FastAPI, Django, Node.js</p>
+      <p class="skill-line"><span class="k">Datos:</span> PostgreSQL, Redis, Kafka, Elasticsearch</p>
+      <p class="skill-line"><span class="k">Infraestructura:</span> Kubernetes (EKS), Docker, Terraform, AWS, GitLab CI/CD</p>
+      <p class="skill-line"><span class="k">Prácticas:</span> Arquitectura de microservicios, observabilidad (Prometheus, Grafana), DDD, code review</p>
+    </div>
+  </section>
+
+  <section class="section">
+    <h2>Experiencia</h2>
+
+    <div class="entry">
+      <div class="entry-head">
+        <span class="entry-title">Senior Backend Engineer</span>
+        <span class="entry-dates">ene 2021 – Presente</span>
+      </div>
+      <div class="entry-org">Fintual Administradora General de Fondos S.A. · Santiago, Chile</div>
+      <ul>
+        <li>Rediseñé la API de pagos y reduje la latencia p99 de <span class="num">850 ms</span> a <span class="num">180 ms</span>, migrando un monolito Django a <span class="num">6</span> servicios en Go con gRPC.</li>
+        <li>Sostuve <span class="num">99,95%</span> de uptime procesando <span class="num">CLP 12.000M</span> en transacciones mensuales durante <span class="num">3</span> años sin incidentes de pérdida de datos.</li>
+        <li>Lideré un equipo de <span class="num">4</span> ingenieros y mentoré a <span class="num">2</span> desarrolladores junior hasta roles semi-senior en <span class="num">18</span> meses.</li>
+        <li>Reduje el costo de infraestructura <span class="num">30%</span> (<span class="num">USD 8.000</span>/mes) con autoescalado por colas y right-sizing de nodos en EKS.</li>
+        <li>Implementé un pipeline de conciliación que detecta descuadres en menos de <span class="num">5</span> minutos, reemplazando un proceso manual de <span class="num">2</span> días.</li>
+      </ul>
+    </div>
+
+  </section>
+
+</article>
+
+<!-- ======================= PÁGINA 2 ======================= -->
+<article class="page" data-pageno="2 / 2">
+
+  <!-- La sección Experiencia continúa desde la página 1 (sin repetir encabezado:
+       así fluye un CV de 2 páginas y así lo serializa el golden file). -->
+  <section class="section" style="margin-top:0">
+
+    <div class="entry">
+      <div class="entry-head">
+        <span class="entry-title">Backend Engineer</span>
+        <span class="entry-dates">mar 2019 – dic 2020</span>
+      </div>
+      <div class="entry-org">Cornershop by Uber · Santiago, Chile</div>
+      <ul>
+        <li>Escalé el servicio de catálogo para soportar <span class="num">40.000</span> usuarios concurrentes en campañas, con caché en Redis y particionado en PostgreSQL.</li>
+        <li>Reduje el tiempo de despliegue de <span class="num">45 min</span> a <span class="num">6 min</span> al contenerizar <span class="num">12</span> servicios y montar CI/CD en GitLab.</li>
+        <li>Construí un buscador de productos que subió la tasa de conversión <span class="num">12%</span> en <span class="num">2</span> mercados.</li>
+      </ul>
+    </div>
+
+    <div class="entry">
+      <div class="entry-head">
+        <span class="entry-title">Software Engineer</span>
+        <span class="entry-dates">ene 2017 – feb 2019</span>
+      </div>
+      <div class="entry-org">Continuum SpA (consultora) · Santiago, Chile</div>
+      <ul>
+        <li>Desarrollé integraciones de pago para <span class="num">7</span> clientes retail sobre Transbank y Webpay, procesando sobre <span class="num">CLP 3.000M</span> anuales.</li>
+        <li>Automaticé reportes financieros que ahorraron <span class="num">20</span> horas-persona por semana al área de finanzas.</li>
+      </ul>
+    </div>
+
+    <div class="entry">
+      <div class="entry-head">
+        <span class="entry-title">Práctica de Ingeniería</span>
+        <span class="entry-dates">ene 2016 – dic 2016</span>
+      </div>
+      <div class="entry-org">Sonda S.A. · Santiago, Chile</div>
+      <ul>
+        <li>Migré <span class="num">15</span> reportes legados de PL/SQL a un dashboard en React consumido por <span class="num">200</span> usuarios internos.</li>
+      </ul>
+    </div>
+  </section>
+
+  <section class="section">
+    <h2>Educación</h2>
+    <div class="entry">
+      <div class="entry-head">
+        <span class="entry-title">Ingeniería Civil en Computación</span>
+        <span class="entry-dates">2011 – 2016</span>
+      </div>
+      <div class="entry-org">Universidad de Chile · Santiago, Chile</div>
+      <ul>
+        <li>Memoria: sistema de detección de fraude en transacciones con gradient boosting (<span class="num">AUC 0,94</span>).</li>
+      </ul>
+    </div>
+  </section>
+
+  <section class="section">
+    <h2>Proyectos</h2>
+    <div class="entry">
+      <div class="entry-head">
+        <span class="entry-title">pago-conciliador — librería open source (Go)</span>
+        <span class="entry-dates">2022 – Presente</span>
+      </div>
+      <div class="entry-org">github.com/mfuentes-demo/pago-conciliador</div>
+      <ul>
+        <li>Librería de conciliación de transacciones; <span class="num">320</span> estrellas en GitHub y uso documentado en <span class="num">4</span> empresas.</li>
+      </ul>
+    </div>
+    <div class="entry">
+      <div class="entry-head">
+        <span class="entry-title">Charla: “Latencia p99 en sistemas de pago”</span>
+        <span class="entry-dates">2023</span>
+      </div>
+      <div class="entry-org">Meetup Golang Chile · <span class="num">180</span> asistentes</div>
+    </div>
+  </section>
+
+  <section class="section">
+    <h2>Certificaciones</h2>
+    <div class="skills">
+      <p class="skill-line">AWS Certified Solutions Architect – Associate <span class="num">(2022)</span></p>
+      <p class="skill-line">Certified Kubernetes Administrator — CKA <span class="num">(2021)</span></p>
+    </div>
+  </section>
+
+  <section class="section">
+    <h2>Idiomas</h2>
+    <p class="plain-line">Español (nativo) · Inglés (C1, profesional)</p>
+  </section>
+
+</article>
+
+</body>
+</html>

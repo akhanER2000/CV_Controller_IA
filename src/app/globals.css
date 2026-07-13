@@ -1,0 +1,89 @@
+@import "tailwindcss";
+@import "../styles/tokens.css";
+@import "../styles/canon-motion.css";
+@import "../styles/canon-aurora.css";
+
+/* ============================================================================
+   Puentes hacia el sistema de diseño heredado
+   - #050508 (sustrato del sistema ventana/muro) promovido a token, según
+     handoff.md §7.1 (el original solo lo tenía como fallback inline).
+   - Las fuentes se cargan con next/font (self-hosted, sin CDN) y se enchufan
+     a los tokens --font-* que consume tokens.css.
+   ============================================================================ */
+:root {
+  --obsidian-deep: #050508;
+  --font-display: var(--font-playfair), Georgia, "Times New Roman", serif;
+  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, "SF Mono", "Roboto Mono", monospace;
+}
+
+html, body { min-height: 100dvh; }
+
+/* ── Toggle de tema (Obsidiana ⇄ Porcelana) ──────────────────────────────── */
+.theme-toggle {
+  position: fixed; top: 18px; right: 18px; z-index: var(--z-sticky, 100);
+  font-family: var(--font-mono); font-size: 11.5px; letter-spacing: .08em;
+  text-transform: uppercase; cursor: pointer;
+  padding: 7px 14px; border-radius: var(--radius-pill);
+  background: var(--surface); color: var(--text-muted);
+  border: 1px solid var(--border-strong);
+}
+.theme-toggle:hover { color: var(--accent-text); border-color: var(--border-gold); }
+
+/* ============================================================================
+   Pantalla AUTH — capa ATMOSFÉRICA (la aurora asoma)
+   ============================================================================ */
+.auth {
+  position: relative; min-height: 100dvh;
+  display: grid; place-items: center; padding: 24px;
+}
+.auth__card {
+  position: relative; z-index: 1;
+  width: 100%; max-width: 408px; padding: 40px 36px;
+  display: flex; flex-direction: column; gap: var(--space-5);
+}
+.auth__brand {
+  font-family: var(--font-mono); font-size: 12px; letter-spacing: .28em;
+  text-transform: uppercase; color: var(--text-subtle);
+  display: flex; align-items: center; gap: 10px;
+}
+.auth__brand::before { content: ""; width: 20px; height: 1px; background: var(--border-gold); }
+.auth__title {
+  font-family: var(--font-display); font-weight: 600; letter-spacing: -.01em;
+  font-size: var(--fs-h2); line-height: var(--lh-heading); color: var(--text); margin: 0;
+  text-wrap: balance;
+}
+.auth__sub { color: var(--text-muted); font-size: var(--fs-body-sm); margin: -8px 0 0; }
+.auth__fields { display: flex; flex-direction: column; gap: var(--space-4); }
+.field { display: flex; flex-direction: column; gap: var(--field-gap); }
+.field label {
+  font-family: var(--font-mono); font-size: var(--fs-overline); letter-spacing: .12em;
+  text-transform: uppercase; color: var(--text-subtle);
+}
+.field input {
+  height: var(--control-h-lg); padding: 0 var(--control-pad-x);
+  background: var(--surface-sunken); color: var(--text);
+  border: 1px solid var(--border-strong); border-radius: var(--radius-md);
+  font-family: var(--font-sans); font-size: var(--ui-fs);
+}
+.field input:focus-visible { outline: none; box-shadow: var(--shadow-focus); border-color: var(--border-gold); }
+.btn {
+  height: var(--control-h-lg); border-radius: var(--radius-md); cursor: pointer;
+  font-family: var(--font-sans); font-size: var(--ui-fs); font-weight: var(--fw-medium);
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  border: 1px solid transparent; transition: all var(--dur-fast) var(--ease-standard);
+}
+.btn--gold { background: var(--accent); color: var(--on-accent); }
+.btn--gold:hover { filter: brightness(1.06); }
+.btn--ghost { background: transparent; color: var(--text); border-color: var(--border-strong); }
+.btn--ghost:hover { border-color: var(--border-gold); color: var(--accent-text); }
+.auth__oauth { display: flex; flex-direction: column; gap: var(--space-3); }
+.auth__hint { font-size: var(--fs-caption); color: var(--text-subtle); text-align: center; margin: 0; }
+.auth__row { display: flex; justify-content: space-between; font-size: var(--fs-body-sm); }
+.auth__row a { color: var(--link); }
+.auth__legal {
+  font-family: var(--font-mono); font-size: var(--fs-caption); color: var(--text-subtle);
+  text-align: center; margin: 0; line-height: 1.5;
+}
+.auth__sep { display: flex; align-items: center; gap: 12px; color: var(--text-subtle); font-size: var(--fs-caption); }
+.auth__sep::before, .auth__sep::after { content: ""; flex: 1; height: 1px; background: var(--border); }

@@ -1,0 +1,623 @@
+{
+  "$schema": "canon.profile/v0",
+  "$meta": {
+    "note": "GOLDEN FIXTURE. Par con cv-texto-plano.txt. El PDF renderizado desde este JSON, re-parseado, DEBE coincidir con ese .txt. Contacto anonimizado (email/tel/ubicación/links ficticios); estructura, cargos, fechas y logros son el perfil de ejemplo. Ver 05/ESPECIFICACION.md §El golden file.",
+    "provenanceMethods": [
+      "extracted",
+      "handwritten",
+      "ai-reworded"
+    ],
+    "confidenceLevels": [
+      "high",
+      "medium",
+      "low"
+    ],
+    "updatedAt": "2026-07-12"
+  },
+  "basics": {
+    "name": "Matías Fuentes Aguilar",
+    "targetTitleDefault": "Ingeniero de Software Senior",
+    "contacts": [
+      {
+        "type": "email",
+        "label": "Email",
+        "value": "matias.fuentes@correo-ejemplo.cl",
+        "visible": true,
+        "provenance": {
+          "source": "CV_2023.pdf",
+          "method": "extracted",
+          "confidence": "high",
+          "page": 1,
+          "snippet": "matias.fuentes@correo-ejemplo.cl"
+        }
+      },
+      {
+        "type": "phone",
+        "label": "Teléfono",
+        "value": "+56 9 6123 4567",
+        "visible": true,
+        "provenance": {
+          "source": "CV_2023.pdf",
+          "method": "extracted",
+          "confidence": "high",
+          "page": 1,
+          "snippet": "+56 9 6123 4567"
+        }
+      },
+      {
+        "type": "location",
+        "label": "Ubicación",
+        "value": "Providencia, Región Metropolitana",
+        "visible": true,
+        "provenance": {
+          "source": "linkedin-captura-01.png",
+          "method": "extracted",
+          "confidence": "medium",
+          "snippet": "Santiago Metropolitan Region, Chile"
+        }
+      },
+      {
+        "type": "linkedin",
+        "label": "LinkedIn",
+        "value": "linkedin.com/in/mfuentes-demo",
+        "visible": true,
+        "provenance": {
+          "source": "linkedin-captura-01.png",
+          "method": "extracted",
+          "confidence": "high"
+        }
+      },
+      {
+        "type": "github",
+        "label": "GitHub",
+        "value": "github.com/mfuentes-demo",
+        "visible": true,
+        "provenance": {
+          "source": "github.com-mfuentes-demo",
+          "method": "extracted",
+          "confidence": "high"
+        }
+      }
+    ],
+    "summaries": [
+      {
+        "id": "sum-backend",
+        "angle": "Backend / pagos",
+        "text": "Ingeniero de software con 8 años construyendo sistemas de pagos y back-ends de alta concurrencia en fintech y e-commerce. Reduje la latencia p99 de la API de pagos de 850 ms a 180 ms y sostuve 99,95% de uptime procesando CLP 12.000M mensuales. Especializado en Go, Python, PostgreSQL y Kubernetes.",
+        "hasMetric": true,
+        "provenance": {
+          "source": "CV_2023.pdf",
+          "method": "ai-reworded",
+          "confidence": "high",
+          "page": 1,
+          "snippet": "Ingeniero backend con experiencia en fintech.",
+          "originalText": "Ingeniero backend con amplia experiencia en el rubro fintech, apasionado por los sistemas escalables."
+        }
+      },
+      {
+        "id": "sum-platform",
+        "angle": "Plataforma / infra",
+        "text": "Ingeniero de plataforma con foco en confiabilidad y costos. Bajé 30% el gasto de infraestructura y reduje el despliegue de 45 a 6 minutos en equipos de e-commerce y fintech. Kubernetes, Terraform y observabilidad de extremo a extremo.",
+        "hasMetric": true,
+        "provenance": {
+          "source": null,
+          "method": "handwritten",
+          "confidence": "high"
+        }
+      }
+    ]
+  },
+  "work": [
+    {
+      "id": "w-fintual",
+      "title": "Senior Backend Engineer",
+      "org": "Fintual",
+      "orgLegal": "Fintual Administradora General de Fondos S.A.",
+      "location": "Santiago, Chile",
+      "start": "2021-01",
+      "end": null,
+      "current": true,
+      "provenance": {
+        "source": "CV_2023.pdf",
+        "method": "extracted",
+        "confidence": "high",
+        "page": 1,
+        "snippet": "Senior Backend Engineer — Fintual — 2021 a la fecha"
+      },
+      "bullets": [
+        {
+          "id": "w-fintual-b1",
+          "text": "Rediseñé la API de pagos y reduje la latencia p99 de 850 ms a 180 ms, migrando un monolito Django a 6 servicios en Go con gRPC.",
+          "hasMetric": true,
+          "provenance": {
+            "source": "CV_2023.pdf",
+            "method": "extracted",
+            "confidence": "high",
+            "page": 1,
+            "snippet": "Rediseño de API de pagos, p99 850ms→180ms, 6 microservicios Go/gRPC"
+          }
+        },
+        {
+          "id": "w-fintual-b2",
+          "text": "Sostuve 99,95% de uptime procesando CLP 12.000M en transacciones mensuales durante 3 años sin incidentes de pérdida de datos.",
+          "hasMetric": true,
+          "provenance": {
+            "source": "CV_2023.pdf",
+            "method": "extracted",
+            "confidence": "high",
+            "page": 1,
+            "snippet": "99.95% uptime, CLP 12.000M/mes"
+          }
+        },
+        {
+          "id": "w-fintual-b3",
+          "text": "Lideré un equipo de 4 ingenieros y mentoré a 2 desarrolladores junior hasta roles semi-senior en 18 meses.",
+          "hasMetric": true,
+          "provenance": {
+            "source": "linkedin-captura-01.png",
+            "method": "extracted",
+            "confidence": "medium",
+            "snippet": "Lideré equipo backend"
+          }
+        },
+        {
+          "id": "w-fintual-b4",
+          "text": "Reduje el costo de infraestructura 30% (USD 8.000/mes) con autoescalado por colas y right-sizing de nodos en EKS.",
+          "hasMetric": true,
+          "provenance": {
+            "source": "CV_2023.pdf",
+            "method": "extracted",
+            "confidence": "high",
+            "page": 2,
+            "snippet": "Optimización de costos cloud, -30%"
+          }
+        },
+        {
+          "id": "w-fintual-b5",
+          "text": "Implementé un pipeline de conciliación que detecta descuadres en menos de 5 minutos, reemplazando un proceso manual de 2 días.",
+          "hasMetric": true,
+          "provenance": {
+            "source": null,
+            "method": "handwritten",
+            "confidence": "high"
+          }
+        }
+      ]
+    },
+    {
+      "id": "w-cornershop",
+      "title": "Backend Engineer",
+      "org": "Cornershop by Uber",
+      "orgLegal": "Cornershop by Uber",
+      "location": "Santiago, Chile",
+      "start": "2019-03",
+      "end": "2020-12",
+      "current": false,
+      "provenance": {
+        "source": "CV_2023.pdf",
+        "method": "extracted",
+        "confidence": "high",
+        "page": 2,
+        "snippet": "Backend Engineer, Cornershop, 2019-2020"
+      },
+      "bullets": [
+        {
+          "id": "w-corner-b1",
+          "text": "Escalé el servicio de catálogo para soportar 40.000 usuarios concurrentes en campañas, con caché en Redis y particionado en PostgreSQL.",
+          "hasMetric": true,
+          "provenance": {
+            "source": "CV_2023.pdf",
+            "method": "extracted",
+            "confidence": "high",
+            "page": 2,
+            "snippet": "40k usuarios concurrentes, Redis, PostgreSQL"
+          }
+        },
+        {
+          "id": "w-corner-b2",
+          "text": "Reduje el tiempo de despliegue de 45 min a 6 min al contenerizar 12 servicios y montar CI/CD en GitLab.",
+          "hasMetric": true,
+          "provenance": {
+            "source": "CV_2023.pdf",
+            "method": "extracted",
+            "confidence": "high",
+            "page": 2,
+            "snippet": "Deploy 45min→6min, Docker, GitLab CI"
+          }
+        },
+        {
+          "id": "w-corner-b3",
+          "text": "Construí un buscador de productos que subió la tasa de conversión 12% en 2 mercados.",
+          "hasMetric": true,
+          "provenance": {
+            "source": "linkedin-captura-01.png",
+            "method": "extracted",
+            "confidence": "low",
+            "snippet": "Search de productos"
+          }
+        }
+      ]
+    },
+    {
+      "id": "w-continuum",
+      "title": "Software Engineer",
+      "org": "Continuum SpA",
+      "orgLegal": "Continuum SpA (consultora)",
+      "location": "Santiago, Chile",
+      "start": "2017-01",
+      "end": "2019-02",
+      "current": false,
+      "provenance": {
+        "source": "CV_2023.pdf",
+        "method": "extracted",
+        "confidence": "high",
+        "page": 2
+      },
+      "bullets": [
+        {
+          "id": "w-cont-b1",
+          "text": "Desarrollé integraciones de pago para 7 clientes retail sobre Transbank y Webpay, procesando sobre CLP 3.000M anuales.",
+          "hasMetric": true,
+          "provenance": {
+            "source": "CV_2023.pdf",
+            "method": "extracted",
+            "confidence": "high",
+            "page": 2,
+            "snippet": "Integraciones Transbank/Webpay, 7 clientes"
+          }
+        },
+        {
+          "id": "w-cont-b2",
+          "text": "Automaticé reportes financieros que ahorraron 20 horas-persona por semana al área de finanzas.",
+          "hasMetric": true,
+          "provenance": {
+            "source": "CV_2023.pdf",
+            "method": "extracted",
+            "confidence": "medium",
+            "page": 2,
+            "snippet": "Automatización de reportes"
+          }
+        }
+      ]
+    },
+    {
+      "id": "w-sonda",
+      "title": "Práctica de Ingeniería",
+      "org": "Sonda S.A.",
+      "orgLegal": "Sonda S.A.",
+      "location": "Santiago, Chile",
+      "start": "2016-01",
+      "end": "2016-12",
+      "current": false,
+      "provenance": {
+        "source": "CV_2023.pdf",
+        "method": "extracted",
+        "confidence": "medium",
+        "page": 2
+      },
+      "bullets": [
+        {
+          "id": "w-sonda-b1",
+          "text": "Migré 15 reportes legados de PL/SQL a un dashboard en React consumido por 200 usuarios internos.",
+          "hasMetric": true,
+          "provenance": {
+            "source": "CV_2023.pdf",
+            "method": "extracted",
+            "confidence": "medium",
+            "page": 2,
+            "snippet": "Migración de reportes a React"
+          }
+        }
+      ]
+    }
+  ],
+  "skills": [
+    {
+      "id": "sk-lang",
+      "category": "Lenguajes",
+      "items": [
+        "Go",
+        "Python",
+        "TypeScript",
+        "SQL"
+      ],
+      "provenance": {
+        "source": "CV_2023.pdf",
+        "method": "extracted",
+        "confidence": "high",
+        "page": 1
+      }
+    },
+    {
+      "id": "sk-backend",
+      "category": "Backend",
+      "items": [
+        "gRPC",
+        "REST",
+        "FastAPI",
+        "Django",
+        "Node.js"
+      ],
+      "provenance": {
+        "source": "CV_2023.pdf",
+        "method": "extracted",
+        "confidence": "high",
+        "page": 1
+      }
+    },
+    {
+      "id": "sk-data",
+      "category": "Datos",
+      "items": [
+        "PostgreSQL",
+        "Redis",
+        "Kafka",
+        "Elasticsearch"
+      ],
+      "provenance": {
+        "source": "CV_2023.pdf",
+        "method": "extracted",
+        "confidence": "high",
+        "page": 1
+      }
+    },
+    {
+      "id": "sk-infra",
+      "category": "Infraestructura",
+      "items": [
+        "Kubernetes (EKS)",
+        "Docker",
+        "Terraform",
+        "AWS",
+        "GitLab CI/CD"
+      ],
+      "provenance": {
+        "source": "linkedin-captura-01.png",
+        "method": "extracted",
+        "confidence": "medium"
+      }
+    },
+    {
+      "id": "sk-practices",
+      "category": "Prácticas",
+      "items": [
+        "Arquitectura de microservicios",
+        "observabilidad (Prometheus, Grafana)",
+        "DDD",
+        "code review"
+      ],
+      "provenance": {
+        "source": null,
+        "method": "handwritten",
+        "confidence": "high"
+      }
+    }
+  ],
+  "education": [
+    {
+      "id": "ed-uchile",
+      "degree": "Ingeniería Civil en Computación",
+      "institution": "Universidad de Chile",
+      "location": "Santiago, Chile",
+      "start": "2011",
+      "end": "2016",
+      "provenance": {
+        "source": "CV_2023.pdf",
+        "method": "extracted",
+        "confidence": "high",
+        "page": 2
+      },
+      "notes": [
+        {
+          "id": "ed-uchile-n1",
+          "text": "Memoria: sistema de detección de fraude en transacciones con gradient boosting (AUC 0,94).",
+          "hasMetric": true,
+          "provenance": {
+            "source": "CV_2023.pdf",
+            "method": "extracted",
+            "confidence": "medium",
+            "page": 2
+          }
+        }
+      ]
+    }
+  ],
+  "projects": [
+    {
+      "id": "pr-conciliador",
+      "name": "pago-conciliador — librería open source (Go)",
+      "url": "github.com/mfuentes-demo/pago-conciliador",
+      "start": "2022",
+      "end": null,
+      "provenance": {
+        "source": "github.com-mfuentes-demo",
+        "method": "extracted",
+        "confidence": "high"
+      },
+      "bullets": [
+        {
+          "id": "pr-conc-b1",
+          "text": "Librería de conciliación de transacciones; 320 estrellas en GitHub y uso documentado en 4 empresas.",
+          "hasMetric": true,
+          "provenance": {
+            "source": "github.com-mfuentes-demo",
+            "method": "extracted",
+            "confidence": "high",
+            "snippet": "320 stars"
+          }
+        }
+      ]
+    },
+    {
+      "id": "pr-charla",
+      "name": "Charla: “Latencia p99 en sistemas de pago”",
+      "url": null,
+      "start": "2023",
+      "end": "2023",
+      "org": "Meetup Golang Chile · 180 asistentes",
+      "provenance": {
+        "source": null,
+        "method": "handwritten",
+        "confidence": "high"
+      },
+      "bullets": []
+    }
+  ],
+  "certifications": [
+    {
+      "id": "cert-aws",
+      "name": "AWS Certified Solutions Architect – Associate",
+      "year": "2022",
+      "provenance": {
+        "source": "CV_2023.pdf",
+        "method": "extracted",
+        "confidence": "high",
+        "page": 1
+      }
+    },
+    {
+      "id": "cert-cka",
+      "name": "Certified Kubernetes Administrator — CKA",
+      "year": "2021",
+      "provenance": {
+        "source": "CV_2023.pdf",
+        "method": "extracted",
+        "confidence": "high",
+        "page": 1
+      }
+    }
+  ],
+  "languages": [
+    {
+      "id": "lang-es",
+      "language": "Español",
+      "level": "nativo",
+      "provenance": {
+        "source": "CV_2023.pdf",
+        "method": "extracted",
+        "confidence": "high",
+        "page": 1
+      }
+    },
+    {
+      "id": "lang-en",
+      "language": "Inglés",
+      "level": "C1, profesional",
+      "provenance": {
+        "source": "CV_2023.pdf",
+        "method": "extracted",
+        "confidence": "medium",
+        "page": 1
+      }
+    }
+  ],
+  "variants": [
+    {
+      "id": "var-backend-2p-es",
+      "name": "Backend — 2 páginas (ES)",
+      "isGoldenSource": true,
+      "language": "es",
+      "targetTitle": "Backend Engineer (Ingeniero de Software Senior)",
+      "target": {
+        "company": null,
+        "role": "Backend Engineer"
+      },
+      "summaryRef": "sum-backend",
+      "sections": [
+        {
+          "type": "skills",
+          "order": [
+            "sk-lang",
+            "sk-backend",
+            "sk-data",
+            "sk-infra",
+            "sk-practices"
+          ]
+        },
+        {
+          "type": "work",
+          "order": [
+            "w-fintual",
+            "w-cornershop",
+            "w-continuum",
+            "w-sonda"
+          ]
+        },
+        {
+          "type": "education",
+          "order": [
+            "ed-uchile"
+          ]
+        },
+        {
+          "type": "projects",
+          "order": [
+            "pr-conciliador",
+            "pr-charla"
+          ]
+        },
+        {
+          "type": "certifications",
+          "order": [
+            "cert-aws",
+            "cert-cka"
+          ]
+        },
+        {
+          "type": "languages",
+          "order": [
+            "lang-es",
+            "lang-en"
+          ]
+        }
+      ],
+      "hidden": [],
+      "overrides": {}
+    },
+    {
+      "id": "var-platform-1p-es",
+      "name": "Plataforma — 1 página (ES)",
+      "isGoldenSource": false,
+      "language": "es",
+      "targetTitle": "Platform Engineer (Ingeniero de Plataforma)",
+      "target": {
+        "company": "Ejemplo SpA",
+        "role": "Platform Engineer"
+      },
+      "summaryRef": "sum-platform",
+      "sections": [
+        {
+          "type": "skills",
+          "order": [
+            "sk-infra",
+            "sk-lang",
+            "sk-backend"
+          ]
+        },
+        {
+          "type": "work",
+          "order": [
+            "w-fintual",
+            "w-cornershop"
+          ]
+        },
+        {
+          "type": "education",
+          "order": [
+            "ed-uchile"
+          ]
+        }
+      ],
+      "hidden": [
+        "w-fintual-b3",
+        "w-corner-b3"
+      ],
+      "overrides": {
+        "w-fintual-b1": {
+          "text": "Migré la plataforma de pagos de un monolito Django a 6 servicios en Go y bajé la latencia p99 de 850 ms a 180 ms.",
+          "reason": "Enfatiza plataforma sobre API para este target."
+        }
+      }
+    }
+  ]
+}

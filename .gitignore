@@ -1,0 +1,30 @@
+# dependencias
+/node_modules
+/.pnp
+.pnp.*
+
+# build
+/.next/
+/out/
+/build
+next-env.d.ts
+*.tsbuildinfo
+
+# entorno (nunca commitear claves)
+.env
+.env*.local
+
+# supabase local
+/supabase/.branches
+/supabase/.temp
+
+# artefactos de diseño pesados (la carpeta VFinal SÍ se versiona como spec)
+*.zip
+
+# sistema
+.DS_Store
+*.pem
+/coverage
+/playwright-report
+/test-results
+npm-debug.log*

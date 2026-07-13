@@ -1,0 +1,610 @@
+<!DOCTYPE html>
+<html lang="es" data-theme="obsidian">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Corpus · Fuentes</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500;600&family=Playfair+Display:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+--deep:#050508;--bg:#0B0B0D;--surface:#141418;--surface-2:#1C1C22;--sunken:#0E0E11;
+--text:#F5F5F2;--muted:#B4B4AD;--subtle:#82827B;
+--border:rgba(255,255,255,.08);--border-strong:rgba(255,255,255,.16);--border-gold:rgba(231,194,79,.55);
+--g100:#F6E2A2;--g300:#E7C24F;--g500:#D4AF37;--g700:#8A6414;--g900:#5C450F;--ink-on-gold:#1A1206;--danger:#C4453A;
+--sans:"Geist",system-ui,sans-serif;--mono:"Geist Mono",monospace;--disp:"Playfair Display",Georgia,serif;--ease:cubic-bezier(.16,1,.3,1);}
+*{box-sizing:border-box}html{background:var(--deep)}
+body{margin:0;background:var(--deep);color:var(--text);font-family:var(--sans);font-size:14px;line-height:1.45;-webkit-font-smoothing:antialiased}
+a{color:var(--g300);text-decoration:none}a:hover{color:var(--g100)}
+:focus-visible{outline:none;box-shadow:0 0 0 2px var(--deep),0 0 0 4px var(--g300);border-radius:6px}
+
+.app{display:flex;min-height:100vh}
+.side{width:248px;flex:none;background:var(--surface);border-right:1px solid var(--border);display:flex;flex-direction:column;padding:18px 14px;position:sticky;top:0;height:100vh}
+.brand{font-family:var(--disp);font-weight:600;font-size:22px;color:var(--g500);letter-spacing:-.01em;padding:6px 10px 18px}
+.nav{display:flex;flex-direction:column;gap:2px}
+.nav a{display:flex;align-items:center;gap:11px;height:38px;padding:0 10px;border-radius:6px;color:var(--muted);font-size:13.5px;font-weight:500}
+.nav a svg{width:16px;height:16px;stroke:currentColor;fill:none;stroke-width:1.6}
+.nav a:hover{background:var(--surface-2);color:var(--text)}
+.nav a.on{background:rgba(231,194,79,.12);color:var(--g300)}
+.sfoot{margin-top:auto;display:flex;flex-direction:column;gap:12px;padding-top:14px;border-top:1px solid var(--border)}
+.aimini{display:flex;align-items:center;justify-content:space-between;font-size:12px;color:var(--muted)}
+.track{width:34px;height:19px;border-radius:999px;background:rgba(231,194,79,.22);border:1px solid var(--g300);position:relative}
+.track::after{content:"";position:absolute;top:2px;left:16px;width:13px;height:13px;border-radius:50%;background:var(--g300)}
+.usr{display:flex;align-items:center;gap:10px}.ava{width:30px;height:30px;border-radius:50%;background:linear-gradient(135deg,var(--g700),var(--g500));color:var(--ink-on-gold);display:flex;align-items:center;justify-content:center;font:600 12px var(--sans)}
+.usr .nm{font-size:13px;font-weight:500}.usr .em{font:500 11px var(--mono);color:var(--subtle)}
+.main{flex:1;display:flex;flex-direction:column;min-width:0}
+.top{height:56px;flex:none;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:16px;padding:0 24px;position:sticky;top:0;background:rgba(11,11,13,.85);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);z-index:5}
+.top h1{font-family:var(--disp);font-weight:600;font-size:18px;letter-spacing:-.01em}
+.top .sub{font:500 12px var(--mono);color:var(--subtle)}
+.spacer{flex:1}
+.content{flex:1;padding:24px;max-width:1180px}
+.btn{height:32px;padding:0 13px;border-radius:6px;border:1px solid var(--border-strong);background:var(--surface);color:var(--text);font:600 12px var(--sans);cursor:pointer;display:inline-flex;align-items:center;gap:6px;white-space:nowrap}
+.btn:hover{border-color:var(--border-gold)}
+.btn.gold{background:var(--g500);border-color:var(--g500);color:var(--ink-on-gold)}
+.btn.sm{height:28px;padding:0 10px;font-size:11.5px}
+.btn.ghost{background:transparent}
+.intro{font-size:14px;color:var(--muted);margin:0 0 18px;max-width:66ch}
+.intro b{color:var(--text)}
+.sech{font-family:var(--disp);font-weight:600;font-size:17px;margin:0 0 12px;position:relative;padding-bottom:9px}
+/* pills de evidencia (oro/gris; sin semáforo). c-unverified lo da el kit */
+.lvl{display:inline-flex;align-items:center;gap:5px;height:20px;padding:0 8px;border-radius:999px;font:500 11px var(--sans);white-space:nowrap}
+.lvl-ver{background:rgba(231,194,79,.14);border:1px solid var(--border-gold);color:var(--g300)}
+.lvl-ver::before{content:"◆";font-size:9px}
+.lvl-par{background:rgba(255,255,255,.05);border:1px solid var(--border-strong);color:var(--muted)}
+.lvl-par::before{content:"◈";font-size:9px;color:var(--g700)}
+@media (max-width:1024px){.side{width:60px}.side .brand{font-size:0}.side .brand::first-letter{font-size:22px}.nav a{font-size:0;justify-content:center}.nav a svg{font-size:16px}.sfoot .usr .nm,.sfoot .usr .em,.aimini span{display:none}.content{max-width:none}}
+@media (max-width:390px){.side{display:none}.top{padding:0 16px}.content{padding:16px}}
+
+.srcgrid{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:26px}
+.source{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:15px 17px;display:flex;flex-direction:column;gap:9px}
+.source .top2{display:flex;align-items:center;gap:12px}
+.badge{width:34px;height:34px;border-radius:6px;display:flex;align-items:center;justify-content:center;font:600 11px var(--mono);flex:none;background:var(--sunken);border:1px solid var(--border-strong);color:var(--muted)}
+.source .ttl{font-weight:600;font-size:14px}.source .hd{font:500 12px var(--mono);color:var(--subtle)}
+.st2{margin-left:auto;display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--muted)}
+.st2 .d{width:7px;height:7px;border-radius:50%;background:var(--g500)}.st2 .d.stale{background:var(--subtle)}
+.source .stats{font-size:12.5px;color:var(--muted)}
+.source .new{font-size:12.5px;color:var(--g300);font-weight:500}
+.verif{font:500 11px var(--mono);color:var(--subtle)}
+.stars{color:var(--g500)}.stars .off{color:var(--border-strong)}
+.reposel{border:1px solid var(--border);border-radius:10px;overflow:hidden}
+.rh{display:flex;justify-content:space-between;align-items:center;padding:12px 16px;background:var(--surface-2);border-bottom:1px solid var(--border);font-size:12.5px;color:var(--muted)}
+.repo{display:flex;align-items:center;gap:12px;padding:11px 16px;border-bottom:1px solid var(--border)}
+.repo:last-child{border-bottom:none}.repo.off{opacity:.5}
+.repo .box{width:17px;height:17px;border:1px solid var(--border-strong);border-radius:4px;background:var(--sunken);display:flex;align-items:center;justify-content:center;font-size:11px;color:var(--ink-on-gold);flex:none;cursor:pointer}
+.repo.on .box{background:var(--g300);border-color:var(--g300)}
+.repo .ld{width:8px;height:8px;border-radius:50%;flex:none;background:var(--subtle)}
+.repo.on .ld{background:var(--g500)}
+.repo .rn{font-weight:500;font-size:13.5px}
+.repo .rmeta{font:500 11px var(--mono);color:var(--subtle);margin-left:auto}
+.repo .reason{font-size:11px;color:var(--subtle);font-style:italic}
+.newnote{font-size:12.5px;color:var(--subtle);margin-top:14px;border-top:1px dashed var(--border);padding-top:12px}
+.newnote b{color:var(--g300)}
+@media (max-width:390px){.srcgrid{grid-template-columns:1fr}}
+</style>
+<style>/* ===== canon-motion.css ===== */
+/* ============================================================================
+   CANON · canon-motion.css
+   La librería de movimiento del producto. NO es una descripción: es el código.
+   Depende de los tokens de 02-sistema/tokens.css (--dur-*, --ease-*, --gold-*).
+
+   Reglas:
+   · Solo se anima transform, opacity y filter. Nunca width/height/top/box-shadow.
+   · Cada animación tiene su equivalencia sin movimiento (§ reduce al final).
+   · La escala de ceremonia (0..3) determina la duración. Ver canon-motion.md.
+   ============================================================================ */
+
+/* ── Fallback de tokens: si se abre este archivo aislado, sigue funcionando ── */
+:root{
+  --dur-instant:80ms; --dur-fast:140ms; --dur-base:220ms;
+  --dur-slow:360ms;   --dur-deliberate:640ms;
+  --ease-standard:cubic-bezier(.2,0,0,1);
+  --ease-decelerate:cubic-bezier(0,0,0,1);
+  --ease-accelerate:cubic-bezier(.3,0,1,1);
+  --ease-spring:cubic-bezier(.34,1.24,.64,1);
+
+  /* Ritmo del escalonado (ceremonia 3) */
+  --stagger-step:40ms;    /* retraso entre hermanos */
+  --stagger-max:24;       /* tope de items animados; el resto entra de golpe */
+}
+
+/* ============================================================================
+   CEREMONIA 0 · INSTANTÁNEO (0–80 ms)
+   Acciones que el usuario repite decenas de veces al día.
+   Solo color y opacidad. Cero desplazamiento. Cero espera.
+   ============================================================================ */
+
+.c-interactive{
+  transition:
+    color         var(--dur-instant) var(--ease-standard),
+    background-color var(--dur-instant) var(--ease-standard),
+    border-color  var(--dur-instant) var(--ease-standard),
+    opacity       var(--dur-instant) var(--ease-standard);
+}
+
+/* ── El hairline dorado como SISTEMA DE ESTADOS (no un adorno) ──
+   Sustituye a los fondos de color. Un borde, no un relleno. */
+.c-hairline{
+  position:relative;
+  border:1px solid var(--border);
+  transition:border-color var(--dur-fast) var(--ease-standard);
+}
+.c-hairline:hover        { border-color:var(--border-strong,rgba(255,255,255,.16)); }
+.c-hairline[data-state="active"],
+.c-hairline[data-state="selected"]{ border-color:var(--border-gold,rgba(231,194,79,.55)); }
+
+/* El glow sutil SOLO en el elemento activo. Nunca en más de uno por vista. */
+.c-hairline[data-state="active"]::after{
+  content:""; position:absolute; inset:-1px; border-radius:inherit; pointer-events:none;
+  box-shadow:0 0 0 1px var(--border-gold), 0 0 12px -2px rgba(212,175,55,.28);
+  opacity:0; animation:c-glow-in var(--dur-base) var(--ease-decelerate) forwards;
+}
+@keyframes c-glow-in{ to{ opacity:1 } }
+
+/* ── Override presente: la arista dorada IZQUIERDA. Se ve sin leer. ── */
+.c-override{ box-shadow:inset 2px 0 0 0 var(--gold-500,#D4AF37); }
+
+/* ── Foco visible SIEMPRE. Nunca outline:none sin reemplazo. ── */
+.c-focusable:focus-visible{
+  outline:2px solid var(--focus-ring,#E7C24F);
+  outline-offset:2px;
+  border-radius:4px;
+}
+
+/* ============================================================================
+   CEREMONIA 1 · CONFIRMACIÓN (120–200 ms)
+   Aceptar un item, añadirlo a la variante, revertir un override.
+   ============================================================================ */
+
+/* Un item aceptado en staging: se asienta. Un solo pulso, sin rebote payaso. */
+@keyframes c-confirm{
+  0%  { transform:scale(1);     background-color:transparent; }
+  35% { transform:scale(1.012); background-color:rgba(212,175,55,.10); }
+  100%{ transform:scale(1);     background-color:transparent; }
+}
+.c-confirm{ animation:c-confirm var(--dur-base) var(--ease-spring); }
+
+/* Un item que sale de la lista (descartado / quitado de la variante) */
+@keyframes c-dismiss{
+  to{ opacity:0; transform:translateX(8px) scale(.98); }
+}
+.c-dismiss{ animation:c-dismiss var(--dur-fast) var(--ease-accelerate) forwards; }
+
+/* ============================================================================
+   CEREMONIA 1 · dividerDraw — LA HAIRLINE QUE SE DIBUJA
+   Bajo cada encabezado de sección. Enseña la estructura la PRIMERA vez.
+   Nunca dos veces en la misma sesión (lo garantiza canon-motion.js).
+   ============================================================================ */
+
+.c-divider{
+  position:relative; height:1px; background:var(--border);
+  overflow:hidden;
+}
+.c-divider::after{
+  content:""; position:absolute; inset:0;
+  background:linear-gradient(90deg,
+    var(--gold-500,#D4AF37) 0%,
+    var(--gold-700,#8A6414) 45%,
+    transparent 100%);
+  transform:scaleX(0); transform-origin:left center;
+}
+.c-divider.is-drawn::after{
+  animation:c-divider-draw var(--dur-deliberate) var(--ease-decelerate) forwards;
+}
+@keyframes c-divider-draw{ to{ transform:scaleX(1) } }
+
+/* ============================================================================
+   CEREMONIA 3 · EL MOMENTO ESTELAR
+   El escalonado de items al terminar la ingesta. Ver tu carrera aparecer,
+   item por item, ES el producto entero en tres segundos.
+   Se dispara con .c-stagger en el contenedor (canon-motion.js pone los delays).
+   ============================================================================ */
+
+.c-stagger > .c-stagger-item{
+  opacity:0;
+  transform:translateY(12px);
+}
+.c-stagger.is-running > .c-stagger-item{
+  animation:c-rise var(--dur-slow) var(--ease-decelerate) forwards;
+  animation-delay:var(--d,0ms);
+}
+@keyframes c-rise{
+  to{ opacity:1; transform:translateY(0); }
+}
+/* Los items por encima de --stagger-max entran de golpe: con 100 items,
+   escalonarlos todos dura un minuto y deja de ser magia para ser tortura. */
+.c-stagger.is-running > .c-stagger-item.c-no-stagger{
+  animation:c-rise var(--dur-fast) var(--ease-decelerate) forwards;
+  animation-delay:0ms;
+}
+
+/* ── Contador que sube mientras la IA extrae. Honesto: cuenta lo real. ── */
+.c-tick{ font-family:var(--font-mono); font-variant-numeric:tabular-nums; }
+
+/* ============================================================================
+   CEREMONIA 3 · EL ÚNICO SHIMMER DEL PRODUCTO
+   Cuando la IA termina de extraer. Una vez. En ningún otro sitio.
+   Un shimmer que aparece dos veces deja de ser un momento y pasa a ser un tic.
+   ============================================================================ */
+
+@keyframes c-shimmer{
+  0%  { transform:translateX(-120%); }
+  100%{ transform:translateX(120%); }
+}
+.c-shimmer{ position:relative; overflow:hidden; }
+.c-shimmer.is-firing::before{
+  content:""; position:absolute; inset:0; pointer-events:none;
+  background:linear-gradient(105deg,
+    transparent 30%,
+    rgba(246,226,162,.00) 42%,
+    rgba(246,226,162,.22) 50%,
+    rgba(246,226,162,.00) 58%,
+    transparent 70%);
+  animation:c-shimmer 1100ms var(--ease-standard) 1;
+}
+
+/* ============================================================================
+   CEREMONIA 2 · ★ EL BLUR-IN DEL TOGGLE "CÓMO LO LEE EL ATS"
+   El efecto más caro del producto, y el que lo define.
+   El PDF se desenfoca, pierde el color, y del desenfoque resuelve el texto
+   crudo del parser. No es decoración: es la metáfora. Así te ve la máquina.
+   ============================================================================ */
+
+.c-xray{ position:relative; isolation:isolate; }
+
+.c-xray__doc,
+.c-xray__raw{
+  transition:
+    opacity   var(--dur-slow) var(--ease-standard),
+    filter    var(--dur-slow) var(--ease-standard),
+    transform var(--dur-slow) var(--ease-standard);
+}
+
+/* Estado normal: el documento, nítido y en color. El texto crudo, oculto. */
+.c-xray__doc{ opacity:1; filter:blur(0) saturate(1); transform:scale(1); }
+.c-xray__raw{
+  opacity:0; filter:blur(10px) saturate(0); transform:scale(1.01);
+  position:absolute; inset:0; pointer-events:none;
+  font-family:var(--font-mono); color:var(--text-muted);
+  white-space:pre-wrap; overflow:auto;
+}
+
+/* Estado rayos-X: el documento se desviste. */
+.c-xray[data-mode="raw"] .c-xray__doc{
+  opacity:0; filter:blur(12px) saturate(0); transform:scale(.995);
+}
+.c-xray[data-mode="raw"] .c-xray__raw{
+  opacity:1; filter:blur(0) saturate(1); transform:scale(1);
+  pointer-events:auto;
+}
+
+/* ============================================================================
+   CEREMONIA 2 · Transiciones de panel / vista
+   ============================================================================ */
+
+@keyframes c-panel-in{
+  from{ opacity:0; transform:translateY(8px); }
+  to  { opacity:1; transform:translateY(0);   }
+}
+.c-panel-in{ animation:c-panel-in var(--dur-base) var(--ease-decelerate); }
+
+/* ============================================================================
+   ESTADOS DE IA — la espera es real (5–40 s). Diséñala, no la castigues.
+   ============================================================================ */
+
+/* Pensando: respiración lenta. Nunca un spinner girando: gira = "colgado". */
+@keyframes c-breathe{
+  0%,100%{ opacity:.45 } 50%{ opacity:1 }
+}
+.c-thinking{ animation:c-breathe 1600ms var(--ease-standard) infinite; }
+
+/* Skeleton mientras se extrae: barrido de oro apagadísimo, no gris de Bootstrap */
+@keyframes c-skeleton{
+  to{ background-position:200% 0 }
+}
+.c-skeleton{
+  background:linear-gradient(90deg,
+    var(--surface,#141418) 0%,
+    rgba(212,175,55,.06) 50%,
+    var(--surface,#141418) 100%);
+  background-size:200% 100%;
+  animation:c-skeleton 1400ms linear infinite;
+  border-radius:4px; color:transparent!important;
+}
+
+/* Propuesta de IA pendiente de revisión: pulso MUY leve en la arista.
+   No pide atención a gritos: la pide con educación. */
+@keyframes c-pending{
+  0%,100%{ border-color:var(--border) }
+  50%    { border-color:var(--border-gold,rgba(231,194,79,.55)) }
+}
+.c-pending{ animation:c-pending 2400ms var(--ease-standard) infinite; }
+
+/* NO VERIFICADO — el estado más importante del producto.
+   Nunca solo color: lleva SIEMPRE texto e icono. */
+.c-unverified{
+  border-left:2px dashed var(--danger,#C4453A);
+  padding-left:10px;
+}
+
+/* ============================================================================
+   FONDO VIVO — SOLO en la pantalla de espera de la ingesta.
+   Único sitio del producto donde algo se mueve sin que el usuario lo pida:
+   no hay contenido con el que interferir y la espera es real.
+   Un tono. Oro sobre obsidiana. Nada de la nebulosa multicolor de la referencia.
+   ============================================================================ */
+
+@keyframes c-drift{
+  0%  { transform:translate3d(-6%,-4%,0) scale(1.05) rotate(0deg);   }
+  50% { transform:translate3d( 4%, 3%,0) scale(1.15) rotate(6deg);   }
+  100%{ transform:translate3d(-6%,-4%,0) scale(1.05) rotate(0deg);   }
+}
+.c-aurora{
+  position:absolute; inset:0; overflow:hidden; pointer-events:none; z-index:0;
+}
+.c-aurora::before,
+.c-aurora::after{
+  content:""; position:absolute; width:70%; aspect-ratio:1; border-radius:50%;
+  filter:blur(90px);
+}
+.c-aurora::before{
+  top:-15%; left:-10%;
+  background:radial-gradient(circle, rgba(212,175,55,.16) 0%, transparent 65%);
+  animation:c-drift 26s ease-in-out infinite;
+}
+.c-aurora::after{
+  bottom:-20%; right:-10%;
+  background:radial-gradient(circle, rgba(231,194,79,.09) 0%, transparent 65%);
+  animation:c-drift 34s ease-in-out infinite reverse;
+}
+
+/* ============================================================================
+   SCROLL-REVEAL — PROHIBIDO EN LA APP.
+   Una herramienta no revela su contenido al hacer scroll. Si tengo 200 items
+   y cada uno hace fade-in al entrar en viewport, NO PUEDO TRABAJAR.
+   Permitido solo en documentos largos de lectura (ajustes, "cómo funciona").
+   ============================================================================ */
+
+.c-doc .c-reveal{ opacity:0; transform:translateY(10px); }
+.c-doc .c-reveal.is-in{
+  animation:c-rise var(--dur-base) var(--ease-decelerate) forwards;
+}
+
+/* ============================================================================
+   PREFERS-REDUCED-MOTION — sin excepciones.
+   Cada animación pierde el MOVIMIENTO, nunca la INFORMACIÓN.
+   ============================================================================ */
+
+@media (prefers-reduced-motion: reduce){
+  *,*::before,*::after{
+    animation-duration:.001ms!important;
+    animation-iteration-count:1!important;
+    transition-duration:.001ms!important;
+    scroll-behavior:auto!important;
+  }
+  /* El contenido escalonado: aparece. Sin subir, sin retraso. */
+  .c-stagger > .c-stagger-item{ opacity:1!important; transform:none!important; }
+  /* La hairline: está dibujada. No se dibuja. */
+  .c-divider::after{ transform:scaleX(1)!important; }
+  /* El blur-in: corte limpio. Comunica lo mismo sin desenfoque. */
+  .c-xray__doc,.c-xray__raw{ filter:none!important; transform:none!important; }
+  /* El shimmer: no existe. El cambio de estado ya se ve por otra vía. */
+  .c-shimmer.is-firing::before{ display:none!important; }
+  /* Pensando: opacidad fija, legible. */
+  .c-thinking{ opacity:.75!important; }
+  /* Skeleton: bloque quieto. */
+  .c-skeleton{ animation:none!important; background:var(--surface,#141418)!important; }
+  /* Pendiente: la arista, dorada y fija. */
+  .c-pending{ border-color:var(--border-gold,rgba(231,194,79,.55))!important; }
+  /* Aurora: quieta. */
+  .c-aurora::before,.c-aurora::after{ animation:none!important; }
+}
+
+</style>
+</head>
+<body class="c-wall">
+<div class="app">
+<aside class="side"><div class="brand">Corpus</div><nav class="nav"><a href="dashboard.html" class=""><svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>Dashboard</a><a href="master.html" class=""><svg viewBox="0 0 24 24"><path d="M6 3h9l4 4v14H6z"/><path d="M9 12h7M9 16h7M9 8h3"/></svg>Master</a><a href="fuentes.html" class="on"><svg viewBox="0 0 24 24"><path d="M12 3v6M6 21a6 6 0 0 1 12 0"/><circle cx="12" cy="9" r="3"/></svg>Fuentes</a><a href="editor-variante.html" class=""><svg viewBox="0 0 24 24"><path d="M4 7l8-4 8 4-8 4z"/><path d="M4 12l8 4 8-4M4 17l8 4 8-4"/></svg>Variantes</a><a href="ajustes.html" class=""><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3"/></svg>Ajustes</a></nav>
+  <div class="sfoot"><div class="aimini"><span>Asistencia de IA</span><span class="track"></span></div><div class="usr"><span class="ava">MF</span><div><div class="nm">Matías Fuentes</div><div class="em">plan Pro</div></div></div></div></aside>
+<div class="main">
+<div class="top"><h1>Fuentes</h1><span class="sub">conexiones vivas · por verificabilidad</span></div>
+<div class="content">
+  <p class="intro">Conexiones vivas, ordenadas por verificabilidad. <b>Lo nuevo va a revisión, nunca directo al master.</b></p>
+  <div class="srcgrid">
+    <div class="source"><div class="top2"><span class="badge">GH</span><div><div class="ttl">GitHub</div><div class="hd">@mfuentes-demo</div></div><span class="st2"><span class="d"></span>conectado</span></div><div class="stats">Sincronizado hace 2 días · 14 repos considerados, 4 en el master</div><div class="new">↑ 3 repos nuevos desde la última vez</div><div style="display:flex;justify-content:space-between;align-items:center"><span class="verif"><span class="stars">★★★★★</span> dato duro · sin IA</span><button class="btn sm ghost">Resincronizar</button></div></div>
+    <div class="source"><div class="top2"><span class="badge">PF</span><div><div class="ttl">Portfolio</div><div class="hd">mi-sitio.cl</div></div><span class="st2"><span class="d"></span>conectado</span></div><div class="stats">Hace 7 días · 8 proyectos · 2 actualizados</div><div class="new">↑ 2 proyectos con novedades</div><div style="display:flex;justify-content:space-between;align-items:center"><span class="verif"><span class="stars">★★★★★</span> primera parte</span><button class="btn sm ghost">Resincronizar</button></div></div>
+    <div class="source"><div class="top2"><span class="badge">in</span><div><div class="ttl">LinkedIn</div><div class="hd">3 capturas</div></div><span class="st2"><span class="d stale"></span>desactualizada</span></div><div class="stats" style="color:var(--subtle)">Última hace 4 meses · tu LinkedIn puede estar desactualizado.</div><div style="display:flex;justify-content:space-between;align-items:center"><span class="verif"><span class="stars">★★★<span class="off">★★</span></span> IA · requiere revisión</span><button class="btn sm ghost">Subir nuevas</button></div></div>
+    <div class="source"><div class="top2"><span class="badge">PDF</span><div><div class="ttl">CV_2023.pdf</div><div class="hd">archivo</div></div><span class="st2"><span class="d"></span>procesado</span></div><div class="stats">41 items · 38 aceptados</div><div style="display:flex;justify-content:space-between;align-items:center"><span class="verif"><span class="stars">★★★<span class="off">★★</span></span> IA</span><button class="btn sm ghost">Ver items</button></div></div>
+  </div>
+  <h2 class="sech c-divider">Repos de GitHub — ¿cuáles son proyectos reales?</h2>
+  <p class="intro" style="font-size:12.5px">Propuse un default (sin forks, con descripción, con actividad). Revísalo — tú decides. Un CV no es un volcado de GitHub.</p>
+  <div class="reposel">
+    <div class="rh"><span><b style="color:var(--muted)">4 de 14</b> marcados como proyecto real</span><span style="font:500 11px var(--mono)">tú decides</span></div>
+    <div class="repo on"><span class="box">✓</span><span class="ld"></span><span class="rn">pago-conciliador</span><span class="rmeta">Go · 412 KB · ★ 320</span></div>
+    <div class="repo on"><span class="box">✓</span><span class="ld"></span><span class="rn">latency-lab</span><span class="rmeta">Go · 88 KB · ★ 12</span></div>
+    <div class="repo on"><span class="box">✓</span><span class="ld"></span><span class="rn">reco-search</span><span class="rmeta">Python · 154 KB</span></div>
+    <div class="repo on"><span class="box">✓</span><span class="ld"></span><span class="rn">infra-templates</span><span class="rmeta">HCL · 34 KB</span></div>
+    <div class="repo off"><span class="box"></span><span class="ld"></span><span class="rn">ts-utils</span><span class="reason">sin descripción</span><span class="rmeta">TS · 98 KB</span></div>
+    <div class="repo off"><span class="box"></span><span class="ld"></span><span class="rn">advent-of-code-2024</span><span class="reason">ejercicios, no proyecto</span><span class="rmeta">Python</span></div>
+    <div class="repo off"><span class="box"></span><span class="ld"></span><span class="rn">dotfiles</span><span class="reason">configuración personal</span><span class="rmeta">Shell</span></div>
+    <div class="repo off"><span class="box"></span><span class="ld"></span><span class="rn">kubernetes</span><span class="reason">fork · 0 commits propios</span><span class="rmeta">fork</span></div>
+  </div>
+  <p class="newnote">Cuando resincronizas, <b>lo nuevo va a staging</b>, nunca directo al master — aunque el dato sea duro, la decisión de incluirlo es tuya.</p>
+</div>
+</div>
+</div>
+<script>/* ===== canon-motion.js ===== */
+/* ============================================================================
+   CANON · canon-motion.js
+   El motor de las animaciones que necesitan lógica (no solo CSS).
+   Vanilla, sin dependencias, ~2 KB. Copiar tal cual en cada pantalla del diseño.
+   En producción (Next.js), esta misma lógica se porta a hooks — pero la API
+   y los nombres de clase NO CAMBIAN. Ese es el contrato con ingeniería.
+   ============================================================================ */
+(() => {
+  'use strict';
+
+  const REDUCED = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  /* ── Guarda de "una sola vez por sesión" ──────────────────────────────────
+     La hairline se dibuja la PRIMERA vez que la sección aparece. Nunca más.
+     Una animación que se repite deja de enseñar y empieza a estorbar.        */
+  const seen = new Set();
+  const once = (key) => { if (seen.has(key)) return false; seen.add(key); return true; };
+
+  /* ══════════════════════════════════════════════════════════════════════════
+     1 · dividerDraw — la hairline dorada, al entrar en viewport, UNA vez
+     Uso:  <div class="c-divider" data-divider="experiencia"></div>
+     ══════════════════════════════════════════════════════════════════════════ */
+  const dividers = document.querySelectorAll('.c-divider');
+  if (dividers.length) {
+    if (REDUCED) {
+      dividers.forEach(d => d.classList.add('is-drawn'));   // ya dibujada
+    } else {
+      const io = new IntersectionObserver((entries) => {
+        entries.forEach(e => {
+          if (!e.isIntersecting) return;
+          const key = e.target.dataset.divider || e.target.id || Math.random();
+          if (once('div:' + key)) e.target.classList.add('is-drawn');
+          io.unobserve(e.target);
+        });
+      }, { threshold: 0.6 });
+      dividers.forEach(d => io.observe(d));
+    }
+  }
+
+  /* ══════════════════════════════════════════════════════════════════════════
+     2 · ★ EL ESCALONADO — el momento estelar del producto
+     Los items se pueblan al terminar la ingesta. Ver tu carrera aparecer,
+     item por item, ES el producto en tres segundos.
+
+     Uso:  CANON.stagger(document.querySelector('#staging-list'))
+     El contenedor lleva .c-stagger y los hijos .c-stagger-item
+     ══════════════════════════════════════════════════════════════════════════ */
+  function stagger(container, { step = 40, max = 24 } = {}) {
+    if (!container) return;
+    const items = container.querySelectorAll('.c-stagger-item');
+    items.forEach((el, i) => {
+      if (i < max) {
+        el.style.setProperty('--d', `${i * step}ms`);   // retraso incremental
+      } else {
+        el.classList.add('c-no-stagger');               // el resto, de golpe
+      }
+    });
+    // doble rAF: garantiza que el navegador pinta el estado inicial
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      container.classList.add('is-running');
+    }));
+  }
+
+  /* ══════════════════════════════════════════════════════════════════════════
+     3 · EL ÚNICO SHIMMER — cuando la IA termina de extraer. Una vez.
+     Se autolimita: si alguien lo llama dos veces, la segunda no hace nada.
+     ══════════════════════════════════════════════════════════════════════════ */
+  function shimmer(el, key = 'global') {
+    if (!el || REDUCED) return;
+    if (!once('shimmer:' + key)) {
+      console.warn('[CANON] El shimmer ya se disparó. Hay UNO por producto.');
+      return;
+    }
+    el.classList.add('is-firing');
+    el.addEventListener('animationend', () => el.classList.remove('is-firing'), { once: true });
+  }
+
+  /* ══════════════════════════════════════════════════════════════════════════
+     4 · ★ EL TOGGLE RAYOS-X — "Cómo lo lee el ATS"
+     El PDF se desenfoca, pierde el color, y del desenfoque resuelve el texto
+     crudo del parser. Es la metáfora del producto: así te ve la máquina.
+
+     Uso:  <div class="c-xray" data-mode="doc">
+             <div class="c-xray__doc">…el CV renderizado…</div>
+             <pre class="c-xray__raw">…el texto REAL extraído del PDF…</pre>
+           </div>
+           <button data-xray-toggle="#preview" aria-pressed="false">…</button>
+     ══════════════════════════════════════════════════════════════════════════ */
+  document.querySelectorAll('[data-xray-toggle]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const target = document.querySelector(btn.dataset.xrayToggle);
+      if (!target) return;
+      const raw = target.dataset.mode !== 'raw';
+      target.dataset.mode = raw ? 'raw' : 'doc';
+      btn.setAttribute('aria-pressed', String(raw));
+      announce(raw
+        ? 'Mostrando el texto que extrae el ATS de tu PDF'
+        : 'Mostrando el documento');
+    });
+  });
+
+  /* ══════════════════════════════════════════════════════════════════════════
+     5 · CONTADOR HONESTO — sube contando lo que de verdad se encontró.
+     Nunca un porcentaje inventado. Si no sabes cuánto falta, di qué haces.
+     ══════════════════════════════════════════════════════════════════════════ */
+  function countTo(el, to, ms = 600) {
+    if (!el) return;
+    if (REDUCED) { el.textContent = to; return; }
+    const from = parseInt(el.textContent, 10) || 0;
+    const t0 = performance.now();
+    const tick = (t) => {
+      const p = Math.min(1, (t - t0) / ms);
+      el.textContent = Math.round(from + (to - from) * (1 - Math.pow(1 - p, 3)));
+      if (p < 1) requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+  }
+
+  /* ══════════════════════════════════════════════════════════════════════════
+     6 · CONFIRMAR / DESCARTAR — ceremonia 1
+     ══════════════════════════════════════════════════════════════════════════ */
+  function confirm(el) {
+    if (!el || REDUCED) return;
+    el.classList.remove('c-confirm');
+    void el.offsetWidth;                       // reinicia la animación
+    el.classList.add('c-confirm');
+  }
+  function dismiss(el, after) {
+    if (!el) return;
+    if (REDUCED) { after && after(); el.remove(); return; }
+    el.classList.add('c-dismiss');
+    el.addEventListener('animationend', () => { after && after(); el.remove(); }, { once: true });
+  }
+
+  /* ══════════════════════════════════════════════════════════════════════════
+     7 · ACCESIBILIDAD — los estados de IA se ANUNCIAN.
+     Una animación que solo se ve deja fuera a quien usa lector de pantalla.
+     ══════════════════════════════════════════════════════════════════════════ */
+  let live = document.getElementById('canon-live');
+  if (!live) {
+    live = document.createElement('div');
+    live.id = 'canon-live';
+    live.setAttribute('aria-live', 'polite');
+    live.setAttribute('aria-atomic', 'true');
+    live.style.cssText =
+      'position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap';
+    document.body.appendChild(live);
+  }
+  function announce(msg) { live.textContent = msg; }
+
+  /* ══════════════════════════════════════════════════════════════════════════
+     8 · SCROLL-REVEAL — solo dentro de .c-doc. En la app está PROHIBIDO.
+     ══════════════════════════════════════════════════════════════════════════ */
+  const reveals = document.querySelectorAll('.c-doc .c-reveal');
+  if (reveals.length && !REDUCED) {
+    const io2 = new IntersectionObserver((entries) => {
+      entries.forEach(e => {
+        if (!e.isIntersecting) return;
+        e.target.classList.add('is-in');
+        io2.unobserve(e.target);
+      });
+    }, { threshold: 0.25 });
+    reveals.forEach(r => io2.observe(r));
+  }
+
+  window.CANON = { stagger, shimmer, countTo, confirm, dismiss, announce, REDUCED };
+})();
+
+</script>
+<script>
+(function(){
+document.querySelectorAll('.c-divider').forEach(function(d){d.classList.add('is-visible')});document.querySelectorAll('.repo .box').forEach(function(b){b.onclick=function(){b.closest('.repo').classList.toggle('on')}});
+})();
+</script>
+</body>
+</html>

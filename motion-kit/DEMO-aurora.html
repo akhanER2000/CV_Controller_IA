@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CANON · El fondo vivo — mueve el ratón</title>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&family=Playfair+Display:wght@500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --obsidian-deep:#050508;
+  --gold-100:#F6E2A2;--gold-300:#E7C24F;--gold-500:#D4AF37;--gold-700:#8A6414;
+  --copper:#B87333;--silver:#ADB6C2;
+  --bg:#0B0B0D;--surface:#141418;--surface-elevated:#1C1C22;
+  --text:#F5F5F2;--text-muted:#B4B4AD;--text-subtle:#82827B;
+  --border:rgba(255,255,255,.08);--border-strong:rgba(255,255,255,.16);
+  --border-gold:rgba(231,194,79,.55);--danger:#C6544B;
+  --font-display:"Playfair Display",Georgia,serif;
+  --font-sans:"Geist",system-ui,sans-serif;
+  --font-mono:"Geist Mono",ui-monospace,monospace;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--obsidian-deep);color:var(--text);font-family:var(--font-sans);-webkit-font-smoothing:antialiased;line-height:1.55}
+.overline{font:500 11px/1 var(--font-mono);text-transform:uppercase;letter-spacing:.14em;color:var(--gold-500);margin:0 0 16px}
+h1{font-family:var(--font-display);font-weight:600;font-size:clamp(38px,5.4vw,66px);line-height:1.06;letter-spacing:-.02em;margin:0 0 20px}
+h1 em{font-style:italic;color:var(--gold-500)}
+h2{font-family:var(--font-display);font-weight:600;font-size:30px;margin:0 0 10px}
+h2 b{color:var(--gold-500);font-weight:600}
+.lede{color:var(--text-muted);font-size:17px;max-width:58ch;margin:0 auto 30px}
+.inner{max-width:1080px;margin:0 auto;padding:0 32px}
+section{padding:100px 0}
+.center{text-align:center}
+.mono{font-family:var(--font-mono)}
+.hint{font:400 12.5px/1.75 var(--font-mono);color:var(--text-subtle)}
+.hint b{color:var(--gold-300);font-weight:500}
+.bad{color:var(--danger)}
+kbd{font:500 11px var(--font-mono);background:var(--surface-elevated);border:1px solid var(--border);border-radius:4px;padding:2px 6px;color:var(--text-muted)}
+button{font:500 13px var(--font-sans);background:transparent;color:var(--gold-300);border:1px solid var(--border-gold);border-radius:6px;padding:10px 16px;cursor:pointer;transition:background 140ms}
+button:hover{background:rgba(212,175,55,.10)}
+button.solid{background:var(--gold-500);color:#1A1206;border-color:var(--gold-500);font-weight:600}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.tag{display:inline-flex;align-items:center;gap:6px;font:500 10px/1 var(--font-mono);letter-spacing:.08em;text-transform:uppercase;padding:5px 9px;border:1px solid var(--border);border-radius:999px;color:var(--text-subtle)}
+.tag.win{color:var(--gold-300);border-color:var(--border-gold)}
+.tag.wall{color:var(--text-subtle)}
+.divider{height:1px;background:linear-gradient(90deg,transparent,var(--gold-700),transparent);margin:0}
+
+/* ── métricas en vivo ── */
+.hud{position:fixed;right:18px;bottom:18px;z-index:50;font:400 11px/1.7 var(--font-mono);
+  background:rgba(5,5,8,.86);border:1px solid var(--border);border-radius:8px;padding:12px 14px;color:var(--text-subtle);backdrop-filter:blur(8px)}
+.hud b{color:var(--gold-300);font-weight:500}
+
+/* ── paleta ── */
+.metals{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-top:24px}
+.metal{border:1px solid var(--border);border-radius:10px;padding:16px;background:rgba(20,20,24,.6);backdrop-filter:blur(10px)}
+.sw{height:44px;border-radius:6px;margin-bottom:12px}
+.metal .n{font-size:14px;font-weight:600}
+.metal .h{font:400 11px var(--font-mono);color:var(--text-subtle);margin-top:3px}
+.metal .r{font-size:12px;color:var(--text-muted);margin-top:8px;line-height:1.5}
+
+/* ── dashboard simulado ── */
+.dash{display:grid;grid-template-columns:1.4fr 1fr;gap:16px;margin-top:8px}
+@media(max-width:900px){.dash{grid-template-columns:1fr}.metals{grid-template-columns:repeat(2,1fr)}}
+.card{padding:20px 22px}
+.card h3{font-size:13px;font-weight:600;margin:0 0 2px}
+.card .sub{font:400 11px var(--font-mono);color:var(--text-subtle);margin-bottom:14px}
+.vrow{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:11px 12px;border:1px solid var(--border);border-radius:7px;margin-bottom:7px;transition:border-color 140ms}
+.vrow:hover{border-color:var(--border-strong)}
+.vrow.stale{border-color:var(--border-gold)}
+.vrow .nm{font-size:13px}
+.vrow .mt{font:400 10.5px var(--font-mono);color:var(--text-subtle);margin-top:2px}
+.vrow .mt b{color:var(--gold-300);font-weight:500}
+.skill{display:flex;justify-content:space-between;align-items:center;padding:9px 0;border-bottom:1px solid var(--border)}
+.skill:last-child{border-bottom:0}
+.skill .ev{font:400 10.5px var(--font-mono);color:var(--text-subtle)}
+.badge{font:500 9.5px/1 var(--font-mono);letter-spacing:.06em;text-transform:uppercase;padding:4px 7px;border-radius:4px;border:1px solid var(--border-gold);color:var(--gold-300);white-space:nowrap}
+.badge.no{border-color:var(--danger);color:var(--danger)}
+</style>
+<link rel="stylesheet" href="canon-aurora.css">
+</head>
+<body>
+
+<!-- ══ LA CAPA DEL HUMO: fixed · inset:0 · z-index:0 · pointer-events:none ══ -->
+<div class="c-aurora-gl" data-aurora="calm"></div>
+
+<div class="hud">
+  ratón <b id="h-m">—</b><br>
+  estela <b id="h-t">0</b>/16 puntos<br>
+  buffer <b id="h-b">—</b> · <b>30</b> fps<br>
+  estado <b id="h-s">calma</b>
+</div>
+
+
+<!-- ═══════════════ 1 · VENTANA — el humo a plena vista ═══════════════ -->
+<section class="c-window">
+  <div class="inner center c-scrim c-scrim--radial" style="padding-top:60px;padding-bottom:60px">
+    <p class="overline">🔓 Ventana · c-scrim--radial</p>
+    <h1>Mueve el ratón sobre el <em>humo</em></h1>
+    <p class="lede">La estela no pinta encima: <b>deforma el dominio del ruido</b>. Por eso el humo
+    recuerda por dónde pasaste, y se disipa solo. No es un foco pegado al cursor.</p>
+    <div class="row" style="justify-content:center">
+      <button class="solid" id="b-active">La IA se pone a trabajar</button>
+      <button id="b-calm">Se calma</button>
+      <button id="b-pause">Pausar (escribiendo)</button>
+      <button id="b-resume">Reanudar</button>
+    </div>
+    <p class="hint" style="margin-top:26px">Este bloque lleva un <b>velo radial</b>: oscurece bajo el texto
+    y deja los bordes limpios. El humo se sigue viendo, respirando.</p>
+  </div>
+</section>
+
+
+<!-- ═══════════════ 2 · MURO — los tres metales ═══════════════ -->
+<section class="c-wall">
+  <div class="divider"></div>
+  <div class="inner" style="padding-top:76px">
+    <p class="overline">🧱 Muro · el humo está tapado</p>
+    <h2>Los tres metales <b>conductores</b></h2>
+    <p class="lede" style="margin-left:0">La referencia usa cuatro acentos arbitrarios: esmeralda, púrpura,
+    carmesí, oro. Nosotros no importamos su paleta — <b>extendemos la nuestra</b>.</p>
+
+    <div class="c-panel" style="padding:22px 24px;border-left:2px solid var(--gold-500)">
+      <p style="font-family:var(--font-display);font-style:italic;font-size:18px;margin:0;line-height:1.5">
+        «El oro: en electrónica, el metal con que se bañan los contactos críticos
+        <b style="color:var(--gold-500)">porque conduce sin corroerse</b>.»</p>
+      <p class="hint" style="margin:12px 0 0">— del concepto original de Oro · Obsidiana · Porcelana</p>
+    </div>
+
+    <p class="lede" style="margin:24px 0 0">Oro, cobre y plata <b>son</b> los tres metales conductores de la
+    electrónica. La paleta no es un capricho: es la metáfora, llevada más lejos.</p>
+
+    <div class="metals">
+      <div class="metal"><div class="sw" style="background:#050508;border:1px solid var(--border)"></div>
+        <div class="n">Obsidiana</div><div class="h">#050508</div>
+        <div class="r">El sustrato. El 85% del fondo es esto.</div></div>
+      <div class="metal"><div class="sw" style="background:linear-gradient(135deg,#ADB6C2,#8A93A0)"></div>
+        <div class="n">Plata</div><div class="h">#ADB6C2</div>
+        <div class="r">El humo <b>en reposo</b>. Frío, quieto.</div></div>
+      <div class="metal"><div class="sw" style="background:linear-gradient(135deg,#B87333,#8A5626)"></div>
+        <div class="n">Cobre</div><div class="h">#B87333</div>
+        <div class="r">El humo <b>torcido</b>. Donde el dominio se retuerce.</div></div>
+      <div class="metal"><div class="sw" style="background:linear-gradient(135deg,#F6E2A2,#D4AF37)"></div>
+        <div class="n">Oro</div><div class="h">#D4AF37</div>
+        <div class="r">La <b>cresta</b>. Y donde pasa tu cursor.</div></div>
+    </div>
+
+    <div class="c-panel" style="padding:20px 24px;margin-top:24px;border-left:2px solid var(--danger)">
+      <p style="margin:0;font-size:15px"><b class="bad">La disciplina que no se toca.</b></p>
+      <p class="hint" style="margin:10px 0 0;line-height:1.8">Los tres metales viven <b>solo en la atmósfera</b>.
+      En la UI, el oro sigue siendo el <b>único</b> acento interactivo: enlace, foco, CTA, override.<br>
+      <span class="bad">Atmósfera ≠ señal.</span> Si el cobre empieza a significar algo, el sistema se rompe
+      y volvemos a ser una nebulosa bonita sin gramática.</p>
+    </div>
+  </div>
+  <div style="height:76px"></div>
+</section>
+
+
+<!-- ═══════════════ 3 · EL MECANISMO ═══════════════ -->
+<section class="c-window">
+  <div class="inner c-scrim">
+    <p class="overline">🔓 Ventana · c-scrim (velo medio)</p>
+    <h2>Cómo hacemos que <b>no estorbe</b></h2>
+    <p class="lede" style="margin-left:0">Lo desmonté en su página. No es un «blackout» encima del humo.
+    Es al revés — y es más elegante.</p>
+
+    <div class="c-panel" style="padding:24px 26px;margin-top:8px">
+      <p class="hint" style="margin:0 0 16px;line-height:1.9">
+        <b>1.</b> El humo vive en una capa <b>fija al fondo</b> (z-index 0), a pantalla completa.<br>
+        <b>2.</b> El contenedor de página es <b>opaco</b> (#050508). Eso lo <b>tapa</b>.<br>
+        <b>3.</b> Algunas secciones se declaran <b>transparentes</b> → son <b>ventanas</b> por las que asoma.
+      </p>
+      <p class="hint" style="margin:0 0 14px"><b>Verificado, sección por sección, en su página:</b></p>
+      <p class="hint" style="margin:0;line-height:2">
+        <span class="tag win">🔓 Hero</span>
+        <span class="tag wall">🧱 Audience</span>
+        <span class="tag wall">🧱 Transmutation</span>
+        <span class="tag win">🔓 Features</span>
+        <span class="tag win">🔓 Speed</span>
+        <span class="tag wall">🧱 Proof</span>
+        <span class="tag win">🔓 Pricing</span>
+      </p>
+      <p class="hint" style="margin:18px 0 0;line-height:1.8">Al bajar, el humo <b>aparece y desaparece</b>
+      en un ritmo. El fondo <b>respira</b>.<br>
+      Y donde hay trabajo que leer, <b>hay muro</b>. Ese es todo el secreto.</p>
+    </div>
+  </div>
+</section>
+
+
+<!-- ═══════════════ 4 · EL DASHBOARD SOBRE EL HUMO ═══════════════ -->
+<section class="c-window">
+  <div class="inner">
+    <p class="overline center" style="text-align:center">🔓 Ventana + paneles de vidrio ahumado</p>
+    <h2 class="center" style="text-align:center">El dashboard, <b>encima</b></h2>
+    <p class="lede center" style="margin:0 auto 32px;text-align:center">Esto es lo que preguntabas: cómo conviven.
+    Los paneles son <b>vidrio ahumado</b> — dejan intuir el humo detrás sin comerse una sola letra.</p>
+
+    <div class="dash">
+      <div class="c-panel card">
+        <h3>Mis variantes</h3>
+        <div class="sub">7 activas · 3 desactualizadas</div>
+        <div class="vrow stale">
+          <div><div class="nm">Backend — Fintech</div>
+            <div class="mt">desactualizada · cambió: <b>cargo en Acme</b></div></div>
+          <span class="badge">revisar</span>
+        </div>
+        <div class="vrow stale">
+          <div><div class="nm">Data / IA — Investigación</div>
+            <div class="mt">desactualizada · cambió: <b>cargo en Acme</b></div></div>
+          <span class="badge">revisar</span>
+        </div>
+        <div class="vrow">
+          <div><div class="nm">Full-stack — Startup</div>
+            <div class="mt">al día · 2 páginas · <b>78 KB</b></div></div>
+          <span class="badge">PDF</span>
+        </div>
+      </div>
+
+      <div class="c-panel card">
+        <h3>Skills con evidencia</h3>
+        <div class="sub">de tus repos, tu portfolio y tu CV</div>
+        <div class="skill">
+          <div><div class="nm" style="font-size:14px;font-weight:600">Go</div>
+            <div class="ev">412 KB · 3 repos · 2 viñetas</div></div>
+          <span class="badge">◆ dato duro</span>
+        </div>
+        <div class="skill">
+          <div><div class="nm" style="font-size:14px;font-weight:600">PostgreSQL</div>
+            <div class="ev">portfolio · /experiencia</div></div>
+          <span class="badge">● verificado</span>
+        </div>
+        <div class="skill">
+          <div><div class="nm" style="font-size:14px;font-weight:600">Kubernetes</div>
+            <div class="ev" style="color:var(--danger)">sin evidencia en ninguna fuente</div></div>
+          <span class="badge no">⚠ ¿dónde?</span>
+        </div>
+      </div>
+    </div>
+
+    <p class="hint center" style="text-align:center;margin-top:26px">
+      El <b>dashboard vacío del día 1</b> es ventana: no hay nada que leer, y el humo llena el silencio.<br>
+      Cuando se llena de contenido, los paneles pueden pasar a <b>sólidos</b> con un toggle.
+    </p>
+  </div>
+</section>
+
+
+<!-- ═══════════════ 5 · MURO — donde el humo NO entra ═══════════════ -->
+<section class="c-wall">
+  <div class="divider"></div>
+  <div class="inner" style="padding-top:76px">
+    <p class="overline">🧱 Muro · aquí el humo está tapado. A propósito.</p>
+    <h2>Donde hay <b>trabajo</b>, el trabajo gana</h2>
+
+    <div class="c-panel c-panel--solid" style="padding:24px 26px;margin-top:20px">
+      <p class="hint" style="margin:0;line-height:2">
+        <span style="color:var(--gold-300)">✅ VENTANA</span> — login · onboarding · <b>la espera de la ingesta</b> ·
+        dashboard vacío del día 1 · cabeceras de sección<br>
+        <span class="bad">🧱 MURO</span> — el master con 200 items · <b>el editor de variante</b> · staging ·
+        tailoring · <b>el documento</b>
+      </p>
+    </div>
+
+    <div class="c-panel c-panel--solid" style="padding:24px 26px;margin-top:14px">
+      <p style="margin:0 0 12px;font-size:15px"><b>Y tres frenos más, en el código:</b></p>
+      <p class="hint" style="margin:0;line-height:2">
+        <b>Se detiene al escribir.</b> <code>CANON.aurora.pause()</code> en cada <kbd>focus</kbd> de un input.
+        El editor es sagrado: nada se mueve mientras tecleas.<br>
+        <b>Pestaña oculta = cero trabajo.</b> Y va a <b>30 fps</b>, no 60.<br>
+        <b>Buffer a 1/4 de resolución</b> (tope 560 px). El humo no tiene bordes duros: nadie lo nota.
+        La referencia usa <b>300×150</b> para una pantalla de 1920.<br>
+        <b>Sin WebGL2 o con <kbd>prefers-reduced-motion</kbd></b> → degradado estático, mismos metales.
+      </p>
+    </div>
+  </div>
+  <div style="height:90px"></div>
+</section>
+
+
+<!-- ═══════════════ 6 · CIERRE ═══════════════ -->
+<section class="c-window">
+  <div class="inner center c-scrim c-scrim--radial" style="padding:70px 32px">
+    <p class="overline">Un fondo que no comunica nada</p>
+    <h1 style="font-size:clamp(30px,4vw,50px)">no tiene derecho a <em>moverse</em></h1>
+    <p class="lede">El nuestro sí: en calma, deriva imperceptible. Cuando la IA trabaja, el humo se agita
+    y el oro sube. <b>Es el pulso de la máquina pensando.</b></p>
+    <p class="hint">Pruébalo: dale a «La IA se pone a trabajar» arriba y vuelve a mirar el fondo.</p>
+  </div>
+</section>
+
+<script src="canon-aurora.js"></script>
+<script>
+const hs=document.getElementById('h-s'), hm=document.getElementById('h-m'),
+      ht=document.getElementById('h-t'), hb=document.getElementById('h-b');
+document.getElementById('b-active').onclick = ()=>{ CANON.aurora.setActive(true);  hs.textContent='la IA trabaja'; };
+document.getElementById('b-calm').onclick   = ()=>{ CANON.aurora.setActive(false); hs.textContent='calma'; };
+document.getElementById('b-pause').onclick  = ()=>{ CANON.aurora.pause();  hs.textContent='pausado'; };
+document.getElementById('b-resume').onclick = ()=>{ CANON.aurora.resume(); hs.textContent='calma'; };
+
+let moves=0;
+addEventListener('pointermove', e=>{ moves++; hm.textContent = `${e.clientX},${e.clientY}`; }, {passive:true});
+setInterval(()=>{ ht.textContent = Math.min(16, moves>0?16:0); moves=0; }, 500);
+setTimeout(()=>{ const c=document.querySelector('.c-aurora-gl canvas');
+  hb.textContent = c ? `${c.width}×${c.height}` : 'estático'; }, 500);
+</script>
+</body>
+</html>
