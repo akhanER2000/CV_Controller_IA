@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useProfiles } from "@/lib/store/store";
 import { serializeWithVariant, buildDefaultVariant, resumeToPlainText } from "@/lib/cv/serialize";
+import { Divider } from "@/components/Divider";
 
 export default function CvPage() {
   const { current } = useProfiles();
@@ -87,19 +88,22 @@ export default function CvPage() {
           <button className="btn btn--gold" onClick={download}>Descargar PDF</button>
         </div>
       </header>
+      <Divider />
 
-      <div className="cv__stage">
-        {mode === "doc" ? (
-          err ? (
+      {/* c-xray: el PDF se desenfoca y del blur resuelve el texto crudo del ATS. */}
+      <div className="c-xray cv__stage" data-mode={mode}>
+        <div className="c-xray__doc cv__doc">
+          {err ? (
             <div className="cv__err">{err}</div>
           ) : loading || !pdfUrl ? (
             <div className="cv__loading">Generando el PDF…</div>
           ) : (
             <iframe title="Previsualización del CV" src={pdfUrl} className="cv__frame" />
-          )
-        ) : (
-          <pre className="cv__raw">{ats || "Tu CV está vacío. Ve al Master y agrega tu información."}</pre>
-        )}
+          )}
+        </div>
+        <pre className="c-xray__raw cv__raw">
+          {ats || "Tu CV está vacío. Ve al Master y agrega tu información."}
+        </pre>
       </div>
 
       <p className="cv__hint">

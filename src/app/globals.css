@@ -154,6 +154,13 @@ html, body { min-height: 100dvh; }
 .card p { color: var(--text-muted); font-size: var(--fs-body-sm); margin: 0; }
 .card__go { margin-top: 6px; color: var(--accent-text); font-size: var(--fs-body-sm); }
 
+/* Secciones con encabezado + hairline dorada que se dibuja */
+.dsec { margin-bottom: var(--space-8); }
+.sechd { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-4); margin-bottom: var(--space-2); }
+.sech { font-family: var(--font-display); font-weight: 600; font-size: 17px; letter-spacing: -.01em; color: var(--text); margin: 0; }
+.meta { font-family: var(--font-mono); font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: var(--text-subtle); }
+.c-divider { margin: var(--space-2) 0 var(--space-5); }
+
 /* ── Editor ── */
 .ed__sec { margin-bottom: var(--space-10); }
 .ed__h2 { font-family: var(--font-sans); font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: .1em; color: var(--text); margin: 0 0 var(--space-4); padding-bottom: 8px; border-bottom: 1px solid var(--border); }
@@ -190,10 +197,13 @@ html, body { min-height: 100dvh; }
 .xraytabs { display: inline-flex; border: 1px solid var(--border-strong); border-radius: var(--radius-md); overflow: hidden; }
 .xraytabs button { padding: 8px 14px; background: var(--surface); color: var(--text-muted); border: none; cursor: pointer; font-family: var(--font-sans); font-size: var(--ui-fs-sm); }
 .xraytabs button.is-on { background: var(--surface-elevated); color: var(--accent-text); }
-.cv__stage { margin-top: var(--space-6); background: var(--surface-sunken); border: 1px solid var(--border); border-radius: var(--radius-lg); overflow: hidden; min-height: 70vh; }
+.cv__stage { position: relative; margin-top: var(--space-6); background: var(--surface-sunken); border: 1px solid var(--border); border-radius: var(--radius-lg); overflow: hidden; min-height: 78vh; }
+.cv__doc { height: 100%; }
 .cv__frame { width: 100%; height: 78vh; border: 0; background: #fff; display: block; }
-.cv__raw { margin: 0; padding: var(--space-6); font-family: var(--font-mono); font-size: 12.5px; line-height: 1.7; color: var(--text-muted); white-space: pre-wrap; overflow-x: auto; }
-.cv__loading, .cv__err { padding: var(--space-16); text-align: center; color: var(--text-subtle); font-family: var(--font-mono); font-size: 13px; }
+/* .cv__raw es también .c-xray__raw (absolute inset:0, blur→resuelve). Solo le
+   damos fondo opaco y padding para que se lea sobre el PDF que se desvanece. */
+.cv__raw { margin: 0; padding: var(--space-6); background: var(--surface-sunken); font-size: 12.5px; line-height: 1.7; }
+.cv__loading, .cv__err { display: grid; place-items: center; height: 78vh; text-align: center; color: var(--text-subtle); font-family: var(--font-mono); font-size: 13px; }
 .cv__err { color: var(--danger-quiet); }
 .cv__hint { margin-top: var(--space-3); font-family: var(--font-mono); font-size: var(--fs-caption); color: var(--text-subtle); }
 
