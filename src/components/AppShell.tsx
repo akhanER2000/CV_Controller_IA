@@ -8,6 +8,7 @@ const NAV = [
   { href: "/app", label: "Panel" },
   { href: "/app/master", label: "Master" },
   { href: "/app/cv", label: "CV" },
+  { href: "/app/salud", label: "Salud" },
   { href: "/app/cuenta", label: "Cuenta" },
 ];
 
@@ -50,7 +51,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <button type="button" className="shell__theme" onClick={toggleTheme} aria-label="Cambiar tema">◐</button>
         </div>
       </header>
-      <main className="shell__main c-wall">{children}</main>
+      {/* transparente: cada pantalla decide ventana (aurora) o muro (opaco) */}
+      <main className="shell__main">{children}</main>
     </div>
   );
 }

@@ -193,6 +193,51 @@ html, body { min-height: 100dvh; }
 @media (max-width: 1024px) { .vgrid { grid-template-columns: repeat(2, 1fr); } }
 @media (max-width: 720px) { .vgrid { grid-template-columns: 1fr; } }
 
+/* ── Onboarding: las dos puertas (ventana + aurora) ── */
+.onb { position: relative; min-height: calc(100dvh - var(--topbar-h)); display: grid; place-items: center; padding: var(--space-10) var(--space-6); }
+.onb__inner { position: relative; z-index: 1; max-width: 920px; width: 100%; text-align: center; display: flex; flex-direction: column; align-items: center; gap: var(--space-5); }
+.onb__eyebrow { font-family: var(--font-mono); font-size: 11.5px; letter-spacing: .24em; text-transform: uppercase; color: var(--text-subtle); margin: 0; }
+.onb__title { font-family: var(--font-display); font-weight: 700; font-size: var(--fs-display); line-height: 1.05; letter-spacing: -.02em; color: var(--text); margin: 0; text-wrap: balance; }
+.onb__lede { color: var(--text-muted); font-size: var(--fs-body-lg); margin: 0; max-width: 56ch; }
+.onb__doors { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-4); width: 100%; margin-top: var(--space-4); text-align: left; }
+.onb__door { display: flex; flex-direction: column; gap: var(--space-3); padding: var(--space-6); background: var(--surface); border-radius: var(--radius-xl); }
+.onb__dtag { font-family: var(--font-mono); font-size: 11px; text-transform: uppercase; letter-spacing: .14em; color: var(--accent-text); margin: 0; }
+.onb__dtitle { font-family: var(--font-display); font-weight: 600; font-size: 20px; line-height: 1.2; color: var(--text); margin: 0; }
+.onb__dbody { color: var(--text-muted); font-size: var(--fs-body-sm); line-height: 1.6; margin: 0; }
+.onb__dbody strong { color: var(--text); font-weight: 600; }
+.onb__spacer { flex: 1; min-height: 8px; }
+.onb__chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.onb__chips span { font-family: var(--font-mono); font-size: 11px; padding: 4px 9px; border-radius: var(--radius-sm); border: 1px solid var(--border-strong); color: var(--text-muted); }
+.onb__foot { font-family: var(--font-mono); font-size: var(--fs-caption); color: var(--text-subtle); margin: 0; }
+.onb__door .btn { align-self: flex-start; }
+@media (max-width: 720px) { .onb__doors { grid-template-columns: 1fr; } }
+
+/* ── Salud: chequeo sin score ── */
+.salud__intro { color: var(--text-muted); font-size: var(--fs-body); max-width: 64ch; margin: 0 0 var(--space-6); }
+.salud__list { list-style: none; margin: 0; padding: 0; }
+.salud__item { display: flex; gap: var(--space-4); padding: var(--space-5) 0; border-top: 1px solid var(--border); }
+.salud__item:first-child { border-top: none; }
+.salud__icon { flex: none; width: 22px; font-size: 15px; line-height: 1.5; color: var(--gold-300); }
+.salud__item--info .salud__icon { color: var(--text-subtle); }
+.salud__icon--ok { color: var(--success-quiet); }
+.salud__msgwrap { display: flex; flex-direction: column; gap: 4px; }
+.salud__msg { color: var(--text); font-size: var(--fs-body); margin: 0; }
+.salud__src { font-family: var(--font-mono); font-size: var(--fs-caption); color: var(--text-subtle); margin: 0; }
+.salud__clear { display: flex; gap: var(--space-4); padding: var(--space-6); background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); }
+.salud__note { margin-top: var(--space-8); padding-top: var(--space-4); border-top: 1px solid var(--border); font-size: var(--fs-body-sm); color: var(--text-subtle); max-width: 68ch; }
+
+/* ── Fuentes (shell) ── */
+.src__list { display: flex; flex-direction: column; gap: var(--space-3); }
+.src { display: flex; flex-direction: column; gap: 6px; padding: var(--space-5); background: var(--surface); border-radius: var(--radius-lg); }
+.src__head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-4); }
+.src__name { font-family: var(--font-display); font-weight: 600; font-size: 18px; color: var(--text); margin: 0; }
+.src__stars { flex: none; font-size: 12px; color: var(--accent-text); letter-spacing: 2px; }
+.src__note { color: var(--text-muted); font-size: var(--fs-body-sm); margin: 0; }
+.src__detail { color: var(--text-subtle); font-size: var(--fs-caption); margin: 0; }
+.src__foot { display: flex; align-items: center; gap: var(--space-3); margin-top: 6px; }
+.src .btn[disabled] { opacity: .5; cursor: not-allowed; }
+.src__soon { font-family: var(--font-mono); font-size: 10.5px; text-transform: uppercase; letter-spacing: .1em; color: var(--text-subtle); }
+
 /* ── Editor · densidad editorial (diseño VFinal master) ── */
 .page.ed { max-width: 1080px; padding-top: var(--space-6); }
 .ed .page__title { font-size: 22px; line-height: 1.15; }
