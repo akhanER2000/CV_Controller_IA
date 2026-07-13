@@ -34,6 +34,7 @@ export interface Variant {
   id: string; language: string; targetTitle: string; summaryRef?: string;
   sections?: VariantSection[]; hidden?: string[]; overrides?: Record<string, Override>;
   isGoldenSource?: boolean;
+  name?: string; role?: string; pages?: number; outdated?: boolean; updatedAt?: string;
 }
 export interface Profile {
   basics: { name: string; targetTitleDefault?: string; photo?: string; contacts: Contact[]; summaries: Summary[] };
@@ -228,11 +229,25 @@ export function buildDefaultVariant(data: Profile, lang = "es"): Variant {
   };
 }
 
-/** Un master vacío para un perfil nuevo. */
-export function emptyProfile(name = ""): Profile {
+const newId = (p: string) => `${p}-${globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.round(Math.random() * 1e6)}`}`;
+
+/** Crea una variante nueva a partir del master (todas las secciones, orden estándar). */
+export function makeVariant(data: Profile, name: string, lang = "es"): Variant {
   return {
+    ...buildDefaultVariant(data, lang),
+    id: newId("v"),
+    name,
+    updatedAt: undefined,
+  };
+}
+
+/** Un master vacío para un perfil nuevo, con una variante inicial. */
+export function emptyProfile(name = ""): Profile {
+  const p: Profile = {
     basics: { name, targetTitleDefault: "", contacts: [], summaries: [] },
     work: [], skills: [], education: [], projects: [],
     certifications: [], languages: [], variants: [],
   };
+  p.variants = [makeVariant(p, "Mi CV")];
+  return p;
 }

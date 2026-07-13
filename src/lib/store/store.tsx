@@ -2,7 +2,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 import type { Profile } from "@/lib/cv/serialize";
-import { emptyProfile } from "@/lib/cv/serialize";
+import { emptyProfile, makeVariant } from "@/lib/cv/serialize";
 import { type AppState, type PersonProfile, STORE_KEY } from "./types";
 import { seedProfiles } from "./seed";
 import { supabaseEnabled } from "@/lib/supabase/config";
@@ -23,6 +23,8 @@ interface Ctx {
   renameCurrent: (label: string) => void;
   addProfile: (label?: string) => void;
   deleteProfile: (id: string) => void;
+  addVariant: (name: string) => void;
+  deleteVariant: (id: string) => void;
 }
 
 const StoreContext = createContext<Ctx | null>(null);
@@ -117,12 +119,20 @@ export function ProfilesProvider({ children }: { children: React.ReactNode }) {
     });
   }, []);
 
+  const addVariant = useCallback((name: string) => {
+    updateCurrentData((data) => ({ ...data, variants: [...data.variants, makeVariant(data, name || "Nueva variante")] }));
+  }, [updateCurrentData]);
+
+  const deleteVariant = useCallback((id: string) => {
+    updateCurrentData((data) => ({ ...data, variants: data.variants.filter((v) => v.id !== id) }));
+  }, [updateCurrentData]);
+
   if (!state) return null;
   const current = state.profiles.find((p) => p.id === state.currentId) ?? state.profiles[0]!;
 
   return (
     <StoreContext.Provider
-      value={{ profiles: state.profiles, current, currentId: current.id, setCurrentId, updateCurrentData, renameCurrent, addProfile, deleteProfile }}
+      value={{ profiles: state.profiles, current, currentId: current.id, setCurrentId, updateCurrentData, renameCurrent, addProfile, deleteProfile, addVariant, deleteVariant }}
     >
       {children}
     </StoreContext.Provider>

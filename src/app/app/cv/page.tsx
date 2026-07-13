@@ -7,14 +7,18 @@ import { Divider } from "@/components/Divider";
 
 export default function CvPage() {
   const { current } = useProfiles();
+  const [variantId, setVariantId] = useState<string | null>(null);
+  useEffect(() => { setVariantId(new URLSearchParams(window.location.search).get("v")); }, []);
+  const variant = variantId ? current.data.variants.find((v) => v.id === variantId) : undefined;
+
   const hasPhoto = !!current.data.basics.photo;
   const [includePhoto, setIncludePhoto] = useState(false);
   // Por defecto: incluir la foto si existe (versión "para persona").
   useEffect(() => { setIncludePhoto(hasPhoto); }, [hasPhoto, current.id]);
 
   const model = useMemo(
-    () => serializeWithVariant(current.data, buildDefaultVariant(current.data, "es"), { includePhoto }),
-    [current, includePhoto],
+    () => serializeWithVariant(current.data, variant ?? buildDefaultVariant(current.data, "es"), { includePhoto }),
+    [current, includePhoto, variant],
   );
   const ats = useMemo(() => resumeToPlainText(model), [model]);
 
@@ -71,8 +75,9 @@ export default function CvPage() {
     <div className="page">
       <header className="page__head cv__head">
         <div>
-          <p className="page__eyebrow">Documento</p>
+          <p className="page__eyebrow">{variant?.name ?? "Documento"}</p>
           <h1 className="page__title">{model.name || "Tu CV"}</h1>
+          {model.targetTitle ? <p className="page__sub">{model.targetTitle}</p> : null}
         </div>
         <div className="cv__actions">
           <div className="xraytabs">
