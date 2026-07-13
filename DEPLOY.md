@@ -30,9 +30,14 @@
 ## 1 · Supabase (primero — desbloquea las Fases 2-6)
 
 1. Crea un proyecto en [supabase.com](https://supabase.com).
-2. **Aplica el esquema:** panel → **SQL Editor** → pega `supabase/migrations/0001_schema.sql` → Run.
-   (O con la CLI: `supabase db push`.) Verifica que se crearon las tablas y las políticas RLS.
-3. Panel → **Project Settings → API**. Copia:
+2. **Aplica el esquema:** panel → **SQL Editor** → pega **`supabase/migrations/0002_user_state.sql`** → Run.
+   Ese es el esquema ACTIVO de la app (una fila jsonb por usuario, con RLS). El `0001_schema.sql`
+   es el modelo completo del producto futuro (variantes por tabla, ingesta) — **no lo corras aún**.
+3. **Auth por correo y contraseña:** panel → **Authentication → Providers → Email** → activado.
+   - Para uso personal rápido: **Authentication → Sign In / Providers → Confirm email = OFF**
+     (entras al instante sin confirmar por correo). Actívalo si luego quieres más seguridad.
+   - No necesitas Google/GitHub OAuth (usamos correo+contraseña).
+4. Panel → **Project Settings → API**. Copia:
    - Project URL → `NEXT_PUBLIC_SUPABASE_URL`
    - anon public key → `NEXT_PUBLIC_SUPABASE_ANON_KEY`
    - service_role key → `SUPABASE_SERVICE_ROLE_KEY` **(secreta)**

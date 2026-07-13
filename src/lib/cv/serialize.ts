@@ -36,7 +36,7 @@ export interface Variant {
   isGoldenSource?: boolean;
 }
 export interface Profile {
-  basics: { name: string; targetTitleDefault?: string; contacts: Contact[]; summaries: Summary[] };
+  basics: { name: string; targetTitleDefault?: string; photo?: string; contacts: Contact[]; summaries: Summary[] };
   work: Work[]; skills: SkillCat[]; education: Education[];
   projects: Project[]; certifications: Cert[]; languages: Language[];
   variants: Variant[];
@@ -51,6 +51,8 @@ export type Block =
 export interface Section { header: string; type: string; blocks: Block[] }
 export interface ResumeModel {
   name: string; targetTitle: string; contact: string; lang: string; sections: Section[];
+  /** data-URL de la foto. Opcional; solo la versión "para persona" (no ATS). */
+  photo?: string;
 }
 
 // ── i18n mínimo del documento ────────────────────────────────────────────────
@@ -90,7 +92,11 @@ export function serializeResume(profile: Profile, variantId: string): ResumeMode
 }
 
 /** Igual que serializeResume pero con el objeto variante directo (variantes generadas). */
-export function serializeWithVariant(profile: Profile, variant: Variant): ResumeModel {
+export function serializeWithVariant(
+  profile: Profile,
+  variant: Variant,
+  opts?: { includePhoto?: boolean },
+): ResumeModel {
   const lang = variant.language || "es";
   const H = HEADERS[lang] ?? HEADERS.es!;
   const hidden = new Set(variant.hidden ?? []);
@@ -175,7 +181,14 @@ export function serializeWithVariant(profile: Profile, variant: Variant): Resume
     }
   }
 
-  return { name: profile.basics.name, targetTitle: variant.targetTitle, contact, lang, sections };
+  return {
+    name: profile.basics.name,
+    targetTitle: variant.targetTitle,
+    contact,
+    lang,
+    sections,
+    photo: opts?.includePhoto ? profile.basics.photo : undefined,
+  };
 }
 
 /** El texto en orden de lectura. Debe igualar cv-texto-plano.txt para el golden. */

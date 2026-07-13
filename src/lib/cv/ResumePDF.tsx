@@ -1,4 +1,4 @@
-import { Document, Page, View, Text, StyleSheet, renderToBuffer } from "@react-pdf/renderer";
+import { Document, Page, View, Text, Image, StyleSheet, renderToBuffer } from "@react-pdf/renderer";
 import type { ResumeModel, Section, Block } from "./serialize";
 
 /**
@@ -33,6 +33,9 @@ const s = StyleSheet.create({
   name: { fontFamily: F.name, fontSize: 25, color: C.name, lineHeight: 1.05 },
   title: { fontFamily: F.head, fontSize: 13, color: C.ink, marginTop: mm(2.5), lineHeight: 1.2 },
   contact: { fontFamily: F.mono, fontSize: 8.5, color: C.meta, marginTop: mm(3.5), lineHeight: 1.5 },
+  headerRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start" },
+  headerText: { flex: 1, paddingRight: mm(6) },
+  photo: { width: mm(28), height: mm(35), objectFit: "cover", borderRadius: 3 },
   section: { marginTop: mm(6.5) },
   h2wrap: { borderBottomWidth: mm(0.4), borderBottomColor: C.hair, paddingBottom: mm(1.6), marginBottom: mm(3) },
   // Sin letterSpacing: el tracking de imprenta hace que pdf.js extraiga el
@@ -106,9 +109,22 @@ export function ResumePDF({ model }: { model: ResumeModel }) {
   return (
     <Document title={`CV — ${model.name}`} author={model.name}>
       <Page size="A4" style={s.page}>
-        <Text style={s.name}>{model.name}</Text>
-        <Text style={s.title}>{model.targetTitle}</Text>
-        <Text style={s.contact}>{model.contact}</Text>
+        {model.photo ? (
+          <View style={s.headerRow}>
+            <View style={s.headerText}>
+              <Text style={s.name}>{model.name}</Text>
+              <Text style={s.title}>{model.targetTitle}</Text>
+              <Text style={s.contact}>{model.contact}</Text>
+            </View>
+            <Image src={model.photo} style={s.photo} />
+          </View>
+        ) : (
+          <>
+            <Text style={s.name}>{model.name}</Text>
+            <Text style={s.title}>{model.targetTitle}</Text>
+            <Text style={s.contact}>{model.contact}</Text>
+          </>
+        )}
         {model.sections.map((sec, i) => (
           <SectionView key={i} sec={sec} />
         ))}

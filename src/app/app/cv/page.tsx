@@ -6,9 +6,14 @@ import { serializeWithVariant, buildDefaultVariant, resumeToPlainText } from "@/
 
 export default function CvPage() {
   const { current } = useProfiles();
+  const hasPhoto = !!current.data.basics.photo;
+  const [includePhoto, setIncludePhoto] = useState(false);
+  // Por defecto: incluir la foto si existe (versión "para persona").
+  useEffect(() => { setIncludePhoto(hasPhoto); }, [hasPhoto, current.id]);
+
   const model = useMemo(
-    () => serializeWithVariant(current.data, buildDefaultVariant(current.data, "es")),
-    [current],
+    () => serializeWithVariant(current.data, buildDefaultVariant(current.data, "es"), { includePhoto }),
+    [current, includePhoto],
   );
   const ats = useMemo(() => resumeToPlainText(model), [model]);
 
@@ -73,6 +78,12 @@ export default function CvPage() {
             <button className={mode === "doc" ? "is-on" : ""} onClick={() => setMode("doc")}>Vista PDF</button>
             <button className={mode === "raw" ? "is-on" : ""} onClick={() => setMode("raw")}>Cómo lo lee el ATS</button>
           </div>
+          {hasPhoto ? (
+            <label className="cv__photochk">
+              <input type="checkbox" checked={includePhoto} onChange={(e) => setIncludePhoto(e.target.checked)} />
+              Incluir foto
+            </label>
+          ) : null}
           <button className="btn btn--gold" onClick={download}>Descargar PDF</button>
         </div>
       </header>

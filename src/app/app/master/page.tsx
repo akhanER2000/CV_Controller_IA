@@ -32,6 +32,7 @@ export default function MasterEditor() {
           <Field label="Nombre completo" value={d.basics.name} onChange={(v) => edit((x) => { x.basics.name = v; })} />
           <Field label="Título objetivo por defecto" value={d.basics.targetTitleDefault ?? ""} onChange={(v) => edit((x) => { x.basics.targetTitleDefault = v; })} placeholder="Ingeniero de Software Senior" />
         </div>
+        <PhotoField value={d.basics.photo} onChange={(v) => edit((x) => { x.basics.photo = v; })} />
       </section>
 
       {/* CONTACTO */}
@@ -229,6 +230,48 @@ function Area({ label, value, onChange, placeholder }: { label: string; value: s
 function Remove({ onClick, label = "Quitar" }: { onClick: () => void; label?: string }) {
   return (
     <button type="button" className="ed__remove" onClick={onClick}>{label}</button>
+  );
+}
+
+function PhotoField({ value, onChange }: { value?: string; onChange: (v: string | undefined) => void }) {
+  return (
+    <div className="ed__photo">
+      <div className="ed__photoprev">
+        {value ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={value} alt="Foto de perfil" />
+        ) : (
+          <span>Sin foto</span>
+        )}
+      </div>
+      <div className="ed__photoactions">
+        <div className="ed__photobtns">
+          <label className="ed__add ed__filelabel">
+            {value ? "Cambiar foto" : "Subir foto"}
+            <input
+              type="file"
+              accept="image/*"
+              hidden
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (!file) return;
+                const reader = new FileReader();
+                reader.onload = () => onChange(typeof reader.result === "string" ? reader.result : undefined);
+                reader.readAsDataURL(file);
+                e.target.value = "";
+              }}
+            />
+          </label>
+          {value ? (
+            <button type="button" className="ed__remove ed__remove--sm" onClick={() => onChange(undefined)}>Quitar</button>
+          ) : null}
+        </div>
+        <p className="ed__phototip">
+          Opcional. En la versión ATS del CV la foto se omite (una foto puede afectar el parseo automático).
+          Úsala en la versión “para persona”, cuando envías el CV directo a alguien.
+        </p>
+      </div>
+    </div>
   );
 }
 

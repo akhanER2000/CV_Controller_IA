@@ -8,6 +8,7 @@ const NAV = [
   { href: "/app", label: "Panel" },
   { href: "/app/master", label: "Master" },
   { href: "/app/cv", label: "CV" },
+  { href: "/app/cuenta", label: "Cuenta" },
 ];
 
 function toggleTheme() {
