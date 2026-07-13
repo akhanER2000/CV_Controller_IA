@@ -21,7 +21,14 @@ export default function LoginPage() {
     const { error } = await createClient().auth.signInWithPassword({ email, password: pw });
     if (error) {
       setBusy(false);
-      setErr("Email o contraseña incorrectos.");
+      const m = error.message.toLowerCase();
+      if (m.includes("not confirmed") || m.includes("confirm")) {
+        setErr("Tu correo aún no está confirmado. Revisa tu bandeja, o desactiva la confirmación en Supabase (Authentication → Sign In → Confirm email = OFF).");
+      } else if (m.includes("invalid") || m.includes("credentials")) {
+        setErr("Email o contraseña incorrectos. ¿Es tu primera vez? Crea tu cuenta con “Crear cuenta”.");
+      } else {
+        setErr(error.message);
+      }
       return;
     }
     router.push("/app");

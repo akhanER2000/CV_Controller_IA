@@ -33,7 +33,12 @@ export default function SignupPage() {
     });
     setBusy(false);
     if (error) {
-      setErr(error.message);
+      const m = error.message.toLowerCase();
+      if (m.includes("already") || m.includes("registered")) {
+        setErr("Ese correo ya tiene cuenta. Entra desde “Ya tengo cuenta”.");
+      } else {
+        setErr(error.message);
+      }
       return;
     }
     if (data.session) {
