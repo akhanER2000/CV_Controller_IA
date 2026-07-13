@@ -1,9 +1,24 @@
 "use client";
 
+import Link from "next/link";
 import { useProfiles } from "@/lib/store/store";
+import { Divider } from "@/components/Divider";
 import type { Profile } from "@/lib/cv/serialize";
 
 const uid = () => (globalThis.crypto?.randomUUID?.() ?? `id-${Date.now()}-${Math.round(Math.random() * 1e6)}`);
+
+/** Encabezado de sección: título Playfair + la hairline dorada que se dibuja. */
+function SectionHead({ title, action }: { title: string; action?: React.ReactNode }) {
+  return (
+    <>
+      <div className="ed__sechead">
+        <h2 className="ed__h2">{title}</h2>
+        {action}
+      </div>
+      <Divider />
+    </>
+  );
+}
 
 export default function MasterEditor() {
   const { current, updateCurrentData } = useProfiles();
@@ -25,9 +40,18 @@ export default function MasterEditor() {
         <p className="page__sub">Todo lo que has hecho. Se guarda solo mientras escribes.</p>
       </header>
 
+      <div className="ed__toolbar">
+        <span className="ed__count">
+          {d.work.length + d.education.length + d.projects.length + d.certifications.length +
+            d.languages.length + d.skills.reduce((n, s) => n + s.items.length, 0)}{" "}
+          elementos
+        </span>
+        <Link href="/app/cv" className="btn btn--ghost">Ver y exportar CV →</Link>
+      </div>
+
       {/* IDENTIDAD */}
       <section className="ed__sec">
-        <h2 className="ed__h2">Identidad</h2>
+        <SectionHead title="Identidad" />
         <div className="ed__grid2">
           <Field label="Nombre completo" value={d.basics.name} onChange={(v) => edit((x) => { x.basics.name = v; })} />
           <Field label="Título objetivo por defecto" value={d.basics.targetTitleDefault ?? ""} onChange={(v) => edit((x) => { x.basics.targetTitleDefault = v; })} placeholder="Ingeniero de Software Senior" />
@@ -37,10 +61,10 @@ export default function MasterEditor() {
 
       {/* CONTACTO */}
       <section className="ed__sec">
-        <div className="ed__sechead">
-          <h2 className="ed__h2">Contacto</h2>
-          <button className="ed__add" onClick={() => edit((x) => { x.basics.contacts.push({ type: "manual", label: "", value: "", visible: true }); })}>+ Añadir</button>
-        </div>
+        <SectionHead
+          title="Contacto"
+          action={<button className="ed__add" onClick={() => edit((x) => { x.basics.contacts.push({ type: "manual", label: "", value: "", visible: true }); })}>+ Añadir</button>}
+        />
         {d.basics.contacts.map((c, i) => (
           <div className="ed__row3" key={i}>
             <Field label="Etiqueta" value={c.label} onChange={(v) => edit((x) => { x.basics.contacts[i]!.label = v; })} placeholder="Email" />
@@ -52,10 +76,10 @@ export default function MasterEditor() {
 
       {/* RESUMEN */}
       <section className="ed__sec">
-        <div className="ed__sechead">
-          <h2 className="ed__h2">Resumen</h2>
-          <button className="ed__add" onClick={() => edit((x) => { x.basics.summaries.push({ id: uid(), text: "" }); })}>+ Añadir</button>
-        </div>
+        <SectionHead
+          title="Resumen"
+          action={<button className="ed__add" onClick={() => edit((x) => { x.basics.summaries.push({ id: uid(), text: "" }); })}>+ Añadir</button>}
+        />
         {d.basics.summaries.map((sm, i) => (
           <div className="ed__stack" key={sm.id}>
             <Area label={`Resumen ${i + 1}`} value={sm.text} onChange={(v) => edit((x) => { x.basics.summaries[i]!.text = v; })} placeholder="Ingeniero de software con 8 años…" />
@@ -66,10 +90,10 @@ export default function MasterEditor() {
 
       {/* EXPERIENCIA */}
       <section className="ed__sec">
-        <div className="ed__sechead">
-          <h2 className="ed__h2">Experiencia</h2>
-          <button className="ed__add" onClick={() => edit((x) => { x.work.push({ id: uid(), title: "", orgLegal: "", location: "", start: "", end: null, current: false, bullets: [] }); })}>+ Añadir</button>
-        </div>
+        <SectionHead
+          title="Experiencia"
+          action={<button className="ed__add" onClick={() => edit((x) => { x.work.push({ id: uid(), title: "", orgLegal: "", location: "", start: "", end: null, current: false, bullets: [] }); })}>+ Añadir</button>}
+        />
         {d.work.map((w, i) => (
           <div className="ed__card" key={w.id}>
             <div className="ed__grid2">
@@ -96,10 +120,10 @@ export default function MasterEditor() {
 
       {/* APTITUDES */}
       <section className="ed__sec">
-        <div className="ed__sechead">
-          <h2 className="ed__h2">Aptitudes técnicas</h2>
-          <button className="ed__add" onClick={() => edit((x) => { x.skills.push({ id: uid(), category: "", items: [] }); })}>+ Categoría</button>
-        </div>
+        <SectionHead
+          title="Aptitudes técnicas"
+          action={<button className="ed__add" onClick={() => edit((x) => { x.skills.push({ id: uid(), category: "", items: [] }); })}>+ Categoría</button>}
+        />
         {d.skills.map((s, i) => (
           <div className="ed__card" key={s.id}>
             <Field label="Categoría" value={s.category} onChange={(v) => edit((x) => { x.skills[i]!.category = v; })} placeholder="Lenguajes" />
@@ -119,10 +143,10 @@ export default function MasterEditor() {
 
       {/* EDUCACIÓN */}
       <section className="ed__sec">
-        <div className="ed__sechead">
-          <h2 className="ed__h2">Educación</h2>
-          <button className="ed__add" onClick={() => edit((x) => { x.education.push({ id: uid(), degree: "", institution: "", location: "", start: "", end: "", notes: [] }); })}>+ Añadir</button>
-        </div>
+        <SectionHead
+          title="Educación"
+          action={<button className="ed__add" onClick={() => edit((x) => { x.education.push({ id: uid(), degree: "", institution: "", location: "", start: "", end: "", notes: [] }); })}>+ Añadir</button>}
+        />
         {d.education.map((e, i) => (
           <div className="ed__card" key={e.id}>
             <div className="ed__grid2">
@@ -149,10 +173,10 @@ export default function MasterEditor() {
 
       {/* PROYECTOS */}
       <section className="ed__sec">
-        <div className="ed__sechead">
-          <h2 className="ed__h2">Proyectos</h2>
-          <button className="ed__add" onClick={() => edit((x) => { x.projects.push({ id: uid(), name: "", url: null, start: "", end: null, org: "", bullets: [] }); })}>+ Añadir</button>
-        </div>
+        <SectionHead
+          title="Proyectos"
+          action={<button className="ed__add" onClick={() => edit((x) => { x.projects.push({ id: uid(), name: "", url: null, start: "", end: null, org: "", bullets: [] }); })}>+ Añadir</button>}
+        />
         {d.projects.map((p, i) => (
           <div className="ed__card" key={p.id}>
             <Field label="Nombre" value={p.name} onChange={(v) => edit((x) => { x.projects[i]!.name = v; })} placeholder="pago-conciliador — librería open source (Go)" />
@@ -177,10 +201,10 @@ export default function MasterEditor() {
 
       {/* CERTIFICACIONES */}
       <section className="ed__sec">
-        <div className="ed__sechead">
-          <h2 className="ed__h2">Certificaciones</h2>
-          <button className="ed__add" onClick={() => edit((x) => { x.certifications.push({ id: uid(), name: "", year: "" }); })}>+ Añadir</button>
-        </div>
+        <SectionHead
+          title="Certificaciones"
+          action={<button className="ed__add" onClick={() => edit((x) => { x.certifications.push({ id: uid(), name: "", year: "" }); })}>+ Añadir</button>}
+        />
         {d.certifications.map((c, i) => (
           <div className="ed__row3" key={c.id}>
             <Field label="Nombre" value={c.name} onChange={(v) => edit((x) => { x.certifications[i]!.name = v; })} placeholder="AWS Certified Solutions Architect – Associate" />
@@ -192,10 +216,10 @@ export default function MasterEditor() {
 
       {/* IDIOMAS */}
       <section className="ed__sec">
-        <div className="ed__sechead">
-          <h2 className="ed__h2">Idiomas</h2>
-          <button className="ed__add" onClick={() => edit((x) => { x.languages.push({ id: uid(), language: "", level: "" }); })}>+ Añadir</button>
-        </div>
+        <SectionHead
+          title="Idiomas"
+          action={<button className="ed__add" onClick={() => edit((x) => { x.languages.push({ id: uid(), language: "", level: "" }); })}>+ Añadir</button>}
+        />
         {d.languages.map((l, i) => (
           <div className="ed__row3" key={l.id}>
             <Field label="Idioma" value={l.language} onChange={(v) => edit((x) => { x.languages[i]!.language = v; })} placeholder="Español" />
