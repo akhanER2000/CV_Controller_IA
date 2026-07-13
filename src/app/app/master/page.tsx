@@ -1,0 +1,256 @@
+"use client";
+
+import { useProfiles } from "@/lib/store/store";
+import type { Profile } from "@/lib/cv/serialize";
+
+const uid = () => (globalThis.crypto?.randomUUID?.() ?? `id-${Date.now()}-${Math.round(Math.random() * 1e6)}`);
+
+export default function MasterEditor() {
+  const { current, updateCurrentData } = useProfiles();
+  const d = current.data;
+
+  // Edición inmutable simple: clona, muta, devuelve. Se guarda solo (localStorage).
+  const edit = (fn: (draft: Profile) => void) =>
+    updateCurrentData((data) => {
+      const nd = structuredClone(data);
+      fn(nd);
+      return nd;
+    });
+
+  return (
+    <div className="page ed">
+      <header className="page__head">
+        <p className="page__eyebrow">Master · {current.label}</p>
+        <h1 className="page__title">Tu registro completo</h1>
+        <p className="page__sub">Todo lo que has hecho. Se guarda solo mientras escribes.</p>
+      </header>
+
+      {/* IDENTIDAD */}
+      <section className="ed__sec">
+        <h2 className="ed__h2">Identidad</h2>
+        <div className="ed__grid2">
+          <Field label="Nombre completo" value={d.basics.name} onChange={(v) => edit((x) => { x.basics.name = v; })} />
+          <Field label="Título objetivo por defecto" value={d.basics.targetTitleDefault ?? ""} onChange={(v) => edit((x) => { x.basics.targetTitleDefault = v; })} placeholder="Ingeniero de Software Senior" />
+        </div>
+      </section>
+
+      {/* CONTACTO */}
+      <section className="ed__sec">
+        <div className="ed__sechead">
+          <h2 className="ed__h2">Contacto</h2>
+          <button className="ed__add" onClick={() => edit((x) => { x.basics.contacts.push({ type: "manual", label: "", value: "", visible: true }); })}>+ Añadir</button>
+        </div>
+        {d.basics.contacts.map((c, i) => (
+          <div className="ed__row3" key={i}>
+            <Field label="Etiqueta" value={c.label} onChange={(v) => edit((x) => { x.basics.contacts[i]!.label = v; })} placeholder="Email" />
+            <Field label="Valor" value={c.value} onChange={(v) => edit((x) => { x.basics.contacts[i]!.value = v; })} placeholder="tu@correo.cl" />
+            <Remove onClick={() => edit((x) => { x.basics.contacts.splice(i, 1); })} />
+          </div>
+        ))}
+      </section>
+
+      {/* RESUMEN */}
+      <section className="ed__sec">
+        <div className="ed__sechead">
+          <h2 className="ed__h2">Resumen</h2>
+          <button className="ed__add" onClick={() => edit((x) => { x.basics.summaries.push({ id: uid(), text: "" }); })}>+ Añadir</button>
+        </div>
+        {d.basics.summaries.map((sm, i) => (
+          <div className="ed__stack" key={sm.id}>
+            <Area label={`Resumen ${i + 1}`} value={sm.text} onChange={(v) => edit((x) => { x.basics.summaries[i]!.text = v; })} placeholder="Ingeniero de software con 8 años…" />
+            <Remove onClick={() => edit((x) => { x.basics.summaries.splice(i, 1); })} />
+          </div>
+        ))}
+      </section>
+
+      {/* EXPERIENCIA */}
+      <section className="ed__sec">
+        <div className="ed__sechead">
+          <h2 className="ed__h2">Experiencia</h2>
+          <button className="ed__add" onClick={() => edit((x) => { x.work.push({ id: uid(), title: "", orgLegal: "", location: "", start: "", end: null, current: false, bullets: [] }); })}>+ Añadir</button>
+        </div>
+        {d.work.map((w, i) => (
+          <div className="ed__card" key={w.id}>
+            <div className="ed__grid2">
+              <Field label="Cargo" value={w.title} onChange={(v) => edit((x) => { x.work[i]!.title = v; })} placeholder="Senior Backend Engineer" />
+              <Field label="Empresa (con identificador legal)" value={w.orgLegal} onChange={(v) => edit((x) => { x.work[i]!.orgLegal = v; })} placeholder="Fintual … S.A." />
+            </div>
+            <div className="ed__grid3">
+              <Field label="Ubicación" value={w.location} onChange={(v) => edit((x) => { x.work[i]!.location = v; })} placeholder="Santiago, Chile" />
+              <Field label="Inicio (AAAA-MM)" value={w.start} onChange={(v) => edit((x) => { x.work[i]!.start = v; })} placeholder="2021-01" />
+              <Field label="Fin (AAAA-MM · vacío = actual)" value={w.end ?? ""} onChange={(v) => edit((x) => { x.work[i]!.end = v || null; x.work[i]!.current = !v; })} placeholder="2020-12" />
+            </div>
+            <ListEditor
+              label="Viñetas"
+              items={w.bullets.map((b) => b.text)}
+              onAdd={() => edit((x) => { x.work[i]!.bullets.push({ id: uid(), text: "" }); })}
+              onChange={(j, v) => edit((x) => { x.work[i]!.bullets[j]!.text = v; })}
+              onRemove={(j) => edit((x) => { x.work[i]!.bullets.splice(j, 1); })}
+              placeholder="Reduje la latencia p99 de 850 ms a 180 ms…"
+            />
+            <Remove label="Eliminar experiencia" onClick={() => edit((x) => { x.work.splice(i, 1); })} />
+          </div>
+        ))}
+      </section>
+
+      {/* APTITUDES */}
+      <section className="ed__sec">
+        <div className="ed__sechead">
+          <h2 className="ed__h2">Aptitudes técnicas</h2>
+          <button className="ed__add" onClick={() => edit((x) => { x.skills.push({ id: uid(), category: "", items: [] }); })}>+ Categoría</button>
+        </div>
+        {d.skills.map((s, i) => (
+          <div className="ed__card" key={s.id}>
+            <Field label="Categoría" value={s.category} onChange={(v) => edit((x) => { x.skills[i]!.category = v; })} placeholder="Lenguajes" />
+            <ListEditor
+              label="Aptitudes (una por línea)"
+              items={s.items.map((it) => it.name)}
+              onAdd={() => edit((x) => { x.skills[i]!.items.push({ name: "" }); })}
+              onChange={(j, v) => edit((x) => { x.skills[i]!.items[j]!.name = v; })}
+              onRemove={(j) => edit((x) => { x.skills[i]!.items.splice(j, 1); })}
+              placeholder="Go"
+              compact
+            />
+            <Remove label="Eliminar categoría" onClick={() => edit((x) => { x.skills.splice(i, 1); })} />
+          </div>
+        ))}
+      </section>
+
+      {/* EDUCACIÓN */}
+      <section className="ed__sec">
+        <div className="ed__sechead">
+          <h2 className="ed__h2">Educación</h2>
+          <button className="ed__add" onClick={() => edit((x) => { x.education.push({ id: uid(), degree: "", institution: "", location: "", start: "", end: "", notes: [] }); })}>+ Añadir</button>
+        </div>
+        {d.education.map((e, i) => (
+          <div className="ed__card" key={e.id}>
+            <div className="ed__grid2">
+              <Field label="Título / grado" value={e.degree} onChange={(v) => edit((x) => { x.education[i]!.degree = v; })} placeholder="Ingeniería Civil en Computación" />
+              <Field label="Institución" value={e.institution} onChange={(v) => edit((x) => { x.education[i]!.institution = v; })} placeholder="Universidad de Chile" />
+            </div>
+            <div className="ed__grid3">
+              <Field label="Ubicación" value={e.location} onChange={(v) => edit((x) => { x.education[i]!.location = v; })} placeholder="Santiago, Chile" />
+              <Field label="Inicio (AAAA)" value={e.start} onChange={(v) => edit((x) => { x.education[i]!.start = v; })} placeholder="2011" />
+              <Field label="Fin (AAAA)" value={e.end} onChange={(v) => edit((x) => { x.education[i]!.end = v; })} placeholder="2016" />
+            </div>
+            <ListEditor
+              label="Notas (memoria, distinciones…)"
+              items={(e.notes ?? []).map((n) => n.text)}
+              onAdd={() => edit((x) => { (x.education[i]!.notes ??= []).push({ id: uid(), text: "" }); })}
+              onChange={(j, v) => edit((x) => { x.education[i]!.notes![j]!.text = v; })}
+              onRemove={(j) => edit((x) => { x.education[i]!.notes!.splice(j, 1); })}
+              placeholder="Memoria: detección de fraude…"
+            />
+            <Remove label="Eliminar formación" onClick={() => edit((x) => { x.education.splice(i, 1); })} />
+          </div>
+        ))}
+      </section>
+
+      {/* PROYECTOS */}
+      <section className="ed__sec">
+        <div className="ed__sechead">
+          <h2 className="ed__h2">Proyectos</h2>
+          <button className="ed__add" onClick={() => edit((x) => { x.projects.push({ id: uid(), name: "", url: null, start: "", end: null, org: "", bullets: [] }); })}>+ Añadir</button>
+        </div>
+        {d.projects.map((p, i) => (
+          <div className="ed__card" key={p.id}>
+            <Field label="Nombre" value={p.name} onChange={(v) => edit((x) => { x.projects[i]!.name = v; })} placeholder="pago-conciliador — librería open source (Go)" />
+            <div className="ed__grid3">
+              <Field label="URL (opcional)" value={p.url ?? ""} onChange={(v) => edit((x) => { x.projects[i]!.url = v || null; })} placeholder="github.com/…" />
+              <Field label="Inicio (AAAA)" value={p.start} onChange={(v) => edit((x) => { x.projects[i]!.start = v; })} placeholder="2022" />
+              <Field label="Fin (AAAA · vacío = actual)" value={p.end ?? ""} onChange={(v) => edit((x) => { x.projects[i]!.end = v || null; })} placeholder="2023" />
+            </div>
+            <Field label="Meta (organización · detalle, opcional)" value={p.org ?? ""} onChange={(v) => edit((x) => { x.projects[i]!.org = v; })} placeholder="Meetup Golang Chile · 180 asistentes" />
+            <ListEditor
+              label="Viñetas"
+              items={p.bullets.map((b) => b.text)}
+              onAdd={() => edit((x) => { x.projects[i]!.bullets.push({ id: uid(), text: "" }); })}
+              onChange={(j, v) => edit((x) => { x.projects[i]!.bullets[j]!.text = v; })}
+              onRemove={(j) => edit((x) => { x.projects[i]!.bullets.splice(j, 1); })}
+              placeholder="Librería de conciliación; 320 estrellas…"
+            />
+            <Remove label="Eliminar proyecto" onClick={() => edit((x) => { x.projects.splice(i, 1); })} />
+          </div>
+        ))}
+      </section>
+
+      {/* CERTIFICACIONES */}
+      <section className="ed__sec">
+        <div className="ed__sechead">
+          <h2 className="ed__h2">Certificaciones</h2>
+          <button className="ed__add" onClick={() => edit((x) => { x.certifications.push({ id: uid(), name: "", year: "" }); })}>+ Añadir</button>
+        </div>
+        {d.certifications.map((c, i) => (
+          <div className="ed__row3" key={c.id}>
+            <Field label="Nombre" value={c.name} onChange={(v) => edit((x) => { x.certifications[i]!.name = v; })} placeholder="AWS Certified Solutions Architect – Associate" />
+            <Field label="Año" value={c.year} onChange={(v) => edit((x) => { x.certifications[i]!.year = v; })} placeholder="2022" />
+            <Remove onClick={() => edit((x) => { x.certifications.splice(i, 1); })} />
+          </div>
+        ))}
+      </section>
+
+      {/* IDIOMAS */}
+      <section className="ed__sec">
+        <div className="ed__sechead">
+          <h2 className="ed__h2">Idiomas</h2>
+          <button className="ed__add" onClick={() => edit((x) => { x.languages.push({ id: uid(), language: "", level: "" }); })}>+ Añadir</button>
+        </div>
+        {d.languages.map((l, i) => (
+          <div className="ed__row3" key={l.id}>
+            <Field label="Idioma" value={l.language} onChange={(v) => edit((x) => { x.languages[i]!.language = v; })} placeholder="Español" />
+            <Field label="Nivel" value={l.level} onChange={(v) => edit((x) => { x.languages[i]!.level = v; })} placeholder="nativo" />
+            <Remove onClick={() => edit((x) => { x.languages.splice(i, 1); })} />
+          </div>
+        ))}
+      </section>
+    </div>
+  );
+}
+
+// ── Controles reutilizables ─────────────────────────────────────────────────
+function Field({ label, value, onChange, placeholder }: { label: string; value: string; onChange: (v: string) => void; placeholder?: string }) {
+  return (
+    <label className="field">
+      <span>{label}</span>
+      <input value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} />
+    </label>
+  );
+}
+
+function Area({ label, value, onChange, placeholder }: { label: string; value: string; onChange: (v: string) => void; placeholder?: string }) {
+  return (
+    <label className="field">
+      <span>{label}</span>
+      <textarea value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} rows={3} />
+    </label>
+  );
+}
+
+function Remove({ onClick, label = "Quitar" }: { onClick: () => void; label?: string }) {
+  return (
+    <button type="button" className="ed__remove" onClick={onClick}>{label}</button>
+  );
+}
+
+function ListEditor({ label, items, onAdd, onChange, onRemove, placeholder, compact }: {
+  label: string; items: string[]; onAdd: () => void; onChange: (i: number, v: string) => void; onRemove: (i: number) => void; placeholder?: string; compact?: boolean;
+}) {
+  return (
+    <div className="ed__list">
+      <div className="ed__listhead">
+        <span>{label}</span>
+        <button type="button" className="ed__add ed__add--sm" onClick={onAdd}>+ línea</button>
+      </div>
+      {items.map((it, i) => (
+        <div className="ed__listrow" key={i}>
+          {compact ? (
+            <input className="ed__listinput" value={it} onChange={(e) => onChange(i, e.target.value)} placeholder={placeholder} />
+          ) : (
+            <textarea className="ed__listinput" value={it} onChange={(e) => onChange(i, e.target.value)} placeholder={placeholder} rows={2} />
+          )}
+          <button type="button" className="ed__remove ed__remove--sm" onClick={() => onRemove(i)}>×</button>
+        </div>
+      ))}
+    </div>
+  );
+}

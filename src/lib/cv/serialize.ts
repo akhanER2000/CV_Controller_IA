@@ -36,7 +36,7 @@ export interface Variant {
   isGoldenSource?: boolean;
 }
 export interface Profile {
-  basics: { name: string; contacts: Contact[]; summaries: Summary[] };
+  basics: { name: string; targetTitleDefault?: string; contacts: Contact[]; summaries: Summary[] };
   work: Work[]; skills: SkillCat[]; education: Education[];
   projects: Project[]; certifications: Cert[]; languages: Language[];
   variants: Variant[];
@@ -86,6 +86,11 @@ function range(start: string, end: string | null, current: boolean, lang: string
 export function serializeResume(profile: Profile, variantId: string): ResumeModel {
   const variant = profile.variants.find((v) => v.id === variantId);
   if (!variant) throw new Error(`variante no encontrada: ${variantId}`);
+  return serializeWithVariant(profile, variant);
+}
+
+/** Igual que serializeResume pero con el objeto variante directo (variantes generadas). */
+export function serializeWithVariant(profile: Profile, variant: Variant): ResumeModel {
   const lang = variant.language || "es";
   const H = HEADERS[lang] ?? HEADERS.es!;
   const hidden = new Set(variant.hidden ?? []);
@@ -190,4 +195,31 @@ export function resumeToPlainText(m: ResumeModel): string {
     }
   }
   return lines.join("\n");
+}
+
+/** Variante por defecto: todas las secciones con contenido, orden estándar, todo incluido. */
+export function buildDefaultVariant(data: Profile, lang = "es"): Variant {
+  const sections: VariantSection[] = [];
+  if (data.skills.length) sections.push({ type: "skills", order: data.skills.map((s) => s.id) });
+  if (data.work.length) sections.push({ type: "work", order: data.work.map((w) => w.id) });
+  if (data.education.length) sections.push({ type: "education", order: data.education.map((e) => e.id) });
+  if (data.projects.length) sections.push({ type: "projects", order: data.projects.map((p) => p.id) });
+  if (data.certifications.length) sections.push({ type: "certifications", order: data.certifications.map((c) => c.id) });
+  if (data.languages.length) sections.push({ type: "languages", order: data.languages.map((l) => l.id) });
+  return {
+    id: "default",
+    language: lang,
+    targetTitle: data.basics.targetTitleDefault ?? "",
+    summaryRef: data.basics.summaries[0]?.id,
+    sections,
+  };
+}
+
+/** Un master vacío para un perfil nuevo. */
+export function emptyProfile(name = ""): Profile {
+  return {
+    basics: { name, targetTitleDefault: "", contacts: [], summaries: [] },
+    work: [], skills: [], education: [], projects: [],
+    certifications: [], languages: [], variants: [],
+  };
 }
