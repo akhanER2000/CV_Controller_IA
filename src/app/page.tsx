@@ -8,7 +8,7 @@ export default function Landing() {
     <main className="landing c-window">
       <AuroraCanvas active />
       <ThemeToggle />
-      <div className="landing__inner">
+      <div className="landing__inner c-panel-in">
         <p className="landing__eyebrow">Corpus</p>
         <h1 className="landing__title">
           Tu carrera, en <em>un solo registro</em>.

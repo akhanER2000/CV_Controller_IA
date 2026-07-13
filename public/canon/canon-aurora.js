@@ -127,8 +127,8 @@
     // ═══ LOS METALES ════════════════════════════════════════════════════════
     // Calibrado renderizando el campo y MIRÁNDOLO, no a ojo.
     // Sigue siendo escaso: la mediana de mezcla es 0.004 — el 85% es obsidiana.
-    float veil     = pow(smoothstep(0.30, 1.00, fn), 1.5);
-    float filament = smoothstep(0.72, 0.88, fn) * (1.0 - smoothstep(0.88, 1.00, fn));
+    float veil     = smoothstep(0.05, 0.80, fn);
+    float filament = smoothstep(0.50, 0.72, fn) * (1.0 - smoothstep(0.82, 1.00, fn));
 
     // Qué metal aflora depende de la torsión del dominio (length(q)),
     // también normalizada:
@@ -140,15 +140,15 @@
     metal      = mix(metal,   uGold,   smoothstep(0.55, 1.00, torsion + heat * 0.32));
 
     vec3 col = uObsidian;
-    col = mix(col, metal,  veil     * (0.28 + 0.12 * uIntensity + heat * 0.18));
-    col = mix(col, uGold,  filament * (0.18 + 0.10 * uIntensity + heat * 0.20));
+    col = mix(col, metal,  veil     * (0.85 + 0.12 * uIntensity + heat * 0.18));
+    col = mix(col, uGold,  filament * (0.60 + 0.10 * uIntensity + heat * 0.20));
 
     // el rastro del cursor: un rescoldo, no un foco. Muy contenido.
     col += uGold * heat * 0.020;
 
     // viñeta: el centro respira, los bordes se apagan. El texto vive en el centro.
     vec2 vuv = uv / 0.85;
-    float vig = 1.0 - 0.42 * dot(vuv * 0.75, vuv * 0.75);
+    float vig = 1.0 - 0.16 * dot(vuv * 0.75, vuv * 0.75);
     col *= clamp(vig, 0.0, 1.0);
 
     // grano: obligatorio en negros, mata el banding

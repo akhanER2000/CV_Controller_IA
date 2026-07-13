@@ -29,7 +29,7 @@
    three.js r183, contenedor fixed, opacity 0.15). Es el mando de intensidad.
    Un solo número gobierna cuánto humo hay en todo el producto.               */
 :root{
-  --aurora-strength: 0.55;   /* 0 = apagado · 0.35 discreto · 0.55 ★ · 0.8 fuerte */
+  --aurora-strength: 0.9;   /* 0 = apagado · 0.35 discreto · 0.55 · 0.9 ★ visible */
 }
 
 /* ── 1 · LA CAPA DEL HUMO ─────────────────────────────────────────────────── */

@@ -39,7 +39,7 @@ export default function LoginPage() {
     <main className="auth c-window">
       <AuroraCanvas />
       <ThemeToggle />
-      <form className="auth__card c-panel" onSubmit={submit}>
+      <form className="auth__card c-panel c-panel-in" onSubmit={submit}>
         <p className="auth__brand">Corpus</p>
         <div className="auth__fields" style={{ gap: "var(--space-2)" }}>
           <h1 className="auth__title">Tu carrera, en un solo registro.</h1>
