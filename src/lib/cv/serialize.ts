@@ -41,6 +41,22 @@ export interface Profile {
   work: Work[]; skills: SkillCat[]; education: Education[];
   projects: Project[]; certifications: Cert[]; languages: Language[];
   variants: Variant[];
+  staged?: StagedItem[];
+}
+
+/** Un item extraído a la espera de revisión (staging). Nada entra al master sin
+ *  que el usuario lo acepte — ni siquiera lo que viene de una API. */
+export interface StagedItem {
+  id: string;
+  section: "work" | "skills" | "education" | "projects" | "summary";
+  label: string;      // título del item en la tarjeta
+  preview: string;    // el contenido que se muestra
+  origin: string;     // "CV_2023.pdf · pág. 2" · "GitHub · API" · "LinkedIn"
+  originKind: "file" | "api" | "linkedin" | "ai" | "manual";
+  evidenceLevel: "verified" | "partial" | "unverified" | "api";
+  evidence?: string;  // el fragmento literal / coincidencia difusa / dato de API
+  duplicateOf?: string; // etiqueta del item del master que quizá duplica
+  payload: Record<string, unknown>; // lo que se empuja al master al aceptar
 }
 
 // ── Modelo de salida ─────────────────────────────────────────────────────────
