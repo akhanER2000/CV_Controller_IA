@@ -48,7 +48,7 @@ export interface Profile {
  *  que el usuario lo acepte — ni siquiera lo que viene de una API. */
 export interface StagedItem {
   id: string;
-  section: "work" | "skills" | "education" | "projects" | "summary";
+  section: "basics" | "work" | "skills" | "education" | "projects" | "summary";
   label: string;      // título del item en la tarjeta
   preview: string;    // el contenido que se muestra
   origin: string;     // "CV_2023.pdf · pág. 2" · "GitHub · API" · "LinkedIn"

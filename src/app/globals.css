@@ -1,7 +1,455 @@
 @import "tailwindcss";
 @import "../styles/tokens.css";
-@import "../styles/canon-motion.css";
-@import "../styles/canon-aurora.css";
+/* ── kit de movimiento (inline desde 02-sistema/canon-motion.css) ── */
+/* ============================================================================
+   CANON · canon-motion.css
+   La librería de movimiento del producto. NO es una descripción: es el código.
+   Depende de los tokens de 02-sistema/tokens.css (--dur-*, --ease-*, --gold-*).
+
+   Reglas:
+   · Solo se anima transform, opacity y filter. Nunca width/height/top/box-shadow.
+   · Cada animación tiene su equivalencia sin movimiento (§ reduce al final).
+   · La escala de ceremonia (0..3) determina la duración. Ver canon-motion.md.
+   ============================================================================ */
+
+/* ── Fallback de tokens: si se abre este archivo aislado, sigue funcionando ── */
+:root{
+  --dur-instant:80ms; --dur-fast:140ms; --dur-base:220ms;
+  --dur-slow:360ms;   --dur-deliberate:640ms;
+  --ease-standard:cubic-bezier(.2,0,0,1);
+  --ease-decelerate:cubic-bezier(0,0,0,1);
+  --ease-accelerate:cubic-bezier(.3,0,1,1);
+  --ease-spring:cubic-bezier(.34,1.24,.64,1);
+
+  /* Ritmo del escalonado (ceremonia 3) */
+  --stagger-step:40ms;    /* retraso entre hermanos */
+  --stagger-max:24;       /* tope de items animados; el resto entra de golpe */
+}
+
+/* ============================================================================
+   CEREMONIA 0 · INSTANTÁNEO (0–80 ms)
+   Acciones que el usuario repite decenas de veces al día.
+   Solo color y opacidad. Cero desplazamiento. Cero espera.
+   ============================================================================ */
+
+.c-interactive{
+  transition:
+    color         var(--dur-instant) var(--ease-standard),
+    background-color var(--dur-instant) var(--ease-standard),
+    border-color  var(--dur-instant) var(--ease-standard),
+    opacity       var(--dur-instant) var(--ease-standard);
+}
+
+/* ── El hairline dorado como SISTEMA DE ESTADOS (no un adorno) ──
+   Sustituye a los fondos de color. Un borde, no un relleno. */
+.c-hairline{
+  position:relative;
+  border:1px solid var(--border);
+  transition:border-color var(--dur-fast) var(--ease-standard);
+}
+.c-hairline:hover        { border-color:var(--border-strong,rgba(255,255,255,.16)); }
+.c-hairline[data-state="active"],
+.c-hairline[data-state="selected"]{ border-color:var(--border-gold,rgba(231,194,79,.55)); }
+
+/* El glow sutil SOLO en el elemento activo. Nunca en más de uno por vista. */
+.c-hairline[data-state="active"]::after{
+  content:""; position:absolute; inset:-1px; border-radius:inherit; pointer-events:none;
+  box-shadow:0 0 0 1px var(--border-gold), 0 0 12px -2px rgba(212,175,55,.28);
+  opacity:0; animation:c-glow-in var(--dur-base) var(--ease-decelerate) forwards;
+}
+@keyframes c-glow-in{ to{ opacity:1 } }
+
+/* ── Override presente: la arista dorada IZQUIERDA. Se ve sin leer. ── */
+.c-override{ box-shadow:inset 2px 0 0 0 var(--gold-500,#D4AF37); }
+
+/* ── Foco visible SIEMPRE. Nunca outline:none sin reemplazo. ── */
+.c-focusable:focus-visible{
+  outline:2px solid var(--focus-ring,#E7C24F);
+  outline-offset:2px;
+  border-radius:4px;
+}
+
+/* ============================================================================
+   CEREMONIA 1 · CONFIRMACIÓN (120–200 ms)
+   Aceptar un item, añadirlo a la variante, revertir un override.
+   ============================================================================ */
+
+/* Un item aceptado en staging: se asienta. Un solo pulso, sin rebote payaso. */
+@keyframes c-confirm{
+  0%  { transform:scale(1);     background-color:transparent; }
+  35% { transform:scale(1.012); background-color:rgba(212,175,55,.10); }
+  100%{ transform:scale(1);     background-color:transparent; }
+}
+.c-confirm{ animation:c-confirm var(--dur-base) var(--ease-spring); }
+
+/* Un item que sale de la lista (descartado / quitado de la variante) */
+@keyframes c-dismiss{
+  to{ opacity:0; transform:translateX(8px) scale(.98); }
+}
+.c-dismiss{ animation:c-dismiss var(--dur-fast) var(--ease-accelerate) forwards; }
+
+/* ============================================================================
+   CEREMONIA 1 · dividerDraw — LA HAIRLINE QUE SE DIBUJA
+   Bajo cada encabezado de sección. Enseña la estructura la PRIMERA vez.
+   Nunca dos veces en la misma sesión (lo garantiza canon-motion.js).
+   ============================================================================ */
+
+.c-divider{
+  position:relative; height:1px; background:var(--border);
+  overflow:hidden;
+}
+.c-divider::after{
+  content:""; position:absolute; inset:0;
+  background:linear-gradient(90deg,
+    var(--gold-500,#D4AF37) 0%,
+    var(--gold-700,#8A6414) 45%,
+    transparent 100%);
+  transform:scaleX(0); transform-origin:left center;
+}
+.c-divider.is-drawn::after{
+  animation:c-divider-draw var(--dur-deliberate) var(--ease-decelerate) forwards;
+}
+@keyframes c-divider-draw{ to{ transform:scaleX(1) } }
+
+/* ============================================================================
+   CEREMONIA 3 · EL MOMENTO ESTELAR
+   El escalonado de items al terminar la ingesta. Ver tu carrera aparecer,
+   item por item, ES el producto entero en tres segundos.
+   Se dispara con .c-stagger en el contenedor (canon-motion.js pone los delays).
+   ============================================================================ */
+
+.c-stagger > .c-stagger-item{
+  opacity:0;
+  transform:translateY(12px);
+}
+.c-stagger.is-running > .c-stagger-item{
+  animation:c-rise var(--dur-slow) var(--ease-decelerate) forwards;
+  animation-delay:var(--d,0ms);
+}
+@keyframes c-rise{
+  to{ opacity:1; transform:translateY(0); }
+}
+/* Los items por encima de --stagger-max entran de golpe: con 100 items,
+   escalonarlos todos dura un minuto y deja de ser magia para ser tortura. */
+.c-stagger.is-running > .c-stagger-item.c-no-stagger{
+  animation:c-rise var(--dur-fast) var(--ease-decelerate) forwards;
+  animation-delay:0ms;
+}
+
+/* ── Contador que sube mientras la IA extrae. Honesto: cuenta lo real. ── */
+.c-tick{ font-family:var(--font-mono); font-variant-numeric:tabular-nums; }
+
+/* ============================================================================
+   CEREMONIA 3 · EL ÚNICO SHIMMER DEL PRODUCTO
+   Cuando la IA termina de extraer. Una vez. En ningún otro sitio.
+   Un shimmer que aparece dos veces deja de ser un momento y pasa a ser un tic.
+   ============================================================================ */
+
+@keyframes c-shimmer{
+  0%  { transform:translateX(-120%); }
+  100%{ transform:translateX(120%); }
+}
+.c-shimmer{ position:relative; overflow:hidden; }
+.c-shimmer.is-firing::before{
+  content:""; position:absolute; inset:0; pointer-events:none;
+  background:linear-gradient(105deg,
+    transparent 30%,
+    rgba(246,226,162,.00) 42%,
+    rgba(246,226,162,.22) 50%,
+    rgba(246,226,162,.00) 58%,
+    transparent 70%);
+  animation:c-shimmer 1100ms var(--ease-standard) 1;
+}
+
+/* ============================================================================
+   CEREMONIA 2 · ★ EL BLUR-IN DEL TOGGLE "CÓMO LO LEE EL ATS"
+   El efecto más caro del producto, y el que lo define.
+   El PDF se desenfoca, pierde el color, y del desenfoque resuelve el texto
+   crudo del parser. No es decoración: es la metáfora. Así te ve la máquina.
+   ============================================================================ */
+
+.c-xray{ position:relative; isolation:isolate; }
+
+.c-xray__doc,
+.c-xray__raw{
+  transition:
+    opacity   var(--dur-slow) var(--ease-standard),
+    filter    var(--dur-slow) var(--ease-standard),
+    transform var(--dur-slow) var(--ease-standard);
+}
+
+/* Estado normal: el documento, nítido y en color. El texto crudo, oculto. */
+.c-xray__doc{ opacity:1; filter:blur(0) saturate(1); transform:scale(1); }
+.c-xray__raw{
+  opacity:0; filter:blur(10px) saturate(0); transform:scale(1.01);
+  position:absolute; inset:0; pointer-events:none;
+  font-family:var(--font-mono); color:var(--text-muted);
+  white-space:pre-wrap; overflow:auto;
+}
+
+/* Estado rayos-X: el documento se desviste. */
+.c-xray[data-mode="raw"] .c-xray__doc{
+  opacity:0; filter:blur(12px) saturate(0); transform:scale(.995);
+}
+.c-xray[data-mode="raw"] .c-xray__raw{
+  opacity:1; filter:blur(0) saturate(1); transform:scale(1);
+  pointer-events:auto;
+}
+
+/* ============================================================================
+   CEREMONIA 2 · Transiciones de panel / vista
+   ============================================================================ */
+
+@keyframes c-panel-in{
+  from{ opacity:0; transform:translateY(8px); }
+  to  { opacity:1; transform:translateY(0);   }
+}
+.c-panel-in{ animation:c-panel-in var(--dur-base) var(--ease-decelerate); }
+
+/* ============================================================================
+   ESTADOS DE IA — la espera es real (5–40 s). Diséñala, no la castigues.
+   ============================================================================ */
+
+/* Pensando: respiración lenta. Nunca un spinner girando: gira = "colgado". */
+@keyframes c-breathe{
+  0%,100%{ opacity:.45 } 50%{ opacity:1 }
+}
+.c-thinking{ animation:c-breathe 1600ms var(--ease-standard) infinite; }
+
+/* Skeleton mientras se extrae: barrido de oro apagadísimo, no gris de Bootstrap */
+@keyframes c-skeleton{
+  to{ background-position:200% 0 }
+}
+.c-skeleton{
+  background:linear-gradient(90deg,
+    var(--surface,#141418) 0%,
+    rgba(212,175,55,.06) 50%,
+    var(--surface,#141418) 100%);
+  background-size:200% 100%;
+  animation:c-skeleton 1400ms linear infinite;
+  border-radius:4px; color:transparent!important;
+}
+
+/* Propuesta de IA pendiente de revisión: pulso MUY leve en la arista.
+   No pide atención a gritos: la pide con educación. */
+@keyframes c-pending{
+  0%,100%{ border-color:var(--border) }
+  50%    { border-color:var(--border-gold,rgba(231,194,79,.55)) }
+}
+.c-pending{ animation:c-pending 2400ms var(--ease-standard) infinite; }
+
+/* NO VERIFICADO — el estado más importante del producto.
+   Nunca solo color: lleva SIEMPRE texto e icono. */
+.c-unverified{
+  border-left:2px dashed var(--danger,#C4453A);
+  padding-left:10px;
+}
+
+/* ============================================================================
+   FONDO VIVO — SOLO en la pantalla de espera de la ingesta.
+   Único sitio del producto donde algo se mueve sin que el usuario lo pida:
+   no hay contenido con el que interferir y la espera es real.
+   Un tono. Oro sobre obsidiana. Nada de la nebulosa multicolor de la referencia.
+   ============================================================================ */
+
+@keyframes c-drift{
+  0%  { transform:translate3d(-6%,-4%,0) scale(1.05) rotate(0deg);   }
+  50% { transform:translate3d( 4%, 3%,0) scale(1.15) rotate(6deg);   }
+  100%{ transform:translate3d(-6%,-4%,0) scale(1.05) rotate(0deg);   }
+}
+.c-aurora{
+  position:absolute; inset:0; overflow:hidden; pointer-events:none; z-index:0;
+}
+.c-aurora::before,
+.c-aurora::after{
+  content:""; position:absolute; width:70%; aspect-ratio:1; border-radius:50%;
+  filter:blur(90px);
+}
+.c-aurora::before{
+  top:-15%; left:-10%;
+  background:radial-gradient(circle, rgba(212,175,55,.16) 0%, transparent 65%);
+  animation:c-drift 26s ease-in-out infinite;
+}
+.c-aurora::after{
+  bottom:-20%; right:-10%;
+  background:radial-gradient(circle, rgba(231,194,79,.09) 0%, transparent 65%);
+  animation:c-drift 34s ease-in-out infinite reverse;
+}
+
+/* ============================================================================
+   SCROLL-REVEAL — PROHIBIDO EN LA APP.
+   Una herramienta no revela su contenido al hacer scroll. Si tengo 200 items
+   y cada uno hace fade-in al entrar en viewport, NO PUEDO TRABAJAR.
+   Permitido solo en documentos largos de lectura (ajustes, "cómo funciona").
+   ============================================================================ */
+
+.c-doc .c-reveal{ opacity:0; transform:translateY(10px); }
+.c-doc .c-reveal.is-in{
+  animation:c-rise var(--dur-base) var(--ease-decelerate) forwards;
+}
+
+/* ============================================================================
+   PREFERS-REDUCED-MOTION — sin excepciones.
+   Cada animación pierde el MOVIMIENTO, nunca la INFORMACIÓN.
+   ============================================================================ */
+
+@media (prefers-reduced-motion: reduce){
+  *,*::before,*::after{
+    animation-duration:.001ms!important;
+    animation-iteration-count:1!important;
+    transition-duration:.001ms!important;
+    scroll-behavior:auto!important;
+  }
+  /* El contenido escalonado: aparece. Sin subir, sin retraso. */
+  .c-stagger > .c-stagger-item{ opacity:1!important; transform:none!important; }
+  /* La hairline: está dibujada. No se dibuja. */
+  .c-divider::after{ transform:scaleX(1)!important; }
+  /* El blur-in: corte limpio. Comunica lo mismo sin desenfoque. */
+  .c-xray__doc,.c-xray__raw{ filter:none!important; transform:none!important; }
+  /* El shimmer: no existe. El cambio de estado ya se ve por otra vía. */
+  .c-shimmer.is-firing::before{ display:none!important; }
+  /* Pensando: opacidad fija, legible. */
+  .c-thinking{ opacity:.75!important; }
+  /* Skeleton: bloque quieto. */
+  .c-skeleton{ animation:none!important; background:var(--surface,#141418)!important; }
+  /* Pendiente: la arista, dorada y fija. */
+  .c-pending{ border-color:var(--border-gold,rgba(231,194,79,.55))!important; }
+  /* Aurora: quieta. */
+  .c-aurora::before,.c-aurora::after{ animation:none!important; }
+}
+
+/* ── aurora (inline desde 02-sistema/canon-aurora.css) ── */
+/* ============================================================================
+   CANON · canon-aurora.css   —  v3, CALIBRADO EN NAVEGADOR REAL
+   El sistema de VENTANAS, MUROS Y VELOS. Esto es lo que hace que el humo
+   se VEA donde debe y NO ESTORBE donde no debe.
+
+   ── POR QUÉ NO SE VEÍA (v2) ──────────────────────────────────────────────
+   No era el shader. Lo ejecuté en GPU y leí los píxeles: luminancia máxima
+   73/255, 53% de píxeles visibles. El shader pintaba humo perfectamente.
+   EL VELO SE LO COMÍA:
+       .c-scrim--radial  →  rgba(5,5,8, .86)   ← 86% de negro encima
+       73 * (1 - 0.86)   =   10/255            ← invisible
+   Más los degradados de borde de 120px, que tapaban media sección.
+   Verificado con captura comparativa: velo .86 = negro · velo .25 = humo.
+
+   ── EL MECANISMO (forense de la referencia) ──────────────────────────────
+   No hay un "blackout" encima del humo. Es al revés:
+     1. El humo vive en una capa FIJA al fondo (z-index: 0).
+     2. El contenedor de página es OPACO (#050508). Eso lo TAPA.
+     3. Algunas secciones se declaran TRANSPARENTES → son VENTANAS.
+   Verificado sección por sección en su página:
+     🔓 Hero · 🧱 Audience · 🧱 Transmutation · 🔓 Features · 🔓 Speed ·
+     🧱 Proof · 🔓 Pricing · 🧱 Philosophy · 🔓 Compare · 🔓 Calculator
+   Al bajar, el humo APARECE Y DESAPARECE. El fondo respira.
+   Y donde hay trabajo que leer, HAY MURO.
+   ============================================================================ */
+
+/* ── 0 · ★ EL DIAL MAESTRO ────────────────────────────────────────────────
+   La referencia aplica opacity:0.15 a TODA la capa del canvas (verificado:
+   three.js r183, contenedor fixed, opacity 0.15). Es el mando de intensidad.
+   Un solo número gobierna cuánto humo hay en todo el producto.               */
+:root{
+  --aurora-strength: 0.9;   /* 0 = apagado · 0.35 discreto · 0.55 · 0.9 ★ visible */
+}
+
+/* ── 1 · LA CAPA DEL HUMO ─────────────────────────────────────────────────── */
+.c-aurora-gl{
+  position:fixed; inset:0;
+  z-index:0;
+  pointer-events:none;              /* nunca intercepta un clic */
+  overflow:hidden;
+  opacity:var(--aurora-strength);   /* ← el dial */
+}
+
+/* Sin WebGL2 o con reduce-motion → degradado estático, mismos metales, cero GPU */
+.c-aurora-gl.is-static{
+  background:
+    radial-gradient(58% 48% at 18% 12%, rgba(212,175,55,.16), transparent 70%),
+    radial-gradient(45% 40% at 78% 30%, rgba(184,115,51,.11), transparent 70%),
+    radial-gradient(50% 45% at 60% 88%, rgba(173,182,194,.08), transparent 70%),
+    var(--bg,#0B0B0D);
+}
+
+/* ── 2 · EL MURO — donde hay trabajo que leer ─────────────────────────────── */
+/* El contenido denso va SIEMPRE sobre muro. El humo no compite con el trabajo. */
+.c-wall{
+  position:relative; z-index:1;
+  background:var(--obsidian-deep,#050508);
+}
+
+/* ── 3 · LA VENTANA — donde el humo asoma ─────────────────────────────────── */
+.c-window{
+  position:relative; z-index:1;
+  background:transparent;           /* ← el humo de la capa fija se ve aquí */
+}
+
+/* Difuminado en los bordes: el humo no "corta" en seco contra el muro.
+   ⚠️ 64px, NO 120px. Con 120 y una sección corta, los dos degradados se
+   solapaban y tapaban la sección entera. Ese fue el segundo asesino del humo. */
+.c-window::before,
+.c-window::after{
+  content:""; position:absolute; left:0; right:0; height:64px;
+  pointer-events:none; z-index:0;
+}
+.c-window::before{ top:0;    background:linear-gradient(to bottom, var(--obsidian-deep,#050508), transparent); }
+.c-window::after { bottom:0; background:linear-gradient(to top,    var(--obsidian-deep,#050508), transparent); }
+
+/* ── 4 · EL VELO (scrim) — cuando hay TEXTO encima del humo ───────────────── */
+/* ★ VALORES CALIBRADOS MIRANDO CAPTURAS REALES, no a ojo.
+   Regla: usa siempre el MÍNIMO que deje leer cómodamente.
+   El humo tiene una luminancia máxima de 73/255 — no aguanta un velo pesado. */
+.c-scrim{ position:relative; z-index:1; }
+.c-scrim::before{
+  content:""; position:absolute; inset:0; z-index:-1; pointer-events:none;
+  background:rgba(5,5,8,.28);            /* ★ era .55 → invisibilizaba el humo */
+}
+.c-scrim--light::before { background:rgba(5,5,8,.15); }   /* casi nada */
+.c-scrim--heavy::before { background:rgba(5,5,8,.45); }   /* texto denso */
+
+/* Velo radial: oscurece bajo el texto y deja los bordes limpios.
+   El mejor para un titular centrado sobre humo. */
+.c-scrim--radial::before{
+  background:radial-gradient(65% 75% at 50% 50%,
+    rgba(5,5,8,.55),                     /* ★ era .86 → negro total */
+    rgba(5,5,8,.18) 70%,
+    transparent);
+}
+
+/* ── 5 · PANEL — la superficie sobre la que se trabaja ────────────────────── */
+/* Vidrio ahumado. Deja intuir el humo detrás SIN comerse una sola letra.
+   Es lo que permite tener un dashboard legible Y un fondo vivo a la vez. */
+.c-panel{
+  position:relative; z-index:1;
+  background:rgba(20,20,24,.72);
+  backdrop-filter:blur(14px) saturate(1.1);
+  -webkit-backdrop-filter:blur(14px) saturate(1.1);
+  border:1px solid var(--border,rgba(255,255,255,.08));
+  border-radius:12px;
+}
+/* Panel sólido: listas densas y el editor. CERO transparencia.
+   Con 200 items que leer, el humo detrás es ruido. Punto. */
+.c-panel--solid{
+  background:var(--surface,#141418);
+  backdrop-filter:none; -webkit-backdrop-filter:none;
+}
+@supports not (backdrop-filter: blur(1px)){
+  .c-panel{ background:rgba(20,20,24,.94); }
+}
+
+/* ── 6 · REGLA DE ORO ─────────────────────────────────────────────────────── */
+/*
+   ✅ VENTANA (humo visible):  login · onboarding · espera de la ingesta ·
+                               dashboard VACÍO del día 1 · cabeceras de sección
+   🧱 MURO (humo tapado):      master con 200 items · editor de variante ·
+                               staging · tailoring · el documento
+                               → donde hay trabajo, el trabajo gana. Siempre.
+*/
+
+@media (prefers-reduced-motion: reduce){
+  .c-aurora-gl canvas{ display:none; }
+}
+
 
 /* ============================================================================
    Puentes hacia el sistema de diseño heredado
@@ -308,6 +756,23 @@ html, body { min-height: 100dvh; }
 .cv__loading, .cv__err { display: grid; place-items: center; height: 78vh; text-align: center; color: var(--text-subtle); font-family: var(--font-mono); font-size: 13px; }
 .cv__err { color: var(--danger-quiet); }
 .cv__hint { margin-top: var(--space-3); font-family: var(--font-mono); font-size: var(--fs-caption); color: var(--text-subtle); }
+
+/* ── Importar · "pega lo que tengas" ─────────────────────────────────────── */
+.imp__box {
+  width: 100%; margin-top: var(--space-5); padding: var(--space-5);
+  background: var(--surface-sunken); color: var(--text);
+  border-radius: 8px; font-family: var(--font-sans); font-size: 14.5px; line-height: 1.7;
+  resize: vertical; min-height: 260px;
+}
+.imp__box::placeholder { color: var(--text-subtle); }
+.imp__cta { display: flex; align-items: center; gap: var(--space-4); margin-top: var(--space-5); flex-wrap: wrap; }
+.imp__hint { font-family: var(--font-mono); font-size: var(--fs-caption); color: var(--text-subtle); }
+.imp__err { margin-top: var(--space-4); color: var(--danger-quiet); font-family: var(--font-mono); font-size: 13px; }
+.imp__wait { margin-top: var(--space-5); padding: var(--space-6); border-radius: 8px; display: flex; align-items: center; gap: var(--space-4); color: var(--text-subtle); }
+.imp__wait .c-thinking { width: 10px; height: 10px; border-radius: 50%; background: var(--gold-500, #D4AF37); flex: none; }
+.imp__sources { display: flex; flex-wrap: wrap; gap: var(--space-3); margin-top: var(--space-4); }
+.imp__src { padding: 4px 12px; border-radius: 999px; font-family: var(--font-mono); font-size: 12px; color: var(--text-subtle); }
+.imp__note { margin-top: var(--space-5); padding: var(--space-5); background: var(--surface-sunken); border-radius: 8px; font-size: 14px; line-height: 1.7; color: var(--text); }
 
 @media (max-width: 720px) {
   .kpis4 { grid-template-columns: repeat(2, 1fr); }

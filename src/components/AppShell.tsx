@@ -6,6 +6,7 @@ import { useProfiles } from "@/lib/store/store";
 
 const NAV = [
   { href: "/app", label: "Panel" },
+  { href: "/app/importar", label: "Importar" },
   { href: "/app/master", label: "Master" },
   { href: "/app/cv", label: "CV" },
   { href: "/app/staging", label: "Revisión" },

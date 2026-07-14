@@ -5,9 +5,8 @@ import Link from "next/link";
 import { useProfiles } from "@/lib/store/store";
 import { Divider } from "@/components/Divider";
 import { sampleStaging } from "@/lib/cv/staging";
-import type { Profile, StagedItem } from "@/lib/cv/serialize";
-
-const uid = () => `id-${globalThis.crypto?.randomUUID?.() ?? Math.random().toString(36).slice(2)}`;
+import { promote } from "@/lib/cv/promote";
+import type { StagedItem } from "@/lib/cv/serialize";
 
 const LEVEL: Record<StagedItem["evidenceLevel"], { label: string; cls: string; glyph: string }> = {
   verified: { label: "Verificado", cls: "lvl-ver", glyph: "◆" },
@@ -15,23 +14,6 @@ const LEVEL: Record<StagedItem["evidenceLevel"], { label: string; cls: string; g
   partial: { label: "Parcial", cls: "lvl-par", glyph: "◈" },
   unverified: { label: "Sin evidencia", cls: "lvl-unv", glyph: "⚠" },
 };
-
-/** Promueve un item aceptado al master (nada entra sin esta acción explícita). */
-function promote(d: Profile, item: StagedItem): Profile {
-  const nd = structuredClone(d);
-  const pl = item.payload as never;
-  if (item.section === "work") nd.work.push(pl);
-  else if (item.section === "projects") nd.projects.push(pl);
-  else if (item.section === "education") nd.education.push(pl);
-  else if (item.section === "summary") nd.basics.summaries.push(pl);
-  else if (item.section === "skills") {
-    let cat = nd.skills.find((c) => c.category === "Importadas");
-    if (!cat) { cat = { id: uid(), category: "Importadas", items: [] }; nd.skills.push(cat); }
-    cat.items.push(pl);
-  }
-  nd.staged = (nd.staged ?? []).filter((s) => s.id !== item.id);
-  return nd;
-}
 
 export default function Staging() {
   const { current, updateCurrentData } = useProfiles();
