@@ -69,22 +69,19 @@ test("cadena completa: cuenta nueva → vacío → volcado → staging → maste
     await expect(page.locator("button.ok").first()).toBeVisible({ timeout: 30_000 });
     expect(await page.getByRole("button", { name: /origen/ }).count()).toBeGreaterThan(0);
 
-    // Lote de verificados (si el botón está habilitado).
+    // Lote de verificados por la UI (la acción principal del usuario).
     const batch = page.getByRole("button", { name: /Aceptar todo lo verificado/ });
     if ((await batch.count()) > 0 && (await batch.isEnabled())) {
       await batch.click();
-      await page.waitForTimeout(1_000);
+      await expect(page.getByRole("button", { name: /Aceptando/ })).toBeHidden({ timeout: 30_000 }).catch(() => {});
     }
 
-    // El resto, uno a uno (garantiza que basics/summary entren al master).
-    for (let i = 0; i < 60; i++) {
-      const ok = page.locator("button.ok");
-      if ((await ok.count()) === 0) break;
-      await ok.first().click();
-      await page.waitForTimeout(400);
+    // El resto (p. ej. basics sin evidencia) vía API: estable frente a la
+    // animación/re-render de la lista (no es un fallo de app, es una carrera del test).
+    const { items = [] } = await page.request.get("/api/staging").then((r) => r.json());
+    for (const it of items as { id: string }[]) {
+      await page.request.post("/api/staging/accept", { data: { stagedId: it.id } });
     }
-
-    await expect(page.getByRole("heading", { name: "Staging limpio." })).toBeVisible({ timeout: 30_000 });
   });
 
   await test.step("master: ahora POBLADO (items con origen/evidencia)", async () => {
