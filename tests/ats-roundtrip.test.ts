@@ -3,36 +3,34 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 import { extractText, getDocumentProxy } from "unpdf";
-import { serializeResume, resumeToPlainText, type Profile } from "../src/lib/cv/serialize";
+import { toPlainText, type ResumeData } from "../src/lib/cv/resume";
 import { renderResumeToBuffer } from "../src/lib/cv/ResumePDF";
 
 /**
- * EL TEST QUE NADIE HACE (ESPECIFICACION.md §7). Renderiza el PDF desde el golden
- * JSON, lo re-parsea, y lo diffea contra cv-texto-plano.txt. Si no coincide, falla
- * el build. Es el test de CI y, a la vez, el feature más vendible ("cómo lo lee el ATS").
+ * EL TEST QUE NADIE HACE (documento-cv.md §6). Renderiza el PDF desde el golden
+ * JSON, lo re-parsea con unpdf, normaliza y lo compara contra cv-texto-plano.txt.
+ * Si no coincide, FALLA EL BUILD. Es el test de CI y, a la vez, el feature más
+ * vendible ("cómo lo lee el ATS": el texto plano real que extrae el parser).
  */
-
 const here = path.dirname(fileURLToPath(import.meta.url));
 const fx = path.join(here, "../src/lib/cv/fixtures");
-const profile = JSON.parse(readFileSync(path.join(fx, "datos-ejemplo.json"), "utf8")) as Profile;
+const data = JSON.parse(readFileSync(path.join(fx, "datos-ejemplo.json"), "utf8")) as ResumeData;
 const golden = readFileSync(path.join(fx, "cv-texto-plano.txt"), "utf8");
 
-const GOLDEN_VARIANT = "var-backend-2p-es";
 const norm = (x: string) => x.replace(/\s+/g, " ").trim();
 
-describe("CV round-trip ATS · golden var-backend-2p-es", () => {
-  const model = serializeResume(profile, GOLDEN_VARIANT);
+describe("CV round-trip ATS · golden (Diego Gatica, 2 páginas, es)", () => {
   let extracted = "";
 
   beforeAll(async () => {
-    const buf = await renderResumeToBuffer(model);
+    const buf = await renderResumeToBuffer(data, { locale: "es", onePage: false });
     const pdf = await getDocumentProxy(new Uint8Array(buf));
     const { text } = await extractText(pdf, { mergePages: true });
     extracted = norm(text);
   });
 
-  it("1 · el serializador reproduce cv-texto-plano.txt EXACTO", () => {
-    expect(resumeToPlainText(model).trimEnd()).toBe(golden.trimEnd());
+  it("1 · el generador de texto plano reproduce cv-texto-plano.txt EXACTO", () => {
+    expect(toPlainText(data, { locale: "es", onePage: false })).toBe(golden);
   });
 
   it("2 · el PDF re-parseado contiene cada línea del golden, EN ORDEN DE LECTURA", () => {
@@ -44,26 +42,39 @@ describe("CV round-trip ATS · golden var-backend-2p-es", () => {
     }
   });
 
-  it("3 · contacto y métricas sobreviven al parseo (runs no se pegan ni separan)", () => {
+  it("3 · contacto y datos sobreviven al parseo (runs no se pegan ni separan)", () => {
     for (const needle of [
-      "Matías Fuentes Aguilar",
-      "matias.fuentes@correo-ejemplo.cl",
+      "Diego Gatica Morales",
+      "diego.gatica@ejemplo.cl",
       "+56 9 6123 4567",
-      "850 ms", "180 ms", "99,95%", "CLP 12.000M", "40.000", "45 min", "6 min", "AUC 0,94", "320",
+      "github.com/dgatica",
+      "40.000",
+      "Altiplano Pagos SpA",
+      "mar 2022 – hoy",
+      "Go, Python, SQL, TypeScript",
     ]) {
-      expect(extracted, `dato/métrica perdido: "${needle}"`).toContain(needle);
+      expect(extracted, `dato perdido: "${needle}"`).toContain(needle);
     }
   });
 
   it("4 · < 2,5 MB (umbral Greenhouse) y con texto real seleccionable", async () => {
-    const buf = await renderResumeToBuffer(model);
+    const buf = await renderResumeToBuffer(data, { locale: "es", onePage: false });
     expect(buf.length).toBeLessThan(2.5 * 1024 * 1024);
     expect(extracted.length).toBeGreaterThan(500);
   });
 
   it("5 · sin basura de embedding (letras espaciadas / mojibake)", () => {
-    expect(extracted).not.toMatch(/M a n a g e m e n t|N b o b h f n f o u/);
-    // el nombre no debe salir con letras separadas
-    expect(extracted).not.toMatch(/M a t í a s/);
+    expect(extracted).not.toMatch(/D i e g o|E x p e r i e n c i a/);
+  });
+
+  it("6 · la versión de 1 página aplica el filtro p1 (freelance y práctica fuera, sin Proyectos)", () => {
+    const one = toPlainText(data, { locale: "es", onePage: true });
+    expect(one).not.toContain("Desarrollador freelance");
+    expect(one).not.toContain("Práctica profesional");
+    expect(one).not.toContain("Proyectos");
+    expect(one).toContain("Backend Developer — Altiplano Pagos SpA");
+    // Altiplano queda en 4 viñetas (fuera "Documenté la API…" y "Turno de soporte…")
+    expect(one).not.toContain("Documenté la API pública");
+    expect(one).not.toContain("Turno de soporte");
   });
 });

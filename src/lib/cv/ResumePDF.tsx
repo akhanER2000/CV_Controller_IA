@@ -1,138 +1,161 @@
-import { Document, Page, View, Text, Image, StyleSheet, renderToBuffer } from "@react-pdf/renderer";
-import type { ResumeModel, Section, Block } from "./serialize";
+import { Document, Page, View, Text, Font, StyleSheet, renderToBuffer } from "@react-pdf/renderer";
+import { fileURLToPath } from "node:url";
+import path from "node:path";
+import { selectContent, type ResumeData, type Locale } from "./resume";
 
 /**
- * El documento CV en @react-pdf/renderer, según 05-documento-cv/ESPECIFICACION.md.
- * Una sola columna; fechas a la derecha por flex (no tabla); contacto en el cuerpo;
- * los bullets son un <View> (punto vectorial), NO un carácter "•" — así no entran
- * al texto extraído (regla ESPECIFICACION §5.4).
+ * El documento CV en @react-pdf/renderer v4, según docs/spec/documento-cv.md.
+ * Consume directamente el shape de datos-ejemplo.json.
  *
- * ⚠️ FUENTES — estado Fase 1: se usan las Standard-14 integradas (Times/Helvetica/
- * Courier) como stand-in. Para la fidelidad de marca hay que registrar los .ttf de
- * Playfair Display (nombre), Geist (cuerpo) y Geist Mono (cifras) — ver
- * decision-tipografica.md. El contrato ATS es independiente de la fuente (el texto
- * extraído es el mismo), así que el round-trip vale igual; el swap es cosmético y
- * está gateado por este mismo test. TODO(fase-1.1): registrar las TTF de marca.
+ * Reglas ATS materializadas (spec §8): UNA columna · cero tablas (fechas a la
+ * derecha por flex) · contacto en el cuerpo con prefijos de texto "Email:"/"Tel:"
+ * · cero iconos · cero fotos · texto seleccionable · viñeta "• " (U+2022, glifo de
+ * texto que parsea limpio) · cargo en negrita · un solo acento #1F6E5A.
  *
- * ⚠️ CIFRAS EN MONO — se aplica el Plan B de ESPECIFICACION §5: la cifra va en la
- * misma fuente del cuerpo (un solo run → cero riesgo de pegado/separación en el
- * parseo). Activar el run mono inline es una mejora posterior, ya cubierta por el
- * test de round-trip (que detectaría el glue/split si aparece).
+ * TRAMPA 1 — Font.register a NIVEL DE MÓDULO (fuera del componente), una vez.
+ * TRAMPA 2 — .ttf, NO .woff2. Se registran las MISMAS .ttf que usa la app
+ *            (src/lib/fonts/), así el preview en pantalla y el PDF no derivan.
  */
 
-const mm = (x: number) => x * 2.834645669; // mm → pt
+// src/lib/cv → ../fonts = src/lib/fonts
+const FONTS = path.join(path.dirname(fileURLToPath(import.meta.url)), "../fonts");
+const f = (name: string) => path.join(FONTS, name);
 
-const C = {
-  name: "#8A6414", ink: "#17171A", para: "#24242A", meta: "#45454A",
-  subtle: "#6E6E72", hair: "rgba(23,23,26,0.30)",
-};
-const F = { name: "Times-Bold", head: "Helvetica-Bold", body: "Helvetica", mono: "Courier" };
+Font.register({
+  family: "Geist",
+  fonts: [
+    { src: f("Geist-Regular.ttf"), fontWeight: 400 },
+    { src: f("Geist-Medium.ttf"), fontWeight: 500 },
+    { src: f("Geist-SemiBold.ttf"), fontWeight: 600 },
+    { src: f("Geist-Bold.ttf"), fontWeight: 700 },
+  ],
+});
+Font.register({ family: "Playfair Display", fonts: [{ src: f("PlayfairDisplay-600.ttf"), fontWeight: 600 }] });
+Font.register({ family: "Geist Mono", fonts: [{ src: f("GeistMono-Regular.ttf"), fontWeight: 400 }] });
+
+// El guionado automático parte palabras (URLs, nombres) y ensucia el parseo ATS.
+Font.registerHyphenationCallback((word) => [word]);
+
+const C = { acc: "#1F6E5A", ink: "#14181A", mut: "#454B49", hair: "#D8DAD6" };
 
 const s = StyleSheet.create({
-  page: { paddingTop: mm(16), paddingBottom: mm(16), paddingLeft: mm(18), paddingRight: mm(18), fontFamily: F.body, color: C.ink },
-  name: { fontFamily: F.name, fontSize: 25, color: C.name, lineHeight: 1.05 },
-  title: { fontFamily: F.head, fontSize: 13, color: C.ink, marginTop: mm(2.5), lineHeight: 1.2 },
-  contact: { fontFamily: F.mono, fontSize: 8.5, color: C.meta, marginTop: mm(3.5), lineHeight: 1.5 },
-  headerRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start" },
-  headerText: { flex: 1, paddingRight: mm(6) },
-  photo: { width: mm(28), height: mm(35), objectFit: "cover", borderRadius: 3 },
-  section: { marginTop: mm(6.5) },
-  h2wrap: { borderBottomWidth: mm(0.4), borderBottomColor: C.hair, paddingBottom: mm(1.6), marginBottom: mm(3) },
-  // Sin letterSpacing: el tracking de imprenta hace que pdf.js extraiga el
-  // encabezado como letras separadas ("R E S U M E N") — el patrón anti-ATS que
-  // el documento prohíbe (ESPECIFICACION §8). En el documento gana el ATS siempre.
-  h2: { fontFamily: F.head, fontSize: 10.5, color: C.ink },
-  para: { fontFamily: F.body, fontSize: 10.5, color: C.para, lineHeight: 1.5 },
-  skill: { fontSize: 10, color: C.ink, lineHeight: 1.4, marginBottom: mm(0.8) },
-  skillLabel: { fontFamily: F.head },
-  entry: { marginBottom: mm(4) },
-  entryHead: { flexDirection: "row", justifyContent: "space-between", alignItems: "baseline" },
-  entryTitle: { fontFamily: F.head, fontSize: 11, color: C.ink, lineHeight: 1.2, flexShrink: 1, paddingRight: mm(6) },
-  entryDates: { fontFamily: F.mono, fontSize: 9, color: C.subtle, lineHeight: 1.2 },
-  entryMeta: { fontFamily: F.body, fontSize: 9.5, color: C.meta, marginTop: mm(0.6), lineHeight: 1.3 },
-  ul: { marginTop: mm(1.8) },
-  li: { flexDirection: "row", marginBottom: mm(1.1) },
-  dotCol: { width: mm(4.6), flexDirection: "row", justifyContent: "flex-start", paddingTop: 3.2 },
-  dot: { width: 2, height: 2, borderRadius: 1, backgroundColor: C.para, marginLeft: mm(1.8) },
-  liText: { flex: 1, fontFamily: F.body, fontSize: 10, color: C.para, lineHeight: 1.4 },
-  line: { fontFamily: F.body, fontSize: 10, color: C.para, lineHeight: 1.4, marginBottom: mm(0.6) },
+  page: { paddingVertical: "18mm", paddingHorizontal: "20mm", fontFamily: "Geist", fontSize: 10, color: C.ink },
+  name: { fontFamily: "Playfair Display", fontWeight: 600, fontSize: 22, lineHeight: 1.15, color: C.acc },
+  label: { fontWeight: 600, fontSize: 11, lineHeight: 1.3, marginTop: 2 },
+  contact: { fontSize: 9.5, lineHeight: 1.5, color: C.mut, marginTop: 5 },
+  contact2: { fontSize: 9.5, lineHeight: 1.5, color: C.mut, marginTop: 1 },
+  // ⚠ SIN letterSpacing: el tracking de imprenta (.h del diseño usa .1em) hace
+  // que pdf.js extraiga el encabezado como letras separadas ("R E S U M E N") —
+  // el patrón anti-ATS que el documento prohíbe (ESPECIFICACION §8). En el
+  // documento gana el ATS siempre; el peso 700 + las mayúsculas hacen el trabajo
+  // (ESPECIFICACION §4). El tracking se queda solo en la app, no en el PDF.
+  h: {
+    fontWeight: 700, fontSize: 10.5, lineHeight: 1.1,
+    textTransform: "uppercase", color: C.acc,
+    marginTop: 13, marginBottom: 3, paddingBottom: 3,
+    borderBottomWidth: 1, borderBottomColor: C.hair,
+  },
+  sum: { fontSize: 10, lineHeight: 1.45, marginTop: 3 },
+  skline: { fontSize: 10, lineHeight: 1.5, marginTop: 1.5 },
+  skLabel: { fontWeight: 600 },
+  erow: { flexDirection: "row", justifyContent: "space-between", alignItems: "baseline", marginTop: 8 },
+  t: { fontWeight: 700, fontSize: 11, lineHeight: 1.3, flexShrink: 1 },
+  tEdu: { fontWeight: 700, fontSize: 10.5, lineHeight: 1.3, flexShrink: 1 },
+  d: { fontWeight: 400, fontSize: 9.5, lineHeight: 1.3, color: C.mut, paddingLeft: 12 },
+  org: { fontSize: 9.5, lineHeight: 1.35, color: C.mut, marginTop: 1 },
+  b: { fontSize: 10, lineHeight: 1.45, marginTop: 3, paddingLeft: 11, textIndent: -7.5 },
 });
 
-function EntryView({ b }: { b: Extract<Block, { kind: "entry" }> }) {
-  return (
-    <View style={s.entry} wrap={false}>
-      <View style={s.entryHead}>
-        <Text style={s.entryTitle}>{b.title}</Text>
-        {b.dates ? <Text style={s.entryDates}>{b.dates}</Text> : null}
-      </View>
-      {b.meta.map((m, i) => (
-        <Text key={i} style={s.entryMeta}>{m}</Text>
-      ))}
-      {b.bullets.length > 0 ? (
-        <View style={s.ul}>
-          {b.bullets.map((t, i) => (
-            <View key={i} style={s.li}>
-              <View style={s.dotCol}>
-                <View style={s.dot} />
-              </View>
-              <Text style={s.liText}>{t}</Text>
-            </View>
-          ))}
-        </View>
-      ) : null}
-    </View>
-  );
+export interface RenderOpts {
+  locale?: Locale;
+  onePage?: boolean;
 }
 
-function SectionView({ sec }: { sec: Section }) {
-  return (
-    <View style={s.section}>
-      <View style={s.h2wrap}>
-        <Text style={s.h2}>{sec.header}</Text>
-      </View>
-      {sec.blocks.map((b, i) => {
-        if (b.kind === "paragraph") return <Text key={i} style={s.para}>{b.text}</Text>;
-        if (b.kind === "skill")
-          return (
-            <Text key={i} style={s.skill}>
-              <Text style={s.skillLabel}>{b.label}:</Text> {b.value}
-            </Text>
-          );
-        if (b.kind === "line") return <Text key={i} style={s.line}>{b.text}</Text>;
-        return <EntryView key={i} b={b} />;
-      })}
-    </View>
-  );
-}
+export function ResumePDF({ data, opts = {} }: { data: ResumeData; opts?: RenderOpts }) {
+  const loc: Locale = opts.locale ?? "es";
+  const onePage = opts.onePage ?? false;
+  const tt = <T extends { es: string; en: string }>(v: T) => v[loc];
+  const { work, projects, education } = selectContent(data, onePage);
+  const b = data.basics;
 
-export function ResumePDF({ model }: { model: ResumeModel }) {
   return (
-    <Document title={`CV — ${model.name}`} author={model.name}>
-      <Page size="A4" style={s.page}>
-        {model.photo ? (
-          <View style={s.headerRow}>
-            <View style={s.headerText}>
-              <Text style={s.name}>{model.name}</Text>
-              <Text style={s.title}>{model.targetTitle}</Text>
-              <Text style={s.contact}>{model.contact}</Text>
-            </View>
-            <Image src={model.photo} style={s.photo} />
-          </View>
-        ) : (
+    <Document title={`CV — ${b.name}`} author={b.name}>
+      <Page size="LETTER" style={s.page}>
+        {/* Cabecera — contacto EN EL CUERPO (no header/footer), con prefijos de texto */}
+        <Text style={s.name}>{b.name}</Text>
+        <Text style={s.label}>{tt(b.label)}</Text>
+        <Text style={s.contact}>
+          Email: {b.email} · Tel: {b.phone} · {tt(b.location)}
+        </Text>
+        <Text style={s.contact2}>{b.links.join(" · ")}</Text>
+
+        {/* Resumen */}
+        <Text style={s.h}>{tt(data.headings.summary)}</Text>
+        <Text style={s.sum}>{tt(b.summary)}</Text>
+
+        {/* Habilidades */}
+        <Text style={s.h}>{tt(data.headings.skills)}</Text>
+        {data.skills.map((sk, i) => (
+          <Text key={i} style={s.skline}>
+            <Text style={s.skLabel}>{tt(sk.group)}:</Text> {tt(sk.items)}
+          </Text>
+        ))}
+
+        {/* Experiencia */}
+        {work.length > 0 && (
           <>
-            <Text style={s.name}>{model.name}</Text>
-            <Text style={s.title}>{model.targetTitle}</Text>
-            <Text style={s.contact}>{model.contact}</Text>
+            <Text style={s.h}>{tt(data.headings.work)}</Text>
+            {work.map((w, i) => (
+              <View key={i} wrap={false}>
+                <View style={s.erow}>
+                  <Text style={s.t}>
+                    {tt(w.title)} — {w.company}
+                  </Text>
+                  <Text style={s.d}>{tt(w.dates)}</Text>
+                </View>
+                <Text style={s.org}>{tt(w.location)}</Text>
+                {w.bullets.map((bl, j) => (
+                  <Text key={j} style={s.b}>
+                    • {tt(bl)}
+                  </Text>
+                ))}
+              </View>
+            ))}
           </>
         )}
-        {model.sections.map((sec, i) => (
-          <SectionView key={i} sec={sec} />
-        ))}
+
+        {/* Proyectos — cada proyecto es una viñeta, sin erow/org */}
+        {projects.length > 0 && (
+          <>
+            <Text style={s.h}>{tt(data.headings.projects)}</Text>
+            {projects.map((p, i) => (
+              <Text key={i} style={s.b}>
+                • {tt(p)}
+              </Text>
+            ))}
+          </>
+        )}
+
+        {/* Educación */}
+        {education.length > 0 && (
+          <>
+            <Text style={s.h}>{tt(data.headings.education)}</Text>
+            {education.map((e, i) => (
+              <View key={i} wrap={false}>
+                <View style={s.erow}>
+                  <Text style={s.tEdu}>{tt(e.title)}</Text>
+                  <Text style={s.d}>{tt(e.dates)}</Text>
+                </View>
+                <Text style={s.org}>{e.org}</Text>
+              </View>
+            ))}
+          </>
+        )}
       </Page>
     </Document>
   );
 }
 
-export async function renderResumeToBuffer(model: ResumeModel): Promise<Buffer> {
-  return renderToBuffer(<ResumePDF model={model} />);
+export async function renderResumeToBuffer(data: ResumeData, opts: RenderOpts = {}): Promise<Buffer> {
+  return renderToBuffer(<ResumePDF data={data} opts={opts} />);
 }
