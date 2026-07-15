@@ -31,13 +31,14 @@ const IA_ON = "encendida — nunca inventa; solo selecciona, reordena y reformul
 const IA_OFF = "apagada — modo manual completo";
 const THEME_KEY = "corpus-theme";
 
-async function saveSettings(patch: Record<string, unknown>) {
-  if (!supabaseEnabled) return;
-  await fetch("/api/account/settings", {
+async function saveSettings(patch: Record<string, unknown>): Promise<{ ok?: boolean; keyParked?: boolean } | null> {
+  if (!supabaseEnabled) return null;
+  const r = await fetch("/api/account/settings", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(patch),
   });
+  return r.ok ? ((await r.json()) as { ok?: boolean; keyParked?: boolean }) : null;
 }
 
 export function AjustesScreen() {
@@ -131,9 +132,15 @@ export function AjustesScreen() {
 
   function saveKey() {
     const value = byokDisabled ? null : byok.trim() || null;
-    void saveSettings({ llm_api_key: value }).then(() => {
-      setHasKey(!!value);
-      note(value ? "Clave guardada ✓ (cifrada, no se muestra)" : "Se usará la clave incluida ✓");
+    void saveSettings({ llm_api_key: value }).then((res) => {
+      if (value && res?.keyParked) {
+        // El servidor NO guarda secretos sin cifrar (falta CORPUS_ENCRYPTION_KEY).
+        setHasKey(false);
+        note("Cifrado en preparación — la clave NO se guardó (nada de secretos en texto plano).");
+      } else {
+        setHasKey(!!value);
+        note(value ? "Clave guardada ✓ (cifrada, no se muestra)" : "Se usará la clave incluida ✓");
+      }
     });
   }
 

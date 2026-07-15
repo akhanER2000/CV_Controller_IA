@@ -35,7 +35,12 @@ export const VariantPlanSchema = z.object({
     .string()
     .describe(
       "Resumen profesional de 2-3 frases, redactado SOLO a partir de hechos que aparecen en el master. " +
-        "NO inventes cifras, tecnologías, empresas ni logros que no estén en los items dados.",
+        "NO inventes cifras, tecnologías, empresas ni logros que no estén en los items dados. " +
+        "★ REGLA DE CALIBRACIÓN: prefiere las PALABRAS DEL PROPIO USUARIO antes que 'subir de nivel' una " +
+        "afirmación. En la duda, understate, NO overstate: si el master dice 'algo de Kubernetes' o 'lo " +
+        "usamos pero no lo administraba yo', déjalo así — NO lo conviertas en 'conocimientos sólidos en " +
+        "Kubernetes'. La entidad puede ser real, pero el NIVEL no se inventa. Respeta los matices y las " +
+        "limitaciones que el usuario expresó.",
     ),
   include: z
     .array(z.string())
