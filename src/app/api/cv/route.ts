@@ -3,12 +3,14 @@ import type { ResumeData } from "@/lib/cv/resume";
 import example from "@/lib/cv/fixtures/datos-ejemplo.json";
 import { createClient } from "@/lib/supabase/server";
 import { buildResumeData } from "@/lib/db/queries";
+import { buildVariantResumeData } from "@/lib/db/variants";
 
 // react-pdf necesita el runtime de Node (fontkit, streams).
 export const runtime = "nodejs";
 
 /**
  * Genera el PDF del CV. Body:
+ *   { variantId }         → arma el ResumeData de ESA variante (items visibles + overrides).
  *   { fromMaster: true }  → arma el ResumeData del master del usuario autenticado.
  *   { data }              → usa el ResumeData dado (preview del editor).
  *   (nada)                → el ejemplo (Diego Gatica), para la demo.
@@ -16,7 +18,7 @@ export const runtime = "nodejs";
  * (documento-cv.md §7 / ESPECIFICACION §5.1). opts: {locale, onePage}. download: bool.
  */
 export async function POST(req: Request) {
-  let body: { data?: ResumeData; fromMaster?: boolean; opts?: RenderOpts; download?: boolean } = {};
+  let body: { data?: ResumeData; fromMaster?: boolean; variantId?: string; opts?: RenderOpts; download?: boolean } = {};
   try {
     body = (await req.json()) as typeof body;
   } catch {
@@ -24,7 +26,16 @@ export async function POST(req: Request) {
   }
 
   let data: ResumeData;
-  if (body.fromMaster) {
+  if (body.variantId) {
+    const sb = await createClient();
+    const { data: { user } } = await sb.auth.getUser();
+    if (!user) return new Response("Sesión requerida", { status: 401 });
+    try {
+      data = await buildVariantResumeData(sb, user.id, body.variantId);
+    } catch (e) {
+      return new Response(e instanceof Error ? e.message : "Error", { status: 404 });
+    }
+  } else if (body.fromMaster) {
     const sb = await createClient();
     const { data: { user } } = await sb.auth.getUser();
     if (!user) return new Response("Sesión requerida", { status: 401 });
