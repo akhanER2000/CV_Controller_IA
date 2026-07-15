@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import Link from "next/link";
 import { supabaseEnabled } from "@/lib/supabase/config";
@@ -28,8 +28,12 @@ import "./master.css";
 type Ver = "ok" | "partial" | "none";
 type FilterKey = "all" | "sin-cifra" | "sin-evidencia" | "sin-fechas";
 
-/* ── Vista unificada: la pintan los mismos helpers, venga de la demo o de la DB ─ */
+/* ── Vista unificada: la pintan los mismos helpers, venga de la demo o de la DB ─
+   `id`/`data` cargan el profile_item REAL (null en la demo local) para que la
+   edición inline pueda persistir con PATCH /api/master/[id] { data }. */
 interface VBullet {
+  id: string | null;
+  data: Record<string, unknown>;
   tx: string;
   num: boolean;
   origin: string;
@@ -37,6 +41,8 @@ interface VBullet {
   nudge?: string;
 }
 interface VRole {
+  id: string | null;
+  data: Record<string, unknown>;
   tt: string;
   org: string;
   dates: string;
@@ -52,10 +58,15 @@ interface VSkill {
   ask?: string;
 }
 interface VRow {
+  id: string | null;
+  kind: string;
+  data: Record<string, unknown>;
   tx: string;
   m: string;
 }
 interface VSummary {
+  id: string | null;
+  data: Record<string, unknown>;
   text: string;
   origin: string;
   evidence: string | null;
@@ -159,28 +170,31 @@ const DEMO_SK: VSkill[] = [
 ];
 
 const DEMO_PJ: VRow[] = [
-  { tx: "idempotency-go — librería open source de idempotencia en Go", m: "github · 214 KB · 41 commits" },
-  { tx: "reservas-club — sistema de reservas en Django", m: "dgatica.cl · en producción" },
-  { tx: "scraper-sii — CLI de series de tipo de cambio", m: "github · Python · 67 KB" },
-  { tx: "dgatica.cl — portfolio con 6 casos documentados", m: "Next.js" },
+  { id: null, kind: "project", data: {}, tx: "idempotency-go — librería open source de idempotencia en Go", m: "github · 214 KB · 41 commits" },
+  { id: null, kind: "project", data: {}, tx: "reservas-club — sistema de reservas en Django", m: "dgatica.cl · en producción" },
+  { id: null, kind: "project", data: {}, tx: "scraper-sii — CLI de series de tipo de cambio", m: "github · Python · 67 KB" },
+  { id: null, kind: "project", data: {}, tx: "dgatica.cl — portfolio con 6 casos documentados", m: "Next.js" },
 ];
 
 const DEMO_ED: VRow[] = [
-  { tx: "Ingeniería Civil en Computación e Informática — Universidad Andrés Bello", m: "2014 – 2019" },
-  { tx: "Diplomado en Ingeniería de Datos — Pontificia Universidad Católica", m: "2022" },
-  { tx: "Inglés B2 — autoevaluación", m: "sin certificado" },
+  { id: null, kind: "education", data: {}, tx: "Ingeniería Civil en Computación e Informática — Universidad Andrés Bello", m: "2014 – 2019" },
+  { id: null, kind: "education", data: {}, tx: "Diplomado en Ingeniería de Datos — Pontificia Universidad Católica", m: "2022" },
+  { id: null, kind: "education", data: {}, tx: "Inglés B2 — autoevaluación", m: "sin certificado" },
 ];
 
 function buildDemoView(): MasterView {
   return {
     summary: {
+      id: null,
+      data: {},
       text: "Backend developer con 6 años construyendo servicios de pago y e-commerce en Go y Node.js. A cargo del servicio de conciliación de Altiplano Pagos (~40.000 transacciones diarias).",
       origin: MANUAL_LABEL,
       evidence: "escrito por ti (onboarding) — el origen manual es el más verificable de todos.",
     },
     roles: DEMO_EXP.map((e) => ({
+      id: null, data: {},
       tt: e.tt, org: e.org, dates: e.dates, origin: SRC[e.src], evidence: e.ev, warn: e.warn,
-      bullets: e.bullets.map((b) => ({ tx: b.tx, num: b.num, origin: SRC[b.src], evidence: null, nudge: b.nudge })),
+      bullets: e.bullets.map((b) => ({ id: null, data: {}, tx: b.tx, num: b.num, origin: SRC[b.src], evidence: null, nudge: b.nudge })),
     })),
     skills: DEMO_SK,
     projects: DEMO_PJ,
@@ -203,12 +217,14 @@ function buildRealView(items: ApiItem[]): MasterView {
   const by = (k: string) => items.filter((i) => i.kind === k);
   const summaryItem = by("summary")[0];
   const summary: VSummary | null = summaryItem
-    ? { text: str(summaryItem.data, "text"), origin: originLabel(summaryItem.origin), evidence: summaryItem.evidenceSnippet }
+    ? { id: summaryItem.id, data: summaryItem.data, text: str(summaryItem.data, "text"), origin: originLabel(summaryItem.origin), evidence: summaryItem.evidenceSnippet }
     : null;
 
   const roles: VRole[] = by("work").map((w) => {
     const dates = str(w.data, "dates");
     return {
+      id: w.id,
+      data: w.data,
       tt: str(w.data, "title") || "(rol sin título)",
       org: [str(w.data, "company"), str(w.data, "location")].filter(Boolean).join(" · "),
       dates,
@@ -219,7 +235,7 @@ function buildRealView(items: ApiItem[]): MasterView {
         .filter((b) => b.kind === "bullet" && b.parentId === w.id)
         .map((b) => {
           const tx = str(b.data, "text");
-          return { tx, num: hasDigit(tx), origin: originLabel(b.origin), evidence: b.evidenceSnippet };
+          return { id: b.id, data: b.data, tx, num: hasDigit(tx), origin: originLabel(b.origin), evidence: b.evidenceSnippet };
         }),
     };
   });
@@ -236,11 +252,17 @@ function buildRealView(items: ApiItem[]): MasterView {
   });
 
   const projects: VRow[] = by("project").map((p) => ({
+    id: p.id,
+    kind: "project",
+    data: p.data,
     tx: [str(p.data, "name"), str(p.data, "description")].filter(Boolean).join(" — "),
     m: [originLabel(p.origin), str(p.data, "url")].filter(Boolean).join(" · "),
   }));
 
   const education: VRow[] = by("education").map((e) => ({
+    id: e.id,
+    kind: "education",
+    data: e.data,
     tx: [str(e.data, "degree"), str(e.data, "institution")].filter(Boolean).join(" — "),
     m: str(e.data, "dates") || originLabel(e.origin),
   }));
@@ -278,10 +300,70 @@ export function MasterScreen() {
   const [openFrags, setOpenFrags] = useState<ReadonlySet<string>>(new Set());
   const [folded, setFolded] = useState<ReadonlySet<string>>(new Set());
   const [touched, setTouched] = useState<ReadonlySet<string>>(new Set());
+  const [savedNote, setSavedNote] = useState("");
 
   const mainRef = useRef<HTMLElement>(null);
   const groupsRef = useRef<HTMLDivElement>(null);
   const liveRef = useRef<HTMLSpanElement>(null);
+  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const noteSaved = useCallback((msg: string) => {
+    setSavedNote(msg);
+    if (saveTimer.current) clearTimeout(saveTimer.current);
+    saveTimer.current = setTimeout(() => setSavedNote(""), 2400);
+  }, []);
+  useEffect(() => () => { if (saveTimer.current) clearTimeout(saveTimer.current); }, []);
+
+  // Persiste una edición inline: PATCH /api/master/[id] { data }. En modo local
+  // (sin Supabase, o item de demo) es solo visual — nunca inventa un guardado.
+  const saveEdit = useCallback(
+    (id: string | null, data: Record<string, unknown>) => {
+      if (!supabaseEnabled) {
+        noteSaved("editado (modo local)");
+        return;
+      }
+      if (!id) return;
+      void (async () => {
+        try {
+          const res = await fetch(`/api/master/${id}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ data }),
+          });
+          if (!res.ok) throw new Error();
+          noteSaved("guardado ✓");
+        } catch {
+          noteSaved("no se pudo guardar");
+        }
+      })();
+    },
+    [noteSaved],
+  );
+
+  // onBlur/Enter genérico para un texto editable: si cambió, marca origen "editado
+  // por ti" y persiste. `build` arma el `data` completo del item desde el texto.
+  const commitEdit = useCallback(
+    (
+      displayId: string,
+      dbId: string | null,
+      original: string,
+      build: (text: string) => Record<string, unknown>,
+    ) =>
+      (e: React.FocusEvent<HTMLSpanElement>) => {
+        const text = (e.currentTarget.textContent ?? "").trim();
+        if (!text || text === original.trim()) return;
+        setTouched((prev) => (prev.has(displayId) ? prev : new Set(prev).add(displayId)));
+        saveEdit(dbId, build(text));
+      },
+    [saveEdit],
+  );
+
+  const editKeyDown = useCallback((e: React.KeyboardEvent<HTMLSpanElement>) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      e.currentTarget.blur();
+    }
+  }, []);
 
   // Carga real (modo Supabase).
   useEffect(() => {
@@ -341,8 +423,6 @@ export function MasterScreen() {
     });
   const toggleFrag = (id: string) => toggleIn(setOpenFrags, id);
   const toggleFold = (id: string) => toggleIn(setFolded, id);
-  const markTouched = (id: string) =>
-    setTouched((prev) => (prev.has(id) ? prev : new Set(prev).add(id)));
 
   // Movimiento del sistema: escalonado + dibujo de hairlines, cuando el runtime
   // vanilla exista Y haya datos montados (se re-ejecuta al llegar la vista).
@@ -471,7 +551,8 @@ export function MasterScreen() {
             spellCheck={false}
             role="textbox"
             aria-label={`Editar título del rol: ${e.tt}`}
-            onBlur={() => markTouched(headerId)}
+            onKeyDown={editKeyDown}
+            onBlur={commitEdit(headerId, e.id, e.tt, (text) => ({ ...e.data, title: text }))}
           >
             {e.tt}
           </span>
@@ -501,7 +582,8 @@ export function MasterScreen() {
                   spellCheck={false}
                   role="textbox"
                   aria-label="Editar viñeta"
-                  onBlur={() => markTouched(bid)}
+                  onKeyDown={editKeyDown}
+                  onBlur={commitEdit(bid, b.id, b.tx, (text) => ({ ...b.data, text }))}
                 >
                   {wrapNums(b.tx)}
                 </span>
@@ -538,14 +620,34 @@ export function MasterScreen() {
     </div>
   );
 
-  const denseRow = (r: VRow, key: string): ReactNode => (
-    <div className="ms-row" data-item key={key}>
-      <span contentEditable suppressContentEditableWarning spellCheck={false} role="textbox" aria-label="Editar elemento">
-        {r.tx}
-      </span>
-      <span className="m">{r.m}</span>
-    </div>
-  );
+  const denseRow = (r: VRow, key: string): ReactNode => {
+    // El texto denso es "cabeza — cola" (name — description / degree — institution).
+    // Se reparte por el PRIMER " — " (el mismo separador con que se compuso).
+    const build = (text: string): Record<string, unknown> => {
+      const idx = text.indexOf(" — ");
+      const head = (idx >= 0 ? text.slice(0, idx) : text).trim();
+      const tail = idx >= 0 ? text.slice(idx + 3).trim() : "";
+      return r.kind === "project"
+        ? { ...r.data, name: head, description: tail }
+        : { ...r.data, degree: head, institution: tail };
+    };
+    return (
+      <div className="ms-row" data-item key={key}>
+        <span
+          contentEditable
+          suppressContentEditableWarning
+          spellCheck={false}
+          role="textbox"
+          aria-label="Editar elemento"
+          onKeyDown={editKeyDown}
+          onBlur={commitEdit(key, r.id, r.tx, build)}
+        >
+          {r.tx}
+        </span>
+        <span className="m">{r.m}</span>
+      </div>
+    );
+  };
 
   return (
     <div className="c-page">
@@ -597,6 +699,17 @@ export function MasterScreen() {
           <span className="n" id="msN" aria-live="polite">
             {msNText}
           </span>
+          {savedNote ? (
+            <span
+              className="n"
+              id="msSaved"
+              role="status"
+              aria-live="polite"
+              style={{ color: "var(--accent-text)" }}
+            >
+              {savedNote}
+            </span>
+          ) : null}
         </div>
       </div>
 
@@ -632,7 +745,11 @@ export function MasterScreen() {
                             spellCheck={false}
                             role="textbox"
                             aria-label="Editar resumen"
-                            onBlur={() => markTouched("it-resumen")}
+                            onKeyDown={editKeyDown}
+                            onBlur={commitEdit("it-resumen", v.summary.id, v.summary.text, (text) => ({
+                              ...v.summary!.data,
+                              text,
+                            }))}
                           >
                             {wrapNums(v.summary.text)}
                           </span>

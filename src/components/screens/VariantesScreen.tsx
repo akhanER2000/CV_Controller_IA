@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { supabaseEnabled } from "@/lib/supabase/config";
 import "./variantes.css";
 
@@ -15,12 +16,21 @@ import "./variantes.css";
    count real; el copy del estado vacío usa el nº real de items del master. La
    maqueta (persona Diego Gatica) SOLO se usa como fallback del modo local.
 
+   ★ CREACIÓN DE VARIANTES (esta fase). Dos caminos, ambos parten del master real,
+   nunca de demo:
+     - Manual: POST /api/variants { mode:'manual', name? } → editor de la variante.
+     - Con IA (un clic): una caja en lenguaje natural → POST { mode:'ai', prompt }
+       → la variante queda ARMADA como punto de partida; se muestran las `notes`
+       (la IA es honesta si el master es flaco) y el usuario la abre para revisar.
+       Nada se aplica en silencio.
+
    Cada variante es una VISTA del master, no una copia. Las desactualizadas se
    marcan con c-pulse-dot (master_seen_at < master.updated_at) y dejan decidir:
    actualizar (adoptar el master) o mantener tu override.
    ============================================================================ */
 
 type Variant = {
+  id?: string;
   nm: string;
   obj: string;
   pg: string;
@@ -41,8 +51,9 @@ const DEMO_VARIANTS: Variant[] = [
 ];
 const DEMO_MASTER_ITEMS = 52;
 
-// Ruta de producto del editor de variante.
-const EDITOR = "/app/variantes/editor";
+// Ruta del editor cuando no hay id real (modo local / fallback).
+const EDITOR_FALLBACK = "/app/variantes/editor";
+const editorHref = (v: Variant) => (v.id ? `/app/variantes/${v.id}` : EDITOR_FALLBACK);
 
 function rel(iso: string): string {
   const then = new Date(iso).getTime();
@@ -58,6 +69,7 @@ function rel(iso: string): string {
 }
 
 export function VariantesScreen() {
+  const router = useRouter();
   const [variants, setVariants] = useState<Variant[]>(supabaseEnabled ? [] : DEMO_VARIANTS);
   const [masterItems, setMasterItems] = useState<number>(supabaseEnabled ? 0 : DEMO_MASTER_ITEMS);
   const [loading, setLoading] = useState(supabaseEnabled);
@@ -65,9 +77,17 @@ export function VariantesScreen() {
   const [gen, setGen] = useState(0);
   const [announce, setAnnounce] = useState("");
 
+  // Creación de variantes.
+  const [newName, setNewName] = useState("");
+  const [aiPrompt, setAiPrompt] = useState("");
+  const [creating, setCreating] = useState<"manual" | "ai" | null>(null);
+  const [createErr, setCreateErr] = useState("");
+  const [aiResult, setAiResult] = useState<{ id: string; name: string; notes: string | null } | null>(null);
+
   const mainRef = useRef<HTMLElement>(null);
 
   const empty = !loading && variants.length === 0;
+  const canCreate = masterItems > 0; // sin master, no hay de dónde elegir
 
   // Carga real (modo Supabase).
   useEffect(() => {
@@ -78,7 +98,8 @@ export function VariantesScreen() {
         const res = await fetch("/api/variants");
         const data = await res.json();
         if (!active) return;
-        const list = ((data.variants ?? []) as { name: string; targetTitle: string | null; updatedAt: string; outdated: boolean }[]).map((x) => ({
+        const list = ((data.variants ?? []) as { id: string; name: string; targetTitle: string | null; updatedAt: string; outdated: boolean }[]).map((x) => ({
+          id: x.id,
           nm: x.name,
           obj: x.targetTitle || "sin objetivo definido",
           pg: "",
@@ -133,7 +154,7 @@ export function VariantesScreen() {
   }
 
   // «Actualizar» / «Mantener»: la fila deja de estar desactualizada. Optimista y
-  // local (aún no hay endpoint de escritura de variantes en esta fase).
+  // local (aún no hay endpoint de escritura de estas señales en esta fase).
   function updateVariant(i: number) {
     setVariants((prev) => prev.map((v, k) => (k === i ? { ...v, old: false } : v)));
     setOpenRows(new Set());
@@ -146,6 +167,168 @@ export function VariantesScreen() {
     setGen((g) => g + 1);
     setAnnounce(`Variante «${variants[i].nm}»: override mantenido. Ahora está al día.`);
   }
+
+  // ── Creación ──────────────────────────────────────────────────────────────
+  async function createManual() {
+    if (creating) return;
+    setCreateErr("");
+    if (!supabaseEnabled) {
+      router.push(EDITOR_FALLBACK);
+      return;
+    }
+    setCreating("manual");
+    try {
+      const res = await fetch("/api/variants", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mode: "manual", name: newName.trim() || undefined }),
+      });
+      if (!res.ok) throw new Error();
+      const { variant } = (await res.json()) as { variant: { id: string } };
+      router.push(`/app/variantes/${variant.id}`);
+    } catch {
+      setCreating(null);
+      setCreateErr("No se pudo crear la variante. Intenta de nuevo.");
+    }
+  }
+
+  async function createAI() {
+    const prompt = aiPrompt.trim();
+    if (creating || !prompt) return;
+    setCreateErr("");
+    setAiResult(null);
+    if (!supabaseEnabled) {
+      setAiResult({
+        id: "editor",
+        name: prompt.slice(0, 40),
+        notes: "Modo local: la IA real se activa con Supabase configurado. Esto es una vista de la maqueta.",
+      });
+      return;
+    }
+    setCreating("ai");
+    try {
+      const res = await fetch("/api/variants", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mode: "ai", prompt }),
+      });
+      if (!res.ok) throw new Error();
+      const { variant, notes } = (await res.json()) as { variant: { id: string; name: string }; notes?: string };
+      setAiResult({ id: variant.id, name: variant.name, notes: notes ?? null });
+      setAnnounce(`Variante «${variant.name}» creada con IA como punto de partida. Ábrela para revisarla.`);
+    } catch {
+      setCreateErr("La IA no pudo armar la variante. Intenta otra descripción o crea una manual.");
+    } finally {
+      setCreating(null);
+    }
+  }
+
+  // Panel de creación (se muestra en el lead y, con master, también en el vacío).
+  const createPanel = (
+    <div className="vr-create">
+      <div
+        className="c-card"
+        style={{ padding: "18px 20px", display: "grid", gap: "16px", textAlign: "left", maxWidth: "760px", margin: "0 auto" }}
+      >
+        <div>
+          <label htmlFor="aiPrompt" className="t-overline" style={{ display: "block", marginBottom: "8px" }}>
+            Crear con IA — un punto de partida
+          </label>
+          <textarea
+            id="aiPrompt"
+            className="c-input"
+            rows={2}
+            placeholder="Describe el rol o el enfoque: «para Backend Engineer», «un CV completo y honesto»…"
+            value={aiPrompt}
+            onChange={(e) => setAiPrompt(e.target.value)}
+            style={{ resize: "vertical", minHeight: "54px", width: "100%", lineHeight: 1.5 }}
+          />
+          <div style={{ display: "flex", alignItems: "center", gap: "12px", marginTop: "10px", flexWrap: "wrap" }}>
+            <button
+              type="button"
+              className="c-btn c-btn--patina"
+              disabled={creating !== null || !aiPrompt.trim()}
+              onClick={() => void createAI()}
+            >
+              {creating === "ai" ? "Armando…" : "Crear con IA"}
+            </button>
+            <span style={{ font: "400 var(--fs-micro)/1.5 var(--font-mono)", color: "var(--text-subtle)", maxWidth: "52ch" }}>
+              La IA elige del master lo que encaja y propone un título. Tú lo revisas antes de nada — no se aplica en
+              silencio.
+            </span>
+          </div>
+        </div>
+
+        <div
+          style={{
+            borderTop: "1px solid var(--border)",
+            paddingTop: "14px",
+            display: "flex",
+            alignItems: "center",
+            gap: "10px",
+            flexWrap: "wrap",
+          }}
+        >
+          <input
+            className="c-input"
+            aria-label="Nombre de la nueva variante"
+            placeholder="Nombre (opcional): «Backend — Fintech»"
+            value={newName}
+            onChange={(e) => setNewName(e.target.value)}
+            style={{ maxWidth: "280px" }}
+          />
+          <button type="button" className="c-btn" disabled={creating !== null} onClick={() => void createManual()}>
+            {creating === "manual" ? "Creando…" : "Nueva variante (vacía)"}
+          </button>
+          <span style={{ font: "400 var(--fs-micro)/1.5 var(--font-mono)", color: "var(--text-subtle)" }}>
+            Empiezas de cero y eliges del master.
+          </span>
+        </div>
+
+        {createErr ? (
+          <p style={{ font: "400 var(--fs-micro)/1.6 var(--font-mono)", color: "var(--danger)", margin: 0 }} role="alert">
+            {createErr}
+          </p>
+        ) : null}
+      </div>
+
+      {aiResult ? (
+        <div
+          className="c-card"
+          style={{
+            padding: "18px 20px",
+            marginTop: "14px",
+            maxWidth: "760px",
+            marginInline: "auto",
+            textAlign: "left",
+            borderColor: "var(--border-patina)",
+          }}
+        >
+          <span className="t-overline">Variante creada — revísala</span>
+          <p style={{ marginTop: "10px", color: "var(--text-muted)", lineHeight: 1.6 }}>
+            «{aiResult.name}» quedó armada como <b style={{ color: "var(--text)" }}>punto de partida</b>. Ábrela y
+            ajusta lo que quieras — nada se tocó en tu master.
+          </p>
+          {aiResult.notes ? (
+            <p
+              style={{
+                marginTop: "8px",
+                font: "400 var(--fs-micro)/1.7 var(--font-mono)",
+                color: "var(--text-subtle)",
+              }}
+            >
+              Nota de la IA: {aiResult.notes}
+            </p>
+          ) : null}
+          <div style={{ marginTop: "14px" }}>
+            <Link className="c-btn c-btn--patina" href={`/app/variantes/${aiResult.id}`}>
+              Abrir para revisar →
+            </Link>
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
 
   return (
     <div className="c-page">
@@ -199,11 +382,10 @@ export function VariantesScreen() {
                 Cada una referencia tus datos — no los copia. Cuando el master cambia, las variantes lo saben; los
                 overrides tuyos siempre ganan.
               </p>
-              <Link className="c-btn c-btn--patina" href={EDITOR}>
-                Nueva variante
-              </Link>
             </div>
           )}
+
+          {!empty && !loading && createPanel}
 
           {!empty && !loading && <hr className="c-divider" />}
 
@@ -212,6 +394,7 @@ export function VariantesScreen() {
               {variants.map((v, i) => {
                 const open = openRows.has(i);
                 const diffId = `vr-diff-${i}`;
+                const href = editorHref(v);
                 return (
                   <div
                     className={`vr-row${open ? " open" : ""}`}
@@ -256,7 +439,7 @@ export function VariantesScreen() {
                         {v.touch}
                         {v.pg ? ` · ${v.pg}` : ""}
                       </span>
-                      <Link className="open" href={EDITOR}>
+                      <Link className="open" href={href}>
                         abrir →
                       </Link>
                       <span className="obj">objetivo: {v.obj}</span>
@@ -278,7 +461,7 @@ export function VariantesScreen() {
                           <button type="button" onClick={() => keepVariant(i)}>
                             Mantener como está (override)
                           </button>
-                          <Link className="c-btn c-btn--quiet" style={{ height: "30px", fontSize: "10px" }} href={EDITOR}>
+                          <Link className="c-btn c-btn--quiet" style={{ height: "30px", fontSize: "10px" }} href={href}>
                             ver en el editor
                           </Link>
                         </div>
@@ -294,7 +477,7 @@ export function VariantesScreen() {
             <div className="vr-empty show" id="empty">
               <span className="t-overline">Sin variantes todavía</span>
               <h2 style={{ marginTop: "16px" }}>
-                {masterItems > 0 ? (
+                {canCreate ? (
                   <>
                     Tu master tiene {masterItems} item{masterItems === 1 ? "" : "s"}.
                     <br />
@@ -309,17 +492,21 @@ export function VariantesScreen() {
                 )}
               </h2>
               <p>
-                {masterItems > 0
-                  ? "Elige qué cuenta, ajusta el título al aviso, y el PDF sale igual al preview. Empieza por el rol al que más postulas."
+                {canCreate
+                  ? "Elige qué cuenta, ajusta el título al aviso, y el PDF sale igual al preview. Empieza por el rol al que más postulas — o deja que la IA arme un punto de partida."
                   : "Una variante referencia tu master — no lo copia. Sin master, no hay de dónde elegir."}
               </p>
-              <div style={{ marginTop: "26px" }}>
-                <span className="c-forge">
-                  <Link className="c-btn c-btn--forge c-btn--lg" href={masterItems > 0 ? EDITOR : "/app/importar"}>
-                    {masterItems > 0 ? "Crear la primera →" : "Volcar lo que tengo →"}
-                  </Link>
-                </span>
-              </div>
+              {canCreate ? (
+                <div style={{ marginTop: "26px" }}>{createPanel}</div>
+              ) : (
+                <div style={{ marginTop: "26px" }}>
+                  <span className="c-forge">
+                    <Link className="c-btn c-btn--forge c-btn--lg" href="/app/importar">
+                      Volcar lo que tengo →
+                    </Link>
+                  </span>
+                </div>
+              )}
             </div>
           )}
         </div>

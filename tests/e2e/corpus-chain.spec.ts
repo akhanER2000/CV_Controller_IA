@@ -24,6 +24,7 @@ function creds(): E2ECreds {
 
 test("cadena completa: cuenta nueva → vacío → volcado → staging → master → PDF", async ({ page }) => {
   const { email, password } = creds();
+  let variantId = "";
 
   await test.step("login con la cuenta nueva (auth real de Supabase)", async () => {
     await page.goto("/login");
@@ -103,5 +104,69 @@ test("cadena completa: cuenta nueva → vacío → volcado → staging → maste
     const { text } = await extractText(pdf, { mergePages: true });
     const flat = text.replace(/\s+/g, " ");
     expect(flat).toContain("Valentina");
+  });
+
+  // ── VARIANTES: crear con IA en un clic (parte del master REAL) ──────────────
+  await test.step("crear variante con IA: 'Backend Engineer' (POST mode:'ai')", async () => {
+    // La IA real (Gemini) puede tardar; damos margen amplio.
+    const resp = await page.request.post("/api/variants", {
+      data: { mode: "ai", prompt: "Backend Engineer" },
+      timeout: 120_000,
+    });
+    expect(resp.status()).toBe(200);
+    const body = (await resp.json()) as { variant?: { id?: string } };
+    expect(body.variant?.id).toBeTruthy();
+    variantId = body.variant!.id!;
+
+    // La UI del editor carga la variante ya armada (el #objInput es su ancla).
+    await page.goto(`/app/variantes/${variantId}`);
+    await expect(page.locator("#objInput")).toBeVisible({ timeout: 20_000 });
+  });
+
+  await test.step("la variante referencia items REALES del master y tiene target_title", async () => {
+    const { variant, items, master } = (await page.request
+      .get(`/api/variants/${variantId}`)
+      .then((r) => r.json())) as {
+      variant: { target_title: string | null };
+      items: { item_id: string }[];
+      master: { id: string }[];
+    };
+    expect(items.length).toBeGreaterThan(0);
+    const masterIds = new Set(master.map((m) => m.id));
+    for (const it of items) expect(masterIds.has(it.item_id)).toBe(true);
+    expect((variant.target_title ?? "").trim().length).toBeGreaterThan(0);
+  });
+
+  await test.step("PDF de la variante (/api/cv {variantId}): honestidad + round-trip ATS", async () => {
+    // Corpus del master: TODO el texto de sus datos, para la prueba de honestidad.
+    const { master } = (await page.request
+      .get(`/api/variants/${variantId}`)
+      .then((r) => r.json())) as { master: { data: Record<string, unknown> }[] };
+    const masterText = master
+      .flatMap((m) => Object.values(m.data ?? {}))
+      .map((x) => String(x))
+      .join(" ")
+      .replace(/\s+/g, " ");
+
+    const resp = await page.request.post("/api/cv", { data: { variantId } });
+    expect(resp.status()).toBe(200);
+    expect(resp.headers()["content-type"]).toContain("application/pdf");
+
+    const buf = await resp.body();
+    expect(buf.subarray(0, 5).toString("latin1")).toBe("%PDF-");
+
+    const pdf = await getDocumentProxy(new Uint8Array(buf));
+    const { text } = await extractText(pdf, { mergePages: true });
+    const flat = text.replace(/\s+/g, " ");
+
+    // Round-trip: la persona inventada y sus datos del master están en el PDF.
+    expect(flat).toContain("Valentina");
+
+    // Honestidad: ninguna cifra de ≥3 dígitos del PDF puede faltar en el master
+    // (la variante NO inventa números que no estén en tu registro).
+    const nums = flat.match(/\d{3,}/g) ?? [];
+    for (const n of nums) {
+      expect(masterText, `cifra «${n}» del PDF ausente en el master`).toContain(n);
+    }
   });
 });

@@ -11,236 +11,147 @@ import {
 } from "react";
 import Link from "next/link";
 import { useBoot } from "@/lib/corpus/runtime";
+import { supabaseEnabled } from "@/lib/supabase/config";
 import "./editor-variante.css";
 
 /* ============================================================================
    Editor de variante — porte de corpus-design/04-pantallas/editor-variante.html
    (ver docs/spec/pantallas/editor-variante.md). LA PANTALLA MÁS IMPORTANTE.
 
-   MURO: no monta la aurora ("donde hay trabajo, el trabajo gana"). Por eso NO
-   se importa ni renderiza <Aurora>.
+   ★ CABLEADO A DATOS REALES. En modo Supabase la variante sale de
+   GET /api/variants/[id] (el master del usuario + sus variant_items con `data`
+   EFECTIVA = master + override). Cada acción PERSISTE contra el contrato:
+     - añadir del master     → POST   /api/variants/[id]/items { item_id }
+     - quitar de la variante → DELETE /api/variants/[id]/items?id=<variant_item>
+     - ocultar               → PATCH  /api/variants/[id]/items { id, visible }
+     - reordenar (drag/tecla)→ PATCH  /api/variants/[id]/items { id, sort_order }
+     - override por campo     → PATCH  /api/variants/[id]/items { id, override_data }
+                                (override_data:null = revertir al master)
+     - título objetivo/nombre → PATCH  /api/variants/[id] { target_title, name }
+     - Descargar PDF          → POST   /api/cv { variantId, download:true } (blob)
+   La maqueta (persona Diego Gatica) SOLO se usa como fallback del modo local sin
+   Supabase; en modo Supabase NO hay ni un dato de demo.
 
-   Tres columnas: biblioteca del master (referencia) · composición de la variante
-   (incluir / ocultar / afinar / reordenar, con override por campo) · preview que
-   ES el PDF (mismo motor, misma paginación real medida en el DOM) con su rayos-X.
-
-   Fidelidad crítica (spec §6.3, Anexo):
-   - La paginación es MEDICIÓN REAL: div fuera de pantalla, width 664px,
-     display:flow-root, PAGE_H = 1056 − 68·2 = 920. Nunca se recorta contenido.
-   - El rayos-X se genera del ESTADO, no del DOM (los runs pegados son el bug que
-     el producto denuncia).
-   - textOf(): el override gana siempre; si el texto vuelve a igualar al master,
-     el override se elimina solo.
-   - Añadir una viñeta arrastra su experiencia padre.
-   - El drag & drop solo reordena dentro de la misma experiencia.
-   - .var-orig es el hermano ADYACENTE de .var-b (.var-b.ovr + .var-orig).
-
-   El panel .demo del HTML NO se porta (convención de entrega). Sus cinco estados
-   (normal · rayos-x · override · 3 páginas · vacía) son alcanzables como producto
-   real: el toggle Documento/ATS, editar un campo, vaciar la variante o dejar que
-   el contenido rebase a 3 páginas los producen sin botón de atajo.
+   MURO: no monta la aurora ("donde hay trabajo, el trabajo gana"). Por eso NO se
+   importa ni renderiza <Aurora>. Tres columnas: biblioteca del master · composición
+   de la variante · preview que ES el PDF (misma paginación real medida en el DOM)
+   con su rayos-X. El override gana siempre; si el texto vuelve a igualar al master,
+   el override se revierte. Añadir una viñeta arrastra su experiencia padre. El
+   reordenamiento (drag y su alternativa de teclado) solo mueve dentro de la misma
+   experiencia. .var-orig es el hermano ADYACENTE de .var-b (.var-b.ovr + .var-orig).
    ============================================================================ */
 
-// ── EL MASTER (biblioteca canónica; ids estables) ──────────────────────────
-interface MExp {
+const JSON_HEADERS = { "Content-Type": "application/json" } as const;
+
+// ── Shapes del contrato de API ──────────────────────────────────────────────
+interface MasterRow {
   id: string;
-  tt: string;
-  org: string;
-  loc: string;
-  dates: string;
-  bullets: { id: string; tx: string }[];
+  kind: string;
+  data: Record<string, unknown>;
+  parent_id: string | null;
+  sort_order: number;
 }
-interface MSkill {
-  id: string;
-  g: string;
-  tx: string;
+interface VItem {
+  id: string; // id del variant_item
+  item_id: string; // id del profile_item (master) al que referencia
+  kind: string;
+  visible: boolean;
+  sort_order: number;
+  override_data: Record<string, unknown> | null;
+  data: Record<string, unknown>; // EFECTIVA (master + override)
+  parent_id: string | null;
 }
-interface MProj {
+interface VMeta {
   id: string;
-  tx: string;
-}
-interface MEdu {
-  id: string;
-  tt: string;
-  org: string;
-  dates: string;
+  name: string;
+  target_title: string | null;
+  lang: string;
+  updated_at?: string;
+  master_updated_at?: string;
 }
 
-const MASTER = {
-  summary: {
-    id: "sum",
-    tx: "Backend developer con 6 años construyendo servicios de pago y e-commerce en Go y Node.js. A cargo del servicio de conciliación de Altiplano Pagos (~40.000 transacciones diarias). Busco problemas de plataforma con datos de verdad.",
-  },
-  exp: [
-    {
-      id: "e1",
-      tt: "Backend Developer",
-      org: "Altiplano Pagos SpA",
-      loc: "Santiago, Chile",
-      dates: "mar 2022 – hoy",
-      bullets: [
-        { id: "b1", tx: "A cargo del servicio de conciliación de pagos en Go (~40.000 transacciones diarias)." },
-        { id: "b4", tx: "Escribí la librería interna de idempotencia (Go) adoptada por otros equipos de la empresa." },
-        { id: "b5", tx: "Mantengo los pipelines de CI/CD del equipo (GitHub Actions)." },
-        { id: "b7", tx: "Documenté la API pública de conciliación (OpenAPI 3.1)." },
-        { id: "b8", tx: "Mentoreo a 2 desarrolladores junior del equipo de pagos." },
-        { id: "b6", tx: "Turno de soporte (on-call) una semana al mes." },
-      ],
-    },
-    {
-      id: "e2",
-      tt: "Backend Developer — equipo Checkout",
-      org: "Rayén Retail S.A.",
-      loc: "Santiago, Chile",
-      dates: "ene 2020 – feb 2022",
-      bullets: [
-        { id: "b9", tx: "Desarrollé y mantuve APIs del checkout (Node.js, PostgreSQL)." },
-        { id: "b13", tx: "Implementé el flujo de cupones y descuentos del checkout." },
-        { id: "b12", tx: "Atendí incidentes de producción durante cyber days." },
-        { id: "b14", tx: "Automaticé reportes de ventas diarios para operaciones." },
-      ],
-    },
-    {
-      id: "e3",
-      tt: "Desarrollador freelance",
-      org: "Independiente",
-      loc: "Santiago, Chile",
-      dates: "2019 – 2020",
-      bullets: [
-        { id: "b16", tx: "Construí sitios y APIs para 4 pymes chilenas." },
-        { id: "b17", tx: "Sistema de reservas para un centro deportivo (Django)." },
-        { id: "b19", tx: "Administré hosting y dominios de clientes." },
-      ],
-    },
-    {
-      id: "e4",
-      tt: "Práctica profesional — Área TI",
-      org: "Universidad Andrés Bello",
-      loc: "Santiago, Chile",
-      dates: "2018 – 2019",
-      bullets: [
-        { id: "b21", tx: "Soporte a la plataforma de matrícula en periodos peak." },
-        { id: "b22", tx: "Scripts de migración de datos de alumnos (Python)." },
-        { id: "b24", tx: "Documenté procesos del área para nuevos practicantes." },
-      ],
-    },
-  ] as MExp[],
-  skills: [
-    { id: "s1", g: "Lenguajes", tx: "Go, Python, SQL, TypeScript" },
-    { id: "s2", g: "Backend", tx: "PostgreSQL, Redis, gRPC, OpenAPI, Node.js, Django" },
-    { id: "s3", g: "Plataforma", tx: "Docker, GitHub Actions, Linux, Bash" },
-    { id: "s4", g: "Idiomas", tx: "Español nativo, Inglés B2" },
-  ] as MSkill[],
-  proj: [
-    { id: "p1", tx: "idempotency-go — librería open source de idempotencia en Go (github.com/dgatica)." },
-    { id: "p2", tx: "reservas-club — sistema de reservas en Django, en producción desde 2020 (dgatica.cl)." },
-    { id: "p3", tx: "scraper-sii — CLI en Python para series de tipo de cambio del SII." },
-  ] as MProj[],
-  edu: [
-    { id: "ed1", tt: "Ingeniería Civil en Computación e Informática", org: "Universidad Andrés Bello", dates: "2014 – 2019" },
-    { id: "ed2", tt: "Diplomado en Ingeniería de Datos", org: "Pontificia Universidad Católica de Chile", dates: "2022" },
-  ] as MEdu[],
+// Campo de texto editable por kind (override "por campo").
+const EDIT_FIELD: Record<string, string> = { summary: "text", bullet: "text", project: "description" };
+const editableField = (kind: string): string | null => EDIT_FIELD[kind] ?? null;
+
+const S = (o: Record<string, unknown> | null | undefined, k: string): string => {
+  const v = o?.[k];
+  return v == null ? "" : String(v);
 };
+const bySort = (a: VItem, b: VItem) => a.sort_order - b.sort_order;
+const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+const numWrap = (t: string): string => t.replace(/(\d[\d.,%~½]*)/g, '<span class="num">$1</span>');
 
-const BASICS = {
-  name: "Diego Gatica Morales",
-  email: "diego.gatica@ejemplo.cl",
-  tel: "+56 9 6123 4567",
-  loc: "Santiago, Chile",
-  web: "dgatica.cl",
-  gh: "github.com/dgatica",
-};
+function normalizeIncoming(raw: unknown): VItem {
+  const r = raw as Partial<VItem> & Record<string, unknown>;
+  return {
+    id: String(r.id ?? ""),
+    item_id: String(r.item_id ?? ""),
+    kind: String(r.kind ?? ""),
+    visible: r.visible !== false,
+    sort_order: Number(r.sort_order ?? 0),
+    override_data: (r.override_data as Record<string, unknown> | null) ?? null,
+    data: (r.data as Record<string, unknown>) ?? {},
+    parent_id: (r.parent_id as string | null) ?? null,
+  };
+}
 
-// Índice plano: a cada viñeta se le añade `exp` (id de su experiencia padre).
-const byId: Record<string, { tx?: string; exp?: string }> = {};
-MASTER.exp.forEach((e) => {
-  byId[e.id] = {};
-  e.bullets.forEach((b) => (byId[b.id] = { tx: b.tx, exp: e.id }));
-});
-MASTER.skills.forEach((s) => (byId[s.id] = { tx: s.tx }));
-MASTER.proj.forEach((p) => (byId[p.id] = { tx: p.tx }));
-MASTER.edu.forEach((d) => (byId[d.id] = {}));
-byId.sum = { tx: MASTER.summary.tx };
-
-// El "N items — tu biblioteca" se DERIVA del master real (spec §10): nunca un
-// literal a mano. Aquí = filas que produce la biblioteca (sum + cabeceras de
-// experiencia + viñetas + skills + proyectos + educación).
-const LIB_COUNT =
-  1 +
-  MASTER.exp.reduce((n, e) => n + 1 + e.bullets.length, 0) +
-  MASTER.skills.length +
-  MASTER.proj.length +
-  MASTER.edu.length;
-
-// El estado inicial de la variante (referencia + overrides + ocultos + orden).
-const INITIAL_INC = [
-  "sum", "e1", "b1", "b4", "b5", "b8", "b6", "b7", "e2", "b9", "b13", "b12", "b14",
-  "e3", "b16", "b17", "e4", "b21", "b22", "s1", "s2", "s3", "s4", "p1", "p2", "p3", "ed1", "ed2",
-];
+// ── DOC model: lo que se dibuja en el preview y el rayos-X (solo visibles) ────
+interface Doc {
+  basics: { name: string; email: string; phone: string; location: string; links: string[]; label: string };
+  targetTitle: string;
+  summary: string | null;
+  skills: { group: string; items: string }[];
+  work: { title: string; company: string; location: string; dates: string; bullets: string[] }[];
+  projects: string[];
+  education: { title: string; dates: string; org: string }[];
+}
 
 // Carta 816×1056 @96dpi, márgenes 68/76 → 920px de caja útil.
 const PAGE_H = 1056 - 68 * 2;
 
-const textOf = (id: string, ovr: Record<string, string>): string =>
-  ovr[id] != null ? ovr[id] : (byId[id]?.tx ?? "");
-
-// Viñetas incluidas de la experiencia `e`, aplicando VAR.order[e.id] si existe
-// (ids reordenados primero, los no listados después).
-function bulletsOf(e: MExp, inc: Set<string>, order: Record<string, string[]>): string[] {
-  const base = e.bullets.map((b) => b.id).filter((id) => inc.has(id));
-  const ord = order[e.id];
-  if (!ord) return base;
-  return [...ord.filter((id) => base.includes(id)), ...base.filter((id) => !ord.includes(id))];
-}
-
-const numWrap = (t: string): string => t.replace(/(\d[\d.,%~½]*)/g, '<span class="num">$1</span>');
-
-// ── Bloques del documento → HTML (mismo granulado que el original: el corte de
-//    página ocurre ENTRE bloques). El preview ES el PDF. ──
-function buildBlocks(
-  inc: Set<string>,
-  hid: Set<string>,
-  ovr: Record<string, string>,
-  order: Record<string, string[]>,
-  obj: string,
-): string[] {
+// ── Bloques del documento → HTML (el corte de página ocurre ENTRE bloques). El
+//    preview ES el PDF. Todo el texto de usuario se escapa. ──
+function buildBlocks(doc: Doc): string[] {
   const B: string[] = [];
+  const contact =
+    "Email: " + esc(doc.basics.email) + " · Tel: " + esc(doc.basics.phone) + " · " + esc(doc.basics.location);
+  const links = doc.basics.links.filter(Boolean).map(esc).join(" · ");
   B.push(
-    '<div class="cvd-name">' + BASICS.name + '</div><div class="cvd-label">' + (obj || "") + "</div>" +
-      '<div class="cvd-contact">Email: ' + BASICS.email + " · Tel: " + BASICS.tel + " · " + BASICS.loc +
-      "<br>" + BASICS.gh + " · " + BASICS.web + "</div>",
+    '<div class="cvd-name">' + esc(doc.basics.name) + "</div>" +
+      '<div class="cvd-label">' + esc(doc.targetTitle) + "</div>" +
+      '<div class="cvd-contact">' + contact + (links ? "<br>" + links : "") + "</div>",
   );
-  if (inc.has("sum") && !hid.has("sum"))
-    B.push('<div class="cvd-h">Resumen</div><p class="cvd-sum">' + textOf("sum", ovr) + "</p>");
-  const sks = MASTER.skills.filter((s) => inc.has(s.id));
-  if (sks.length)
+  if (doc.summary != null && doc.summary.trim())
+    B.push('<div class="cvd-h">Resumen</div><p class="cvd-sum">' + esc(doc.summary) + "</p>");
+  if (doc.skills.length)
     B.push(
       '<div class="cvd-h">Habilidades</div>' +
-        sks.map((s) => '<p class="cvd-skline"><b>' + s.g + ":</b> " + s.tx + "</p>").join(""),
+        doc.skills
+          .map((s) => '<p class="cvd-skline"><b>' + esc(s.group) + ":</b> " + esc(s.items) + "</p>")
+          .join(""),
     );
-  const exps = MASTER.exp.filter((e) => inc.has(e.id));
-  if (exps.length) {
+  if (doc.work.length) {
     B.push('<div class="cvd-h">Experiencia</div>');
-    exps.forEach((e) => {
+    doc.work.forEach((w) => {
       B.push(
-        '<div class="cvd-erow"><span class="t">' + e.tt + " — " + e.org + '</span><span class="d">' + e.dates +
-          '</span></div><div class="cvd-org">' + e.loc + "</div>",
+        '<div class="cvd-erow"><span class="t">' + esc(w.title) + " — " + esc(w.company) +
+          '</span><span class="d">' + esc(w.dates) + '</span></div><div class="cvd-org">' + esc(w.location) + "</div>",
       );
-      bulletsOf(e, inc, order)
-        .filter((id) => !hid.has(id))
-        .forEach((id) => B.push('<p class="cvd-b">• ' + numWrap(textOf(id, ovr)) + "</p>"));
+      w.bullets.forEach((tx) => B.push('<p class="cvd-b">• ' + numWrap(esc(tx)) + "</p>"));
     });
   }
-  const pjs = MASTER.proj.filter((p) => inc.has(p.id) && !hid.has(p.id));
-  if (pjs.length)
-    B.push('<div class="cvd-h">Proyectos</div>' + pjs.map((p) => '<p class="cvd-b">• ' + textOf(p.id, ovr) + "</p>").join(""));
-  const eds = MASTER.edu.filter((d) => inc.has(d.id));
-  if (eds.length) {
+  if (doc.projects.length)
+    B.push(
+      '<div class="cvd-h">Proyectos</div>' +
+        doc.projects.map((tx) => '<p class="cvd-b">• ' + esc(tx) + "</p>").join(""),
+    );
+  if (doc.education.length) {
     B.push('<div class="cvd-h">Educación</div>');
-    eds.forEach((d) =>
+    doc.education.forEach((d) =>
       B.push(
-        '<div class="cvd-erow"><span class="t">' + d.tt + '</span><span class="d">' + d.dates +
-          '</span></div><div class="cvd-org">' + d.org + "</div>",
+        '<div class="cvd-erow"><span class="t">' + esc(d.title) + '</span><span class="d">' + esc(d.dates) +
+          '</span></div><div class="cvd-org">' + esc(d.org) + "</div>",
       ),
     );
   }
@@ -248,50 +159,129 @@ function buildBlocks(
 }
 
 // ── Rayos-X: texto plano en el ORDEN del documento, generado del ESTADO ──
-function buildRaw(
-  inc: Set<string>,
-  hid: Set<string>,
-  ovr: Record<string, string>,
-  order: Record<string, string[]>,
-  obj: string,
-): string {
+function buildRaw(doc: Doc): string {
   const L: string[] = [];
-  L.push(BASICS.name);
-  const o = obj.trim();
+  L.push(doc.basics.name);
+  const o = doc.targetTitle.trim();
   if (o) L.push(o);
-  L.push("Email: " + BASICS.email + " · Tel: " + BASICS.tel + " · " + BASICS.loc);
-  L.push(BASICS.gh + " · " + BASICS.web, "");
-  if (inc.has("sum") && !hid.has("sum")) L.push("RESUMEN", textOf("sum", ovr), "");
-  const sks = MASTER.skills.filter((s) => inc.has(s.id));
-  if (sks.length) {
+  L.push("Email: " + doc.basics.email + " · Tel: " + doc.basics.phone + " · " + doc.basics.location);
+  const links = doc.basics.links.filter(Boolean).join(" · ");
+  if (links) L.push(links);
+  L.push("");
+  if (doc.summary != null && doc.summary.trim()) L.push("RESUMEN", doc.summary, "");
+  if (doc.skills.length) {
     L.push("HABILIDADES");
-    sks.forEach((s) => L.push(s.g + ": " + s.tx));
+    doc.skills.forEach((s) => L.push(s.group + ": " + s.items));
     L.push("");
   }
-  const exps = MASTER.exp.filter((e) => inc.has(e.id));
-  if (exps.length) {
+  if (doc.work.length) {
     L.push("EXPERIENCIA");
-    exps.forEach((e) => {
-      L.push(e.tt + " — " + e.org + "   " + e.dates, e.loc);
-      bulletsOf(e, inc, order)
-        .filter((id) => !hid.has(id))
-        .forEach((id) => L.push("• " + textOf(id, ovr)));
+    doc.work.forEach((w) => {
+      L.push(w.title + " — " + w.company + "   " + w.dates, w.location);
+      w.bullets.forEach((tx) => L.push("• " + tx));
       L.push("");
     });
   }
-  const pjs = MASTER.proj.filter((p) => inc.has(p.id) && !hid.has(p.id));
-  if (pjs.length) {
+  if (doc.projects.length) {
     L.push("PROYECTOS");
-    pjs.forEach((p) => L.push("• " + textOf(p.id, ovr)));
+    doc.projects.forEach((tx) => L.push("• " + tx));
     L.push("");
   }
-  const eds = MASTER.edu.filter((d) => inc.has(d.id));
-  if (eds.length) {
+  if (doc.education.length) {
     L.push("EDUCACIÓN");
-    eds.forEach((d) => L.push(d.tt + "   " + d.dates, d.org));
+    doc.education.forEach((d) => L.push(d.title + "   " + d.dates, d.org));
   }
   const body = L.join("\n").replace(/&/g, "&amp;").replace(/</g, "&lt;");
   return '<span class="cap">texto extraído del PDF — esto es lo que indexa el reclutador</span>' + body;
+}
+
+// ── Fallback del MODO LOCAL (persona Diego Gatica) — jamás con Supabase ──────
+function buildFallback(variantId: string): { master: MasterRow[]; items: VItem[]; meta: VMeta } {
+  const master: MasterRow[] = [];
+  let so = 0;
+  const push = (id: string, kind: string, data: Record<string, unknown>, parent_id: string | null = null) =>
+    master.push({ id, kind, data, parent_id, sort_order: so++ });
+
+  push("basics", "basics", {
+    name: "Diego Gatica Morales",
+    label: "",
+    email: "diego.gatica@ejemplo.cl",
+    phone: "+56 9 6123 4567",
+    location: "Santiago, Chile",
+    links: ["github.com/dgatica", "dgatica.cl"],
+  });
+  push("sum", "summary", {
+    text:
+      "Backend developer con 6 años construyendo servicios de pago y e-commerce en Go y Node.js. A cargo del servicio de conciliación de Altiplano Pagos (~40.000 transacciones diarias). Busco problemas de plataforma con datos de verdad.",
+  });
+  const exp: [string, string, string, string, string, [string, string][]][] = [
+    ["e1", "Backend Developer", "Altiplano Pagos SpA", "Santiago, Chile", "mar 2022 – hoy", [
+      ["b1", "A cargo del servicio de conciliación de pagos en Go (~40.000 transacciones diarias)."],
+      ["b4", "Escribí la librería interna de idempotencia (Go) adoptada por otros equipos de la empresa."],
+      ["b5", "Mantengo los pipelines de CI/CD del equipo (GitHub Actions)."],
+      ["b8", "Mentoreo a 2 desarrolladores junior del equipo de pagos."],
+      ["b6", "Turno de soporte (on-call) una semana al mes."],
+      ["b7", "Documenté la API pública de conciliación (OpenAPI 3.1)."],
+    ]],
+    ["e2", "Backend Developer — equipo Checkout", "Rayén Retail S.A.", "Santiago, Chile", "ene 2020 – feb 2022", [
+      ["b9", "Desarrollé y mantuve APIs del checkout (Node.js, PostgreSQL)."],
+      ["b13", "Implementé el flujo de cupones y descuentos del checkout."],
+      ["b12", "Atendí incidentes de producción durante cyber days."],
+      ["b14", "Automaticé reportes de ventas diarios para operaciones."],
+    ]],
+    ["e3", "Desarrollador freelance", "Independiente", "Santiago, Chile", "2019 – 2020", [
+      ["b16", "Construí sitios y APIs para 4 pymes chilenas."],
+      ["b17", "Sistema de reservas para un centro deportivo (Django)."],
+    ]],
+    ["e4", "Práctica profesional — Área TI", "Universidad Andrés Bello", "Santiago, Chile", "2018 – 2019", [
+      ["b21", "Soporte a la plataforma de matrícula en periodos peak."],
+      ["b22", "Scripts de migración de datos de alumnos (Python)."],
+    ]],
+  ];
+  exp.forEach(([id, title, company, location, dates, bullets]) => {
+    push(id, "work", { title, company, location, dates });
+    bullets.forEach(([bid, text]) => push(bid, "bullet", { text }, id));
+  });
+  ([
+    ["s1", "Lenguajes", "Go, Python, SQL, TypeScript"],
+    ["s2", "Backend", "PostgreSQL, Redis, gRPC, OpenAPI, Node.js, Django"],
+    ["s3", "Plataforma", "Docker, GitHub Actions, Linux, Bash"],
+    ["s4", "Idiomas", "Español nativo, Inglés B2"],
+  ] as [string, string, string][]).forEach(([id, group, items]) => push(id, "skill", { group, items }));
+  ([
+    ["p1", "idempotency-go", "librería open source de idempotencia en Go (github.com/dgatica)."],
+    ["p2", "reservas-club", "sistema de reservas en Django, en producción desde 2020 (dgatica.cl)."],
+    ["p3", "scraper-sii", "CLI en Python para series de tipo de cambio del SII."],
+  ] as [string, string, string][]).forEach(([id, name, description]) => push(id, "project", { name, description }));
+  ([
+    ["ed1", "Ingeniería Civil en Computación e Informática", "Universidad Andrés Bello", "2014 – 2019"],
+    ["ed2", "Diplomado en Ingeniería de Datos", "Pontificia Universidad Católica de Chile", "2022"],
+  ] as [string, string, string, string][]).forEach(([id, degree, institution, dates]) =>
+    push(id, "education", { degree, institution, dates }),
+  );
+
+  const included = new Set([
+    "sum", "e1", "b1", "b4", "b5", "b8", "b6", "b7", "e2", "b9", "b13", "b12", "b14",
+    "e3", "b16", "b17", "e4", "b21", "b22", "s1", "s2", "s3", "s4", "p1", "p2", "p3", "ed1", "ed2",
+  ]);
+  const items: VItem[] = master
+    .filter((m) => included.has(m.id))
+    .map((m, i) => ({
+      id: "v-" + m.id,
+      item_id: m.id,
+      kind: m.kind,
+      visible: true,
+      sort_order: i,
+      override_data: null,
+      data: m.data,
+      parent_id: m.parent_id,
+    }));
+
+  return {
+    master,
+    items,
+    meta: { id: variantId, name: "Backend — Fintech", target_title: "Backend Engineer", lang: "es" },
+  };
 }
 
 // Ejecuta layout-effect en cliente sin avisar en SSR.
@@ -300,13 +290,13 @@ const useIsoLayoutEffect = typeof window !== "undefined" ? useLayoutEffect : use
 type Mode = "doc" | "raw";
 type View = "master" | "mid" | "preview";
 
-export function EditorVarianteScreen({ variantId = "backend-fintech" }: { variantId?: string } = {}) {
-  // La variante: referencia + overrides + ocultos + orden.
-  const [inc, setInc] = useState<Set<string>>(() => new Set(INITIAL_INC));
-  const [hid, setHid] = useState<Set<string>>(() => new Set());
-  const [ovr, setOvr] = useState<Record<string, string>>({});
-  const [order, setOrder] = useState<Record<string, string[]>>({});
-  const [obj, setObj] = useState("Backend Engineer"); // #objInput — alimenta .cvd-label y el rayos-X
+export function EditorVarianteScreen({ variantId = "editor" }: { variantId?: string } = {}) {
+  const [fb] = useState(() => (supabaseEnabled ? null : buildFallback(variantId)));
+  const [master, setMaster] = useState<MasterRow[]>(() => fb?.master ?? []);
+  const [items, setItems] = useState<VItem[]>(() => fb?.items ?? []);
+  const [meta, setMeta] = useState<VMeta | null>(() => fb?.meta ?? null);
+  const [targetTitle, setTargetTitle] = useState<string>(() => fb?.meta.target_title ?? "");
+  const [loading, setLoading] = useState<boolean>(supabaseEnabled);
 
   const [libQ, setLibQ] = useState("");
   const [mode, setMode] = useState<Mode>("doc");
@@ -322,6 +312,7 @@ export function EditorVarianteScreen({ variantId = "backend-fintech" }: { varian
   const pvScrollRef = useRef<HTMLDivElement>(null);
   const editRef = useRef<HTMLSpanElement>(null);
   const dragIdRef = useRef<string | null>(null);
+  const sortSnap = useRef<Map<string, number> | null>(null);
   const bootRef = useBoot<HTMLDivElement>(); // no-op defensivo: no hay reveals aquí
 
   const flash = useCallback((msg: string) => {
@@ -333,8 +324,103 @@ export function EditorVarianteScreen({ variantId = "backend-fintech" }: { varian
       setStAccent(false);
     }, 2600);
   }, []);
-
   useEffect(() => () => { if (flashTimer.current) clearTimeout(flashTimer.current); }, []);
+
+  // ── Carga real (modo Supabase) ──
+  useEffect(() => {
+    if (!supabaseEnabled) return;
+    let active = true;
+    (async () => {
+      try {
+        const res = await fetch(`/api/variants/${variantId}`);
+        if (!res.ok) throw new Error(String(res.status));
+        const data = await res.json();
+        if (!active) return;
+        setMaster((data.master ?? []) as MasterRow[]);
+        setItems(((data.items ?? []) as unknown[]).map(normalizeIncoming));
+        const m = data.variant as VMeta | undefined;
+        setMeta(m ?? null);
+        setTargetTitle(m?.target_title ?? "");
+      } catch {
+        if (active) {
+          setMaster([]);
+          setItems([]);
+          setMeta(null);
+        }
+      } finally {
+        if (active) setLoading(false);
+      }
+    })();
+    return () => {
+      active = false;
+    };
+  }, [variantId]);
+
+  // ── Índices derivados ──
+  const masterById = useMemo(() => {
+    const m = new Map<string, MasterRow>();
+    master.forEach((r) => m.set(r.id, r));
+    return m;
+  }, [master]);
+
+  const vItemByMaster = useMemo(() => {
+    const m = new Map<string, VItem>();
+    items.forEach((it) => m.set(it.item_id, it));
+    return m;
+  }, [items]);
+
+  // ¿La viñeta `bullet` pertenece al `work` (variant_item)?
+  const belongsTo = useCallback(
+    (bullet: VItem, work: VItem): boolean => {
+      const mParent = masterById.get(bullet.item_id)?.parent_id ?? bullet.parent_id;
+      return mParent === work.item_id || bullet.parent_id === work.id;
+    },
+    [masterById],
+  );
+
+  const bulletsForWork = useCallback(
+    (work: VItem): VItem[] => items.filter((b) => b.kind === "bullet" && belongsTo(b, work)).sort(bySort),
+    [items, belongsTo],
+  );
+
+  // basics: preferir el variant_item si existe; si no, el master. Siempre se pinta.
+  const basicsData = useMemo(() => {
+    const vi = items.find((i) => i.kind === "basics");
+    if (vi) return vi.data;
+    return master.find((m) => m.kind === "basics")?.data ?? {};
+  }, [items, master]);
+
+  // ── DOC model (solo visibles), para preview + rayos-X ──
+  const doc = useMemo<Doc>(() => {
+    const summaryV = items.find((i) => i.kind === "summary" && i.visible) ?? null;
+    const skillV = items.filter((i) => i.kind === "skill" && i.visible).sort(bySort);
+    const workV = items.filter((i) => i.kind === "work" && i.visible).sort(bySort);
+    const projectV = items.filter((i) => i.kind === "project" && i.visible).sort(bySort);
+    const eduV = items.filter((i) => i.kind === "education" && i.visible).sort(bySort);
+    const label = (targetTitle || S(basicsData, "label")).trim();
+    return {
+      basics: {
+        name: S(basicsData, "name"),
+        email: S(basicsData, "email"),
+        phone: S(basicsData, "phone"),
+        location: S(basicsData, "location"),
+        links: Array.isArray(basicsData.links) ? (basicsData.links as unknown[]).map((x) => String(x)) : [],
+        label,
+      },
+      targetTitle: label,
+      summary: summaryV ? S(summaryV.data, "text") : null,
+      skills: skillV.map((s) => ({ group: S(s.data, "group"), items: S(s.data, "items") })),
+      work: workV.map((w) => ({
+        title: S(w.data, "title"),
+        company: S(w.data, "company"),
+        location: S(w.data, "location"),
+        dates: S(w.data, "dates"),
+        bullets: bulletsForWork(w).filter((b) => b.visible).map((b) => S(b.data, "text")),
+      })),
+      projects: projectV.map((p) => [S(p.data, "name"), S(p.data, "description")].filter(Boolean).join(" — ")),
+      education: eduV.map((e) => ({ title: S(e.data, "degree"), dates: S(e.data, "dates"), org: S(e.data, "institution") })),
+    };
+  }, [items, basicsData, targetTitle, bulletsForWork]);
 
   // ── Paginación real (medición en el DOM). El error posible queda del lado
   //    honesto: nunca se recorta contenido. ──
@@ -342,7 +428,7 @@ export function EditorVarianteScreen({ variantId = "backend-fintech" }: { varian
   const [scale, setScale] = useState(1);
 
   const recompute = useCallback(() => {
-    const blks = buildBlocks(inc, hid, ovr, order, obj);
+    const blks = buildBlocks(doc);
     const meas = document.createElement("div");
     meas.style.cssText = "position:absolute;visibility:hidden;left:-9999px;top:0;width:664px";
     const inner = document.createElement("div");
@@ -362,17 +448,14 @@ export function EditorVarianteScreen({ variantId = "backend-fintech" }: { varian
     const sc = Math.min(1, ((pvScrollRef.current?.clientWidth || 470) - 36) / 816);
     setPages(pagesArr.map((pg) => pg.join("")));
     setScale(sc);
-  }, [inc, hid, ovr, order, obj]);
+  }, [doc]);
 
   const computeRef = useRef(recompute);
   computeRef.current = recompute;
-
   useIsoLayoutEffect(() => {
     recompute();
   }, [recompute]);
 
-  // resize + carga de fuentes → re-paginar (spec §6.3/§Riesgos: sin fuentes la
-  // medición miente; el scale depende del ancho de .pv-scroll).
   useEffect(() => {
     const run = () => computeRef.current();
     const el = pvScrollRef.current;
@@ -389,57 +472,166 @@ export function EditorVarianteScreen({ variantId = "backend-fintech" }: { varian
     };
   }, []);
 
-  const rawHtml = useMemo(() => buildRaw(inc, hid, ovr, order, obj), [inc, hid, ovr, order, obj]);
+  const rawHtml = useMemo(() => buildRaw(doc), [doc]);
   const pageCount = pages.length;
   const docHeight = pageCount * (1056 + 30) * scale;
 
-  // ── Acciones de estado ─────────────────────────────────────────────────────
-  const addLib = useCallback((id: string) => {
-    setInc((prev) => {
-      const n = new Set(prev);
-      if (n.has(id)) {
-        n.delete(id);
-      } else {
-        n.add(id);
-        const parent = byId[id]?.exp; // añadir una viñeta arrastra su experiencia padre
-        if (parent) n.add(parent);
+  // ── Persistencia (contra el contrato; en modo local es no-op) ──
+  const patchItem = useCallback(
+    (vitemId: string, patch: Record<string, unknown>) => {
+      if (!supabaseEnabled || vitemId.startsWith("tmp-")) return;
+      void (async () => {
+        try {
+          const res = await fetch(`/api/variants/${variantId}/items`, {
+            method: "PATCH",
+            headers: JSON_HEADERS,
+            body: JSON.stringify({ id: vitemId, ...patch }),
+          });
+          if (!res.ok) throw new Error();
+          flash("guardado en esta variante");
+        } catch {
+          flash("no se pudo guardar el cambio");
+        }
+      })();
+    },
+    [variantId, flash],
+  );
+
+  const patchVariant = useCallback(
+    (patch: Record<string, unknown>) => {
+      if (!supabaseEnabled) return;
+      void (async () => {
+        try {
+          const res = await fetch(`/api/variants/${variantId}`, {
+            method: "PATCH",
+            headers: JSON_HEADERS,
+            body: JSON.stringify(patch),
+          });
+          if (!res.ok) throw new Error();
+          flash("guardado");
+        } catch {
+          flash("no se pudo guardar");
+        }
+      })();
+    },
+    [variantId, flash],
+  );
+
+  const nextSortOrder = useCallback(
+    (kind: string) => {
+      const same = items.filter((i) => i.kind === kind);
+      return same.length ? Math.max(...same.map((i) => i.sort_order)) + 1 : items.length + 1;
+    },
+    [items],
+  );
+
+  // POST un item del master a la variante (optimista con id temporal + reconcilia).
+  const postItem = useCallback(
+    async (masterId: string) => {
+      const m = masterById.get(masterId);
+      if (!m || items.some((i) => i.item_id === masterId)) return;
+      const tmpId = "tmp-" + Math.random().toString(36).slice(2);
+      const optimistic: VItem = {
+        id: tmpId,
+        item_id: m.id,
+        kind: m.kind,
+        visible: true,
+        sort_order: nextSortOrder(m.kind),
+        override_data: null,
+        data: m.data,
+        parent_id: m.parent_id,
+      };
+      setItems((prev) => [...prev, optimistic]);
+      if (!supabaseEnabled) return;
+      try {
+        const res = await fetch(`/api/variants/${variantId}/items`, {
+          method: "POST",
+          headers: JSON_HEADERS,
+          body: JSON.stringify({ item_id: masterId }),
+        });
+        if (!res.ok) throw new Error();
+        const { item } = (await res.json()) as { item?: unknown };
+        if (item) {
+          const norm = normalizeIncoming(item);
+          if (!norm.data || Object.keys(norm.data).length === 0) norm.data = m.data;
+          setItems((prev) => prev.map((i) => (i.id === tmpId ? norm : i)));
+        }
+      } catch {
+        setItems((prev) => prev.filter((i) => i.id !== tmpId));
+        flash("no se pudo añadir el item");
       }
-      return n;
-    });
-  }, []);
+    },
+    [masterById, items, nextSortOrder, variantId, flash],
+  );
 
-  const removeInc = useCallback((id: string) => {
-    setInc((prev) => {
-      const n = new Set(prev);
-      n.delete(id);
-      return n;
-    });
-  }, []);
+  const removeItem = useCallback(
+    (vitemId: string) => {
+      const it = items.find((i) => i.id === vitemId);
+      if (!it) return;
+      // Quitar un rol arrastra sus viñetas (no dejar variant_items huérfanos).
+      const childIds =
+        it.kind === "work" ? items.filter((b) => b.kind === "bullet" && belongsTo(b, it)).map((b) => b.id) : [];
+      const allIds = new Set([vitemId, ...childIds]);
+      setItems((prev) => prev.filter((i) => !allIds.has(i.id)));
+      flash("quitado de la variante");
+      if (!supabaseEnabled) return;
+      allIds.forEach((id) => {
+        if (id.startsWith("tmp-")) return;
+        void fetch(`/api/variants/${variantId}/items?id=${encodeURIComponent(id)}`, { method: "DELETE" }).catch(() => {});
+      });
+    },
+    [items, belongsTo, variantId, flash],
+  );
 
-  const toggleHide = useCallback((id: string) => {
-    setHid((prev) => {
-      const n = new Set(prev);
-      if (n.has(id)) n.delete(id);
-      else n.add(id);
-      return n;
-    });
-  }, []);
+  // Biblioteca: clic en una fila = alternar (añadir/quitar). Añadir una viñeta
+  // arrastra su rol padre.
+  const toggleFromLib = useCallback(
+    async (masterId: string) => {
+      const existing = items.find((i) => i.item_id === masterId);
+      if (existing) {
+        removeItem(existing.id);
+        return;
+      }
+      const m = masterById.get(masterId);
+      if (m?.kind === "bullet" && m.parent_id && !items.some((i) => i.item_id === m.parent_id)) {
+        await postItem(m.parent_id);
+      }
+      await postItem(masterId);
+      flash("añadido a la variante");
+    },
+    [items, masterById, removeItem, postItem, flash],
+  );
+
+  const toggleHide = useCallback(
+    (vitemId: string) => {
+      const it = items.find((i) => i.id === vitemId);
+      if (!it) return;
+      const nextVisible = !it.visible;
+      setItems((prev) => prev.map((i) => (i.id === vitemId ? { ...i, visible: nextVisible } : i)));
+      flash(nextVisible ? "mostrado en esta variante" : "oculto en esta variante");
+      patchItem(vitemId, { visible: nextVisible });
+    },
+    [items, flash, patchItem],
+  );
 
   const revert = useCallback(
-    (id: string) => {
-      setOvr((prev) => {
-        const n = { ...prev };
-        delete n[id];
-        return n;
-      });
+    (vitemId: string) => {
+      const it = items.find((i) => i.id === vitemId);
+      if (!it) return;
+      const field = editableField(it.kind) ?? "text";
+      const masterVal = S(masterById.get(it.item_id)?.data, field);
+      setItems((prev) =>
+        prev.map((i) => (i.id === vitemId ? { ...i, override_data: null, data: { ...i.data, [field]: masterVal } } : i)),
+      );
       flash("override revertido — vuelve a seguir al master");
+      patchItem(vitemId, { override_data: null });
     },
-    [flash],
+    [items, masterById, flash, patchItem],
   );
 
   const startEdit = useCallback((id: string) => setEditingId(id), []);
 
-  // Al entrar en edición: enfocar y seleccionar todo (como el original).
+  // Al entrar en edición: enfocar y colapsar al final.
   useEffect(() => {
     if (!editingId) return;
     const el = editRef.current;
@@ -459,20 +651,25 @@ export function EditorVarianteScreen({ variantId = "backend-fintech" }: { varian
       setEditingId(null);
       return;
     }
+    const it = items.find((i) => i.id === id);
+    const field = it ? editableField(it.kind) ?? "text" : "text";
     const v = (el.textContent ?? "").trim();
-    const masterTx = byId[id]?.tx;
-    if (v && v !== masterTx) {
-      setOvr((prev) => ({ ...prev, [id]: v }));
+    const masterVal = S(masterById.get(it?.item_id ?? "")?.data, field);
+    if (v && v !== masterVal) {
+      const override = { [field]: v };
+      setItems((prev) =>
+        prev.map((i) => (i.id === id ? { ...i, override_data: override, data: { ...i.data, [field]: v } } : i)),
+      );
       flash("override guardado — solo en esta variante");
-    } else if (v === masterTx) {
-      setOvr((prev) => {
-        const n = { ...prev };
-        delete n[id];
-        return n;
-      });
+      patchItem(id, { override_data: override });
+    } else if (v === masterVal && it?.override_data) {
+      setItems((prev) =>
+        prev.map((i) => (i.id === id ? { ...i, override_data: null, data: { ...i.data, [field]: masterVal } } : i)),
+      );
+      patchItem(id, { override_data: null });
     }
     setEditingId(null);
-  }, [editingId, flash]);
+  }, [editingId, items, masterById, flash, patchItem]);
 
   const onEditKeyDown = useCallback((e: React.KeyboardEvent<HTMLSpanElement>) => {
     if (e.key === "Enter") {
@@ -481,53 +678,172 @@ export function EditorVarianteScreen({ variantId = "backend-fintech" }: { varian
     }
   }, []);
 
-  // ── Drag & drop: reordenar SOLO dentro de la misma experiencia ──
-  const onDragStart = useCallback((id: string) => {
-    dragIdRef.current = id;
-    setDraggingId(id);
-  }, []);
+  // ── Reordenar (solo viñetas, dentro de su rol). Permuta los sort_order del grupo. ──
+  const computeReorder = useCallback(
+    (list: VItem[], work: VItem, dragId: string, toIndex: number): { id: string; sort_order: number }[] | null => {
+      const group = list.filter((b) => b.kind === "bullet" && belongsTo(b, work)).sort(bySort);
+      const ids = group.map((g) => g.id);
+      const fromIndex = ids.indexOf(dragId);
+      if (fromIndex < 0) return null;
+      const clampTo = Math.max(0, Math.min(group.length - 1, toIndex));
+      if (clampTo === fromIndex) return null;
+      const sortVals = group.map((g) => g.sort_order).slice().sort((a, b) => a - b);
+      const newOrder = group.slice();
+      const [moved] = newOrder.splice(fromIndex, 1);
+      newOrder.splice(clampTo, 0, moved);
+      const changed: { id: string; sort_order: number }[] = [];
+      newOrder.forEach((g, i) => {
+        if (g.sort_order !== sortVals[i]) changed.push({ id: g.id, sort_order: sortVals[i] });
+      });
+      return changed.length ? changed : null;
+    },
+    [belongsTo],
+  );
+
+  const reorder = useCallback(
+    (work: VItem, dragId: string, toIndex: number, persist: boolean) => {
+      setItems((prev) => {
+        const changed = computeReorder(prev, work, dragId, toIndex);
+        if (!changed) return prev;
+        const map = new Map(changed.map((c) => [c.id, c.sort_order]));
+        if (persist) changed.forEach((c) => patchItem(c.id, { sort_order: c.sort_order }));
+        return prev.map((i) => (map.has(i.id) ? { ...i, sort_order: map.get(i.id)! } : i));
+      });
+    },
+    [computeReorder, patchItem],
+  );
+
+  const onGripKey = useCallback(
+    (e: React.KeyboardEvent<HTMLButtonElement>, bullet: VItem, work: VItem) => {
+      if (e.key !== "ArrowUp" && e.key !== "ArrowDown") return;
+      e.preventDefault();
+      const group = bulletsForWork(work);
+      const idx = group.findIndex((g) => g.id === bullet.id);
+      const to = e.key === "ArrowUp" ? idx - 1 : idx + 1;
+      if (to < 0 || to >= group.length) return;
+      reorder(work, bullet.id, to, true);
+      flash("viñeta reordenada");
+      requestAnimationFrame(() => document.querySelector<HTMLButtonElement>(`[data-grip="${bullet.id}"]`)?.focus());
+    },
+    [bulletsForWork, reorder, flash],
+  );
+
+  const onDragStart = useCallback(
+    (id: string) => {
+      dragIdRef.current = id;
+      setDraggingId(id);
+      sortSnap.current = new Map(items.map((i) => [i.id, i.sort_order]));
+    },
+    [items],
+  );
   const onDragEnd = useCallback(() => {
     dragIdRef.current = null;
     setDraggingId(null);
-  }, []);
+    const snap = sortSnap.current;
+    sortSnap.current = null;
+    if (!snap) return;
+    items.forEach((i) => {
+      const before = snap.get(i.id);
+      if (before !== undefined && before !== i.sort_order) patchItem(i.id, { sort_order: i.sort_order });
+    });
+  }, [items, patchItem]);
   const onDragOver = useCallback(
-    (e: React.DragEvent<HTMLDivElement>, overId: string) => {
+    (e: React.DragEvent<HTMLDivElement>, overB: VItem, work: VItem) => {
       const dragId = dragIdRef.current;
-      if (!dragId || overId === dragId) return;
-      const de = byId[dragId];
-      const oe = byId[overId];
-      if (!de || !oe || de.exp !== oe.exp || !de.exp) return; // solo dentro de su experiencia
+      if (!dragId || overB.id === dragId) return;
+      const drag = items.find((i) => i.id === dragId);
+      if (!drag || drag.kind !== "bullet" || !belongsTo(drag, work)) return;
       e.preventDefault();
-      const exp = MASTER.exp.find((x) => x.id === de.exp);
-      if (!exp) return;
-      const ordArr = bulletsOf(exp, inc, order).filter((id) => id !== dragId);
-      const idx = ordArr.indexOf(overId);
+      const group = bulletsForWork(work);
+      const overIndex = group.findIndex((g) => g.id === overB.id);
+      const fromIndex = group.findIndex((g) => g.id === dragId);
       const r = e.currentTarget.getBoundingClientRect();
-      ordArr.splice(e.clientY < r.top + r.height / 2 ? idx : idx + 1, 0, dragId);
-      setOrder((prev) => ({ ...prev, [exp.id]: ordArr }));
+      let to = e.clientY < r.top + r.height / 2 ? overIndex : overIndex + 1;
+      if (fromIndex < to) to -= 1;
+      reorder(work, dragId, to, false); // se persiste en onDragEnd
     },
-    [inc, order],
+    [items, belongsTo, bulletsForWork, reorder],
   );
 
-  // ── Render de una viñeta (.var-b + su .var-orig adyacente si hay override) ──
-  // Función de render (no componente anidado) para no remontar el nodo editable.
-  const renderBullet = (id: string) => {
-    const ov = ovr[id] != null;
-    const hidden = hid.has(id);
-    const editing = editingId === id;
+  // ── Descargar PDF (mismo motor que el preview → cero deriva) ──
+  const downloadPdf = useCallback(async () => {
+    if (!supabaseEnabled) {
+      flash("el PDF se genera del mismo estado que ves — sin sorpresas");
+      return;
+    }
+    flash("generando PDF…");
+    try {
+      const res = await fetch("/api/cv", {
+        method: "POST",
+        headers: JSON_HEADERS,
+        body: JSON.stringify({ variantId, download: true }),
+      });
+      if (!res.ok) throw new Error();
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `CV-${(doc.basics.name || "corpus").replace(/[^a-z0-9]+/gi, "-").replace(/^-|-$/g, "")}.pdf`;
+      a.click();
+      URL.revokeObjectURL(url);
+      flash("PDF descargado ✓");
+    } catch {
+      flash("no se pudo generar el PDF");
+    }
+  }, [variantId, doc.basics.name, flash]);
+
+  // ── Nombre / título objetivo ──
+  const onNameBlur = useCallback(
+    (e: React.FocusEvent<HTMLSpanElement>) => {
+      const name = (e.currentTarget.textContent ?? "").trim();
+      if (!name || name === meta?.name) return;
+      setMeta((prev) => (prev ? { ...prev, name } : prev));
+      patchVariant({ name });
+    },
+    [meta?.name, patchVariant],
+  );
+  const onObjBlur = useCallback(() => {
+    const t = targetTitle.trim();
+    if (t === (meta?.target_title ?? "").trim()) return;
+    setMeta((prev) => (prev ? { ...prev, target_title: t } : prev));
+    patchVariant({ target_title: t });
+  }, [targetTitle, meta?.target_title, patchVariant]);
+
+  // ── Render de una viñeta / item de texto (.var-b + su .var-orig adyacente) ──
+  const renderBullet = (b: VItem, work?: VItem) => {
+    const ov = b.override_data != null;
+    const hidden = !b.visible;
+    const editing = editingId === b.id;
+    const field = editableField(b.kind);
+    const text = field ? S(b.data, field) : "";
+    const masterText = field ? S(masterById.get(b.item_id)?.data, field) : "";
+    const canDrag = b.kind === "bullet" && !!work;
     return (
-      <Fragment key={id}>
+      <Fragment key={b.id}>
         <div
-          className={"var-b" + (ov ? " ovr" : "") + (hidden ? " hid" : "") + (draggingId === id ? " dragging" : "")}
-          data-b={id}
-          draggable={!editing}
-          onDragStart={() => onDragStart(id)}
-          onDragEnd={onDragEnd}
-          onDragOver={(e) => onDragOver(e, id)}
+          className={"var-b" + (ov ? " ovr" : "") + (hidden ? " hid" : "") + (draggingId === b.id ? " dragging" : "")}
+          data-b={b.id}
+          draggable={canDrag && !editing}
+          onDragStart={canDrag ? () => onDragStart(b.id) : undefined}
+          onDragEnd={canDrag ? onDragEnd : undefined}
+          onDragOver={canDrag && work ? (e) => onDragOver(e, b, work) : undefined}
         >
-          <span className="grip" title="arrastra para reordenar" aria-hidden="true">
-            ⠿
-          </span>
+          {canDrag && work ? (
+            <button
+              type="button"
+              className="grip"
+              data-grip={b.id}
+              title="arrastra para reordenar (o usa las flechas ↑ ↓)"
+              aria-label="Reordenar viñeta. Usa las flechas arriba y abajo para mover."
+              onKeyDown={(e) => onGripKey(e, b, work)}
+            >
+              ⠿
+            </button>
+          ) : (
+            <span className="grip" aria-hidden="true">
+              ⠿
+            </span>
+          )}
           <span
             className="tx"
             data-edit=""
@@ -537,24 +853,26 @@ export function EditorVarianteScreen({ variantId = "backend-fintech" }: { varian
             onBlur={editing ? finishEdit : undefined}
             onKeyDown={editing ? onEditKeyDown : undefined}
           >
-            {textOf(id, ovr)}
+            {text}
           </span>
           <span className="bacts">
-            <button type="button" data-a="hide" title="ocultar en esta variante" onClick={() => toggleHide(id)}>
+            <button type="button" data-a="hide" title="ocultar en esta variante" onClick={() => toggleHide(b.id)}>
               {hidden ? "mostrar" : "👁 ocultar"}
             </button>
-            <button type="button" data-a="edit" title="afinar solo aquí" onClick={() => startEdit(id)}>
-              afinar
-            </button>
-            <button type="button" data-a="out" title="quitar de la variante" onClick={() => removeInc(id)}>
+            {field ? (
+              <button type="button" data-a="edit" title="afinar solo aquí" onClick={() => startEdit(b.id)}>
+                afinar
+              </button>
+            ) : null}
+            <button type="button" data-a="out" title="quitar de la variante" onClick={() => removeItem(b.id)}>
               ×
             </button>
           </span>
         </div>
         {ov && (
           <div className="var-orig">
-            <span>original: {byId[id]?.tx}</span>
-            <button type="button" className="rv" data-rv={id} onClick={() => revert(id)}>
+            <span>original: {masterText}</span>
+            <button type="button" className="rv" data-rv={b.id} onClick={() => revert(b.id)}>
               revertir
             </button>
           </div>
@@ -565,18 +883,37 @@ export function EditorVarianteScreen({ variantId = "backend-fintech" }: { varian
 
   // ── Biblioteca (master): filas filtradas por substring del texto visible ──
   const q = libQ.trim().toLowerCase();
-  const libRow = (id: string, text: string, node?: React.ReactNode) => {
+  const libText = (m: MasterRow): string => {
+    switch (m.kind) {
+      case "summary":
+        return S(m.data, "text");
+      case "work":
+        return [S(m.data, "title"), S(m.data, "company")].filter(Boolean).join(" · ");
+      case "bullet":
+        return S(m.data, "text");
+      case "skill":
+        return [S(m.data, "group"), S(m.data, "items")].filter(Boolean).join(": ");
+      case "project":
+        return [S(m.data, "name"), S(m.data, "description")].filter(Boolean).join(" — ");
+      case "education":
+        return [S(m.data, "degree"), S(m.data, "institution")].filter(Boolean).join(" · ");
+      default:
+        return "";
+    }
+  };
+  const libRow = (m: MasterRow, node?: React.ReactNode) => {
+    const text = libText(m);
     if (q && !text.toLowerCase().includes(q)) return null;
-    const inV = inc.has(id);
+    const inV = vItemByMaster.has(m.id);
     return (
-      <div className={"lib-row" + (inV ? " in" : "")} data-lib={id} key={id}>
+      <div className={"lib-row" + (inV ? " in" : "")} data-lib={m.id} key={m.id}>
         <span className="tx">{node ?? text}</span>
         <button
           type="button"
           className="add"
           title={inV ? "quitar de la variante" : "añadir a la variante"}
           aria-pressed={inV}
-          onClick={() => addLib(id)}
+          onClick={() => void toggleFromLib(m.id)}
         >
           {inV ? "✓" : "+"}
         </button>
@@ -584,12 +921,30 @@ export function EditorVarianteScreen({ variantId = "backend-fintech" }: { varian
     );
   };
 
-  const exps = MASTER.exp.filter((e) => inc.has(e.id));
-  const sks = MASTER.skills.filter((s) => inc.has(s.id));
-  const pjs = MASTER.proj.filter((p) => inc.has(p.id));
-  const eds = MASTER.edu.filter((d) => inc.has(d.id));
+  // ── Grupos del master para la biblioteca ──
+  const mSummary = master.filter((m) => m.kind === "summary");
+  const mWorks = master.filter((m) => m.kind === "work").sort((a, b) => a.sort_order - b.sort_order);
+  const mBulletsOf = (workId: string) =>
+    master.filter((m) => m.kind === "bullet" && m.parent_id === workId).sort((a, b) => a.sort_order - b.sort_order);
+  const mSkills = master.filter((m) => m.kind === "skill");
+  const mProjects = master.filter((m) => m.kind === "project");
+  const mEducation = master.filter((m) => m.kind === "education");
+  const libCount =
+    mSummary.length +
+    mWorks.reduce((n, w) => n + 1 + mBulletsOf(w.id).length, 0) +
+    mSkills.length +
+    mProjects.length +
+    mEducation.length;
 
-  const midN = inc.size + " referencias · " + Object.keys(ovr).length + " overrides";
+  // ── Grupos de la variante (centro) ──
+  const summaryItems = items.filter((i) => i.kind === "summary");
+  const workItems = items.filter((i) => i.kind === "work").sort(bySort);
+  const skillItems = items.filter((i) => i.kind === "skill").sort(bySort);
+  const projectItems = items.filter((i) => i.kind === "project").sort(bySort);
+  const eduItems = items.filter((i) => i.kind === "education").sort(bySort);
+  const overrideCount = items.filter((i) => i.override_data != null).length;
+  const midN = items.length + " referencias · " + overrideCount + " overrides";
+  const isEmpty = !loading && items.length === 0;
 
   const setTab = (v: View) => setView(v);
 
@@ -611,11 +966,7 @@ export function EditorVarianteScreen({ variantId = "backend-fintech" }: { varian
           <div className="hd-right">
             <Link href="/app/ajustes" className="hd-nav" style={{ display: "inline-flex" }}>
               <span
-                style={{
-                  font: "500 var(--fs-ui)/1 var(--font-sans)",
-                  color: "var(--text-muted)",
-                  padding: "9px 12px",
-                }}
+                style={{ font: "500 var(--fs-ui)/1 var(--font-sans)", color: "var(--text-muted)", padding: "9px 12px" }}
               >
                 Ajustes
               </span>
@@ -635,10 +986,23 @@ export function EditorVarianteScreen({ variantId = "backend-fintech" }: { varian
             ← Variantes
           </Link>
           <span style={{ width: "1px", height: "16px", background: "var(--border-strong)" }} />
-          <span className="nm" contentEditable suppressContentEditableWarning spellCheck={false} aria-label="Nombre de la variante">
-            Backend — Fintech
+          <span
+            key={meta?.id ?? "nm"}
+            className="nm"
+            contentEditable
+            suppressContentEditableWarning
+            spellCheck={false}
+            aria-label="Nombre de la variante"
+            onBlur={onNameBlur}
+          >
+            {meta?.name ?? "Variante"}
           </span>
-          <span className="st" id="edState" role="status" style={stAccent ? { color: "var(--accent-text)" } : undefined}>
+          <span
+            className="st"
+            id="edState"
+            role="status"
+            style={stAccent ? { color: "var(--accent-text)" } : undefined}
+          >
             {stMsg}
           </span>
           <span className="acts">
@@ -648,12 +1012,7 @@ export function EditorVarianteScreen({ variantId = "backend-fintech" }: { varian
             <Link className="c-btn c-btn--quiet" href={`/app/variantes/${variantId}/salud`}>
               Salud
             </Link>
-            <button
-              type="button"
-              className="c-btn c-btn--patina"
-              id="btnPdf"
-              onClick={() => flash("el PDF se genera del mismo estado que ves — sin sorpresas")}
-            >
+            <button type="button" className="c-btn c-btn--patina" id="btnPdf" onClick={() => void downloadPdf()}>
               Descargar PDF
             </button>
           </span>
@@ -677,7 +1036,7 @@ export function EditorVarianteScreen({ variantId = "backend-fintech" }: { varian
         <aside className="ed-col ed-col--lib" data-screen-label="editor-master">
           <div className="ed-colh">
             <span className="t-overline">Master</span>
-            <span className="n">{LIB_COUNT} items — tu biblioteca</span>
+            <span className="n">{libCount} items — tu biblioteca</span>
           </div>
           <div className="lib-search">
             <input
@@ -690,41 +1049,52 @@ export function EditorVarianteScreen({ variantId = "backend-fintech" }: { varian
             />
           </div>
           <div id="lib">
-            <div className="lib-g">
-              <span className="t-overline">Resumen</span>
-              {libRow("sum", MASTER.summary.tx.slice(0, 80) + "…")}
-            </div>
-            <div className="lib-g">
-              <span className="t-overline">Experiencia · viñetas</span>
-              {MASTER.exp.map((e) => (
-                <Fragment key={e.id}>
-                  {libRow(e.id, e.tt + " · " + e.org, (
+            {mSummary.length > 0 && (
+              <div className="lib-g">
+                <span className="t-overline">Resumen</span>
+                {mSummary.map((m) => libRow(m, S(m.data, "text").slice(0, 80) + (S(m.data, "text").length > 80 ? "…" : "")))}
+              </div>
+            )}
+            {mWorks.length > 0 && (
+              <div className="lib-g">
+                <span className="t-overline">Experiencia · viñetas</span>
+                {mWorks.map((w) => (
+                  <Fragment key={w.id}>
+                    {libRow(w, (
+                      <>
+                        <b style={{ color: "var(--text)" }}>{S(w.data, "title")}</b>
+                        {S(w.data, "company") ? " · " + S(w.data, "company") : ""}
+                      </>
+                    ))}
+                    {mBulletsOf(w.id).map((b) => libRow(b))}
+                  </Fragment>
+                ))}
+              </div>
+            )}
+            {mSkills.length > 0 && (
+              <div className="lib-g">
+                <span className="t-overline">Skills</span>
+                {mSkills.map((s) =>
+                  libRow(s, (
                     <>
-                      <b style={{ color: "var(--text)" }}>{e.tt}</b> · {e.org}
+                      <b style={{ color: "var(--text)" }}>{S(s.data, "group")}:</b> {S(s.data, "items")}
                     </>
-                  ))}
-                  {e.bullets.map((b) => libRow(b.id, b.tx))}
-                </Fragment>
-              ))}
-            </div>
-            <div className="lib-g">
-              <span className="t-overline">Skills</span>
-              {MASTER.skills.map((s) =>
-                libRow(s.id, s.g + ": " + s.tx, (
-                  <>
-                    <b style={{ color: "var(--text)" }}>{s.g}:</b> {s.tx}
-                  </>
-                )),
-              )}
-            </div>
-            <div className="lib-g">
-              <span className="t-overline">Proyectos</span>
-              {MASTER.proj.map((p) => libRow(p.id, p.tx))}
-            </div>
-            <div className="lib-g">
-              <span className="t-overline">Educación</span>
-              {MASTER.edu.map((d) => libRow(d.id, d.tt + " · " + d.org))}
-            </div>
+                  )),
+                )}
+              </div>
+            )}
+            {mProjects.length > 0 && (
+              <div className="lib-g">
+                <span className="t-overline">Proyectos</span>
+                {mProjects.map((p) => libRow(p))}
+              </div>
+            )}
+            {mEducation.length > 0 && (
+              <div className="lib-g">
+                <span className="t-overline">Educación</span>
+                {mEducation.map((d) => libRow(d))}
+              </div>
+            )}
           </div>
           <p style={{ margin: "20px 18px 30px", font: "400 10px/1.7 var(--font-mono)", color: "var(--text-subtle)" }}>
             Aquí vive todo. La variante solo <b style={{ color: "var(--text-muted)" }}>referencia</b> — si editas el
@@ -737,7 +1107,7 @@ export function EditorVarianteScreen({ variantId = "backend-fintech" }: { varian
           <div className="ed-colh">
             <span className="t-overline">Esta variante</span>
             <span className="n" id="midN">
-              {midN}
+              {loading ? "leyendo…" : midN}
             </span>
           </div>
           <div className="c-card var-obj">
@@ -750,9 +1120,11 @@ export function EditorVarianteScreen({ variantId = "backend-fintech" }: { varian
             <input
               className="c-input"
               id="objInput"
-              value={obj}
+              value={targetTitle}
               spellCheck={false}
-              onChange={(e) => setObj(e.target.value)}
+              placeholder="p. ej. Backend Engineer"
+              onChange={(e) => setTargetTitle(e.target.value)}
+              onBlur={onObjBlur}
             />
             <p className="hint">
               Si coincide con el título del aviso: <b>10,6× más entrevistas</b> [Jobscan, 2,5M postulaciones]. Honesto
@@ -760,90 +1132,110 @@ export function EditorVarianteScreen({ variantId = "backend-fintech" }: { varian
             </p>
           </div>
 
-          <div id="mid">
-            {inc.has("sum") && (
-              <div className="var-g">
-                <div className="gh">
-                  <span className="t-overline">Resumen</span>
-                </div>
-                <div className="var-exp">{renderBullet("sum")}</div>
-              </div>
-            )}
-
-            {exps.length > 0 && (
-              <div className="var-g">
-                <div className="gh">
-                  <span className="t-overline">Experiencia</span>
-                  <span className="n">las fechas vienen del master</span>
-                </div>
-                {exps.map((e) => (
-                  <div className="var-exp" data-exp={e.id} key={e.id}>
-                    <div className="var-eh">
-                      <span className="tt">{e.tt}</span>
-                      <span className="org">
-                        {e.org} · {e.dates}
-                      </span>
-                    </div>
-                    {bulletsOf(e, inc, order).map((id) => renderBullet(id))}
+          {!isEmpty && (
+            <div id="mid">
+              {summaryItems.length > 0 && (
+                <div className="var-g">
+                  <div className="gh">
+                    <span className="t-overline">Resumen</span>
                   </div>
-                ))}
-              </div>
-            )}
-
-            {sks.length > 0 && (
-              <div className="var-g">
-                <div className="gh">
-                  <span className="t-overline">Habilidades</span>
+                  <div className="var-exp">{summaryItems.map((s) => renderBullet(s))}</div>
                 </div>
-                <div className="var-chips">
-                  {sks.map((s) => (
-                    <span className="c-chip" key={s.id}>
-                      <b>{s.g}</b> {s.tx.split(",").length} items
-                      <button type="button" data-out={s.id} title="quitar" onClick={() => removeInc(s.id)}>
-                        ×
-                      </button>
-                    </span>
+              )}
+
+              {workItems.length > 0 && (
+                <div className="var-g">
+                  <div className="gh">
+                    <span className="t-overline">Experiencia</span>
+                    <span className="n">las fechas vienen del master</span>
+                  </div>
+                  {workItems.map((w) => (
+                    <div className="var-exp" data-exp={w.item_id} key={w.id}>
+                      <div className="var-eh">
+                        <span className="tt">{S(w.data, "title")}</span>
+                        <span className="org">
+                          {[S(w.data, "company"), S(w.data, "dates")].filter(Boolean).join(" · ")}
+                        </span>
+                        <span className="bacts" style={{ marginLeft: "auto", display: "flex", gap: "1px" }}>
+                          <button
+                            type="button"
+                            data-a="out"
+                            title="quitar el rol (y sus viñetas) de la variante"
+                            onClick={() => removeItem(w.id)}
+                            style={{ font: "400 11px/1 var(--font-mono)", color: "var(--text-subtle)", padding: "4px 6px" }}
+                          >
+                            ×
+                          </button>
+                        </span>
+                      </div>
+                      {bulletsForWork(w).map((b) => renderBullet(b, w))}
+                    </div>
                   ))}
                 </div>
-              </div>
-            )}
+              )}
 
-            {pjs.length > 0 && (
-              <div className="var-g">
-                <div className="gh">
-                  <span className="t-overline">Proyectos</span>
-                </div>
-                <div className="var-exp">{pjs.map((p) => renderBullet(p.id))}</div>
-              </div>
-            )}
-
-            {eds.length > 0 && (
-              <div className="var-g">
-                <div className="gh">
-                  <span className="t-overline">Educación</span>
-                </div>
-                <div className="var-exp">
-                  {eds.map((d) => (
-                    <div className="var-b" data-b={d.id} key={d.id}>
-                      <span className="grip" aria-hidden="true">
-                        ⠿
-                      </span>
-                      <span className="tx">
-                        {d.tt} — {d.org} · {d.dates}
-                      </span>
-                      <span className="bacts">
-                        <button type="button" data-a="out" title="quitar de la variante" onClick={() => removeInc(d.id)}>
+              {skillItems.length > 0 && (
+                <div className="var-g">
+                  <div className="gh">
+                    <span className="t-overline">Habilidades</span>
+                  </div>
+                  <div className="var-chips">
+                    {skillItems.map((s) => (
+                      <span className="c-chip" key={s.id}>
+                        <b>{S(s.data, "group")}</b> {S(s.data, "items").split(",").filter(Boolean).length} items
+                        <button type="button" data-out={s.item_id} title="quitar" onClick={() => removeItem(s.id)}>
                           ×
                         </button>
                       </span>
-                    </div>
-                  ))}
+                    ))}
+                  </div>
                 </div>
-              </div>
-            )}
-          </div>
+              )}
 
-          <div className="var-empty" id="midEmpty" hidden={inc.size > 0}>
+              {projectItems.length > 0 && (
+                <div className="var-g">
+                  <div className="gh">
+                    <span className="t-overline">Proyectos</span>
+                  </div>
+                  <div className="var-exp">{projectItems.map((p) => renderBullet(p))}</div>
+                </div>
+              )}
+
+              {eduItems.length > 0 && (
+                <div className="var-g">
+                  <div className="gh">
+                    <span className="t-overline">Educación</span>
+                  </div>
+                  <div className="var-exp">
+                    {eduItems.map((d) => (
+                      <div className="var-b" data-b={d.id} key={d.id}>
+                        <span className="grip" aria-hidden="true">
+                          ⠿
+                        </span>
+                        <span className="tx">
+                          {[S(d.data, "degree"), S(d.data, "institution"), S(d.data, "dates")]
+                            .filter(Boolean)
+                            .join(" · ")}
+                        </span>
+                        <span className="bacts">
+                          <button
+                            type="button"
+                            data-a="out"
+                            title="quitar de la variante"
+                            onClick={() => removeItem(d.id)}
+                          >
+                            ×
+                          </button>
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          <div className="var-empty" id="midEmpty" hidden={!isEmpty}>
             <span className="t-overline">Variante vacía</span>
             Elige del master qué cuenta esta variante.
             <br />
@@ -873,7 +1265,11 @@ export function EditorVarianteScreen({ variantId = "backend-fintech" }: { varian
           </div>
           <div className="pv-scroll" ref={pvScrollRef}>
             <div className="pv-fit c-xray" id="xray" data-mode={mode}>
-              <div className="c-xray__doc pv-doc" id="pvDoc" style={{ height: docHeight ? docHeight + "px" : undefined }}>
+              <div
+                className="c-xray__doc pv-doc"
+                id="pvDoc"
+                style={{ height: docHeight ? docHeight + "px" : undefined }}
+              >
                 <div className="pv-pagewrap" style={{ transform: `scale(${scale})`, width: "816px" }}>
                   {pages.map((html, i) => (
                     <div className={"pv-page" + (i >= 2 ? " pv-p3" : "")} key={i}>
