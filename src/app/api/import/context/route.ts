@@ -4,6 +4,7 @@ import { runImport } from "@/lib/extract/pipeline";
 import { geminiExtractor } from "@/lib/extract/llm";
 import { fetchGithubUser } from "@/lib/extract/github";
 import { fetchViaJina } from "@/lib/extract/web";
+import { geminiApiKey } from "@/lib/extract/llm";
 import { ensureMaster, persistImport } from "@/lib/db/queries";
 
 // Esperar el I/O del LLM no cuenta como Active CPU en Fluid Compute → timeout
@@ -27,7 +28,7 @@ export async function POST(req: Request) {
   if (text.length < 20) {
     return NextResponse.json({ error: "Pega un poco más de texto (al menos un par de frases)." }, { status: 400 });
   }
-  if (!process.env.GEMINI_API_KEY) {
+  if (!geminiApiKey()) {
     return NextResponse.json({ error: "Falta configurar GEMINI_API_KEY en el servidor." }, { status: 503 });
   }
 

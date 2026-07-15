@@ -20,8 +20,15 @@ export type Extractor = (rawText: string) => Promise<Extraction>;
 
 const MODEL = "gemini-flash-latest";
 
+/** La clave que se usa DE VERDAD. Se pasa explícita al provider (si no, el
+ *  provider de Google leería GOOGLE_GENERATIVE_AI_API_KEY por defecto y la
+ *  GEMINI_API_KEY quedaría sin usar). Se acepta cualquiera de las dos. */
+export function geminiApiKey(): string | undefined {
+  return process.env.GEMINI_API_KEY || process.env.GOOGLE_GENERATIVE_AI_API_KEY;
+}
+
 function google() {
-  const apiKey = process.env.GEMINI_API_KEY;
+  const apiKey = geminiApiKey();
   if (!apiKey) throw new Error("Falta GEMINI_API_KEY");
   return createGoogleGenerativeAI({ apiKey })(MODEL);
 }
