@@ -14,7 +14,7 @@ export async function POST(req: Request) {
   const { data: { user } } = await sb.auth.getUser();
   if (!user) return NextResponse.json({ error: "Sesión requerida." }, { status: 401 });
 
-  let body: { stagedId?: string; verifiedOnly?: boolean };
+  let body: { stagedId?: string; verifiedOnly?: boolean; reject?: boolean };
   try {
     body = await req.json();
   } catch {
@@ -22,6 +22,16 @@ export async function POST(req: Request) {
   }
 
   try {
+    if (body.stagedId && body.reject) {
+      // Descartar: no se borra, se marca. (La papelera de 30 días es una mejora.)
+      const { error } = await sb
+        .from("staged_items")
+        .update({ status: "rejected" })
+        .eq("id", body.stagedId)
+        .eq("user_id", user.id);
+      if (error) throw new Error(error.message);
+      return NextResponse.json({ rejected: 1 });
+    }
     if (body.stagedId) {
       const id = await promoteStaged(sb, user.id, body.stagedId);
       return NextResponse.json({ promoted: 1, itemId: id });

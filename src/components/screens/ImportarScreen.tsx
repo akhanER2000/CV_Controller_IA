@@ -72,20 +72,15 @@ const PLACEHOLDER = `Pega lo que tengas. Sin formato. Sin orden.
 
 Por ejemplo:  «Soy ingeniero civil en computación, titulado en la UNAB. Trabajé tres años en una fintech haciendo APIs de pago… mi portfolio es https://misitio.cl y mi github es github.com/usuario. Adjunto también mi CV viejo.»`;
 
-/* Recuento final del mock. finTotal se DERIVA de la grilla (la suma de todo lo
-   que no son duplicados), en lugar de un 61 hardcodeado suelto: cuadra con el
-   43/8/9 del handoff (52 verificados/parciales + 9 sin evidencia = 61). */
-const FIN_CELLS: Array<{ v: number; k: string }> = [
-  { v: 4, k: "experiencias" },
-  { v: 25, k: "viñetas de logro" },
-  { v: 23, k: "skills" },
-  { v: 6, k: "proyectos" },
-  { v: 3, k: "certificaciones" },
-  { v: 3, k: "posibles duplicados" },
-];
-const FIN_DUP_KEY = "posibles duplicados";
-const FIN_NOEV = 9;
-const FIN_TOTAL = FIN_CELLS.filter((c) => c.k !== FIN_DUP_KEY).reduce((s, c) => s + c.v, 0);
+/* La respuesta real de /api/import/context. El "fin" se renderiza de estos
+   conteos REALES (no de una grilla de maqueta): total y niveles de evidencia. */
+interface ImportResponse {
+  sourceId: string;
+  staged: number;
+  counts: { verified: number; partial: number; none: number; api: number; total: number };
+  sources: string[];
+  linkedin: { url: string; slug?: string }[];
+}
 
 /* Detección de links en vivo — misma regex y clasificación del diseño. */
 const URL_RE = /(?:https?:\/\/)?(?:www\.)?([a-z0-9-]+(?:\.[a-z0-9-]+)+)(\/[^\s,;)»"']*)?/gi;
@@ -141,6 +136,8 @@ export function ImportarScreen() {
   const [isDrag, setIsDrag] = useState(false);
   const [screen, setScreen] = useState<Screen>("idle");
   const [rows, setRows] = useState<LogRow[]>([]);
+  const [result, setResult] = useState<ImportResponse | null>(null);
+  const [err, setErr] = useState<string | null>(null);
 
   // ── ceremonia de entrada ──────────────────────────────────────────────────
   const ovRef = useRef<HTMLSpanElement>(null);
@@ -270,10 +267,6 @@ export function ImportarScreen() {
     if (M) M.counter(el, to, { dur });
     else el.textContent = String(to);
   }
-  function bump(n: number) {
-    itemCount.current += n;
-    setCount(itemCount.current, 700);
-  }
   function logRow(src: string, det: string, st: RowState): number {
     const id = ++rowId.current;
     setRows((prev) => [...prev, { id, src, det, st }]);
@@ -308,71 +301,56 @@ export function ImportarScreen() {
     errResolve.current = null;
   }
 
-  async function runIngest(fail = false) {
+  async function runIngest() {
     if (running.current) return;
     running.current = true;
+    setErr(null);
 
     itemCount.current = 0;
     if (countRef.current) countRef.current.textContent = "0";
     setRows([]);
     revealed.current.clear();
+    setResult(null);
     setScreen("ingest");
     window.CorpusAurora?.setState("active");
 
+    // Log HONESTO: qué se está leyendo, sin cifras inventadas por fuente. El
+    // total real llega en la respuesta (no hay SSE por-fuente todavía).
     const src = detectSources(text);
-    const hasGh = src.some((s) => s.kind === "github");
-    const hasWeb = src.some((s) => s.kind === "web");
-    const w = countWords(text);
-
-    let id = logRow("Texto pegado", "leyendo…", "run");
-    await wait(1400);
-    setRow(id, { st: "ok", det: (w ? w.toLocaleString("es-CL") : "2.147") + " palabras · 3 experiencias, 12 skills" });
-    bump(19);
-
-    if (hasGh) {
-      id = logRow("github.com/dgatica", "consultando la API…", "run");
-      await wait(1700);
-      setRow(id, { st: "ok", det: "12 repos públicos · 3 con actividad sostenida" });
-      bump(9);
+    const rowIds: number[] = [logRow("Texto pegado", "leyendo…", "run")];
+    for (const s of src) {
+      if (s.kind === "github") rowIds.push(logRow(s.label, "consultando la API pública…", "run"));
+      else if (s.kind === "web") rowIds.push(logRow(s.label, "leyendo el portfolio…", "run"));
+      // linkedin: no se lee desde el servidor (se avisa en el volcado)
     }
-    if (hasWeb) {
-      id = logRow("dgatica.cl", "leyendo el portfolio…", "run");
-      await wait(1600);
-      setRow(id, { st: "ok", det: "6 proyectos, 2 con métricas" });
-      bump(12);
+    const idAI = logRow("Extrayendo con evidencia", "la IA estructura y cita el origen…", "run");
+
+    try {
+      const res = await fetch("/api/import/context", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text }),
+      });
+      const data = (await res.json()) as ImportResponse & { error?: string };
+      if (!res.ok) throw new Error(data.error || "No se pudo extraer.");
+
+      for (const id of rowIds) setRow(id, { st: "ok" });
+      setRow(idAI, { st: "ok", det: `${data.counts.total} items · ${data.counts.verified} con evidencia literal` });
+      itemCount.current = data.counts.total;
+      setCount(data.counts.total, 600);
+      setResult(data);
+
+      await wait(700);
+      window.CorpusAurora?.setState("calm");
+      setScreen("done");
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "No se pudo extraer.");
+      setRows((prev) => prev.map((r) => (r.st === "run" ? { ...r, st: "err", det: "detenido" } : r)));
+      window.CorpusAurora?.setState("calm");
+      setScreen("idle");
+    } finally {
+      running.current = false;
     }
-
-    const fileList: Array<{ name: string }> = files.length ? files : [{ name: "CV_2023.pdf" }];
-    for (const f of fileList) {
-      id = logRow(f.name, "extrayendo texto…", "run");
-      await wait(1300);
-      if (fail && f.name.toLowerCase().endsWith(".pdf")) {
-        setRow(id, { st: "err", det: "la página 2 es una imagen escaneada: no hay texto que leer", errActs: true });
-        // la promesa espera la decisión del usuario (Continuar / Reintentar).
-        await new Promise<void>((res) => {
-          errResolve.current = res;
-        });
-        bump(6);
-      } else {
-        setRow(id, { st: "ok", det: "2 páginas de texto · 15 items" });
-        bump(15);
-      }
-    }
-
-    id = logRow("Comparando versiones", "buscando duplicados…", "run");
-    await wait(1300);
-    setRow(id, { st: "ok", det: "3 posibles duplicados — los resolverás tú" });
-
-    // cuadre del contador con el total real de la extracción (derivado de la grilla).
-    if (itemCount.current !== FIN_TOTAL) {
-      itemCount.current = FIN_TOTAL;
-      setCount(FIN_TOTAL, 500);
-    }
-
-    await wait(900);
-    window.CorpusAurora?.setState("calm");
-    setScreen("done");
-    running.current = false;
   }
 
   return (
@@ -572,6 +550,12 @@ export function ImportarScreen() {
             </Link>
           </div>
 
+          {err ? (
+            <p className="imp-note" role="alert" style={{ color: "var(--danger)" }}>
+              {err}
+            </p>
+          ) : null}
+
           <p className="imp-note" data-reveal style={{ "--d": "880ms" } as React.CSSProperties}>
             <span className="c-divider" style={{ "--d": "900ms" } as React.CSSProperties} />
             La IA no inventa: cada dato citará el fragmento del que salió. Tú confirmas item por item antes de que
@@ -646,20 +630,26 @@ export function ImportarScreen() {
           <div className="c-panel fin-panel" id="finPanel" ref={finPanelRef}>
             <div className="fin-head">
               <span className="n" id="finCount">
-                {FIN_TOTAL}
+                {result?.counts.total ?? 0}
               </span>
               <span className="l">items esperan tu revisión</span>
             </div>
             <div className="fin-grid">
-              {FIN_CELLS.map((c) => (
-                <div className="fin-cell" key={c.k}>
-                  <div className="v">{c.v}</div>
-                  <div className="k">{c.k}</div>
-                </div>
-              ))}
+              <div className="fin-cell">
+                <div className="v">{result?.counts.verified ?? 0}</div>
+                <div className="k">con evidencia literal</div>
+              </div>
+              <div className="fin-cell">
+                <div className="v">{result?.counts.partial ?? 0}</div>
+                <div className="k">evidencia parcial</div>
+              </div>
+              <div className="fin-cell">
+                <div className="v">{result?.counts.api ?? 0}</div>
+                <div className="k">dato duro (GitHub)</div>
+              </div>
             </div>
             <div className="fin-noev">
-              <span className="c-ver c-ver--none">{FIN_NOEV} sin evidencia</span>
+              <span className="c-ver c-ver--none">{result?.counts.none ?? 0} sin evidencia</span>
               <span>quedan marcados — la revisión te los pondrá delante, no debajo.</span>
             </div>
           </div>
