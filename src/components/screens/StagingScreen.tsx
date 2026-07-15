@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { useT } from "@/lib/i18n";
 import "./staging.css";
 
 /* ============================================================================
@@ -29,10 +30,10 @@ interface Item {
   parent_staged_id: string | null;
 }
 
-const VER: Record<Ver, [string, string]> = {
-  ok: ["c-ver--ok", "verificado"],
-  partial: ["c-ver--partial", "parcial"],
-  none: ["c-ver--none", "sin evidencia"],
+const VER: Record<Ver, string> = {
+  ok: "c-ver--ok",
+  partial: "c-ver--partial",
+  none: "c-ver--none",
 };
 
 const s = (o: Record<string, unknown>, k: string) => String(o[k] ?? "");
@@ -60,9 +61,10 @@ function textOf(it: Item): string {
     default: return JSON.stringify(d);
   }
 }
-const sourceOf = (it: Item) => s(it.data, "_source") || "texto pegado";
+const sourceOf = (it: Item) => s(it.data, "_source");
 
 export function StagingScreen() {
+  const t = useT();
   const [items, setItems] = useState<Item[]>([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
@@ -78,10 +80,10 @@ export function StagingScreen() {
     try {
       const res = await fetch("/api/staging");
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "No se pudo leer el staging.");
+      if (!res.ok) throw new Error(data.error || t("staging.errRead"));
       setItems(data.items as Item[]);
     } catch (e) {
-      setErr(e instanceof Error ? e.message : "Error");
+      setErr(e instanceof Error ? e.message : t("staging.errGeneric"));
     } finally {
       setLoading(false);
     }
@@ -117,11 +119,11 @@ export function StagingScreen() {
         body: JSON.stringify({ stagedId: id, reject }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "No se pudo.");
+      if (!res.ok) throw new Error(data.error || t("staging.errAccept"));
       remove(id);
       reject ? setDis((n) => n + 1) : setAcc((n) => n + (data.promoted ?? 1));
     } catch (e) {
-      setErr(e instanceof Error ? e.message : "Error");
+      setErr(e instanceof Error ? e.message : t("staging.errGeneric"));
     } finally {
       setBusy((p) => {
         const n = new Set(p);
@@ -140,11 +142,11 @@ export function StagingScreen() {
         body: JSON.stringify({ verifiedOnly: true }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "No se pudo.");
+      if (!res.ok) throw new Error(data.error || t("staging.errAccept"));
       setAcc((n) => n + (data.promoted ?? 0));
       await load();
     } catch (e) {
-      setErr(e instanceof Error ? e.message : "Error");
+      setErr(e instanceof Error ? e.message : t("staging.errGeneric"));
     } finally {
       setBusy((p) => {
         const n = new Set(p);
@@ -172,10 +174,10 @@ export function StagingScreen() {
     return (
       <span className="stg-acts">
         <button className="ok" onClick={() => act(id)} disabled={b}>
-          ✓ aceptar
+          {t("staging.accept")}
         </button>
         <button className="no" onClick={() => act(id, true)} disabled={b}>
-          × descartar
+          {t("staging.discard")}
         </button>
       </span>
     );
@@ -188,15 +190,15 @@ export function StagingScreen() {
       <>
         <div className={`${cls} stg-unit`} data-id={it.id} data-ver={v}>
           <span className="tx">{textOf(it)}</span>
-          <span className={"c-ver " + VER[v][0]}>{VER[v][1]}</span>
+          <span className={"c-ver " + VER[v]}>{t(`staging.ver_${v}`)}</span>
           <button className="stg-orig" onClick={() => toggleFrag(it.id)}>
-            {openFrag.has(it.id) ? "origen ▴" : "origen ▾"}
+            {openFrag.has(it.id) ? `${t("staging.source")} ▴` : `${t("staging.source")} ▾`}
           </button>
           <Acts id={it.id} />
         </div>
         <div className={"stg-frag" + (v === "none" ? " miss" : "") + (openFrag.has(it.id) ? " open" : "")}>
-          <span className="from">{sourceOf(it)}</span>
-          {it.evidence_snippet ?? "Sin fragmento de origen — revísalo antes de aceptar."}
+          <span className="from">{sourceOf(it) || t("staging.sourceFallback")}</span>
+          {it.evidence_snippet ?? t("staging.noFragment")}
         </div>
       </>
     );
@@ -212,7 +214,7 @@ export function StagingScreen() {
             </Link>
             <span style={{ width: "1px", height: "18px", background: "var(--border-strong)" }} />
             <span style={{ font: "500 var(--fs-micro)/1 var(--font-mono)", letterSpacing: ".14em", color: "var(--text-muted)" }}>
-              INGESTA · PASO 2 DE 2 — REVISIÓN
+              {t("staging.microStep")}
             </span>
           </div>
           <div className="hd-right">
@@ -227,34 +229,34 @@ export function StagingScreen() {
 
       <div className="stg-sub" data-screen-label="staging-cabecera">
         <div className="c-container">
-          <span className="stg-title">Staging</span>
+          <span className="stg-title">{t("staging.title")}</span>
           <div className="stg-nums">
             <span>
-              <b>{pend}</b> pendientes
+              <b>{pend}</b> {t("staging.pending")}
             </span>
             <span className="stg-bar" aria-hidden="true">
               <span className="ok" style={{ width: total ? (acc / total) * 100 + "%" : "0%" }} />
               <span className="out" style={{ width: total ? (dis / total) * 100 + "%" : "0%" }} />
             </span>
             <span>
-              <b className="t-accent">{acc}</b> al master
+              <b className="t-accent">{acc}</b> {t("staging.toMaster")}
             </span>
             <span>
-              <b>{dis}</b> descartados
+              <b>{dis}</b> {t("staging.discarded")}
             </span>
           </div>
-          <div className="stg-filter" role="group" aria-label="Filtrar por verificación">
+          <div className="stg-filter" role="group" aria-label={t("staging.filterAria")}>
             <button aria-pressed={filter === "all"} onClick={() => setFilter("all")}>
-              todos
+              {t("staging.filterAll")}
             </button>
             <button aria-pressed={filter === "ok"} onClick={() => setFilter("ok")}>
-              ● verificado <span>{counts.ok}</span>
+              ● {t("staging.filterVerified")} <span>{counts.ok}</span>
             </button>
             <button aria-pressed={filter === "partial"} onClick={() => setFilter("partial")}>
-              ◐ parcial <span>{counts.partial}</span>
+              ◐ {t("staging.filterPartial")} <span>{counts.partial}</span>
             </button>
             <button aria-pressed={filter === "none"} onClick={() => setFilter("none")}>
-              ⚠ sin evidencia <span>{counts.none}</span>
+              ⚠ {t("staging.filterNone")} <span>{counts.none}</span>
             </button>
           </div>
         </div>
@@ -263,7 +265,7 @@ export function StagingScreen() {
       <main className="stg-main c-wall" data-screen-label="staging">
         <div className="c-container">
           {loading ? (
-            <p className="stg-lead">Leyendo tu staging…</p>
+            <p className="stg-lead">{t("staging.loading")}</p>
           ) : err ? (
             <p className="stg-lead" role="alert" style={{ color: "var(--danger)" }}>
               {err}
@@ -272,11 +274,13 @@ export function StagingScreen() {
 
           <div className="stg-lead" hidden={showEmpty || loading}>
             <p>
-              Nada de esto está en tu master todavía. Cada item cita su origen — <b>ábrelo</b> antes de aceptar lo que
-              no te suene. Los lotes solo tocan lo <b>verificado</b>: lo demás pasa por tus ojos, uno a uno.
+              {t("staging.lead1")}<b>{t("staging.leadOpen")}</b>{t("staging.lead2")}<b>{t("staging.leadVerified")}</b>
+              {t("staging.lead3")}
             </p>
             <button className="c-btn c-btn--patina" onClick={acceptVerified} disabled={busy.has("__batch__") || !counts.ok}>
-              {busy.has("__batch__") ? "Aceptando…" : `Aceptar todo lo verificado (${counts.ok})`}
+              {busy.has("__batch__")
+                ? t("staging.batchAccepting")
+                : t("staging.batchAccept").replace("{n}", String(counts.ok))}
             </button>
           </div>
 
@@ -284,7 +288,7 @@ export function StagingScreen() {
             {group("basics").length + group("summary").length > 0 && (
               <section className="stg-g">
                 <div className="stg-gh">
-                  <span className="t-overline">Perfil</span>
+                  <span className="t-overline">{t("staging.groupProfile")}</span>
                 </div>
                 <hr className="c-divider" />
                 {group("basics").map((it) => (
@@ -299,7 +303,7 @@ export function StagingScreen() {
             {group("work").length > 0 && (
               <section className="stg-g" data-g="exp">
                 <div className="stg-gh">
-                  <span className="t-overline">Experiencia</span>
+                  <span className="t-overline">{t("staging.groupExperience")}</span>
                 </div>
                 <hr className="c-divider" />
                 {group("work").map((w) => (
@@ -316,7 +320,7 @@ export function StagingScreen() {
             {group("skill").length > 0 && (
               <section className="stg-g" data-g="sk">
                 <div className="stg-gh">
-                  <span className="t-overline">Skills</span>
+                  <span className="t-overline">{t("staging.groupSkills")}</span>
                 </div>
                 <hr className="c-divider" />
                 {group("skill").map((it) => (
@@ -328,7 +332,7 @@ export function StagingScreen() {
             {group("project").length > 0 && (
               <section className="stg-g" data-g="pj">
                 <div className="stg-gh">
-                  <span className="t-overline">Proyectos — un CV no es un volcado de GitHub: elige</span>
+                  <span className="t-overline">{t("staging.groupProjects")}</span>
                 </div>
                 <hr className="c-divider" />
                 {group("project").map((it) => (
@@ -340,7 +344,7 @@ export function StagingScreen() {
             {group("education").length > 0 && (
               <section className="stg-g" data-g="ct">
                 <div className="stg-gh">
-                  <span className="t-overline">Educación</span>
+                  <span className="t-overline">{t("staging.groupEducation")}</span>
                 </div>
                 <hr className="c-divider" />
                 {group("education").map((it) => (
@@ -352,17 +356,16 @@ export function StagingScreen() {
 
           <div className={"stg-empty" + (showEmpty ? " show" : "")}>
             <div className="mark">✓</div>
-            <h2>Staging limpio.</h2>
+            <h2>{t("staging.emptyTitle")}</h2>
             <p>
-              <span className="t-num">{acc}</span> items entraron a tu master, cada uno con su origen. Lo descartado no
-              se borra: queda en la papelera de la ingesta.
+              <span className="t-num">{acc}</span> {t("staging.emptyBody")}
             </p>
             <span className="c-forge">
               <Link className="c-btn c-btn--forge c-btn--lg" href="/app/master">
-                Ver el master →
+                {t("staging.emptyCta")}
               </Link>
             </span>
-            <p className="fine">Siguiente paso razonable: crear tu primera variante para un aviso concreto.</p>
+            <p className="fine">{t("staging.emptyFine")}</p>
           </div>
         </div>
       </main>

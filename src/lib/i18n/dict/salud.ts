@@ -13,6 +13,8 @@ export const salud = {
     "salud.title": "Solo lo que puede fallar.",
     "salud.tag.source": "[fuente]",
     "salud.tag.criterion": "[criterio]",
+    // Toggle de la cita en cada hallazgo (la flecha ▾/▴ va aparte, es decorativa).
+    "salud.source": "fuente",
     "salud.lead.pre": "Cada hallazgo trae su fuente — ",
     "salud.lead.mid": " es evidencia citada, ",
     "salud.lead.post":
@@ -90,6 +92,8 @@ export const salud = {
     "salud.title": "Only what can fail.",
     "salud.tag.source": "[source]",
     "salud.tag.criterion": "[criterion]",
+    // Citation toggle on each finding (the ▾/▴ arrow stays separate, decorative).
+    "salud.source": "source",
     "salud.lead.pre": "Every finding carries its source — ",
     "salud.lead.mid": " is cited evidence, ",
     "salud.lead.post":

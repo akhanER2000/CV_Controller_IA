@@ -3,9 +3,12 @@
 import { Fragment, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { Aurora } from "@/components/Aurora";
+import { useT, useLang } from "@/lib/i18n";
 import { useBoot } from "@/lib/corpus/runtime";
 import { supabaseEnabled } from "@/lib/supabase/config";
 import "./dashboard.css";
+
+type T = (key: string) => string;
 
 /* ============================================================================
    Dashboard — porte de corpus-design/04-pantallas/dashboard.html
@@ -72,22 +75,27 @@ const DEMO: DashData = {
 };
 
 /* ── Tiempo relativo honesto (un dato con fuente: el reloj del sistema). ─────── */
-function rel(iso: string): string {
+function rel(iso: string, t: T): string {
   const then = new Date(iso).getTime();
   if (!Number.isFinite(then)) return "";
   const d = Math.max(0, Date.now() - then);
   const day = 86_400_000;
-  if (d < 60_000) return "recién";
-  if (d < 3_600_000) return `hace ${Math.round(d / 60_000)} min`;
-  if (d < day) return `hace ${Math.round(d / 3_600_000)} h`;
-  if (d < 7 * day) return `hace ${Math.round(d / day)} día${Math.round(d / day) === 1 ? "" : "s"}`;
-  if (d < 30 * day) return `hace ${Math.round(d / (7 * day))} sem`;
-  if (d < 365 * day) return `hace ${Math.round(d / (30 * day))} mes${Math.round(d / (30 * day)) === 1 ? "" : "es"}`;
-  return `hace ${Math.round(d / (365 * day))} año${Math.round(d / (365 * day)) === 1 ? "" : "s"}`;
+  const plur = (base: string, n: number) =>
+    t(n === 1 ? `${base}.one` : `${base}.other`).replace("{n}", String(n));
+  if (d < 60_000) return t("dashboard.rel.now");
+  if (d < 3_600_000) return t("dashboard.rel.min").replace("{n}", String(Math.round(d / 60_000)));
+  if (d < day) return t("dashboard.rel.hour").replace("{n}", String(Math.round(d / 3_600_000)));
+  if (d < 7 * day) return plur("dashboard.rel.day", Math.round(d / day));
+  if (d < 30 * day) return t("dashboard.rel.week").replace("{n}", String(Math.round(d / (7 * day))));
+  if (d < 365 * day) return plur("dashboard.rel.month", Math.round(d / (30 * day)));
+  return plur("dashboard.rel.year", Math.round(d / (365 * day)));
 }
 
-const kindLabel = (kind: string): string =>
-  ({ paste: "texto pegado", pdf: "PDF", docx: "DOCX", image: "captura", url: "portfolio", github: "GitHub", manual: "manual" } as Record<string, string>)[kind] ?? kind;
+const kindLabel = (kind: string, t: T): string => {
+  const key = `dashboard.kind.${kind}`;
+  const label = t(key);
+  return label === key ? kind : label; // clave desconocida → cae al kind crudo
+};
 
 interface MasterItemLite {
   kind: string;
@@ -96,54 +104,61 @@ interface MasterItemLite {
 }
 
 /** Hallazgos de salud DERIVADOS de tus propios items — nada inventado. */
-function deriveFindings(items: MasterItemLite[]): Finding[] {
+function deriveFindings(items: MasterItemLite[], t: T): Finding[] {
   const str = (o: Record<string, unknown>, k: string) => String(o[k] ?? "");
   const noNum = items.filter((i) => i.kind === "bullet" && !/\d/.test(str(i.data, "text"))).length;
   const noDates = items.filter((i) => i.kind === "work" && !str(i.data, "dates").trim()).length;
   const noEv = items.filter((i) => i.kind === "skill" && !i.evidenceVerified).length;
+  const pick = (base: string, n: number) => t(n === 1 ? `${base}.one` : `${base}.other`);
   const out: Finding[] = [];
-  if (noNum) out.push({ k: String(noNum), text: `viñeta${noNum === 1 ? "" : "s"} sin ninguna cifra — ¿cuánto? ¿cuántos? ¿en cuánto tiempo?`, anchor: "sin-cifra" });
-  if (noDates) out.push({ k: String(noDates), text: `rol${noDates === 1 ? "" : "es"} sin fechas — un vacío que el reclutador nota`, anchor: "sin-fechas" });
-  if (noEv) out.push({ k: String(noEv), text: `skill${noEv === 1 ? "" : "s"} sin evidencia — respáldala o quítala`, anchor: "sin-evidencia" });
+  if (noNum) out.push({ k: String(noNum), text: pick("dashboard.findings.noNum", noNum), anchor: "sin-cifra" });
+  if (noDates) out.push({ k: String(noDates), text: pick("dashboard.findings.noDates", noDates), anchor: "sin-fechas" });
+  if (noEv) out.push({ k: String(noEv), text: pick("dashboard.findings.noEv", noEv), anchor: "sin-evidencia" });
   return out;
 }
 
 /* Fila de una variante. Enlace estirado (navega a variantes) + botón PDF hermano
    por encima (descarga sin entrar). Auto-placement del grid: nm→pdf→st→obj. */
 function VariantRow({ v }: { v: VariantView }) {
+  const t = useT();
   return (
     <div className="db-vrow" style={{ position: "relative" }}>
       <Link
         href="/app/variantes"
-        aria-label={`${v.nm} — objetivo: ${v.obj}`}
+        aria-label={t("dashboard.variant.aria").replace("{nm}", v.nm).replace("{obj}", v.obj)}
         style={{ position: "absolute", inset: 0, zIndex: 0 }}
       />
       <span className="nm">
-        {v.outdated ? <span className="c-pulse-dot" title="desactualizada" /> : null}
+        {v.outdated ? <span className="c-pulse-dot" title={t("dashboard.variant.outdatedDot")} /> : null}
         {v.nm}
       </span>
       <button
         type="button"
         className="pdf"
-        title="Descargar el PDF sin entrar"
+        title={t("dashboard.variant.pdfTitle")}
         style={{ position: "relative", zIndex: 1 }}
         onClick={() => {
           /* PDF de la variante: pendiente del render por-variante. */
         }}
       >
-        PDF ↓
+        {t("dashboard.variant.pdf")}
       </button>
       <span className="st">
-        {v.outdated ? <span className="old">desactualizada · el master cambió</span> : "al día"}
+        {v.outdated ? <span className="old">{t("dashboard.variant.outdated")}</span> : t("dashboard.variant.upToDate")}
         <br />
         {v.touch}
       </span>
-      <span className="obj">objetivo: {v.obj}</span>
+      <span className="obj">
+        {t("dashboard.variant.target")}
+        {v.obj}
+      </span>
     </div>
   );
 }
 
 export function DashboardScreen() {
+  const t = useT();
+  const { lang } = useLang();
   const [data, setData] = useState<DashData | null>(supabaseEnabled ? null : DEMO);
   const [loading, setLoading] = useState(supabaseEnabled);
 
@@ -164,21 +179,25 @@ export function DashboardScreen() {
         const summary = m.summary ?? { masterItems: items.length, outdatedVariants: 0, pendingStaging: 0 };
         const variants = ((v.variants ?? []) as { name: string; targetTitle: string | null; updatedAt: string; outdated: boolean }[]).map((x) => ({
           nm: x.name,
-          obj: x.targetTitle || "sin objetivo definido",
-          touch: `tocada ${rel(x.updatedAt)}`,
+          obj: x.targetTitle || t("dashboard.variant.noTarget"),
+          touch: t("dashboard.variant.touched").replace("{rel}", rel(x.updatedAt, t)),
           outdated: x.outdated,
         }));
+        const numLocale = lang === "en" ? "en-US" : "es-CL";
         const sources = ((s.sources ?? []) as { kind: string; originalName: string | null; sourceUrl: string | null; status: string; rawTextLength: number; createdAt: string }[]).map((x) => ({
-          nm: x.originalName || x.sourceUrl || kindLabel(x.kind),
-          factsLines: [`${kindLabel(x.kind)} · ${x.rawTextLength.toLocaleString("es-CL")} caracteres`, `leída ${rel(x.createdAt)}`],
-          quietText: x.status === "extracted" ? "extraída — revisa el staging" : "fuente estática",
+          nm: x.originalName || x.sourceUrl || kindLabel(x.kind, t),
+          factsLines: [
+            `${kindLabel(x.kind, t)} · ${x.rawTextLength.toLocaleString(numLocale)} ${t("dashboard.source.chars")}`,
+            t("dashboard.source.read").replace("{rel}", rel(x.createdAt, t)),
+          ],
+          quietText: x.status === "extracted" ? t("dashboard.source.extracted") : t("dashboard.source.static"),
         }));
         setData({
           masterItems: summary.masterItems ?? items.length,
           variants,
           outdated: summary.outdatedVariants ?? variants.filter((x) => x.outdated).length,
           sources,
-          findings: deriveFindings(items),
+          findings: deriveFindings(items, t),
           pendingStaging: summary.pendingStaging ?? 0,
         });
       } catch {
@@ -190,13 +209,21 @@ export function DashboardScreen() {
     return () => {
       active = false;
     };
-  }, []);
+    // Recarga al cambiar de idioma: los strings DERIVADOS del servidor (tocada
+    // {rel}, "leída {rel}", nº de caracteres con locale) se formatean con el `t`
+    // del closure, así que hay que reconstruirlos con el idioma nuevo. Los demás
+    // textos ya son reactivos porque salen de `t(...)` en el render. El resto de
+    // dependencias (`t`) cambia de identidad junto con `lang`.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lang]);
 
   const isEmpty = !!data && data.masterItems === 0 && data.variants.length === 0;
 
-  const suffix = data ? ` · master: ${data.masterItems} items · ${data.sources.length} fuentes` : "";
+  const suffix = data
+    ? t("dashboard.strip.suffix").replace("{n}", String(data.masterItems)).replace("{m}", String(data.sources.length))
+    : "";
   // SSR y primer render: fallback fijo. En cliente lo reescribe con la fecha real.
-  const [dateStr, setDateStr] = useState("Panel");
+  const [dateStr, setDateStr] = useState(t("nav.panel"));
 
   const bootRef = useBoot<HTMLElement>();
   const emptyRef = useRef<HTMLElement>(null);
@@ -205,12 +232,12 @@ export function DashboardScreen() {
     if (!data) return;
     try {
       const d = new Date();
-      const f = d.toLocaleDateString("es-CL", { weekday: "long", day: "numeric", month: "long" });
+      const f = d.toLocaleDateString(lang === "en" ? "en-US" : "es-CL", { weekday: "long", day: "numeric", month: "long" });
       setDateStr(f.charAt(0).toUpperCase() + f.slice(1) + suffix);
     } catch {
-      setDateStr(`Panel${suffix}`);
+      setDateStr(`${t("nav.panel")}${suffix}`);
     }
-  }, [suffix, data]);
+  }, [suffix, data, lang, t]);
 
   // Estado vacío: entrada C2 (enter) + boot del scope, cuando exista el runtime.
   useEffect(() => {
@@ -239,16 +266,16 @@ export function DashboardScreen() {
         </Link>
         <nav className="hd-nav">
           <Link href="/app" aria-current="page">
-            Panel
+            {t("nav.panel")}
           </Link>
-          <Link href="/app/master">Master</Link>
-          <Link href="/app/variantes">Variantes</Link>
-          <Link href="/app/fuentes">Fuentes</Link>
+          <Link href="/app/master">{t("nav.master")}</Link>
+          <Link href="/app/variantes">{t("nav.variantes")}</Link>
+          <Link href="/app/fuentes">{t("nav.fuentes")}</Link>
         </nav>
         <div className="hd-right">
           <Link href="/app/ajustes" className="hd-nav" style={{ display: "inline-flex" }}>
             <span style={{ font: "500 var(--fs-ui)/1 var(--font-sans)", color: "var(--text-muted)", padding: "9px 12px" }}>
-              Ajustes
+              {t("nav.ajustes")}
             </span>
           </Link>
           <div className="hd-lang">
@@ -269,7 +296,7 @@ export function DashboardScreen() {
         <main className="db-main c-wall" data-screen-label="dashboard-cargando">
           <div className="c-container">
             <div className="db-strip">
-              <span className="t-overline">Leyendo tu registro…</span>
+              <span className="t-overline">{t("dashboard.loading")}</span>
             </div>
             <hr className="c-divider" style={{ marginBottom: "2px" }} />
           </div>
@@ -287,35 +314,27 @@ export function DashboardScreen() {
       {isEmpty ? (
         /* ═══ VACÍO: día 1. Ventana: la aurora respira en calma. ═══ */
         <main className="db-empty c-window show" data-screen-label="dashboard-vacio" ref={emptyRef}>
-          <span className="t-overline">Día 1 · master: 0 items</span>
+          <span className="t-overline">{t("dashboard.empty.overline")}</span>
           <h1 style={{ marginTop: "20px" }}>
-            Tu registro está vacío. Bien: <em>partamos de verdad.</em>
+            {t("dashboard.empty.h1.pre")}
+            <em>{t("dashboard.empty.h1.em")}</em>
           </h1>
-          <p className="sub">
-            Corpus guarda tu carrera una sola vez, con la evidencia de cada dato. Las variantes de tu
-            CV salen de ahí — no al revés.
-          </p>
+          <p className="sub">{t("dashboard.empty.sub")}</p>
           <div className="db-doors">
             <Link className="c-card c-lift db-door" href="/app/importar">
-              <span className="t-overline">Con IA · 5 minutos</span>
-              <h3>Vuelca lo que tengas</h3>
-              <p>
-                Texto suelto, tu CV viejo, tu GitHub, tu portfolio. La IA extrae; tú confirmas item
-                por item. Nada entra sin tu ojo.
-              </p>
-              <span className="go">Pegar y extraer →</span>
+              <span className="t-overline">{t("dashboard.empty.doorA.overline")}</span>
+              <h3>{t("dashboard.empty.doorA.title")}</h3>
+              <p>{t("dashboard.empty.doorA.body")}</p>
+              <span className="go">{t("dashboard.empty.doorA.cta")}</span>
             </Link>
             <Link className="c-card c-lift db-door" href="/app/onboarding">
-              <span className="t-overline">Sin IA · a tu ritmo</span>
-              <h3>Escríbelo de cero</h3>
-              <p>
-                Desde una plantilla de rol o en blanco, con la IA apagada. El origen manual es el más
-                verificable de todos: lo escribiste tú.
-              </p>
-              <span className="go">Empezar a escribir →</span>
+              <span className="t-overline">{t("dashboard.empty.doorB.overline")}</span>
+              <h3>{t("dashboard.empty.doorB.title")}</h3>
+              <p>{t("dashboard.empty.doorB.body")}</p>
+              <span className="go">{t("dashboard.empty.doorB.cta")}</span>
             </Link>
           </div>
-          <p className="fine">Ninguna puerta es de segunda. Puedes cambiar de vía cuando quieras.</p>
+          <p className="fine">{t("dashboard.empty.fine")}</p>
         </main>
       ) : (
         /* ═══ DENSO: muro. El estado, no un saludo. ═══ */
@@ -325,10 +344,10 @@ export function DashboardScreen() {
               <span className="t-overline">{dateStr}</span>
               <span className="acts">
                 <Link className="c-btn c-btn--quiet" href="/app/variantes">
-                  Adaptar a un aviso
+                  {t("common.tailor")}
                 </Link>
                 <Link className="c-btn c-btn--patina" href="/app/variantes">
-                  Nueva variante
+                  {t("dashboard.strip.newVariant")}
                 </Link>
               </span>
             </div>
@@ -336,18 +355,20 @@ export function DashboardScreen() {
             <div className="db-bento">
               <section className="db-cell db-v" data-screen-label="dashboard-variantes">
                 <div className="db-ch">
-                  <span className="t-overline">Variantes</span>
+                  <span className="t-overline">{t("nav.variantes")}</span>
                   <span className="n">
-                    {data.variants.length} · {data.outdated} desactualizada{data.outdated === 1 ? "" : "s"}
+                    {data.variants.length} · {data.outdated}{" "}
+                    {t(data.outdated === 1 ? "dashboard.variants.outdated.one" : "dashboard.variants.outdated.other")}
                   </span>
-                  <Link href="/app/variantes">ver todas →</Link>
+                  <Link href="/app/variantes">{t("dashboard.variants.seeAll")}</Link>
                 </div>
                 <div>
                   {data.variants.length ? (
                     data.variants.map((v) => <VariantRow key={v.nm} v={v} />)
                   ) : (
                     <div className="db-fine" style={{ padding: "12px 0" }}>
-                      Aún no hay variantes. <Link href="/app/variantes">Crea la primera →</Link>
+                      {t("dashboard.variants.emptyRow")}
+                      <Link href="/app/variantes">{t("dashboard.variants.createFirst")}</Link>
                     </div>
                   )}
                 </div>
@@ -356,8 +377,8 @@ export function DashboardScreen() {
               <div className="db-side">
                 <section className="db-cell db-s" data-screen-label="dashboard-salud">
                   <div className="db-ch">
-                    <span className="t-overline">Salud del master</span>
-                    <span className="n">sin score — cosas concretas</span>
+                    <span className="t-overline">{t("dashboard.health.overline")}</span>
+                    <span className="n">{t("dashboard.health.n")}</span>
                   </div>
                   {data.findings.length ? (
                     data.findings.map((h) => (
@@ -368,17 +389,17 @@ export function DashboardScreen() {
                       </Link>
                     ))
                   ) : (
-                    <div className="db-fine">Nada que señalar. El silencio es la señal.</div>
+                    <div className="db-fine">{t("dashboard.health.clear")}</div>
                   )}
-                  <div className="db-fine">Lo que está bien no aparece aquí. Silencio = en orden.</div>
+                  <div className="db-fine">{t("dashboard.health.fine")}</div>
                 </section>
 
                 {data.pendingStaging > 0 ? (
                   <section className="db-cell db-s" data-screen-label="dashboard-staging">
                     <Link className="db-stg" href="/app/staging">
                       <span className="k t-accent">{data.pendingStaging}</span>
-                      <span className="tx">items de la ingesta esperan tu decisión</span>
-                      <span className="go">revisar →</span>
+                      <span className="tx">{t("dashboard.staging.pending")}</span>
+                      <span className="go">{t("dashboard.staging.review")}</span>
                     </Link>
                   </section>
                 ) : null}
@@ -408,12 +429,10 @@ export function DashboardScreen() {
                   ))
                 ) : (
                   <div className="db-fcell">
-                    <span className="nm">Sin fuentes conectadas</span>
-                    <div className="facts">
-                      Vuelca material en Importar y quedará registrado aquí, con lo que aportó cada uno.
-                    </div>
+                    <span className="nm">{t("dashboard.sources.emptyName")}</span>
+                    <div className="facts">{t("dashboard.sources.emptyFacts")}</div>
                     <Link className="new" href="/app/importar">
-                      Volcar lo que tengo →
+                      {t("dashboard.sources.emptyCta")}
                     </Link>
                   </div>
                 )}

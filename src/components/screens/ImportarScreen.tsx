@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { Aurora } from "@/components/Aurora";
 import { createClient } from "@/lib/supabase/client";
+import { useT } from "@/lib/i18n";
 import "./importar.css";
 
 /* ============================================================================
@@ -81,11 +82,8 @@ Mi portfolio es https://dgatica.cl y mi github es github.com/dgatica. También d
 
 Sé Go, Python, SQL, algo de Kubernetes (lo usamos pero no lo administraba yo). Inglés B2. Diplomado en ingeniería de datos en la UC (2022).`;
 
-/* Placeholder del textarea — verbatim del HTML (genérico, no el de la persona;
-   ojo al DOBLE espacio tras «Por ejemplo:» y al salto real de línea). */
-const PLACEHOLDER = `Pega lo que tengas. Sin formato. Sin orden.
-
-Por ejemplo:  «Soy ingeniero civil en computación, titulado en la UNAB. Trabajé tres años en una fintech haciendo APIs de pago… mi portfolio es https://misitio.cl y mi github es github.com/usuario. Adjunto también mi CV viejo.»`;
+/* El placeholder del textarea vive en el diccionario (importar.placeholder) —
+   verbatim del HTML, con el DOBLE espacio tras «Por ejemplo:» y el salto real. */
 
 /* La respuesta real de /api/import/context. El "fin" se renderiza de estos
    conteos REALES (no de una grilla de maqueta): total y niveles de evidencia. */
@@ -126,12 +124,14 @@ function detectSources(txt: string): Source[] {
   return [...found.values()];
 }
 
+/* Devuelve una CLAVE i18n (o el ext crudo, que degrada a sí mismo en t()) para
+   la etiqueta del archivo; el texto visible se resuelve con t(f.tag) al pintar. */
 function tagFor(name: string): string {
   const ext = (name.split(".").pop() ?? "").toLowerCase();
-  if (ext === "md") return "cuestionario · fuente de primera";
+  if (ext === "md") return "importar.tag.md";
   if (ext === "pdf") return "pdf";
   if (ext === "docx" || ext === "doc") return "docx";
-  if (["png", "jpg", "jpeg", "webp"].includes(ext)) return "captura · se transcribe literal";
+  if (["png", "jpg", "jpeg", "webp"].includes(ext)) return "importar.tag.image";
   return ext;
 }
 
@@ -165,6 +165,7 @@ function countWords(txt: string): number {
 }
 
 export function ImportarScreen() {
+  const t = useT();
   const [text, setText] = useState("");
   const [files, setFiles] = useState<FileItem[]>([]);
   const [isDrag, setIsDrag] = useState(false);
@@ -209,19 +210,21 @@ export function ImportarScreen() {
   const clearHidden = text.length === 0 && files.length === 0;
 
   const linkCount = sources.length;
-  const taMeta =
-    words.toLocaleString("es-CL") +
-    " palabras" +
-    (linkCount
-      ? " · " + linkCount + " link" + (linkCount > 1 ? "s" : "") + " detectado" + (linkCount > 1 ? "s" : "")
-      : "");
+  const linkPart = linkCount
+    ? " · " +
+      (linkCount === 1 ? t("importar.meta.linkOne") : t("importar.meta.linkMany")).replace(
+        "{n}",
+        String(linkCount),
+      )
+    : "";
+  const taMeta = t("importar.meta.words").replace("{n}", words.toLocaleString("es-CL")) + linkPart;
 
   const hdStep =
     screen === "ingest"
-      ? "INGESTA · LEYENDO FUENTES"
+      ? t("importar.step.ingest")
       : screen === "done"
-        ? "INGESTA · COMPLETA"
-        : "VOLCADO · PASO 1 DE 2";
+        ? t("importar.step.done")
+        : t("importar.step.idle");
 
   // charReveal (overline) + wordReveal (h1) + boot — una sola vez.
   useEffect(() => {
@@ -284,14 +287,14 @@ export function ImportarScreen() {
   async function uploadOne(file: File, id: string) {
     const kind = kindFor(file.name, file.type || "");
     if (!kind) {
-      patchFile(id, { status: "error", error: "tipo no soportado (usa PDF, DOCX o imagen)" });
+      patchFile(id, { status: "error", error: t("importar.file.unsupported") });
       return;
     }
-    const note = file.size > MAX_WARN_BYTES ? "archivo grande (>10 MB): puede tardar" : undefined;
+    const note = file.size > MAX_WARN_BYTES ? t("importar.file.tooBig") : undefined;
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) {
-        patchFile(id, { status: "error", error: "sesión requerida para subir" });
+        patchFile(id, { status: "error", error: t("importar.file.needSession") });
         return;
       }
       // Path {user_id}/{uuid}/{filename}: la RLS del bucket autoriza al dueño
@@ -306,7 +309,7 @@ export function ImportarScreen() {
       }
       patchFile(id, { status: "ok", kind, path, note });
     } catch (e) {
-      patchFile(id, { status: "error", error: e instanceof Error ? e.message : "no se pudo subir" });
+      patchFile(id, { status: "error", error: e instanceof Error ? e.message : t("importar.file.uploadFailed") });
     }
   }
 
@@ -374,7 +377,7 @@ export function ImportarScreen() {
   };
 
   function onContinue(id: number) {
-    setRow(id, { st: "ok", det: "solo página 1 · 6 items", errActs: false });
+    setRow(id, { st: "ok", det: t("importar.log.onlyPage1"), errActs: false });
     errResolve.current?.();
     errResolve.current = null;
   }
@@ -383,7 +386,7 @@ export function ImportarScreen() {
     await wait(1400);
     setRow(id, {
       st: "err",
-      det: "sigue sin texto — continuando con la página 1",
+      det: t("importar.log.retryFail"),
       errActs: false,
       retrying: false,
     });
@@ -412,22 +415,23 @@ export function ImportarScreen() {
     // total real llega en la respuesta (no hay SSE por-fuente todavía).
     const src = detectSources(text);
     const rowIds: number[] = [];
-    if (text.trim().length >= 20) rowIds.push(logRow("Texto pegado", "leyendo…", "run"));
+    if (text.trim().length >= 20)
+      rowIds.push(logRow(t("importar.log.pastedText"), t("importar.log.reading"), "run"));
     for (const f of okFiles) {
       const det =
         f.kind === "image"
-          ? "transcribiendo literal…"
+          ? t("importar.log.transcribing")
           : f.kind === "pdf"
-            ? "leyendo el PDF…"
-            : "leyendo el DOCX…";
+            ? t("importar.log.readingPdf")
+            : t("importar.log.readingDocx");
       rowIds.push(logRow(f.name, det, "run"));
     }
     for (const s of src) {
-      if (s.kind === "github") rowIds.push(logRow(s.label, "consultando la API pública…", "run"));
-      else if (s.kind === "web") rowIds.push(logRow(s.label, "leyendo el portfolio…", "run"));
+      if (s.kind === "github") rowIds.push(logRow(s.label, t("importar.log.queryingApi"), "run"));
+      else if (s.kind === "web") rowIds.push(logRow(s.label, t("importar.log.readingPortfolio"), "run"));
       // linkedin: no se lee desde el servidor (se avisa en el volcado)
     }
-    const idAI = logRow("Extrayendo con evidencia", "la IA estructura y cita el origen…", "run");
+    const idAI = logRow(t("importar.log.extractingSrc"), t("importar.log.extractingDet"), "run");
 
     try {
       const res = await fetch("/api/import/context", {
@@ -436,10 +440,15 @@ export function ImportarScreen() {
         body: JSON.stringify({ text, files: sendFiles }),
       });
       const data = (await res.json()) as ImportResponse & { error?: string; warnings?: string[] };
-      if (!res.ok) throw new Error(data.error || "No se pudo extraer.");
+      if (!res.ok) throw new Error(data.error || t("importar.extractFailed"));
 
       for (const id of rowIds) setRow(id, { st: "ok" });
-      setRow(idAI, { st: "ok", det: `${data.counts.total} items · ${data.counts.verified} con evidencia literal` });
+      setRow(idAI, {
+        st: "ok",
+        det: t("importar.log.result")
+          .replace("{total}", String(data.counts.total))
+          .replace("{verified}", String(data.counts.verified)),
+      });
       itemCount.current = data.counts.total;
       setCount(data.counts.total, 600);
       setResult(data);
@@ -449,8 +458,8 @@ export function ImportarScreen() {
       window.CorpusAurora?.setState("calm");
       setScreen("done");
     } catch (e) {
-      setErr(e instanceof Error ? e.message : "No se pudo extraer.");
-      setRows((prev) => prev.map((r) => (r.st === "run" ? { ...r, st: "err", det: "detenido" } : r)));
+      setErr(e instanceof Error ? e.message : t("importar.extractFailed"));
+      setRows((prev) => prev.map((r) => (r.st === "run" ? { ...r, st: "err", det: t("importar.log.stopped") } : r)));
       window.CorpusAurora?.setState("calm");
       setScreen("idle");
     } finally {
@@ -474,7 +483,7 @@ export function ImportarScreen() {
             </span>
           </div>
           <div className="hd-right">
-            <div className="hd-lang" aria-label="Idioma">
+            <div className="hd-lang" aria-label={t("importar.langAria")}>
               <span data-on>ES</span>
               <span>EN</span>
             </div>
@@ -487,14 +496,14 @@ export function ImportarScreen() {
       <main className="imp-main c-window" id="stIdle" data-screen-label="importar-volcado" hidden={screen !== "idle"}>
         <div className="imp-col">
           <span className="t-overline" id="ov" ref={ovRef}>
-            Nada entra al master sin tu confirmación
+            {t("importar.overline")}
           </span>
           <h1 className="imp-h1" id="h1" ref={h1Ref}>
-            No escribas tu perfil. <em>Vuélcalo.</em>
+            {t("importar.h1.pre")}
+            <em>{t("importar.h1.em")}</em>
           </h1>
           <p className="imp-sub" data-reveal style={{ "--d": "520ms" } as React.CSSProperties}>
-            Pega lo que tengas: párrafos sueltos, tu CV viejo, notas, links. El orden no importa — ordenarlo es
-            trabajo nuestro.
+            {t("importar.sub")}
           </p>
 
           <div
@@ -525,20 +534,20 @@ export function ImportarScreen() {
               id="ta"
               ref={taRef}
               spellCheck={false}
-              aria-label="Pega aquí lo que tengas"
-              placeholder={PLACEHOLDER}
+              aria-label={t("importar.ta.aria")}
+              placeholder={t("importar.placeholder")}
               value={text}
               onChange={(e) => setText(e.target.value)}
             />
 
             <div className={`imp-detect${sources.length ? " has" : ""}`} id="detect">
-              <span className="t-overline">Fuentes detectadas en tu texto</span>
+              <span className="t-overline">{t("importar.detect.overline")}</span>
               <div className="imp-chips" id="chips">
                 {sources.map((s) => (
                   <span className={`c-chip${s.ok ? " c-chip--ok" : ""}`} key={s.host + s.path}>
                     <span className="dot" />
                     <b>{s.label}</b>
-                    <span>· {s.note}</span>
+                    <span>· {t(`importar.chip.${s.kind}`)}</span>
                   </span>
                 ))}
               </div>
@@ -548,12 +557,12 @@ export function ImportarScreen() {
               {files.map((f) => {
                 const statusText =
                   f.status === "uploading"
-                    ? "subiendo…"
+                    ? t("importar.file.uploading")
                     : f.status === "error"
-                      ? `error: ${f.error ?? "no se pudo subir"}`
+                      ? `${t("importar.file.errorPrefix")}${f.error ?? t("importar.file.uploadFailed")}`
                       : f.note
-                        ? `${f.tag} · ${f.note}`
-                        : f.tag;
+                        ? `${t(f.tag)} · ${f.note}`
+                        : t(f.tag);
                 return (
                   <div className="imp-file" key={f.id}>
                     <span className="nm">{f.name}</span>
@@ -564,7 +573,7 @@ export function ImportarScreen() {
                     >
                       {statusText}
                     </span>
-                    <button type="button" className="rm" aria-label="Quitar" onClick={() => removeFile(f.id)}>
+                    <button type="button" className="rm" aria-label={t("importar.file.remove")} onClick={() => removeFile(f.id)}>
                       ×
                     </button>
                   </div>
@@ -585,9 +594,10 @@ export function ImportarScreen() {
                 }
               }}
             >
-              <b>arrastra archivos aquí</b> — o haz clic para elegir
+              <b>{t("importar.drop.bold")}</b>
+              {t("importar.drop.rest")}
               <br />
-              CV en PDF o DOCX · el cuestionario respondido (.md) · capturas de LinkedIn · certificados
+              {t("importar.drop.line2")}
             </div>
             <input
               type="file"
@@ -605,10 +615,10 @@ export function ImportarScreen() {
               <span id="taMeta">{taMeta}</span>
               <span className="acts">
                 <button type="button" id="btnSample" onClick={useSample}>
-                  usar texto de ejemplo
+                  {t("importar.useSample")}
                 </button>
                 <button type="button" id="btnClear" hidden={clearHidden} onClick={clearAll}>
-                  limpiar
+                  {t("importar.clear")}
                 </button>
               </span>
             </div>
@@ -622,34 +632,33 @@ export function ImportarScreen() {
             hidden={!hasLi}
             data-screen-label="importar-linkedin"
           >
-            <h3>LinkedIn no permite que un servicio lea tu perfil desde fuera.</h3>
-            <p>
-              Está detrás de tu sesión y bloquea lectores automáticos — a nosotros y a cualquiera que diga lo
-              contrario. Tres vías que sí funcionan:
-            </p>
+            <h3>{t("importar.li.title")}</h3>
+            <p>{t("importar.li.body")}</p>
             <ol>
               <li>
                 <span className="n">01</span>
-                <span className="h">Copia el texto de tu perfil</span>
+                <span className="h">{t("importar.li.s1.h")}</span>
                 <span className="d">
-                  En tu perfil: <span className="c-kbd">Ctrl</span>+<span className="c-kbd">A</span> y{" "}
-                  <span className="c-kbd">Ctrl</span>+<span className="c-kbd">C</span>, y pégalo aquí encima. Es la
-                  vía más completa.
+                  {t("importar.li.inProfile")}
+                  <span className="c-kbd">Ctrl</span>+<span className="c-kbd">A</span>
+                  {t("importar.li.s1.mid")}
+                  <span className="c-kbd">Ctrl</span>+<span className="c-kbd">C</span>
+                  {t("importar.li.s1.post")}
                 </span>
               </li>
               <li>
                 <span className="n">02</span>
-                <span className="h">Sube el PDF que exporta LinkedIn</span>
+                <span className="h">{t("importar.li.s2.h")}</span>
                 <span className="d">
-                  En tu perfil: <b>Más…</b> → <b>Guardar como PDF</b>. Arrástralo a esta caja.
+                  {t("importar.li.inProfile")}
+                  <b>{t("importar.li.s2.b1")}</b> → <b>{t("importar.li.s2.b2")}</b>
+                  {t("importar.li.s2.post")}
                 </span>
               </li>
               <li>
                 <span className="n">03</span>
-                <span className="h">Capturas de pantalla</span>
-                <span className="d">
-                  Las transcribimos literal, sin interpretar. Lo que no se lea, no se inventa.
-                </span>
+                <span className="h">{t("importar.li.s3.h")}</span>
+                <span className="d">{t("importar.li.s3.d")}</span>
               </li>
             </ol>
           </div>
@@ -662,11 +671,11 @@ export function ImportarScreen() {
                 disabled={!ready}
                 onClick={() => runIngest()}
               >
-                Extraer con evidencia
+                {t("importar.cta")}
               </button>
             </span>
             <Link className="imp-alt" href="/app/onboarding">
-              Prefiero escribirlo de cero →
+              {t("importar.altWrite")}
             </Link>
           </div>
 
@@ -678,8 +687,7 @@ export function ImportarScreen() {
 
           <p className="imp-note" data-reveal style={{ "--d": "880ms" } as React.CSSProperties}>
             <span className="c-divider" style={{ "--d": "900ms" } as React.CSSProperties} />
-            La IA no inventa: cada dato citará el fragmento del que salió. Tú confirmas item por item antes de que
-            entre al master.
+            {t("importar.note")}
           </p>
         </div>
       </main>
@@ -695,11 +703,11 @@ export function ImportarScreen() {
         aria-busy={screen === "ingest"}
       >
         <div className="ing-col">
-          <span className="t-overline">Leyendo tus fuentes</span>
+          <span className="t-overline">{t("importar.ing.overline")}</span>
           <div className="ing-count" id="count" ref={countRef} role="status" aria-live="polite">
             0
           </div>
-          <div className="ing-cap">items encontrados hasta ahora</div>
+          <div className="ing-cap">{t("importar.ing.caption")}</div>
           <div className="c-panel ing-log" id="log" aria-live="polite">
             {rows.map((r) => (
               <div key={r.id} ref={rowRef(r.id)} className={`ing-row is-${r.st}`}>
@@ -711,15 +719,15 @@ export function ImportarScreen() {
                 {r.errActs && (
                   <div className="ing-err-acts">
                     <button type="button" onClick={() => onContinue(r.id)}>
-                      Continuar sin la página 2
+                      {t("importar.err.continue")}
                     </button>
                     <button type="button" onClick={() => onRetry(r.id)}>
                       {r.retrying ? (
                         <>
-                          <span className="c-spin">⟳</span> reintentando…
+                          <span className="c-spin">⟳</span> {t("importar.err.retrying")}
                         </>
                       ) : (
-                        "Reintentar"
+                        t("importar.err.retry")
                       )}
                     </button>
                   </div>
@@ -728,9 +736,9 @@ export function ImportarScreen() {
             ))}
           </div>
           <p className="ing-hint">
-            Esto toma entre 5 y 40 segundos según las fuentes.
+            {t("importar.ing.hint1")}
             <br />
-            Sin porcentajes inventados: te decimos qué estamos haciendo.
+            {t("importar.ing.hint2")}
           </p>
         </div>
       </main>
@@ -745,32 +753,34 @@ export function ImportarScreen() {
         data-screen-label="importar-fin"
       >
         <div className="fin-col">
-          <span className="t-overline">Extracción completa</span>
-          <h2 style={{ marginTop: "18px" }}>Listo. Ahora, tu turno.</h2>
+          <span className="t-overline">{t("importar.fin.overline")}</span>
+          <h2 style={{ marginTop: "18px" }}>{t("importar.fin.title")}</h2>
           <div className="c-panel fin-panel" id="finPanel" ref={finPanelRef}>
             <div className="fin-head">
               <span className="n" id="finCount">
                 {result?.counts.total ?? 0}
               </span>
-              <span className="l">items esperan tu revisión</span>
+              <span className="l">{t("importar.fin.awaitReview")}</span>
             </div>
             <div className="fin-grid">
               <div className="fin-cell">
                 <div className="v">{result?.counts.verified ?? 0}</div>
-                <div className="k">con evidencia literal</div>
+                <div className="k">{t("importar.fin.verified")}</div>
               </div>
               <div className="fin-cell">
                 <div className="v">{result?.counts.partial ?? 0}</div>
-                <div className="k">evidencia parcial</div>
+                <div className="k">{t("importar.fin.partial")}</div>
               </div>
               <div className="fin-cell">
                 <div className="v">{result?.counts.api ?? 0}</div>
-                <div className="k">dato duro (GitHub)</div>
+                <div className="k">{t("importar.fin.api")}</div>
               </div>
             </div>
             <div className="fin-noev">
-              <span className="c-ver c-ver--none">{result?.counts.none ?? 0} sin evidencia</span>
-              <span>quedan marcados — la revisión te los pondrá delante, no debajo.</span>
+              <span className="c-ver c-ver--none">
+                {result?.counts.none ?? 0} {t("importar.fin.noneLabel")}
+              </span>
+              <span>{t("importar.fin.flagged")}</span>
             </div>
           </div>
 
@@ -778,7 +788,7 @@ export function ImportarScreen() {
               nunca se inventa lo que no se pudo leer. */}
           {warnings.length > 0 ? (
             <div className="c-card" style={{ width: "100%", marginTop: 14, textAlign: "left", padding: "16px 20px" }}>
-              <span className="t-overline">Avisos de la ingesta</span>
+              <span className="t-overline">{t("importar.fin.warnings")}</span>
               <ul style={{ margin: "10px 0 0", paddingLeft: 18, color: "var(--text-muted)", fontSize: "var(--fs-ui)" }}>
                 {warnings.map((w, i) => (
                   <li key={i} style={{ marginBottom: 4 }}>
@@ -792,10 +802,10 @@ export function ImportarScreen() {
           <div className="fin-cta">
             <span className="c-forge">
               <Link className="c-btn c-btn--forge c-btn--hero" href="/app/staging">
-                Revisar en staging →
+                {t("importar.fin.reviewCta")}
               </Link>
             </span>
-            <span className="fin-sub">Nada entra al master sin tu confirmación.</span>
+            <span className="fin-sub">{t("importar.fin.sub")}</span>
           </div>
         </div>
       </main>

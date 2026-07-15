@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { useT } from "@/lib/i18n";
 import "./salud.css";
 
 /* ============================================================================
@@ -23,6 +24,8 @@ import "./salud.css";
      "con hallazgos" vs "todo en orden" es estado de DATOS, no un botón.
    - a11y: se cierran huecos documentados en la spec §8 SIN tocar clases —
      aria-expanded/aria-controls en los disclosure, aria-hidden en decorativos.
+   - i18n: el TEXTO sale de dict/salud.ts (ES=referencia, EN=copy.md) vía t();
+     los findings/garantizados se arman con builders que reciben t (rule 1).
    ============================================================================ */
 
 /* Ruta de producto de la variante abierta. En la maqueta el [id] del route se
@@ -42,104 +45,103 @@ interface Finding {
   cite: React.ReactNode; // .sl-cite (con <b> en fuente/criterio)
 }
 
-const FINDINGS: Finding[] = [
+const buildFindings = (t: (key: string) => string): Finding[] => [
   {
     id: "c1",
-    title: "2 viñetas de la página 1 no llevan ninguna cifra",
-    detail:
-      "«Implementé el flujo de cupones…» y «Desarrollé y mantuve APIs…». ¿Cuánto movían? ¿Cuántos usuarios? ¿En cuánto tiempo? Una por una — tú decides cuáles lo ameritan.",
-    fixLabel: "verlas en el editor →",
+    title: t("salud.c1.title"),
+    detail: t("salud.c1.detail"),
+    fixLabel: t("salud.c1.fix"),
     fixHref: EDITOR_HREF,
     blocking: false,
     cite: (
       <>
-        <b>[fuente — Jobscan 2025, n=384]</b> el 58,2% de reclutadores dice que lo que más destaca es
-        un logro cuantificado. <b>No existe</b> un umbral de «% de viñetas con cifra» en ningún
-        estudio — por eso te las señalamos una a una y no te damos un porcentaje.
+        <b>{t("salud.c1.citeSrc")}</b>
+        {t("salud.c1.cite1")}
+        <b>{t("salud.c1.citeBold")}</b>
+        {t("salud.c1.cite2")}
       </>
     ),
   },
   {
     id: "c2",
-    title: "Una viñeta ocupa 4 líneas",
-    detail:
-      "La del servicio de conciliación. En el escaneo de 7 segundos, las frases largas pierden: parte en dos o deja solo el resultado.",
-    fixLabel: "recortarla →",
+    title: t("salud.c2.title"),
+    detail: t("salud.c2.detail"),
+    fixLabel: t("salud.c2.fix"),
     fixHref: EDITOR_HREF,
     blocking: false,
     cite: (
       <>
-        <b>[fuente — Ladders 2018, eye-tracking]</b> screening inicial promedio de 7,4 s; los CVs
-        peor evaluados comparten «frases largas, clutter, poco espacio en blanco». n=30, estudio de
-        vendor: dirección, no ley.
+        <b>{t("salud.c2.citeSrc")}</b>
+        {t("salud.c2.cite1")}
       </>
     ),
   },
   {
     id: "c3",
-    title: "El título no coincide con el último aviso que adaptaste",
-    detail:
-      "El aviso pedía «Backend Engineer»; la variante dice «Backend Developer». Honesto y efectivo: «Backend Engineer (Ingeniero de Software III)».",
-    fixLabel: "alinearlo →",
+    title: t("salud.c3.title"),
+    detail: t("salud.c3.detail"),
+    fixLabel: t("salud.c3.fix"),
     fixHref: TAILOR_HREF,
     blocking: false,
     cite: (
       <>
-        <b>[fuente — Jobscan, 2,5M postulaciones]</b> título del CV = título del aviso → 10,6× más
-        entrevistas. Datos internos del vendor: úsalo para priorizar, no como promesa.
+        <b>{t("salud.c3.citeSrc")}</b>
+        {t("salud.c3.cite1")}
       </>
     ),
   },
   {
     id: "c4",
-    title: "La sección «Proyectos» queda huérfana al final de la página 2",
-    detail:
-      "El encabezado entra pero solo cabe una línea de contenido. Sube un proyecto a la página 1 u oculta uno: un final limpio se lee mejor.",
-    fixLabel: "reordenar →",
+    title: t("salud.c4.title"),
+    detail: t("salud.c4.detail"),
+    fixLabel: t("salud.c4.fix"),
     fixHref: EDITOR_HREF,
     blocking: false,
     cite: (
       <>
-        <b>[criterio]</b> decisión tipográfica nuestra, sin estudio detrás — y lo decimos. Disfrazar
-        criterio de evidencia es exactamente lo que este producto no hace.
+        <b>{t("salud.c4.citeSrc")}</b>
+        {t("salud.c4.cite1")}
       </>
     ),
   },
 ];
 
 /* Lo garantizado por construcción — educación plegada, no teatro. */
-const GUARANTEED: React.ReactNode[] = [
+const buildGuaranteed = (t: (key: string) => string): React.ReactNode[] => [
   <>
-    <b>Una sola columna</b> — el parser lee de izquierda a derecha atravesando columnas [Greenhouse]
+    <b>{t("salud.g1.b")}</b>
+    {t("salud.g1.t")}
   </>,
   <>
-    <b>Cero tablas, headers o footers</b> — Workday los ignora: contacto siempre en el cuerpo
-    [Greenhouse · Workday]
+    <b>{t("salud.g2.b")}</b>
+    {t("salud.g2.t")}
   </>,
   <>
-    <b>Cero iconos ni fotos</b> — «Email:» con letras; glifos no textuales se parsean como basura
-    [Greenhouse · Robert Walters Chile]
+    <b>{t("salud.g3.b")}</b>
+    {t("salud.g3.t")}
   </>,
   <>
-    <b>Texto seleccionable</b> — «si no puedes seleccionar el texto, el documento no es parseable»
-    [Lever, literal]
+    <b>{t("salud.g4.b")}</b>
+    {t("salud.g4.t")}
   </>,
   <>
-    <b>&lt; 2,5 MB</b> — sobre eso Greenhouse no parsea el archivo [Greenhouse]
+    <b>{t("salud.g5.b")}</b>
+    {t("salud.g5.t")}
   </>,
 ];
 
-const BUILT_LABEL =
-  "Lo que no revisamos porque el motor lo garantiza por construcción — listarlo como logro sería teatro de tranquilidad";
-
 export function SaludScreen() {
-  const findings = FINDINGS;
+  const t = useT();
+  const findings = buildFindings(t);
+  const guaranteed = buildGuaranteed(t);
   const hasFindings = findings.length > 0;
   const blockingCount = findings.filter((f) => f.blocking).length;
   // #slN: conteo derivado de los datos. "Todo en orden" pierde "· bloqueantes".
+  // Interpolación por .replace: {n} = nº de hallazgos, {b} = nº de bloqueantes.
   const findingsLabel = hasFindings
-    ? `${findings.length} hallazgos · ${blockingCount} bloqueantes`
-    : "0 hallazgos";
+    ? t("salud.count.findings").replace("{n}", String(findings.length)) +
+      t("salud.count.blocking").replace("{b}", String(blockingCount))
+    : t("salud.count.findings").replace("{n}", "0");
 
   const [openCites, setOpenCites] = useState<Set<string>>(() => new Set());
   const [builtOpen, setBuiltOpen] = useState(false);
@@ -185,16 +187,16 @@ export function SaludScreen() {
             Corpus
           </Link>
           <nav className="hd-nav">
-            <Link href="/app">Panel</Link>
-            <Link href="/app/master">Master</Link>
+            <Link href="/app">{t("nav.panel")}</Link>
+            <Link href="/app/master">{t("nav.master")}</Link>
             <Link href="/app/variantes" aria-current="page">
-              Variantes
+              {t("nav.variantes")}
             </Link>
-            <Link href="/app/fuentes">Fuentes</Link>
+            <Link href="/app/fuentes">{t("nav.fuentes")}</Link>
           </nav>
           <div className="hd-right">
             <nav className="hd-nav" style={{ display: "flex" }}>
-              <Link href="/app/ajustes">Ajustes</Link>
+              <Link href="/app/ajustes">{t("nav.ajustes")}</Link>
             </nav>
             <div className="hd-lang">
               <span data-on>ES</span>
@@ -224,7 +226,7 @@ export function SaludScreen() {
               color: "var(--text-muted)",
             }}
           >
-            SALUD DE LA VARIANTE
+            {t("salud.sectionLabel")}
           </span>
           <span
             id="slN"
@@ -241,12 +243,14 @@ export function SaludScreen() {
 
       <main className="sl-main c-wall" data-screen-label="salud">
         <div className="c-container sl-col">
-          <span className="t-overline">Sin score, sin umbrales</span>
-          <h2 style={{ marginTop: "12px" }}>Solo lo que puede fallar.</h2>
+          <span className="t-overline">{t("salud.overline")}</span>
+          <h2 style={{ marginTop: "12px" }}>{t("salud.title")}</h2>
           <p className="sl-lead">
-            Cada hallazgo trae su fuente — <b>[fuente]</b> es evidencia citada, <b>[criterio]</b> es
-            una decisión de diseño nuestra, dicha como tal. Lo que está bien no aparece: el silencio
-            es la señal.
+            {t("salud.lead.pre")}
+            <b>{t("salud.tag.source")}</b>
+            {t("salud.lead.mid")}
+            <b>{t("salud.tag.criterion")}</b>
+            {t("salud.lead.post")}
           </p>
           <hr className="c-divider" style={{ marginTop: "18px" }} />
 
@@ -266,7 +270,7 @@ export function SaludScreen() {
                         aria-controls={f.id}
                         onClick={() => toggleCite(f.id)}
                       >
-                        {open ? "fuente ▴" : "fuente ▾"}
+                        {open ? `${t("salud.source")} ▴` : `${t("salud.source")} ▾`}
                       </button>
                       <Link className="fix c-btn c-btn--quiet" href={f.fixHref}>
                         {f.fixLabel}
@@ -286,9 +290,9 @@ export function SaludScreen() {
                 —
               </div>
               <p>
-                Nada que señalar en esta variante.
+                {t("salud.ok.line1")}
                 <br />
-                No hay medalla: el silencio es la señal.
+                {t("salud.ok.line2")}
               </p>
             </div>
           )}
@@ -305,10 +309,10 @@ export function SaludScreen() {
               aria-controls="builtRows"
               onClick={() => setBuiltOpen((v) => !v)}
             >
-              {`${builtOpen ? "▾" : "▸"}  ${BUILT_LABEL}`}
+              {`${builtOpen ? "▾" : "▸"}  ${t("salud.builtLabel")}`}
             </button>
             <div className="rows" id="builtRows">
-              {GUARANTEED.map((row, i) => (
+              {guaranteed.map((row, i) => (
                 <div className="sl-brow" key={i}>
                   {row}
                 </div>

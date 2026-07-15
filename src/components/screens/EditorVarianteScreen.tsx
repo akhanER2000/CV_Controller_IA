@@ -11,6 +11,7 @@ import {
 } from "react";
 import Link from "next/link";
 import { useBoot } from "@/lib/corpus/runtime";
+import { useT } from "@/lib/i18n";
 import { supabaseEnabled } from "@/lib/supabase/config";
 import "./editor-variante.css";
 
@@ -158,8 +159,10 @@ function buildBlocks(doc: Doc): string[] {
   return B;
 }
 
-// ── Rayos-X: texto plano en el ORDEN del documento, generado del ESTADO ──
-function buildRaw(doc: Doc): string {
+// ── Rayos-X: texto plano en el ORDEN del documento, generado del ESTADO. La
+//    leyenda (.cap) es copy de UI y se inyecta traducida; los encabezados del
+//    documento son contenido del CV (siguen el idioma de la variante). ──
+function buildRaw(doc: Doc, legend: string): string {
   const L: string[] = [];
   L.push(doc.basics.name);
   const o = doc.targetTitle.trim();
@@ -192,7 +195,7 @@ function buildRaw(doc: Doc): string {
     doc.education.forEach((d) => L.push(d.title + "   " + d.dates, d.org));
   }
   const body = L.join("\n").replace(/&/g, "&amp;").replace(/</g, "&lt;");
-  return '<span class="cap">texto extraído del PDF — esto es lo que indexa el reclutador</span>' + body;
+  return '<span class="cap">' + legend + "</span>" + body;
 }
 
 // ── Fallback del MODO LOCAL (persona Diego Gatica) — jamás con Supabase ──────
@@ -291,6 +294,7 @@ type Mode = "doc" | "raw";
 type View = "master" | "mid" | "preview";
 
 export function EditorVarianteScreen({ variantId = "editor" }: { variantId?: string } = {}) {
+  const t = useT();
   const [fb] = useState(() => (supabaseEnabled ? null : buildFallback(variantId)));
   const [master, setMaster] = useState<MasterRow[]>(() => fb?.master ?? []);
   const [items, setItems] = useState<VItem[]>(() => fb?.items ?? []);
@@ -305,7 +309,8 @@ export function EditorVarianteScreen({ variantId = "editor" }: { variantId?: str
   const [draggingId, setDraggingId] = useState<string | null>(null);
 
   // Barra de estado (#edState): live region, con flash reentrante a 2600 ms.
-  const [stMsg, setStMsg] = useState("al día · guardado");
+  // "" = reposo → se pinta t("editor.stIdle") en vivo (reactivo al idioma).
+  const [stMsg, setStMsg] = useState("");
   const [stAccent, setStAccent] = useState(false);
   const flashTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -320,7 +325,7 @@ export function EditorVarianteScreen({ variantId = "editor" }: { variantId?: str
     setStAccent(true);
     if (flashTimer.current) clearTimeout(flashTimer.current);
     flashTimer.current = setTimeout(() => {
-      setStMsg("al día · guardado");
+      setStMsg("");
       setStAccent(false);
     }, 2600);
   }, []);
@@ -472,7 +477,7 @@ export function EditorVarianteScreen({ variantId = "editor" }: { variantId?: str
     };
   }, []);
 
-  const rawHtml = useMemo(() => buildRaw(doc), [doc]);
+  const rawHtml = useMemo(() => buildRaw(doc, t("editor.xrayLegend")), [doc, t]);
   const pageCount = pages.length;
   const docHeight = pageCount * (1056 + 30) * scale;
 
@@ -488,13 +493,13 @@ export function EditorVarianteScreen({ variantId = "editor" }: { variantId?: str
             body: JSON.stringify({ id: vitemId, ...patch }),
           });
           if (!res.ok) throw new Error();
-          flash("guardado en esta variante");
+          flash(t("editor.stSavedItem"));
         } catch {
-          flash("no se pudo guardar el cambio");
+          flash(t("editor.stSaveItemErr"));
         }
       })();
     },
-    [variantId, flash],
+    [variantId, flash, t],
   );
 
   const patchVariant = useCallback(
@@ -508,13 +513,13 @@ export function EditorVarianteScreen({ variantId = "editor" }: { variantId?: str
             body: JSON.stringify(patch),
           });
           if (!res.ok) throw new Error();
-          flash("guardado");
+          flash(t("editor.stSaved"));
         } catch {
-          flash("no se pudo guardar");
+          flash(t("editor.stSaveErr"));
         }
       })();
     },
-    [variantId, flash],
+    [variantId, flash, t],
   );
 
   const nextSortOrder = useCallback(
@@ -558,10 +563,10 @@ export function EditorVarianteScreen({ variantId = "editor" }: { variantId?: str
         }
       } catch {
         setItems((prev) => prev.filter((i) => i.id !== tmpId));
-        flash("no se pudo añadir el item");
+        flash(t("editor.stAddErr"));
       }
     },
-    [masterById, items, nextSortOrder, variantId, flash],
+    [masterById, items, nextSortOrder, variantId, flash, t],
   );
 
   const removeItem = useCallback(
@@ -573,14 +578,14 @@ export function EditorVarianteScreen({ variantId = "editor" }: { variantId?: str
         it.kind === "work" ? items.filter((b) => b.kind === "bullet" && belongsTo(b, it)).map((b) => b.id) : [];
       const allIds = new Set([vitemId, ...childIds]);
       setItems((prev) => prev.filter((i) => !allIds.has(i.id)));
-      flash("quitado de la variante");
+      flash(t("editor.stRemoved"));
       if (!supabaseEnabled) return;
       allIds.forEach((id) => {
         if (id.startsWith("tmp-")) return;
         void fetch(`/api/variants/${variantId}/items?id=${encodeURIComponent(id)}`, { method: "DELETE" }).catch(() => {});
       });
     },
-    [items, belongsTo, variantId, flash],
+    [items, belongsTo, variantId, flash, t],
   );
 
   // Biblioteca: clic en una fila = alternar (añadir/quitar). Añadir una viñeta
@@ -597,9 +602,9 @@ export function EditorVarianteScreen({ variantId = "editor" }: { variantId?: str
         await postItem(m.parent_id);
       }
       await postItem(masterId);
-      flash("añadido a la variante");
+      flash(t("editor.stAdded"));
     },
-    [items, masterById, removeItem, postItem, flash],
+    [items, masterById, removeItem, postItem, flash, t],
   );
 
   const toggleHide = useCallback(
@@ -608,10 +613,10 @@ export function EditorVarianteScreen({ variantId = "editor" }: { variantId?: str
       if (!it) return;
       const nextVisible = !it.visible;
       setItems((prev) => prev.map((i) => (i.id === vitemId ? { ...i, visible: nextVisible } : i)));
-      flash(nextVisible ? "mostrado en esta variante" : "oculto en esta variante");
+      flash(nextVisible ? t("editor.stShown") : t("editor.stHidden"));
       patchItem(vitemId, { visible: nextVisible });
     },
-    [items, flash, patchItem],
+    [items, flash, patchItem, t],
   );
 
   const revert = useCallback(
@@ -623,10 +628,10 @@ export function EditorVarianteScreen({ variantId = "editor" }: { variantId?: str
       setItems((prev) =>
         prev.map((i) => (i.id === vitemId ? { ...i, override_data: null, data: { ...i.data, [field]: masterVal } } : i)),
       );
-      flash("override revertido — vuelve a seguir al master");
+      flash(t("editor.stReverted"));
       patchItem(vitemId, { override_data: null });
     },
-    [items, masterById, flash, patchItem],
+    [items, masterById, flash, patchItem, t],
   );
 
   const startEdit = useCallback((id: string) => setEditingId(id), []);
@@ -660,7 +665,7 @@ export function EditorVarianteScreen({ variantId = "editor" }: { variantId?: str
       setItems((prev) =>
         prev.map((i) => (i.id === id ? { ...i, override_data: override, data: { ...i.data, [field]: v } } : i)),
       );
-      flash("override guardado — solo en esta variante");
+      flash(t("editor.stOvrSaved"));
       patchItem(id, { override_data: override });
     } else if (v === masterVal && it?.override_data) {
       setItems((prev) =>
@@ -669,7 +674,7 @@ export function EditorVarianteScreen({ variantId = "editor" }: { variantId?: str
       patchItem(id, { override_data: null });
     }
     setEditingId(null);
-  }, [editingId, items, masterById, flash, patchItem]);
+  }, [editingId, items, masterById, flash, patchItem, t]);
 
   const onEditKeyDown = useCallback((e: React.KeyboardEvent<HTMLSpanElement>) => {
     if (e.key === "Enter") {
@@ -722,10 +727,10 @@ export function EditorVarianteScreen({ variantId = "editor" }: { variantId?: str
       const to = e.key === "ArrowUp" ? idx - 1 : idx + 1;
       if (to < 0 || to >= group.length) return;
       reorder(work, bullet.id, to, true);
-      flash("viñeta reordenada");
+      flash(t("editor.stReordered"));
       requestAnimationFrame(() => document.querySelector<HTMLButtonElement>(`[data-grip="${bullet.id}"]`)?.focus());
     },
-    [bulletsForWork, reorder, flash],
+    [bulletsForWork, reorder, flash, t],
   );
 
   const onDragStart = useCallback(
@@ -768,10 +773,10 @@ export function EditorVarianteScreen({ variantId = "editor" }: { variantId?: str
   // ── Descargar PDF (mismo motor que el preview → cero deriva) ──
   const downloadPdf = useCallback(async () => {
     if (!supabaseEnabled) {
-      flash("el PDF se genera del mismo estado que ves — sin sorpresas");
+      flash(t("editor.stPdfLocal"));
       return;
     }
-    flash("generando PDF…");
+    flash(t("editor.stPdfGen"));
     try {
       const res = await fetch("/api/cv", {
         method: "POST",
@@ -786,11 +791,11 @@ export function EditorVarianteScreen({ variantId = "editor" }: { variantId?: str
       a.download = `CV-${(doc.basics.name || "corpus").replace(/[^a-z0-9]+/gi, "-").replace(/^-|-$/g, "")}.pdf`;
       a.click();
       URL.revokeObjectURL(url);
-      flash("PDF descargado ✓");
+      flash(t("editor.stPdfDone"));
     } catch {
-      flash("no se pudo generar el PDF");
+      flash(t("editor.stPdfErr"));
     }
-  }, [variantId, doc.basics.name, flash]);
+  }, [variantId, doc.basics.name, flash, t]);
 
   // ── Nombre / título objetivo ──
   const onNameBlur = useCallback(
@@ -833,8 +838,8 @@ export function EditorVarianteScreen({ variantId = "editor" }: { variantId?: str
               type="button"
               className="grip"
               data-grip={b.id}
-              title="arrastra para reordenar (o usa las flechas ↑ ↓)"
-              aria-label="Reordenar viñeta. Usa las flechas arriba y abajo para mover."
+              title={t("editor.gripTitle")}
+              aria-label={t("editor.gripAria")}
               onKeyDown={(e) => onGripKey(e, b, work)}
             >
               ⠿
@@ -856,24 +861,26 @@ export function EditorVarianteScreen({ variantId = "editor" }: { variantId?: str
             {text}
           </span>
           <span className="bacts">
-            <button type="button" data-a="hide" title="ocultar en esta variante" onClick={() => toggleHide(b.id)}>
-              {hidden ? "mostrar" : "👁 ocultar"}
+            <button type="button" data-a="hide" title={t("editor.hideTitle")} onClick={() => toggleHide(b.id)}>
+              {hidden ? t("editor.show") : t("editor.hide")}
             </button>
             {field ? (
-              <button type="button" data-a="edit" title="afinar solo aquí" onClick={() => startEdit(b.id)}>
-                afinar
+              <button type="button" data-a="edit" title={t("editor.tuneTitle")} onClick={() => startEdit(b.id)}>
+                {t("editor.tune")}
               </button>
             ) : null}
-            <button type="button" data-a="out" title="quitar de la variante" onClick={() => removeItem(b.id)}>
+            <button type="button" data-a="out" title={t("editor.removeFromVariant")} onClick={() => removeItem(b.id)}>
               ×
             </button>
           </span>
         </div>
         {ov && (
           <div className="var-orig">
-            <span>original: {masterText}</span>
+            <span>
+              {t("editor.original")} {masterText}
+            </span>
             <button type="button" className="rv" data-rv={b.id} onClick={() => revert(b.id)}>
-              revertir
+              {t("editor.revert")}
             </button>
           </div>
         )}
@@ -911,7 +918,7 @@ export function EditorVarianteScreen({ variantId = "editor" }: { variantId?: str
         <button
           type="button"
           className="add"
-          title={inV ? "quitar de la variante" : "añadir a la variante"}
+          title={inV ? t("editor.removeFromVariant") : t("editor.addToVariant")}
           aria-pressed={inV}
           onClick={() => void toggleFromLib(m.id)}
         >
@@ -943,7 +950,9 @@ export function EditorVarianteScreen({ variantId = "editor" }: { variantId?: str
   const projectItems = items.filter((i) => i.kind === "project").sort(bySort);
   const eduItems = items.filter((i) => i.kind === "education").sort(bySort);
   const overrideCount = items.filter((i) => i.override_data != null).length;
-  const midN = items.length + " referencias · " + overrideCount + " overrides";
+  const midN = t("editor.midN")
+    .replace("{n}", String(items.length))
+    .replace("{m}", String(overrideCount));
   const isEmpty = !loading && items.length === 0;
 
   const setTab = (v: View) => setView(v);
@@ -956,19 +965,19 @@ export function EditorVarianteScreen({ variantId = "editor" }: { variantId?: str
             Corpus
           </Link>
           <nav className="hd-nav">
-            <Link href="/app">Panel</Link>
-            <Link href="/app/master">Master</Link>
+            <Link href="/app">{t("nav.panel")}</Link>
+            <Link href="/app/master">{t("nav.master")}</Link>
             <Link href="/app/variantes" aria-current="page">
-              Variantes
+              {t("nav.variantes")}
             </Link>
-            <Link href="/app/fuentes">Fuentes</Link>
+            <Link href="/app/fuentes">{t("nav.fuentes")}</Link>
           </nav>
           <div className="hd-right">
             <Link href="/app/ajustes" className="hd-nav" style={{ display: "inline-flex" }}>
               <span
                 style={{ font: "500 var(--fs-ui)/1 var(--font-sans)", color: "var(--text-muted)", padding: "9px 12px" }}
               >
-                Ajustes
+                {t("nav.ajustes")}
               </span>
             </Link>
             <div className="hd-lang">
@@ -983,7 +992,7 @@ export function EditorVarianteScreen({ variantId = "editor" }: { variantId?: str
       <div className="ed-bar" data-screen-label="editor-toolbar">
         <div className="c-container">
           <Link className="bk" href="/app/variantes">
-            ← Variantes
+            {t("editor.backToVariants")}
           </Link>
           <span style={{ width: "1px", height: "16px", background: "var(--border-strong)" }} />
           <span
@@ -992,10 +1001,10 @@ export function EditorVarianteScreen({ variantId = "editor" }: { variantId?: str
             contentEditable
             suppressContentEditableWarning
             spellCheck={false}
-            aria-label="Nombre de la variante"
+            aria-label={t("editor.nameAria")}
             onBlur={onNameBlur}
           >
-            {meta?.name ?? "Variante"}
+            {meta?.name ?? t("editor.defaultVariantName")}
           </span>
           <span
             className="st"
@@ -1003,31 +1012,31 @@ export function EditorVarianteScreen({ variantId = "editor" }: { variantId?: str
             role="status"
             style={stAccent ? { color: "var(--accent-text)" } : undefined}
           >
-            {stMsg}
+            {stMsg || t("editor.stIdle")}
           </span>
           <span className="acts">
             <Link className="c-btn c-btn--quiet" href={`/app/variantes/${variantId}/tailor`}>
-              Adaptar a un aviso
+              {t("common.tailor")}
             </Link>
             <Link className="c-btn c-btn--quiet" href={`/app/variantes/${variantId}/salud`}>
-              Salud
+              {t("common.health")}
             </Link>
             <button type="button" className="c-btn c-btn--patina" id="btnPdf" onClick={() => void downloadPdf()}>
-              Descargar PDF
+              {t("common.downloadPdf")}
             </button>
           </span>
         </div>
       </div>
 
-      <div className="ed-tabs" role="group" aria-label="Vista de columna">
+      <div className="ed-tabs" role="group" aria-label={t("editor.tabsAria")}>
         <button type="button" data-view="master" aria-pressed={view === "master"} onClick={() => setTab("master")}>
-          Master
+          {t("editor.tabMaster")}
         </button>
         <button type="button" data-view="mid" aria-pressed={view === "mid"} onClick={() => setTab("mid")}>
-          Esta variante
+          {t("editor.tabThis")}
         </button>
         <button type="button" data-view="preview" aria-pressed={view === "preview"} onClick={() => setTab("preview")}>
-          Preview
+          {t("editor.tabPreview")}
         </button>
       </div>
 
@@ -1035,15 +1044,15 @@ export function EditorVarianteScreen({ variantId = "editor" }: { variantId?: str
         {/* ── MASTER (biblioteca) ── */}
         <aside className="ed-col ed-col--lib" data-screen-label="editor-master">
           <div className="ed-colh">
-            <span className="t-overline">Master</span>
-            <span className="n">{libCount} items — tu biblioteca</span>
+            <span className="t-overline">{t("editor.libOverline")}</span>
+            <span className="n">{t("editor.libCount").replace("{n}", String(libCount))}</span>
           </div>
           <div className="lib-search">
             <input
               className="c-input"
               id="libQ"
-              placeholder="Buscar en tu master…"
-              aria-label="Buscar en tu master"
+              placeholder={t("editor.libSearchPlaceholder")}
+              aria-label={t("editor.libSearchAria")}
               value={libQ}
               onChange={(e) => setLibQ(e.target.value)}
             />
@@ -1051,13 +1060,13 @@ export function EditorVarianteScreen({ variantId = "editor" }: { variantId?: str
           <div id="lib">
             {mSummary.length > 0 && (
               <div className="lib-g">
-                <span className="t-overline">Resumen</span>
+                <span className="t-overline">{t("editor.groupSummary")}</span>
                 {mSummary.map((m) => libRow(m, S(m.data, "text").slice(0, 80) + (S(m.data, "text").length > 80 ? "…" : "")))}
               </div>
             )}
             {mWorks.length > 0 && (
               <div className="lib-g">
-                <span className="t-overline">Experiencia · viñetas</span>
+                <span className="t-overline">{t("editor.groupWorkBullets")}</span>
                 {mWorks.map((w) => (
                   <Fragment key={w.id}>
                     {libRow(w, (
@@ -1073,7 +1082,7 @@ export function EditorVarianteScreen({ variantId = "editor" }: { variantId?: str
             )}
             {mSkills.length > 0 && (
               <div className="lib-g">
-                <span className="t-overline">Skills</span>
+                <span className="t-overline">{t("editor.groupSkills")}</span>
                 {mSkills.map((s) =>
                   libRow(s, (
                     <>
@@ -1085,36 +1094,36 @@ export function EditorVarianteScreen({ variantId = "editor" }: { variantId?: str
             )}
             {mProjects.length > 0 && (
               <div className="lib-g">
-                <span className="t-overline">Proyectos</span>
+                <span className="t-overline">{t("editor.groupProjects")}</span>
                 {mProjects.map((p) => libRow(p))}
               </div>
             )}
             {mEducation.length > 0 && (
               <div className="lib-g">
-                <span className="t-overline">Educación</span>
+                <span className="t-overline">{t("editor.groupEducation")}</span>
                 {mEducation.map((d) => libRow(d))}
               </div>
             )}
           </div>
           <p style={{ margin: "20px 18px 30px", font: "400 10px/1.7 var(--font-mono)", color: "var(--text-subtle)" }}>
-            Aquí vive todo. La variante solo <b style={{ color: "var(--text-muted)" }}>referencia</b> — si editas el
-            master, las variantes se actualizan solas.
+            {t("editor.libFootA")} <b style={{ color: "var(--text-muted)" }}>{t("editor.libFootRef")}</b>{" "}
+            {t("editor.libFootB")}
           </p>
         </aside>
 
         {/* ── ESTA VARIANTE (composición) ── */}
         <section className="ed-col ed-col--mid" data-screen-label="editor-composicion">
           <div className="ed-colh">
-            <span className="t-overline">Esta variante</span>
+            <span className="t-overline">{t("editor.midOverline")}</span>
             <span className="n" id="midN">
-              {loading ? "leyendo…" : midN}
+              {loading ? t("editor.reading") : midN}
             </span>
           </div>
           <div className="c-card var-obj">
             <label htmlFor="objInput">
-              Título objetivo{" "}
+              {t("editor.objLabel")}{" "}
               <span style={{ letterSpacing: 0, textTransform: "none", color: "var(--text-subtle)" }}>
-                — el campo que más pesa
+                {t("editor.objLabelHint")}
               </span>
             </label>
             <input
@@ -1122,13 +1131,12 @@ export function EditorVarianteScreen({ variantId = "editor" }: { variantId?: str
               id="objInput"
               value={targetTitle}
               spellCheck={false}
-              placeholder="p. ej. Backend Engineer"
+              placeholder={t("editor.objPlaceholder")}
               onChange={(e) => setTargetTitle(e.target.value)}
               onBlur={onObjBlur}
             />
             <p className="hint">
-              Si coincide con el título del aviso: <b>10,6× más entrevistas</b> [Jobscan, 2,5M postulaciones]. Honesto
-              y con tu cargo real al lado: «Backend Engineer (Ingeniero de Software III)».
+              {t("editor.objHintA")} <b>{t("editor.objHintBold")}</b> {t("editor.objHintB")}
             </p>
           </div>
 
@@ -1137,7 +1145,7 @@ export function EditorVarianteScreen({ variantId = "editor" }: { variantId?: str
               {summaryItems.length > 0 && (
                 <div className="var-g">
                   <div className="gh">
-                    <span className="t-overline">Resumen</span>
+                    <span className="t-overline">{t("editor.groupSummary")}</span>
                   </div>
                   <div className="var-exp">{summaryItems.map((s) => renderBullet(s))}</div>
                 </div>
@@ -1146,8 +1154,8 @@ export function EditorVarianteScreen({ variantId = "editor" }: { variantId?: str
               {workItems.length > 0 && (
                 <div className="var-g">
                   <div className="gh">
-                    <span className="t-overline">Experiencia</span>
-                    <span className="n">las fechas vienen del master</span>
+                    <span className="t-overline">{t("editor.groupExperience")}</span>
+                    <span className="n">{t("editor.datesFromMaster")}</span>
                   </div>
                   {workItems.map((w) => (
                     <div className="var-exp" data-exp={w.item_id} key={w.id}>
@@ -1160,7 +1168,7 @@ export function EditorVarianteScreen({ variantId = "editor" }: { variantId?: str
                           <button
                             type="button"
                             data-a="out"
-                            title="quitar el rol (y sus viñetas) de la variante"
+                            title={t("editor.removeRoleTitle")}
                             onClick={() => removeItem(w.id)}
                             style={{ font: "400 11px/1 var(--font-mono)", color: "var(--text-subtle)", padding: "4px 6px" }}
                           >
@@ -1177,13 +1185,17 @@ export function EditorVarianteScreen({ variantId = "editor" }: { variantId?: str
               {skillItems.length > 0 && (
                 <div className="var-g">
                   <div className="gh">
-                    <span className="t-overline">Habilidades</span>
+                    <span className="t-overline">{t("editor.groupSkillsFull")}</span>
                   </div>
                   <div className="var-chips">
                     {skillItems.map((s) => (
                       <span className="c-chip" key={s.id}>
-                        <b>{S(s.data, "group")}</b> {S(s.data, "items").split(",").filter(Boolean).length} items
-                        <button type="button" data-out={s.item_id} title="quitar" onClick={() => removeItem(s.id)}>
+                        <b>{S(s.data, "group")}</b>{" "}
+                        {t("editor.skillItemsCount").replace(
+                          "{n}",
+                          String(S(s.data, "items").split(",").filter(Boolean).length),
+                        )}
+                        <button type="button" data-out={s.item_id} title={t("editor.removeTitle")} onClick={() => removeItem(s.id)}>
                           ×
                         </button>
                       </span>
@@ -1195,7 +1207,7 @@ export function EditorVarianteScreen({ variantId = "editor" }: { variantId?: str
               {projectItems.length > 0 && (
                 <div className="var-g">
                   <div className="gh">
-                    <span className="t-overline">Proyectos</span>
+                    <span className="t-overline">{t("editor.groupProjects")}</span>
                   </div>
                   <div className="var-exp">{projectItems.map((p) => renderBullet(p))}</div>
                 </div>
@@ -1204,7 +1216,7 @@ export function EditorVarianteScreen({ variantId = "editor" }: { variantId?: str
               {eduItems.length > 0 && (
                 <div className="var-g">
                   <div className="gh">
-                    <span className="t-overline">Educación</span>
+                    <span className="t-overline">{t("editor.groupEducation")}</span>
                   </div>
                   <div className="var-exp">
                     {eduItems.map((d) => (
@@ -1221,7 +1233,7 @@ export function EditorVarianteScreen({ variantId = "editor" }: { variantId?: str
                           <button
                             type="button"
                             data-a="out"
-                            title="quitar de la variante"
+                            title={t("editor.removeFromVariant")}
                             onClick={() => removeItem(d.id)}
                           >
                             ×
@@ -1236,10 +1248,10 @@ export function EditorVarianteScreen({ variantId = "editor" }: { variantId?: str
           )}
 
           <div className="var-empty" id="midEmpty" hidden={!isEmpty}>
-            <span className="t-overline">Variante vacía</span>
-            Elige del master qué cuenta esta variante.
+            <span className="t-overline">{t("editor.emptyOverline")}</span>
+            {t("editor.emptyLine1")}
             <br />
-            Pulsa <b>+</b> en la biblioteca — nada se copia: se referencia.
+            {t("editor.emptyLine2A")} <b>+</b> {t("editor.emptyLine2B")}
           </div>
           <div style={{ height: "40px" }} />
         </section>
@@ -1247,19 +1259,21 @@ export function EditorVarianteScreen({ variantId = "editor" }: { variantId?: str
         {/* ── PREVIEW: el preview ES el PDF ── */}
         <section className="ed-col pv-col" data-screen-label="editor-preview">
           <div className="pv-tools">
-            <div className="pv-seg" role="group" aria-label="Vista del documento">
+            <div className="pv-seg" role="group" aria-label={t("editor.segAria")}>
               <button type="button" id="segDoc" aria-pressed={mode === "doc"} onClick={() => setMode("doc")}>
-                Documento
+                {t("editor.viewDoc")}
               </button>
               <button type="button" id="segRaw" aria-pressed={mode === "raw"} onClick={() => setMode("raw")}>
-                Cómo lo lee el ATS
+                {t("editor.viewRaw")}
               </button>
             </div>
             <span className="pv-pages" id="pvPages">
               {pageCount <= 2 ? (
-                "pág " + Math.min(pageCount, 1) + " / " + pageCount
+                t("editor.pageLabel")
+                  .replace("{a}", String(Math.min(pageCount, 1)))
+                  .replace("{b}", String(pageCount))
               ) : (
-                <span className="warn">⚠ {pageCount} páginas — la página 3 no existe para el reclutador [Ladders]</span>
+                <span className="warn">{t("editor.pagesWarn").replace("{n}", String(pageCount))}</span>
               )}
             </span>
           </div>
@@ -1273,7 +1287,7 @@ export function EditorVarianteScreen({ variantId = "editor" }: { variantId?: str
                 <div className="pv-pagewrap" style={{ transform: `scale(${scale})`, width: "816px" }}>
                   {pages.map((html, i) => (
                     <div className={"pv-page" + (i >= 2 ? " pv-p3" : "")} key={i}>
-                      <span className="pv-pnum">pág {i + 1}</span>
+                      <span className="pv-pnum">{t("editor.pageNum").replace("{n}", String(i + 1))}</span>
                       <div className="inner" dangerouslySetInnerHTML={{ __html: html }} />
                     </div>
                   ))}
@@ -1284,9 +1298,7 @@ export function EditorVarianteScreen({ variantId = "editor" }: { variantId?: str
               </div>
             </div>
           </div>
-          <div className="pv-foot">
-            El preview ES el PDF: mismo motor, mismos cortes de página. Si el preview miente, el producto miente.
-          </div>
+          <div className="pv-foot">{t("editor.previewFoot")}</div>
         </section>
       </div>
     </div>

@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { CorpusRuntime } from "@/components/CorpusRuntime";
+import { LangProvider } from "@/lib/i18n";
 import "./globals.css";
 
 /*
@@ -30,7 +31,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         />
       </head>
       <body>
-        {children}
+        {/* LangProvider envuelve TODA la app (no solo /app): auth, onboarding y
+            login también usan useT(). El idioma inicial sale de localStorage y se
+            reconcilia con user_settings al montar. */}
+        <LangProvider>{children}</LangProvider>
         <CorpusRuntime />
       </body>
     </html>

@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { useT } from "@/lib/i18n";
 import { useBoot } from "@/lib/corpus/runtime";
 import "./tailor.css";
 
@@ -144,6 +145,7 @@ const editNote: React.CSSProperties = { font: "400 10px/1.5 var(--font-mono)", c
 
 export function TailorScreen() {
   const bootRef = useBoot<HTMLDivElement>();
+  const t = useT();
 
   const [jd, setJd] = useState("");
   const [analyzing, setAnalyzing] = useState(false);
@@ -211,9 +213,9 @@ export function TailorScreen() {
 
     const M = window.CorpusMotion;
     const steps = [
-      `Leyendo el aviso — ${fmt(words)} palabras, ${totalReqs} exigencias detectadas`,
-      "Comparando contra 52 items del master…",
-      "Buscando las exigencias en tus viñetas, skills y repos…",
+      t("tailor.logReading").replace("{n}", fmt(words)).replace("{r}", String(totalReqs)),
+      t("tailor.logComparing"),
+      t("tailor.logSearching"),
     ];
 
     setResultMsg("");
@@ -232,7 +234,10 @@ export function TailorScreen() {
     setAnalyzing(false);
     setAnalyzed(true);
     setResultMsg(
-      `Comparación lista. ${HAVE.length} ya están en esta variante, ${ADD.length} en tu master, ${GAP.length} sin evidencia en ninguna parte.`,
+      t("tailor.resultMsg")
+        .replace("{have}", String(HAVE.length))
+        .replace("{add}", String(ADD.length))
+        .replace("{gap}", String(GAP.length)),
     );
     runningRef.current = false;
   }
@@ -250,45 +255,40 @@ export function TailorScreen() {
   const saveProp = (i: number) => setProp(i, "saved");
 
   function renderFoot(i: number, p: Prop, st: PropState) {
-    if (st === "accepted")
-      return (
-        <span style={done}>
-          ✓ aplicada como override — el original sigue en el master, revertible en el editor
-        </span>
-      );
-    if (st === "rejected") return <span style={rejNote}>rechazada — no se guarda nada</span>;
+    if (st === "accepted") return <span style={done}>{t("tailor.footAccepted")}</span>;
+    if (st === "rejected") return <span style={rejNote}>{t("tailor.footRejected")}</span>;
     if (st === "editing")
       return (
         <>
-          <span style={editNote}>edítala — al guardar queda como origen: tú</span>
+          <span style={editNote}>{t("tailor.footEditing")}</span>
           <span className="sp">
             <button type="button" className="acc" onClick={() => saveProp(i)}>
-              guardar como mía
+              {t("tailor.footSaveMine")}
             </button>
           </span>
         </>
       );
-    if (st === "saved") return <span style={done}>✓ guardada con origen manual</span>;
+    if (st === "saved") return <span style={done}>{t("tailor.footSaved")}</span>;
     // idle
     return (
       <>
         {p.warn ? (
           <span className="warn">⚠ {p.warn}</span>
         ) : (
-          <span style={inlineNote}>si aceptas, queda como override — reversible, con el original a la vista</span>
+          <span style={inlineNote}>{t("tailor.footIdleNote")}</span>
         )}
         <span className="sp">
           {p.ver === "ok" ? (
             <button type="button" className="acc" onClick={() => acceptProp(i)}>
-              aceptar
+              {t("tailor.footAccept")}
             </button>
           ) : (
             <button type="button" onClick={() => editProp(i)}>
-              editarlo tú
+              {t("tailor.footEditYou")}
             </button>
           )}
           <button type="button" className="rej" onClick={() => rejectProp(i)}>
-            rechazar
+            {t("tailor.footReject")}
           </button>
         </span>
       </>
@@ -303,16 +303,16 @@ export function TailorScreen() {
             Corpus
           </Link>
           <nav className="hd-nav">
-            <Link href="/app">Panel</Link>
-            <Link href="/app/master">Master</Link>
+            <Link href="/app">{t("nav.panel")}</Link>
+            <Link href="/app/master">{t("nav.master")}</Link>
             <Link href="/app/variantes" aria-current="page">
-              Variantes
+              {t("nav.variantes")}
             </Link>
-            <Link href="/app/fuentes">Fuentes</Link>
+            <Link href="/app/fuentes">{t("nav.fuentes")}</Link>
           </nav>
           <div className="hd-right">
             <nav className="hd-nav" style={{ display: "flex" }}>
-              <Link href="/app/ajustes">Ajustes</Link>
+              <Link href="/app/ajustes">{t("nav.ajustes")}</Link>
             </nav>
             <div className="hd-lang">
               <span data-on>ES</span>
@@ -339,7 +339,7 @@ export function TailorScreen() {
               color: "var(--text-muted)",
             }}
           >
-            ADAPTAR A UN AVISO
+            {t("common.tailor").toUpperCase()}
           </span>
           <span
             style={{
@@ -348,7 +348,7 @@ export function TailorScreen() {
               color: "var(--text-subtle)",
             }}
           >
-            sin score — tres respuestas honestas
+            {t("tailor.toolbarNote")}
           </span>
         </div>
       </div>
@@ -358,7 +358,7 @@ export function TailorScreen() {
           {/* el aviso */}
           <aside className="tl-left" data-screen-label="tailor-aviso">
             <label className="c-label" htmlFor="jd">
-              El aviso, tal cual
+              {t("tailor.jdLabel")}
             </label>
             <textarea
               className="c-textarea"
@@ -366,15 +366,15 @@ export function TailorScreen() {
               spellCheck={false}
               value={jd}
               onChange={(e) => setJd(e.target.value)}
-              placeholder="Pega aquí la descripción del cargo — completa, sin limpiar."
+              placeholder={t("tailor.jdPlaceholder")}
             />
             <div className="foot">
               <span className="meta" id="jdMeta">
-                {fmt(words)} palabras
+                {t("tailor.words").replace("{n}", fmt(words))}
               </span>
               <span style={{ display: "flex", gap: "8px" }}>
                 <button type="button" className="c-btn c-btn--quiet" id="btnSample" onClick={() => setJd(JD)}>
-                  usar aviso de ejemplo
+                  {t("tailor.useSample")}
                 </button>
                 <button
                   type="button"
@@ -383,7 +383,7 @@ export function TailorScreen() {
                   disabled={!canGo}
                   onClick={analyze}
                 >
-                  Comparar con tu master
+                  {t("tailor.compare")}
                 </button>
               </span>
             </div>
@@ -410,32 +410,31 @@ export function TailorScreen() {
             </span>
 
             <div className="tl-hint c-card" id="hint" hidden={analyzing || analyzed}>
-              <span className="t-overline">Todavía nada que comparar</span>
-              Pega el aviso y Corpus lo contrasta contra tus <b>52 items</b> — los del master, no los de
-              esta variante.
+              <span className="t-overline">{t("tailor.hintOverline")}</span>
+              {t("tailor.hintBefore")} <b>{t("tailor.hintItems")}</b> {t("tailor.hintAfter")}
               <br />
-              La respuesta son hechos en tres grupos, no un porcentaje.
+              {t("tailor.hintLine2")}
             </div>
 
             <div id="out" ref={outRef} hidden={!analyzed}>
               {/* título */}
               <div className="c-card tl-title" data-screen-label="tailor-titulo">
                 <span className="pair">
-                  El aviso pide <b>«Backend Engineer»</b>
-                  <span className="arrow">·</span>tu variante dice{" "}
+                  {t("tailor.titlePre")} <b>«Backend Engineer»</b>
+                  <span className="arrow">·</span>{t("tailor.titleMid")}{" "}
                   <b id="curTitle">
-                    {titleAligned ? "«Backend Engineer (Ingeniero de Software III)»" : "«Backend Developer»"}
+                    {titleAligned ? t("tailor.titleAlignedValue") : t("tailor.titleCurrent")}
                   </b>
                 </span>
                 <span className="act">
-                  <span className="why">título alineado = 10,6× entrevistas [Jobscan]</span>
+                  <span className="why">{t("tailor.titleWhy")}</span>
                   {titleAligned ? (
                     <span className="done" style={done}>
-                      ✓ título alineado — honesto: tu cargo real queda al lado
+                      {t("tailor.titleDone")}
                     </span>
                   ) : (
                     <button type="button" className="c-btn" id="btnTitle" onClick={() => setTitleAligned(true)}>
-                      Usar el del aviso
+                      {t("tailor.titleUse")}
                     </button>
                   )}
                 </span>
@@ -445,7 +444,7 @@ export function TailorScreen() {
               <div className="tl-g tl-g--have">
                 <div className="tl-gh">
                   <span className="g-mark">✓</span>
-                  <span className="t-overline">Ya está en esta variante</span>
+                  <span className="t-overline">{t("tailor.haveTitle")}</span>
                   <span className="n" id="nHave">
                     {HAVE.length}
                   </span>
@@ -465,9 +464,9 @@ export function TailorScreen() {
               <div className="tl-g tl-g--add">
                 <div className="tl-gh">
                   <span className="g-mark">＋</span>
-                  <span className="t-overline">Lo tienes en el master, no en esta variante</span>
+                  <span className="t-overline">{t("tailor.addTitle")}</span>
                   <span className="n">{ADD.length}</span>
-                  <span className="why">un clic y entra — es tuyo, es honesto</span>
+                  <span className="why">{t("tailor.addWhy")}</span>
                 </div>
                 <hr className="c-divider" />
                 <div className="tl-rows" id="gAdd">
@@ -477,10 +476,10 @@ export function TailorScreen() {
                       <span className="d">{x.d}</span>
                       <span className="act">
                         {added.has(i) ? (
-                          <span className="done">✓ en la variante</span>
+                          <span className="done">{t("tailor.addDone")}</span>
                         ) : (
                           <button type="button" onClick={() => addItem(i)}>
-                            añadir a la variante
+                            {t("tailor.addBtn")}
                           </button>
                         )}
                       </span>
@@ -493,9 +492,9 @@ export function TailorScreen() {
               <div className="tl-g tl-g--gap">
                 <div className="tl-gh">
                   <span className="g-mark">○</span>
-                  <span className="t-overline">No está en ninguna parte</span>
+                  <span className="t-overline">{t("tailor.gapTitle")}</span>
                   <span className="n">{GAP.length}</span>
-                  <span className="why">y no vamos a inventarlo</span>
+                  <span className="why">{t("tailor.gapWhy")}</span>
                 </div>
                 <hr className="c-divider" />
                 <div className="tl-rows" id="gGap">
@@ -511,26 +510,22 @@ export function TailorScreen() {
                             <span className="done">{REFRAME_BULLET}</span>
                           ) : (
                             <button type="button" onClick={() => reframeItem(i)}>
-                              reencuadrar con lo que sí tienes
+                              {t("tailor.gapReframeBtn")}
                             </button>
                           )}
                         </span>
                       )}
                     </div>
                   ))}
-                  <div className="tl-gap-note">
-                    Aquí no hay botón de «añadir». Tres salidas reales: apréndelo, busca en tu master
-                    evidencia parcial que reencuadrar, o asume que este aviso no calza contigo — también
-                    está bien.
-                  </div>
+                  <div className="tl-gap-note">{t("tailor.gapNote")}</div>
                 </div>
               </div>
 
               {/* reformulaciones — original ⇄ propuesto, una a una */}
               <div className="tl-ref" data-screen-label="tailor-reformulaciones">
                 <div className="tl-gh">
-                  <span className="t-overline">Reformulaciones propuestas</span>
-                  <span className="n">{PROPS.length} · una a una, nunca en bloque</span>
+                  <span className="t-overline">{t("tailor.refTitle")}</span>
+                  <span className="n">{t("tailor.refCount").replace("{n}", String(PROPS.length))}</span>
                 </div>
                 <hr className="c-divider" />
                 <div id="props">
@@ -544,23 +539,23 @@ export function TailorScreen() {
                         style={st === "rejected" ? { opacity: 0.45 } : undefined}
                       >
                         <div className="tl-phead">
-                          <span className="t-overline">Propuesta {i + 1}</span>
+                          <span className="t-overline">{t("tailor.propLabel").replace("{n}", String(i + 1))}</span>
                           <span className="trace">{p.trace}</span>
                           {st === "saved" ? (
-                            <span className="c-ver c-ver--ok">verificado · origen: tú</span>
+                            <span className="c-ver c-ver--ok">{t("tailor.verSavedOrigin")}</span>
                           ) : (
                             <span className={`c-ver ${p.ver === "ok" ? "c-ver--ok" : "c-ver--none"}`}>
-                              {p.ver === "ok" ? "verificado" : "no verificado"}
+                              {p.ver === "ok" ? t("tailor.verOk") : t("tailor.verNone")}
                             </span>
                           )}
                         </div>
                         <div className="tl-cols">
                           <div>
-                            <span className="lbl">Original (master)</span>
+                            <span className="lbl">{t("tailor.colOriginal")}</span>
                             <span className="orig">{p.o}</span>
                           </div>
                           <div>
-                            <span className="lbl">Propuesto para esta variante</span>
+                            <span className="lbl">{t("tailor.colProposed")}</span>
                             <span
                               className="prop"
                               ref={(el) => {

@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { Aurora } from "@/components/Aurora";
+import { useT } from "@/lib/i18n";
 import "./onboarding.css";
 
 /* ============================================================================
@@ -19,6 +20,7 @@ import "./onboarding.css";
    ============================================================================ */
 
 export function OnboardingScreen() {
+  const t = useT();
   const [open, setOpen] = useState(false);
   const ovRef = useRef<HTMLSpanElement>(null);
   const h1Ref = useRef<HTMLHeadingElement>(null);
@@ -71,7 +73,7 @@ export function OnboardingScreen() {
               color: "var(--text-muted)",
             }}
           >
-            EMPEZAR
+            {t("onboarding.header")}
           </span>
           <div className="hd-right">
             <div className="hd-lang">
@@ -85,15 +87,16 @@ export function OnboardingScreen() {
 
       <main className="ob-main c-window" data-screen-label="onboarding">
         <span className="t-overline" id="ov" ref={ovRef}>
-          Un master, N variantes — partamos por el master
+          {t("onboarding.overline")}
         </span>
 
         <h1 className="ob-h1" id="h1" ref={h1Ref} style={{ marginTop: "20px" }}>
-          ¿Cómo prefieres <em>empezar?</em>
+          {t("onboarding.h1.pre")}
+          <em>{t("onboarding.h1.em")}</em>
         </h1>
 
         <p className="ob-sub" data-reveal style={{ "--d": "480ms" } as React.CSSProperties}>
-          Dos puertas al mismo lugar. Puedes cruzar la otra cuando quieras — el registro es uno solo.
+          {t("onboarding.sub")}
         </p>
 
         <div className="ob-doors">
@@ -108,16 +111,19 @@ export function OnboardingScreen() {
             aria-controls="tpl"
             onClick={() => setOpen((v) => !v)}
           >
-            <span className="t-overline">Puerta A · sin IA</span>
-            <h3>Escribirlo tú</h3>
+            <span className="t-overline">{t("onboarding.doorA.overline")}</span>
+            <h3>{t("onboarding.doorA.title")}</h3>
             <p>
-              Desde una plantilla de rol o en blanco, con la IA apagada. Escribes, Corpus estructura.
-              Cada item queda con <b style={{ color: "var(--text)", fontWeight: 500 }}>origen: tú</b> —
-              el más verificable de todos: no hay nada que rastrear, lo afirmaste tú.
+              {t("onboarding.doorA.body.pre")}
+              <b style={{ color: "var(--text)", fontWeight: 500 }}>
+                {t("onboarding.doorA.body.bold")}
+              </b>
+              {t("onboarding.doorA.body.post")}
             </p>
-            <p className="fine">bien para: perfeccionistas, perfiles simples, desconfiados con razón</p>
+            <p className="fine">{t("onboarding.doorA.fine")}</p>
             <span className="go" id="goA">
-              {open ? "Elegir plantilla ▴" : "Elegir plantilla ▾"}
+              {t("onboarding.doorA.cta")}
+              {open ? " ▴" : " ▾"}
             </span>
           </button>
 
@@ -128,16 +134,17 @@ export function OnboardingScreen() {
             style={{ "--d": "680ms" } as React.CSSProperties}
             data-screen-label="onboarding-puerta-ia"
           >
-            <span className="t-overline">Puerta B · con IA</span>
-            <h3>Volcarlo</h3>
+            <span className="t-overline">{t("onboarding.doorB.overline")}</span>
+            <h3>{t("onboarding.doorB.title")}</h3>
             <p>
-              Pega texto suelto, tu CV viejo, links a tu GitHub y portfolio. La IA extrae y cita el
-              fragmento de origen de cada dato;{" "}
-              <b style={{ color: "var(--text)", fontWeight: 500 }}>tú confirmas item por item</b> antes
-              de que nada entre al master.
+              {t("onboarding.doorB.body.pre")}
+              <b style={{ color: "var(--text)", fontWeight: 500 }}>
+                {t("onboarding.doorB.body.bold")}
+              </b>
+              {t("onboarding.doorB.body.post")}
             </p>
-            <p className="fine">bien para: 10 años de historia desordenada, poco tiempo, arranque rápido</p>
-            <span className="go">Ir al volcado →</span>
+            <p className="fine">{t("onboarding.doorB.fine")}</p>
+            <span className="go">{t("onboarding.doorB.cta")}</span>
           </Link>
         </div>
 
@@ -148,42 +155,39 @@ export function OnboardingScreen() {
           data-screen-label="onboarding-plantillas"
         >
           <div className="gh">
-            <span className="t-overline">
-              Plantillas de perfil — estructura vacía, cero texto inventado
-            </span>
+            <span className="t-overline">{t("onboarding.tpl.overline")}</span>
           </div>
           <hr className="c-divider" />
           <div className="rows" style={{ marginTop: "12px" }}>
             <Link href="/app/master">
-              <b>Backend / plataforma</b>
-              <span>roles · viñetas XYZ · skills por grupo · proyectos</span>
+              <b>{t("onboarding.tpl.backend.title")}</b>
+              <span>{t("onboarding.tpl.backend.desc")}</span>
             </Link>
             <Link href="/app/master">
-              <b>Data / IA</b>
-              <span>igual + secciones de investigación y datasets</span>
+              <b>{t("onboarding.tpl.data.title")}</b>
+              <span>{t("onboarding.tpl.data.desc")}</span>
             </Link>
             <Link href="/app/master">
-              <b>Diseño</b>
-              <span>igual + casos con problema → decisión → resultado</span>
+              <b>{t("onboarding.tpl.design.title")}</b>
+              <span>{t("onboarding.tpl.design.desc")}</span>
             </Link>
             <Link href="/app/master">
-              <b>Producto</b>
-              <span>igual + métricas de negocio por rol</span>
+              <b>{t("onboarding.tpl.product.title")}</b>
+              <span>{t("onboarding.tpl.product.desc")}</span>
             </Link>
             <Link href="/app/master">
-              <b>En blanco</b>
-              <span>solo la estructura del registro</span>
+              <b>{t("onboarding.tpl.blank.title")}</b>
+              <span>{t("onboarding.tpl.blank.desc")}</span>
             </Link>
             <Link href="/app/importar">
-              <b>Mejor, vuélcalo →</b>
-              <span>cambiar a la puerta B</span>
+              <b>{t("onboarding.tpl.dump.title")}</b>
+              <span>{t("onboarding.tpl.dump.desc")}</span>
             </Link>
           </div>
         </div>
 
         <p className="ob-note" data-reveal style={{ "--d": "760ms" } as React.CSSProperties}>
-          La puerta A no es la puerta «difícil» ni la B la «tramposa»: las dos terminan en el mismo
-          staging, con la misma revisión, y el mismo master.
+          {t("onboarding.note")}
         </p>
       </main>
     </div>

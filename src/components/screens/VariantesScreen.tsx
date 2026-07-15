@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { useT, useLang } from "@/lib/i18n";
 import { supabaseEnabled } from "@/lib/supabase/config";
 import "./variantes.css";
 
@@ -55,20 +56,29 @@ const DEMO_MASTER_ITEMS = 52;
 const EDITOR_FALLBACK = "/app/variantes/editor";
 const editorHref = (v: Variant) => (v.id ? `/app/variantes/${v.id}` : EDITOR_FALLBACK);
 
-function rel(iso: string): string {
+/* Tiempo relativo honesto (fuente: el reloj del sistema). Usa las claves
+   compartidas `dashboard.rel.*` del diccionario plano fusionado —son genéricas y
+   ya vienen pluralizadas en ES/EN—, así el idioma se refleja de verdad en vez de
+   quedar cableado en español. */
+type T = (key: string) => string;
+function rel(iso: string, t: T): string {
   const then = new Date(iso).getTime();
   if (!Number.isFinite(then)) return "";
   const d = Math.max(0, Date.now() - then);
   const day = 86_400_000;
-  if (d < 3_600_000) return "recién";
-  if (d < day) return `hace ${Math.round(d / 3_600_000)} h`;
-  if (d < 7 * day) return `hace ${Math.round(d / day)} día${Math.round(d / day) === 1 ? "" : "s"}`;
-  if (d < 30 * day) return `hace ${Math.round(d / (7 * day))} sem`;
-  if (d < 365 * day) return `hace ${Math.round(d / (30 * day))} mes${Math.round(d / (30 * day)) === 1 ? "" : "es"}`;
-  return `hace ${Math.round(d / (365 * day))} año${Math.round(d / (365 * day)) === 1 ? "" : "s"}`;
+  const plur = (base: string, n: number) =>
+    t(n === 1 ? `${base}.one` : `${base}.other`).replace("{n}", String(n));
+  if (d < 3_600_000) return t("dashboard.rel.now");
+  if (d < day) return t("dashboard.rel.hour").replace("{n}", String(Math.round(d / 3_600_000)));
+  if (d < 7 * day) return plur("dashboard.rel.day", Math.round(d / day));
+  if (d < 30 * day) return t("dashboard.rel.week").replace("{n}", String(Math.round(d / (7 * day))));
+  if (d < 365 * day) return plur("dashboard.rel.month", Math.round(d / (30 * day)));
+  return plur("dashboard.rel.year", Math.round(d / (365 * day)));
 }
 
 export function VariantesScreen() {
+  const t = useT();
+  const { lang } = useLang();
   const router = useRouter();
   const [variants, setVariants] = useState<Variant[]>(supabaseEnabled ? [] : DEMO_VARIANTS);
   const [masterItems, setMasterItems] = useState<number>(supabaseEnabled ? 0 : DEMO_MASTER_ITEMS);
@@ -101,9 +111,9 @@ export function VariantesScreen() {
         const list = ((data.variants ?? []) as { id: string; name: string; targetTitle: string | null; updatedAt: string; outdated: boolean }[]).map((x) => ({
           id: x.id,
           nm: x.name,
-          obj: x.targetTitle || "sin objetivo definido",
+          obj: x.targetTitle || t("variantes.noObjective"),
           pg: "",
-          touch: `tocada ${rel(x.updatedAt)}`,
+          touch: t("dashboard.variant.touched").replace("{rel}", rel(x.updatedAt, t)),
           old: x.outdated,
         }));
         setVariants(list);
@@ -117,7 +127,11 @@ export function VariantesScreen() {
     return () => {
       active = false;
     };
-  }, []);
+    // Recarga al cambiar de idioma: `obj` (sin objetivo) y `touch` (tocada {rel})
+    // se formatean con el `t` del closure, así que hay que rehacerlos con el
+    // idioma nuevo. `t` cambia de identidad junto con `lang`.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lang]);
 
   // Movimiento del sistema: dibuja el c-divider y revela filas. Se re-ejecuta con
   // `gen` (re-stagger tras actualizar/mantener) y cuando llegan los datos.
@@ -159,13 +173,13 @@ export function VariantesScreen() {
     setVariants((prev) => prev.map((v, k) => (k === i ? { ...v, old: false } : v)));
     setOpenRows(new Set());
     setGen((g) => g + 1);
-    setAnnounce(`Variante «${variants[i].nm}» actualizada con el master. Ahora está al día.`);
+    setAnnounce(t("variantes.announceUpdated").replace("{nm}", variants[i].nm));
   }
   function keepVariant(i: number) {
     setVariants((prev) => prev.map((v, k) => (k === i ? { ...v, old: false, kept: true } : v)));
     setOpenRows(new Set());
     setGen((g) => g + 1);
-    setAnnounce(`Variante «${variants[i].nm}»: override mantenido. Ahora está al día.`);
+    setAnnounce(t("variantes.announceKept").replace("{nm}", variants[i].nm));
   }
 
   // ── Creación ──────────────────────────────────────────────────────────────
@@ -188,7 +202,7 @@ export function VariantesScreen() {
       router.push(`/app/variantes/${variant.id}`);
     } catch {
       setCreating(null);
-      setCreateErr("No se pudo crear la variante. Intenta de nuevo.");
+      setCreateErr(t("variantes.errManual"));
     }
   }
 
@@ -201,7 +215,7 @@ export function VariantesScreen() {
       setAiResult({
         id: "editor",
         name: prompt.slice(0, 40),
-        notes: "Modo local: la IA real se activa con Supabase configurado. Esto es una vista de la maqueta.",
+        notes: t("variantes.aiLocalNote"),
       });
       return;
     }
@@ -215,9 +229,9 @@ export function VariantesScreen() {
       if (!res.ok) throw new Error();
       const { variant, notes } = (await res.json()) as { variant: { id: string; name: string }; notes?: string };
       setAiResult({ id: variant.id, name: variant.name, notes: notes ?? null });
-      setAnnounce(`Variante «${variant.name}» creada con IA como punto de partida. Ábrela para revisarla.`);
+      setAnnounce(t("variantes.announceAiCreated").replace("{nm}", variant.name));
     } catch {
-      setCreateErr("La IA no pudo armar la variante. Intenta otra descripción o crea una manual.");
+      setCreateErr(t("variantes.errAi"));
     } finally {
       setCreating(null);
     }
@@ -232,13 +246,13 @@ export function VariantesScreen() {
       >
         <div>
           <label htmlFor="aiPrompt" className="t-overline" style={{ display: "block", marginBottom: "8px" }}>
-            Crear con IA — un punto de partida
+            {t("variantes.aiLabel")}
           </label>
           <textarea
             id="aiPrompt"
             className="c-input"
             rows={2}
-            placeholder="Describe el rol o el enfoque: «para Backend Engineer», «un CV completo y honesto»…"
+            placeholder={t("variantes.aiPlaceholder")}
             value={aiPrompt}
             onChange={(e) => setAiPrompt(e.target.value)}
             style={{ resize: "vertical", minHeight: "54px", width: "100%", lineHeight: 1.5 }}
@@ -250,11 +264,10 @@ export function VariantesScreen() {
               disabled={creating !== null || !aiPrompt.trim()}
               onClick={() => void createAI()}
             >
-              {creating === "ai" ? "Armando…" : "Crear con IA"}
+              {creating === "ai" ? t("variantes.aiCreating") : t("variantes.aiCreate")}
             </button>
             <span style={{ font: "400 var(--fs-micro)/1.5 var(--font-mono)", color: "var(--text-subtle)", maxWidth: "52ch" }}>
-              La IA elige del master lo que encaja y propone un título. Tú lo revisas antes de nada — no se aplica en
-              silencio.
+              {t("variantes.aiHint")}
             </span>
           </div>
         </div>
@@ -271,17 +284,17 @@ export function VariantesScreen() {
         >
           <input
             className="c-input"
-            aria-label="Nombre de la nueva variante"
-            placeholder="Nombre (opcional): «Backend — Fintech»"
+            aria-label={t("variantes.nameAria")}
+            placeholder={t("variantes.namePlaceholder")}
             value={newName}
             onChange={(e) => setNewName(e.target.value)}
             style={{ maxWidth: "280px" }}
           />
           <button type="button" className="c-btn" disabled={creating !== null} onClick={() => void createManual()}>
-            {creating === "manual" ? "Creando…" : "Nueva variante (vacía)"}
+            {creating === "manual" ? t("variantes.manualCreating") : t("variantes.manualCreate")}
           </button>
           <span style={{ font: "400 var(--fs-micro)/1.5 var(--font-mono)", color: "var(--text-subtle)" }}>
-            Empiezas de cero y eliges del master.
+            {t("variantes.manualHint")}
           </span>
         </div>
 
@@ -304,10 +317,11 @@ export function VariantesScreen() {
             borderColor: "var(--border-patina)",
           }}
         >
-          <span className="t-overline">Variante creada — revísala</span>
+          <span className="t-overline">{t("variantes.aiResultOverline")}</span>
           <p style={{ marginTop: "10px", color: "var(--text-muted)", lineHeight: 1.6 }}>
-            «{aiResult.name}» quedó armada como <b style={{ color: "var(--text)" }}>punto de partida</b>. Ábrela y
-            ajusta lo que quieras — nada se tocó en tu master.
+            «{aiResult.name}» {t("variantes.aiResultBody1")}
+            <b style={{ color: "var(--text)" }}>{t("variantes.aiResultBodyBold")}</b>
+            {t("variantes.aiResultBody2")}
           </p>
           {aiResult.notes ? (
             <p
@@ -317,12 +331,12 @@ export function VariantesScreen() {
                 color: "var(--text-subtle)",
               }}
             >
-              Nota de la IA: {aiResult.notes}
+              {t("variantes.aiResultNotePrefix")}{aiResult.notes}
             </p>
           ) : null}
           <div style={{ marginTop: "14px" }}>
             <Link className="c-btn c-btn--patina" href={`/app/variantes/${aiResult.id}`}>
-              Abrir para revisar →
+              {t("variantes.aiResultOpen")}
             </Link>
           </div>
         </div>
@@ -338,16 +352,16 @@ export function VariantesScreen() {
             Corpus
           </Link>
           <nav className="hd-nav">
-            <Link href="/app">Panel</Link>
-            <Link href="/app/master">Master</Link>
+            <Link href="/app">{t("nav.panel")}</Link>
+            <Link href="/app/master">{t("nav.master")}</Link>
             <Link href="/app/variantes" aria-current="page">
-              Variantes
+              {t("nav.variantes")}
             </Link>
-            <Link href="/app/fuentes">Fuentes</Link>
+            <Link href="/app/fuentes">{t("nav.fuentes")}</Link>
           </nav>
           <div className="hd-right">
             <nav className="hd-nav" style={{ display: "flex" }}>
-              <Link href="/app/ajustes">Ajustes</Link>
+              <Link href="/app/ajustes">{t("nav.ajustes")}</Link>
             </nav>
             <div className="hd-lang">
               <span data-on>ES</span>
@@ -369,7 +383,7 @@ export function VariantesScreen() {
 
           {loading ? (
             <p className="t-overline" style={{ color: "var(--text-muted)" }}>
-              Leyendo tus variantes…
+              {t("variantes.loading")}
             </p>
           ) : null}
 
@@ -377,10 +391,11 @@ export function VariantesScreen() {
             <div className="vr-lead">
               <p>
                 <b>
-                  {variants.length} variante{variants.length === 1 ? "" : "s"}, un solo master.
+                  {t("variantes.leadCount")
+                    .replace("{n}", String(variants.length))
+                    .replace("{s}", variants.length === 1 ? "" : "s")}
                 </b>{" "}
-                Cada una referencia tus datos — no los copia. Cuando el master cambia, las variantes lo saben; los
-                overrides tuyos siempre ganan.
+                {t("variantes.leadBody")}
               </p>
             </div>
           )}
@@ -427,42 +442,41 @@ export function VariantesScreen() {
                         : {})}
                     >
                       <span className="nm">
-                        {v.old && <span className="c-pulse-dot" title="desactualizada" aria-hidden="true" />}
+                        {v.old && <span className="c-pulse-dot" title={t("variantes.dotTitle")} aria-hidden="true" />}
                         {v.nm}
                       </span>
-                      <button type="button" className="pdf" title="El PDF sale del mismo estado que el preview" onClick={(e) => e.stopPropagation()}>
-                        PDF ↓
+                      <button type="button" className="pdf" title={t("variantes.pdfTitle")} onClick={(e) => e.stopPropagation()}>
+                        {t("variantes.pdfBtn")}
                       </button>
                       <span className="meta">
-                        {v.old ? <span className="old">desactualizada — el master cambió</span> : "al día"}
+                        {v.old ? <span className="old">{t("variantes.metaOutdated")}</span> : t("variantes.metaUpToDate")}
                         <br />
                         {v.touch}
                         {v.pg ? ` · ${v.pg}` : ""}
                       </span>
                       <Link className="open" href={href}>
-                        abrir →
+                        {t("variantes.openLink")}
                       </Link>
-                      <span className="obj">objetivo: {v.obj}</span>
+                      <span className="obj">{t("variantes.objectivePrefix")}{v.obj}</span>
                     </div>
 
                     {v.old && (
                       <div className="vr-diff" id={diffId}>
-                        <span className="t-overline">Qué cambió en el master</span>
+                        <span className="t-overline">{t("variantes.diffOverline")}</span>
                         <div className="vr-dline">
                           <span style={{ color: "var(--text-subtle)" }}>
-                            El master cambió después de la última vez que abriste esta variante. Revisa qué adoptar y qué
-                            mantener como override.
+                            {t("variantes.diffBody")}
                           </span>
                         </div>
                         <div className="vr-dacts">
                           <button type="button" className="prim" onClick={() => updateVariant(i)}>
-                            Actualizar esta variante
+                            {t("variantes.diffUpdate")}
                           </button>
                           <button type="button" onClick={() => keepVariant(i)}>
-                            Mantener como está (override)
+                            {t("variantes.diffKeep")}
                           </button>
                           <Link className="c-btn c-btn--quiet" style={{ height: "30px", fontSize: "10px" }} href={href}>
-                            ver en el editor
+                            {t("variantes.diffOpenEditor")}
                           </Link>
                         </div>
                       </div>
@@ -475,26 +489,26 @@ export function VariantesScreen() {
 
           {empty && (
             <div className="vr-empty show" id="empty">
-              <span className="t-overline">Sin variantes todavía</span>
+              <span className="t-overline">{t("variantes.emptyOverline")}</span>
               <h2 style={{ marginTop: "16px" }}>
                 {canCreate ? (
                   <>
-                    Tu master tiene {masterItems} item{masterItems === 1 ? "" : "s"}.
+                    {t("variantes.emptyHasMasterLine1")
+                      .replace("{n}", String(masterItems))
+                      .replace("{s}", masterItems === 1 ? "" : "s")}
                     <br />
-                    Una variante es la vista de 2 páginas para un rol.
+                    {t("variantes.emptyHasMasterLine2")}
                   </>
                 ) : (
                   <>
-                    Aún no hay master del que salgan variantes.
+                    {t("variantes.emptyNoMasterLine1")}
                     <br />
-                    Vuelca tu carrera primero; la variante es una vista de ella.
+                    {t("variantes.emptyNoMasterLine2")}
                   </>
                 )}
               </h2>
               <p>
-                {canCreate
-                  ? "Elige qué cuenta, ajusta el título al aviso, y el PDF sale igual al preview. Empieza por el rol al que más postulas — o deja que la IA arme un punto de partida."
-                  : "Una variante referencia tu master — no lo copia. Sin master, no hay de dónde elegir."}
+                {canCreate ? t("variantes.emptyHasMasterBody") : t("variantes.emptyNoMasterBody")}
               </p>
               {canCreate ? (
                 <div style={{ marginTop: "26px" }}>{createPanel}</div>
@@ -502,7 +516,7 @@ export function VariantesScreen() {
                 <div style={{ marginTop: "26px" }}>
                   <span className="c-forge">
                     <Link className="c-btn c-btn--forge c-btn--lg" href="/app/importar">
-                      Volcar lo que tengo →
+                      {t("variantes.emptyDumpCta")}
                     </Link>
                   </span>
                 </div>

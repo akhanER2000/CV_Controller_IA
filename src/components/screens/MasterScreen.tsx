@@ -3,6 +3,7 @@
 import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import Link from "next/link";
+import { useT } from "@/lib/i18n";
 import { supabaseEnabled } from "@/lib/supabase/config";
 import "./master.css";
 
@@ -376,6 +377,7 @@ function wrapNums(text: string): ReactNode[] {
 }
 
 export function MasterScreen() {
+  const t = useT();
   const [view, setView] = useState<MasterView | null>(supabaseEnabled ? null : buildDemoView());
   const [loading, setLoading] = useState(supabaseEnabled);
 
@@ -408,7 +410,7 @@ export function MasterScreen() {
   const saveEdit = useCallback(
     (id: string | null, data: Record<string, unknown>) => {
       if (!supabaseEnabled) {
-        noteSaved("editado (modo local)");
+        noteSaved(t("master.saved.localEdit"));
         return;
       }
       if (!id) return;
@@ -420,13 +422,13 @@ export function MasterScreen() {
             body: JSON.stringify({ data }),
           });
           if (!res.ok) throw new Error();
-          noteSaved("guardado ✓");
+          noteSaved(t("common.saved"));
         } catch {
-          noteSaved("no se pudo guardar");
+          noteSaved(t("master.saved.fail"));
         }
       })();
     },
-    [noteSaved],
+    [noteSaved, t],
   );
 
   // onBlur/Enter genérico para un texto editable: si cambió, marca origen "editado
@@ -509,7 +511,7 @@ export function MasterScreen() {
     if (!supabaseEnabled) {
       basicsRef.current = empty;
       setView((prev) => (prev ? { ...prev, basics: empty } : prev));
-      noteSaved("bloque de contacto añadido (modo local)");
+      noteSaved(t("master.saved.contactAddedLocal"));
       return;
     }
     void (async () => {
@@ -529,12 +531,12 @@ export function MasterScreen() {
         };
         basicsRef.current = created;
         setView((prev) => (prev ? { ...prev, basics: created } : prev));
-        noteSaved("bloque de contacto añadido ✓");
+        noteSaved(t("master.saved.contactAdded"));
       } catch {
-        noteSaved("no se pudo añadir");
+        noteSaved(t("master.saved.contactAddFail"));
       }
     })();
-  }, [noteSaved]);
+  }, [noteSaved, t]);
 
   // Mantén basicsRef sincronizado cuando la vista se (re)carga.
   useEffect(() => {
@@ -585,7 +587,11 @@ export function MasterScreen() {
   }, [v]);
 
   const isEmpty = !loading && total === 0;
-  const msNText = loading ? "leyendo…" : isEmpty ? "0 items" : `${total} items · ${sourceCount} fuente${sourceCount === 1 ? "" : "s"}`;
+  const msNText = loading
+    ? t("master.reading")
+    : isEmpty
+      ? `0 ${t("master.items")}`
+      : `${total} ${t("master.items")} · ${sourceCount} ${sourceCount === 1 ? t("master.source") : t("master.sources")}`;
 
   const toggleIn = (
     setter: (fn: (prev: ReadonlySet<string>) => ReadonlySet<string>) => void,
@@ -658,12 +664,60 @@ export function MasterScreen() {
       const n = [...groups.querySelectorAll<HTMLElement>("[data-item]")].filter(
         (i) => i.style.display !== "none",
       ).length;
-      liveRef.current.textContent = query || filter !== "all" ? `${n} items coinciden` : "";
+      liveRef.current.textContent =
+        query || filter !== "all" ? t("master.itemsMatch").replace("{n}", String(n)) : "";
     }
-  }, [query, filter, v]);
+  }, [query, filter, v, t]);
 
-  const handleAdd = () =>
-    window.alert("En producto: fila nueva editable al foco, origen: manual. (Mock)");
+  const handleAdd = () => window.alert(t("master.addManualMock"));
+
+  // Traducción en el punto de PINTADO de valores que se componen a nivel de módulo
+  // (orígenes, avisos, prompts, filtros). El valor interno sigue en ES y actúa de
+  // sentinela para la lógica; aquí solo se traduce lo que ve el usuario. Los valores
+  // de la maqueta que son DATO (dominios, nombres de archivo) caen al default y pasan.
+  const tOrigin = (o: string): string => {
+    switch (o) {
+      case MANUAL_LABEL:
+        return t("master.origin.manual");
+      case "github":
+        return t("master.origin.github");
+      case "reformulado por IA":
+        return t("master.origin.aiRephrased");
+      case "traducido por IA":
+        return t("master.origin.aiTranslated");
+      case "texto pegado":
+        return t("master.origin.extracted");
+      case "cuestionario":
+        return t("master.origin.questionnaire");
+      default:
+        return o;
+    }
+  };
+  const tWarn = (w: string): string => {
+    switch (w) {
+      case "falta fecha":
+        return t("master.warn.missingDate");
+      case "falta fecha de término":
+        return t("master.warn.missingEndDate");
+      default:
+        return w;
+    }
+  };
+  const tAsk = (a: string): string =>
+    a === "¿Dónde lo usaste?" || a === "¿Dónde la usaste?" ? t("master.whereUsed") : a;
+  const filterLabel = (k: FilterKey): string => {
+    switch (k) {
+      case "sin-cifra":
+        return t("master.noNumber");
+      case "sin-evidencia":
+        return t("master.filter.noEvidence");
+      case "sin-fechas":
+        return t("master.filter.noDates");
+      case "all":
+      default:
+        return t("master.filter.all");
+    }
+  };
 
   // Botón de origen expandible (foco de teclado + aria-expanded).
   const srcButton = (id: string, label: string): ReactNode => {
@@ -677,7 +731,7 @@ export function MasterScreen() {
         style={isTouched ? { opacity: 1, color: "var(--accent-text)" } : undefined}
         onClick={() => toggleFrag(id)}
       >
-        {isTouched ? "origen: editado por ti · ahora ▾" : `origen: ${label} ▾`}
+        {isTouched ? t("master.srcEdited") : `${t("master.originPrefix")}${tOrigin(label)} ▾`}
       </button>
     );
   };
@@ -685,15 +739,15 @@ export function MasterScreen() {
   const fragClass = (id: string) => `ms-frag${openFrags.has(id) ? " open" : ""}`;
   const fragmentText = (origin: string, evidence: string | null): ReactNode => {
     if (evidence) return evidence;
-    if (origin === MANUAL_LABEL) return "escrito por ti — el origen manual es el más verificable de todos.";
-    return "Sin fragmento de origen registrado — revísalo.";
+    if (origin === MANUAL_LABEL) return t("master.frag.manual");
+    return t("master.frag.none");
   };
 
   const nudge = (b: VBullet): ReactNode => {
     if (b.num) return null;
     return (
       <span className={`ms-nudge${b.nudge ? " push" : ""}`}>
-        {b.nudge ? `sin cifra — ${b.nudge}` : "sin cifra"}
+        {b.nudge ? `${t("master.noNumber")} — ${b.nudge}` : t("master.noNumber")}
       </span>
     );
   };
@@ -706,7 +760,7 @@ export function MasterScreen() {
           <span className="t-overline">{title}</span>
           <span className="cnt">{cnt}</span>
           <button type="button" className="fold" data-fold aria-expanded={!isFolded} onClick={() => toggleFold(id)}>
-            {isFolded ? "desplegar" : "plegar"}
+            {isFolded ? t("master.fold.expand") : t("master.fold.collapse")}
           </button>
         </div>
         <hr className="c-divider" />
@@ -726,7 +780,7 @@ export function MasterScreen() {
             suppressContentEditableWarning
             spellCheck={false}
             role="textbox"
-            aria-label={`Editar título del rol: ${e.tt}`}
+            aria-label={`${t("master.aria.editRoleTitle")}${e.tt}`}
             onKeyDown={editKeyDown}
             onBlur={commitEdit(headerId, e.id, e.tt, (text) => ({ ...e.data, title: text }))}
           >
@@ -738,7 +792,7 @@ export function MasterScreen() {
           </span>
           {e.warn ? (
             <span className="warn" data-warn="fechas">
-              ⚠ {e.warn}
+              ⚠ {tWarn(e.warn)}
             </span>
           ) : null}
           <span className="meta">{srcButton(headerId, e.origin)}</span>
@@ -757,7 +811,7 @@ export function MasterScreen() {
                   suppressContentEditableWarning
                   spellCheck={false}
                   role="textbox"
-                  aria-label="Editar viñeta"
+                  aria-label={t("master.aria.editBullet")}
                   onKeyDown={editKeyDown}
                   onBlur={commitEdit(bid, b.id, b.tx, (text) => ({ ...b.data, text }))}
                 >
@@ -781,7 +835,7 @@ export function MasterScreen() {
       <div className="top">
         <span className="nm">{s.n}</span>
         <span className={`c-ver c-ver--${s.ver}`}>
-          {s.ver === "ok" ? "verificado" : s.ver === "partial" ? "parcial" : "sin evidencia"}
+          {s.ver === "ok" ? t("master.ver.ok") : s.ver === "partial" ? t("master.ver.partial") : t("master.ver.none")}
         </span>
       </div>
       <div className="ev">{s.ev}</div>
@@ -789,7 +843,7 @@ export function MasterScreen() {
         <>
           <hr />
           <div className="ask">
-            {s.ask} <button type="button">responder — quedará como origen: tú</button>
+            {tAsk(s.ask)} <button type="button">{t("master.skillAnswer")}</button>
           </div>
         </>
       ) : null}
@@ -814,7 +868,7 @@ export function MasterScreen() {
           suppressContentEditableWarning
           spellCheck={false}
           role="textbox"
-          aria-label="Editar elemento"
+          aria-label={t("master.aria.editItem")}
           onKeyDown={editKeyDown}
           onBlur={commitEdit(key, r.id, r.tx, build)}
         >
@@ -849,7 +903,7 @@ export function MasterScreen() {
           suppressContentEditableWarning
           spellCheck={false}
           role="textbox"
-          aria-label={`Editar ${fieldLabel}`}
+          aria-label={`${t("master.aria.editPrefix")}${fieldLabel}`}
           onKeyDown={editKeyDown}
           onBlur={commitBasicsField(field)}
         >
@@ -866,8 +920,8 @@ export function MasterScreen() {
         className="c-input"
         style={{ width: "140px", height: "32px", fontSize: "var(--fs-micro)" }}
         value={l.label}
-        placeholder="etiqueta (opcional)"
-        aria-label="Etiqueta del enlace"
+        placeholder={t("master.link.labelPlaceholder")}
+        aria-label={t("master.aria.linkLabel")}
         onChange={(e) => setLinkField(i, "label", e.target.value)}
         onBlur={persistBasicsNow}
       />
@@ -875,14 +929,14 @@ export function MasterScreen() {
         className="c-input"
         style={{ flex: 1, minWidth: 0, height: "32px", fontSize: "var(--fs-data)" }}
         value={l.url}
-        placeholder="url — es lo que lee el ATS (linkedin.com/in/…, github.com/…)"
-        aria-label="URL del enlace"
+        placeholder={t("master.link.urlPlaceholder")}
+        aria-label={t("master.aria.linkUrl")}
         onChange={(e) => setLinkField(i, "url", e.target.value)}
         onBlur={persistBasicsNow}
       />
       <button
         type="button"
-        aria-label="Quitar enlace"
+        aria-label={t("master.aria.removeLink")}
         onClick={() => removeLink(i)}
         style={{ flex: "none", font: "400 13px/1 var(--font-mono)", color: "var(--text-subtle)", padding: "0 6px" }}
       >
@@ -900,31 +954,30 @@ export function MasterScreen() {
           suppressContentEditableWarning
           spellCheck={false}
           role="textbox"
-          aria-label="Editar nombre"
+          aria-label={t("master.aria.editName")}
           style={b.name.trim() ? undefined : { minWidth: "140px", display: "inline-block" }}
           onKeyDown={editKeyDown}
           onBlur={commitBasicsField("name")}
         >
           {b.name}
         </span>
-        {b.name.trim() ? null : <span className="warn">⚠ falta tu nombre</span>}
+        {b.name.trim() ? null : <span className="warn">⚠ {t("master.warn.missingName")}</span>}
         <span className="meta">
           <span className="ms-src" style={{ opacity: 1 }}>
-            origen: {MANUAL_LABEL}
+            {t("master.originPrefix")}
+            {t("master.origin.manual")}
           </span>
         </span>
       </div>
-      {contactField(b, "label", "Título", "p. ej. Backend Engineer")}
-      {contactField(b, "email", "Email", "falta — sale vacío en el CV")}
-      {contactField(b, "phone", "Teléfono", "falta — sale vacío en el CV")}
-      {contactField(b, "location", "Ciudad", "p. ej. Santiago, Chile (RM)")}
+      {contactField(b, "label", t("master.contact.label"), t("master.contact.labelMiss"))}
+      {contactField(b, "email", t("master.contact.email"), t("master.contact.miss"))}
+      {contactField(b, "phone", t("master.contact.phone"), t("master.contact.miss"))}
+      {contactField(b, "location", t("master.contact.location"), t("master.contact.locationMiss"))}
       <div className="ms-b" style={{ alignItems: "flex-start" }}>
-        <span style={{ ...cFieldLabel, marginTop: "8px" }}>Enlaces</span>
+        <span style={{ ...cFieldLabel, marginTop: "8px" }}>{t("master.contact.links")}</span>
         <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: "6px" }}>
           {b.links.length === 0 ? (
-            <span style={{ ...cMiss, padding: "6px 0" }}>
-              LinkedIn, GitHub, portafolio, un paper, una charla… la etiqueta es para ti; la URL es lo que importa.
-            </span>
+            <span style={{ ...cMiss, padding: "6px 0" }}>{t("master.contact.linksEmpty")}</span>
           ) : (
             b.links.map((l, i) => linkEditor(l, i))
           )}
@@ -934,7 +987,7 @@ export function MasterScreen() {
             style={{ marginTop: "2px", padding: "9px" }}
             onClick={addLink}
           >
-            + añadir enlace
+            {t("master.contact.addLink")}
           </button>
         </div>
       </div>
@@ -944,8 +997,8 @@ export function MasterScreen() {
   const contactBlock = (): ReactNode => (
     <section id="contacto" key="contacto">
       <div className="ms-gh">
-        <span className="t-overline">Perfil / Contacto</span>
-        <span className="cnt">se imprime en el cuerpo del CV</span>
+        <span className="t-overline">{t("master.contact.overline")}</span>
+        <span className="cnt">{t("master.contact.cnt")}</span>
       </div>
       <hr className="c-divider" />
       <div className="ms-body">
@@ -953,7 +1006,7 @@ export function MasterScreen() {
           contactCard(v.basics)
         ) : (
           <button type="button" className="ms-add" onClick={addBasics}>
-            + Añadir datos de contacto
+            {t("master.contact.add")}
           </button>
         )}
       </div>
@@ -968,17 +1021,17 @@ export function MasterScreen() {
             Corpus
           </Link>
           <nav className="hd-nav">
-            <Link href="/app">Panel</Link>
+            <Link href="/app">{t("nav.panel")}</Link>
             <Link href="/app/master" aria-current="page">
-              Master
+              {t("nav.master")}
             </Link>
-            <Link href="/app/variantes">Variantes</Link>
-            <Link href="/app/fuentes">Fuentes</Link>
+            <Link href="/app/variantes">{t("nav.variantes")}</Link>
+            <Link href="/app/fuentes">{t("nav.fuentes")}</Link>
           </nav>
           <div className="hd-right">
             <Link href="/app/ajustes" className="hd-nav" style={{ display: "inline-flex" }}>
               <span style={{ font: "500 var(--fs-ui)/1 var(--font-sans)", color: "var(--text-muted)", padding: "9px 12px" }}>
-                Ajustes
+                {t("nav.ajustes")}
               </span>
             </Link>
             <div className="hd-lang">
@@ -995,15 +1048,15 @@ export function MasterScreen() {
           <input
             className="c-input"
             id="q"
-            aria-label="Buscar en tu registro"
-            placeholder="Buscar en tu registro… (título, viñeta, skill)"
+            aria-label={t("master.searchAria")}
+            placeholder={t("master.searchPlaceholder")}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
           />
-          <div className="ms-f" role="group" aria-label="Filtros">
+          <div className="ms-f" role="group" aria-label={t("master.filtersAria")}>
             {FILTERS.map((f) => (
               <button key={f.key} type="button" data-f={f.key} aria-pressed={filter === f.key} onClick={() => setFilter(f.key)}>
-                {f.label}
+                {filterLabel(f.key)}
               </button>
             ))}
           </div>
@@ -1030,12 +1083,12 @@ export function MasterScreen() {
             style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: "16px", flexWrap: "wrap" }}
           >
             <p style={{ color: "var(--text-muted)", fontSize: "var(--fs-ui)", maxWidth: "64ch" }}>
-              Tu archivo completo — aquí cabe todo tu historial aunque cada variante muestre una parte.{" "}
-              <b style={{ color: "var(--text)", fontWeight: 500 }}>Haz clic en cualquier texto y edítalo ahí mismo</b>; cada item
-              recuerda de dónde salió.
+              {t("master.intro.a")}{" "}
+              <b style={{ color: "var(--text)", fontWeight: 500 }}>{t("master.intro.b")}</b>
+              {t("master.intro.c")}
             </p>
             <button type="button" className="c-btn" id="btnAdd" onClick={handleAdd}>
-              + Añadir item manual
+              {t("master.addManual")}
             </button>
           </div>
 
@@ -1047,8 +1100,8 @@ export function MasterScreen() {
                 {v.summary
                   ? groupSection(
                       "resumen",
-                      "Resumen",
-                      "1 item",
+                      t("master.group.summary"),
+                      `1 ${t("master.item")}`,
                       <div className="c-card ms-card">
                         <div className="ms-b" data-item>
                           <span
@@ -1057,7 +1110,7 @@ export function MasterScreen() {
                             suppressContentEditableWarning
                             spellCheck={false}
                             role="textbox"
-                            aria-label="Editar resumen"
+                            aria-label={t("master.aria.editSummary")}
                             onKeyDown={editKeyDown}
                             onBlur={commitEdit("it-resumen", v.summary.id, v.summary.text, (text) => ({
                               ...v.summary!.data,
@@ -1078,12 +1131,12 @@ export function MasterScreen() {
                 {v.roles.length > 0 &&
                   groupSection(
                     "experiencia",
-                    "Experiencia",
-                    `${v.roles.length} rol${v.roles.length === 1 ? "" : "es"} · ${totalBullets} viñeta${totalBullets === 1 ? "" : "s"}`,
+                    t("master.group.experience"),
+                    `${v.roles.length} ${v.roles.length === 1 ? t("master.role") : t("master.roles")} · ${totalBullets} ${totalBullets === 1 ? t("master.bullet") : t("master.bullets")}`,
                     <>
                       {v.roles.map((e, i) => roleCard(e, i))}
                       <button type="button" className="ms-add">
-                        + añadir rol
+                        {t("master.addRole")}
                       </button>
                     </>,
                   )}
@@ -1091,12 +1144,12 @@ export function MasterScreen() {
                 {v.skills.length > 0 &&
                   groupSection(
                     "skills",
-                    "Skills — con su evidencia",
-                    `${v.skills.length} items`,
+                    t("master.group.skills"),
+                    `${v.skills.length} ${t("master.items")}`,
                     <>
                       <div className="ms-skills">{v.skills.map((s, i) => skillCard(s, i))}</div>
                       <button type="button" className="ms-add">
-                        + añadir skill (quedará como origen: tú)
+                        {t("master.addSkill")}
                       </button>
                     </>,
                   )}
@@ -1104,16 +1157,16 @@ export function MasterScreen() {
                 {v.projects.length > 0 &&
                   groupSection(
                     "proyectos",
-                    "Proyectos",
-                    `${v.projects.length} items — cada variante elige los suyos`,
+                    t("master.group.projects"),
+                    `${v.projects.length} ${t("master.items")} — ${t("master.eachVariantPicks")}`,
                     <div className="ms-rows">{v.projects.map((p, i) => denseRow(p, `pj-${i}`))}</div>,
                   )}
 
                 {v.education.length > 0 &&
                   groupSection(
                     "educacion",
-                    "Educación y certificaciones",
-                    `${v.education.length} items`,
+                    t("master.group.education"),
+                    `${v.education.length} ${t("master.items")}`,
                     <div className="ms-rows">{v.education.map((d, i) => denseRow(d, `ed-${i}`))}</div>,
                   )}
               </>
@@ -1122,22 +1175,22 @@ export function MasterScreen() {
 
           {loading ? (
             <p className="t-overline" style={{ color: "var(--text-muted)", marginTop: "24px" }}>
-              Leyendo tu registro…
+              {t("master.loadingRecord")}
             </p>
           ) : null}
 
           <span ref={liveRef} className="ms-sr" aria-live="polite" />
 
           <div className="ms-empty" id="msEmpty" hidden={!isEmpty}>
-            <span className="t-overline">Master vacío</span>
-            <h2 style={{ marginTop: "14px" }}>Aún no hay registro.</h2>
-            <p>Vuélcalo con IA en 5 minutos, o escríbelo de cero con la IA apagada.</p>
+            <span className="t-overline">{t("master.empty.overline")}</span>
+            <h2 style={{ marginTop: "14px" }}>{t("master.empty.title")}</h2>
+            <p>{t("master.empty.body")}</p>
             <div style={{ display: "flex", gap: "10px", justifyContent: "center", marginTop: "24px" }}>
               <Link className="c-btn c-btn--patina" href="/app/importar">
-                Volcar lo que tengo
+                {t("master.empty.dump")}
               </Link>
               <Link className="c-btn" href="/app/onboarding">
-                Escribir de cero
+                {t("master.empty.scratch")}
               </Link>
             </div>
           </div>

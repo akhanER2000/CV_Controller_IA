@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useBoot } from "@/lib/corpus/runtime";
 import { supabaseEnabled } from "@/lib/supabase/config";
+import { useT } from "@/lib/i18n";
 import "./fuentes.css";
 
 /* ============================================================================
@@ -49,22 +50,22 @@ interface SourceView {
   createdAt: string;
 }
 
-const KIND_LABEL: Record<string, string> = {
-  paste: "texto pegado", pdf: "PDF", docx: "DOCX", image: "captura · transcrita", url: "portfolio", github: "GitHub", manual: "escrito por ti",
-};
-const STATUS_LABEL: Record<string, string> = {
-  pending: "en cola", parsing: "leyendo…", extracted: "extraída", failed: "falló", reviewed: "revisada",
-};
+const KIND_KEYS = new Set(["paste", "pdf", "docx", "image", "url", "github", "manual"]);
+const STATUS_KEYS = new Set(["pending", "parsing", "extracted", "failed", "reviewed"]);
 
-function rel(iso: string): string {
+function rel(iso: string, t: (key: string) => string): string {
   const then = new Date(iso).getTime();
   if (!Number.isFinite(then)) return "";
   const d = Math.max(0, Date.now() - then);
   const day = 86_400_000;
-  if (d < 3_600_000) return "recién";
-  if (d < day) return `hace ${Math.round(d / 3_600_000)} h`;
-  if (d < 30 * day) return `hace ${Math.round(d / day)} día${Math.round(d / day) === 1 ? "" : "s"}`;
-  return `hace ${Math.round(d / (30 * day))} mes${Math.round(d / (30 * day)) === 1 ? "" : "es"}`;
+  if (d < 3_600_000) return t("fuentes.rel.now");
+  if (d < day) return t("fuentes.rel.hours").replace("{n}", String(Math.round(d / 3_600_000)));
+  if (d < 30 * day) {
+    const n = Math.round(d / day);
+    return t(n === 1 ? "fuentes.rel.day" : "fuentes.rel.days").replace("{n}", String(n));
+  }
+  const n = Math.round(d / (30 * day));
+  return t(n === 1 ? "fuentes.rel.month" : "fuentes.rel.months").replace("{n}", String(n));
 }
 
 /** prefers-reduced-motion vía el runtime vanilla; acorta la ceremonia simulada. */
@@ -76,6 +77,9 @@ const wait = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 export function FuentesScreen() {
   // boot() dibuja el hr.c-divider del scope.
   const bootRef = useBoot<HTMLElement>();
+  const t = useT();
+  const kindLabel = (k: string) => (KIND_KEYS.has(k) ? t(`fuentes.kind.${k}`) : k);
+  const statusLabel = (s: string) => (STATUS_KEYS.has(s) ? t(`fuentes.status.${s}`) : s);
 
   // Estado del MODO LOCAL (demo interactiva).
   const [repos, setRepos] = useState<Repo[]>(INITIAL_REPOS);
@@ -134,16 +138,16 @@ export function FuentesScreen() {
           Corpus
         </Link>
         <nav className="hd-nav">
-          <Link href="/app">Panel</Link>
-          <Link href="/app/master">Master</Link>
-          <Link href="/app/variantes">Variantes</Link>
+          <Link href="/app">{t("nav.panel")}</Link>
+          <Link href="/app/master">{t("nav.master")}</Link>
+          <Link href="/app/variantes">{t("nav.variantes")}</Link>
           <Link href="/app/fuentes" aria-current="page">
-            Fuentes
+            {t("nav.fuentes")}
           </Link>
         </nav>
         <div className="hd-right">
           <nav className="hd-nav" style={{ display: "flex" }}>
-            <Link href="/app/ajustes">Ajustes</Link>
+            <Link href="/app/ajustes">{t("nav.ajustes")}</Link>
           </nav>
           <div className="hd-lang">
             <span data-on>ES</span>
@@ -161,21 +165,18 @@ export function FuentesScreen() {
     <article className="c-card fu-card fu-li" data-screen-label="fuentes-linkedin">
       <div className="fu-h">
         <span className="nm">linkedin</span>
-        <span className="tag">no conectable — así funciona LinkedIn</span>
+        <span className="tag">{t("fuentes.li.tag")}</span>
       </div>
-      <p>
-        LinkedIn bloquea la lectura externa de perfiles: ningún servicio serio puede conectarse, y los que lo
-        prometen, scrapean contra sus términos. Tres vías que sí funcionan:
-      </p>
+      <p>{t("fuentes.li.body")}</p>
       <div className="vias">
         <Link href="/app/importar">
-          <b>Pegar el texto</b>Ctrl+A y Ctrl+C sobre tu perfil → a la caja de volcado. La más completa.
+          <b>{t("fuentes.li.via1Bold")}</b>{t("fuentes.li.via1")}
         </Link>
         <Link href="/app/importar">
-          <b>El PDF oficial</b>En tu perfil: Más… → Guardar como PDF → súbelo.
+          <b>{t("fuentes.li.via2Bold")}</b>{t("fuentes.li.via2")}
         </Link>
         <Link href="/app/importar">
-          <b>Capturas</b>Se transcriben literal. Lo que no se lee, no se inventa.
+          <b>{t("fuentes.li.via3Bold")}</b>{t("fuentes.li.via3")}
         </Link>
       </div>
     </article>
@@ -191,32 +192,32 @@ export function FuentesScreen() {
           <div className="c-container">
             <div className="fu-lead">
               <p>
-                Cada fuente dice <b style={{ color: "var(--text)", fontWeight: 500 }}>qué aportó</b> y cuándo se leyó.
-                Nada se relee ni entra al master sin pasar por staging.
+                {t("fuentes.lead.prefix")}
+                <b style={{ color: "var(--text)", fontWeight: 500 }}>{t("fuentes.lead.bold")}</b>
+                {t("fuentes.lead.suffixReal")}
               </p>
               <Link className="c-btn" href="/app/importar">
-                + Volcar más material
+                {t("fuentes.dumpMore")}
               </Link>
             </div>
             <hr className="c-divider" />
 
             {loading ? (
               <p className="t-overline" style={{ color: "var(--text-muted)" }}>
-                Leyendo tus fuentes…
+                {t("fuentes.loading")}
               </p>
             ) : null}
 
             {sourcesEmpty ? (
               <div style={{ textAlign: "center", padding: "48px 0 40px" }} data-screen-label="fuentes-vacio">
-                <span className="t-overline">Sin fuentes todavía</span>
-                <h2 style={{ marginTop: "14px" }}>Aún no has conectado ninguna fuente.</h2>
+                <span className="t-overline">{t("fuentes.empty.overline")}</span>
+                <h2 style={{ marginTop: "14px" }}>{t("fuentes.empty.title")}</h2>
                 <p style={{ color: "var(--text-muted)", maxWidth: "52ch", margin: "10px auto 0" }}>
-                  Pega texto, sube tu CV o enlaza tu GitHub y tu portfolio. Cada fuente quedará aquí, con lo que
-                  aportó y cuándo la leímos.
+                  {t("fuentes.empty.body")}
                 </p>
                 <div style={{ marginTop: "24px" }}>
                   <Link className="c-btn c-btn--patina" href="/app/importar">
-                    Volcar lo que tengo →
+                    {t("fuentes.empty.cta")}
                   </Link>
                 </div>
               </div>
@@ -224,36 +225,39 @@ export function FuentesScreen() {
 
             {!loading &&
               sources.map((s) => {
-                const name = s.originalName || s.sourceUrl || KIND_LABEL[s.kind] || s.kind;
+                const name = s.originalName || s.sourceUrl || kindLabel(s.kind);
                 return (
                   <article className="c-card fu-card" key={s.id} data-screen-label="fuentes-item">
                     <div className="fu-h">
                       <span className="nm">{name}</span>
-                      <span className="tag">{KIND_LABEL[s.kind] ?? s.kind}</span>
+                      <span className="tag">{kindLabel(s.kind)}</span>
                       <span className="acts">
                         <Link className="c-btn c-btn--quiet" href="/app/staging">
-                          ver en staging
+                          {t("fuentes.item.viewStaging")}
                         </Link>
                       </span>
                     </div>
                     <div className="fu-facts" style={{ gridTemplateColumns: "1fr 1fr 1fr" }}>
                       <div>
                         <div className="v" style={{ fontSize: "13px" }}>
-                          {STATUS_LABEL[s.status] ?? s.status}
+                          {statusLabel(s.status)}
                         </div>
-                        <div className="k">estado de la lectura</div>
+                        <div className="k">{t("fuentes.item.readStatus")}</div>
                       </div>
                       <div>
                         <div className="v" style={{ fontSize: "13px" }}>
                           {s.rawTextLength.toLocaleString("es-CL")}
                         </div>
-                        <div className="k">caracteres leídos{s.pageCount ? ` · ${s.pageCount} págs` : ""}</div>
+                        <div className="k">
+                          {t("fuentes.item.charsRead")}
+                          {s.pageCount ? t("fuentes.item.pages").replace("{n}", String(s.pageCount)) : ""}
+                        </div>
                       </div>
                       <div>
                         <div className="v" style={{ fontSize: "13px" }}>
-                          {rel(s.createdAt)}
+                          {rel(s.createdAt, t)}
                         </div>
-                        <div className="k">añadida</div>
+                        <div className="k">{t("fuentes.item.added")}</div>
                       </div>
                     </div>
                   </article>
@@ -264,25 +268,24 @@ export function FuentesScreen() {
             <article className="c-card fu-card" data-screen-label="fuentes-github">
               <div className="fu-h">
                 <span className="nm">GitHub</span>
-                <span className="tag star">sin IA — API con esquema</span>
+                <span className="tag star">{t("fuentes.tag.noAiApi")}</span>
                 <span className="acts">
                   <Link className="c-btn c-btn--quiet" href="/app/importar">
-                    conectar
+                    {t("fuentes.ghShell.connect")}
                   </Link>
                 </span>
               </div>
               <div className="fu-note">
-                Pega un enlace a tu <b>github.com/usuario</b> en el volcado: leeremos tus repos públicos por la API
-                oficial — sin IA, sin alucinación. Lo que ves es la API.
+                {t("fuentes.ghShell.notePre")}<b>{t("fuentes.ghShell.noteBold")}</b>{t("fuentes.ghShell.noteSuf")}
               </div>
             </article>
 
             {linkedInCard}
 
             <div className="fu-add">
-              <input className="c-input" placeholder="https:// otra fuente — portfolio, blog, repositorio…" />
+              <input className="c-input" placeholder={t("fuentes.add.placeholder")} />
               <button type="button" className="c-btn">
-                Añadir fuente
+                {t("fuentes.add.button")}
               </button>
             </div>
           </div>
@@ -300,11 +303,12 @@ export function FuentesScreen() {
         <div className="c-container">
           <div className="fu-lead">
             <p>
-              Cada fuente dice <b style={{ color: "var(--text)", fontWeight: 500 }}>qué aportó</b> y qué hay de nuevo
-              desde la última lectura. Nada se relee ni entra al master sin pasar por staging.
+              {t("fuentes.lead.prefix")}
+              <b style={{ color: "var(--text)", fontWeight: 500 }}>{t("fuentes.lead.bold")}</b>
+              {t("fuentes.lead.suffixLocal")}
             </p>
             <Link className="c-btn" href="/app/importar">
-              + Volcar más material
+              {t("fuentes.dumpMore")}
             </Link>
           </div>
           <hr className="c-divider" />
@@ -313,7 +317,7 @@ export function FuentesScreen() {
           <article className="c-card fu-card" data-screen-label="fuentes-github">
             <div className="fu-h">
               <span className="nm">github.com/dgatica</span>
-              <span className="tag star">sin IA — API con esquema</span>
+              <span className="tag star">{t("fuentes.tag.noAiApi")}</span>
               <span className="acts">
                 <button
                   type="button"
@@ -323,7 +327,7 @@ export function FuentesScreen() {
                   aria-controls="repos"
                   onClick={() => setReposOpen((v) => !v)}
                 >
-                  elegir repos ({selected} de {total})
+                  {t("fuentes.gh.chooseRepos").replace("{sel}", String(selected)).replace("{tot}", String(total))}
                 </button>
                 <button type="button" className="c-btn" id="btnRead" aria-busy={ghState === "reading"} aria-disabled={ghState === "reading"} onClick={readGithub}>
                   {ghState === "reading" ? (
@@ -331,14 +335,15 @@ export function FuentesScreen() {
                       <span className="c-spin" aria-hidden="true">
                         ⟳
                       </span>
-                      {" leyendo la API…"}
+                      {t("fuentes.gh.readingApi")}
                     </>
                   ) : ghState === "read" ? (
-                    "Leer lo nuevo"
+                    t("fuentes.gh.readNew")
                   ) : (
                     <>
                       <span className="c-pulse-dot" />
-                      {" Leer lo nuevo"}
+                      {" "}
+                      {t("fuentes.gh.readNew")}
                     </>
                   )}
                 </button>
@@ -347,19 +352,19 @@ export function FuentesScreen() {
             <div className="fu-facts" id="ghFacts">
               <div>
                 <div className="v">{total}</div>
-                <div className="k">repos públicos</div>
+                <div className="k">{t("fuentes.gh.factReposK")}</div>
               </div>
               <div>
                 <div className="v">412.803</div>
-                <div className="k">bytes de Go — un hecho, no una estimación</div>
+                <div className="k">{t("fuentes.gh.factBytesK")}</div>
               </div>
               <div>
                 <div className="v">14</div>
-                <div className="k">items aportados al master</div>
+                <div className="k">{t("fuentes.gh.factItemsK")}</div>
               </div>
               <div>
                 <div className="v">hace 3 días</div>
-                <div className="k">último push detectado</div>
+                <div className="k">{t("fuentes.gh.factPushK")}</div>
               </div>
             </div>
             <div className="fu-new" id="ghNew" role="status" aria-live="polite">
@@ -368,24 +373,25 @@ export function FuentesScreen() {
                   <span className="c-spin" aria-hidden="true">
                     ⟳
                   </span>{" "}
-                  idempotency-go: 3 commits nuevos · scraper-sii: README actualizado
+                  {t("fuentes.gh.readingActivity")}
                 </>
               ) : ghState === "read" ? (
                 <>
-                  <span aria-hidden="true">✓</span> leído — <b>2 items nuevos</b> esperan en staging (nada entra solo al
-                  master){" "}
+                  <span aria-hidden="true">✓</span> {t("fuentes.gh.readDonePre")} <b>{t("fuentes.gh.readDoneBold")}</b>
+                  {t("fuentes.gh.readDoneSuf")}{" "}
                   <span className="go">
                     <Link className="c-btn c-btn--quiet" href="/app/staging">
-                      revisar →
+                      {t("fuentes.gh.review")}
                     </Link>
                   </span>
                 </>
               ) : (
                 <>
-                  <b>2 repos con actividad</b> desde la última lectura: idempotency-go, scraper-sii{" "}
+                  <b>{t("fuentes.gh.newBold")}</b>
+                  {t("fuentes.gh.newMid")}idempotency-go, scraper-sii{" "}
                   <span className="go">
                     <button type="button" className="c-btn c-btn--quiet" onClick={readGithub}>
-                      leerlos →
+                      {t("fuentes.gh.readThem")}
                     </button>
                   </span>
                 </>
@@ -394,10 +400,9 @@ export function FuentesScreen() {
             <div className={`fu-repos${reposOpen ? " open" : ""}`} id="repos">
               <div className="fu-rh">
                 <b>
-                  {selected} de {total} seleccionados.
-                </b>{" "}
-                Por defecto quedan fuera forks, tutoriales y configuración — <b>un CV no es un volcado de GitHub.</b>{" "}
-                Revisa la decisión, no la delegues.
+                  {t("fuentes.repo.selected").replace("{sel}", String(selected)).replace("{tot}", String(total))}
+                </b>
+                {t("fuentes.repo.mid")}<b>{t("fuentes.repo.boldRule")}</b>{t("fuentes.repo.end")}
               </div>
               <div id="repoRows">
                 {repos.map((r, i) => (
@@ -405,32 +410,30 @@ export function FuentesScreen() {
                     <input type="checkbox" checked={r.on} data-r={i} onChange={(e) => toggleRepo(i, e.target.checked)} />
                     <span className="nm">{r.n}</span>
                     <span className="meta">{r.m}</span>
-                    {r.why ? <span className="why">fuera por defecto: {r.why}</span> : null}
+                    {r.why ? <span className="why">{t("fuentes.repo.leftOut")}{r.why}</span> : null}
                   </label>
                 ))}
               </div>
             </div>
-            <div className="fu-note">
-              GitHub es la única fuente donde la IA no puede alucinar: no hay IA. Lo que ves es la API.
-            </div>
+            <div className="fu-note">{t("fuentes.gh.note")}</div>
           </article>
 
           {/* Portfolio */}
           <article className="c-card fu-card" data-screen-label="fuentes-portfolio">
             <div className="fu-h">
               <span className="nm">dgatica.cl</span>
-              <span className="tag">portfolio</span>
+              <span className="tag">{t("fuentes.tag.portfolio")}</span>
               <span className="acts">
                 <button type="button" className="c-btn c-btn--quiet" id="btnWeb" aria-busy={webState === "reading"} aria-disabled={webState === "reading"} onClick={reReadWeb}>
                   {webState === "reading" ? (
                     <>
                       <span className="c-spin" aria-hidden="true">
                         ⟳
-                      </span>{" "}
-                      leyendo…
+                      </span>
+                      {t("fuentes.web.reading")}
                     </>
                   ) : (
-                    "Releer"
+                    t("fuentes.web.reread")
                   )}
                 </button>
               </span>
@@ -438,15 +441,15 @@ export function FuentesScreen() {
             <div className="fu-facts">
               <div>
                 <div className="v">6</div>
-                <div className="k">proyectos documentados</div>
+                <div className="k">{t("fuentes.web.factProjectsK")}</div>
               </div>
               <div>
                 <div className="v">12</div>
-                <div className="k">items aportados</div>
+                <div className="k">{t("fuentes.web.factItemsK")}</div>
               </div>
               <div>
                 <div className="v">hace 12 días</div>
-                <div className="k">última lectura</div>
+                <div className="k">{t("fuentes.web.factLastReadK")}</div>
               </div>
               <div role="status" aria-live="polite">
                 <div className="v" id="webChg">
@@ -460,10 +463,10 @@ export function FuentesScreen() {
                 </div>
                 <div className="k" id="webChgK">
                   {webState === "reading"
-                    ? "comparando contra la lectura anterior…"
+                    ? t("fuentes.web.cmpComparing")
                     : webState === "read"
-                      ? "sin cambios — misma versión que el 2 jul"
-                      : "sin cambios detectados"}
+                      ? t("fuentes.web.cmpNoChangeRead")
+                      : t("fuentes.web.cmpNoChange")}
                 </div>
               </div>
             </div>
@@ -472,11 +475,11 @@ export function FuentesScreen() {
           {/* Archivos */}
           <article className="c-card fu-card" data-screen-label="fuentes-archivos">
             <div className="fu-h">
-              <span className="nm">archivos</span>
-              <span className="tag">estáticos — no cambian solos</span>
+              <span className="nm">{t("fuentes.files.name")}</span>
+              <span className="tag">{t("fuentes.files.tag")}</span>
               <span className="acts">
                 <Link className="c-btn c-btn--quiet" href="/app/importar">
-                  + subir otro
+                  {t("fuentes.files.upload")}
                 </Link>
               </span>
             </div>
@@ -485,13 +488,13 @@ export function FuentesScreen() {
                 <div className="v" style={{ fontSize: "13px" }}>
                   CV_2023.pdf
                 </div>
-                <div className="k">2 páginas · aportó 15 items · leído 12 jul</div>
+                <div className="k">{t("fuentes.files.doc1K")}</div>
               </div>
               <div>
                 <div className="v" style={{ fontSize: "13px" }}>
                   cuestionario-identidad.md
                 </div>
-                <div className="k">16 bloques · aportó 6 items · fuente de primera: lo escribiste tú</div>
+                <div className="k">{t("fuentes.files.doc2K")}</div>
               </div>
             </div>
           </article>
@@ -499,9 +502,9 @@ export function FuentesScreen() {
           {linkedInCard}
 
           <div className="fu-add">
-            <input className="c-input" placeholder="https:// otra fuente — portfolio, blog, repositorio…" />
+            <input className="c-input" placeholder={t("fuentes.add.placeholder")} />
             <button type="button" className="c-btn">
-              Añadir fuente
+              {t("fuentes.add.button")}
             </button>
           </div>
         </div>
