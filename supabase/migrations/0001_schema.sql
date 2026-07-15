@@ -14,12 +14,14 @@
 create extension if not exists pgcrypto;
 
 -- ── Enums ───────────────────────────────────────────────────────────────────
-create type source_kind      as enum ('pdf','docx','image','url','manual');
+-- 'paste' y 'github' son fuentes de primera clase (02 §3.1); 'api' es un origen
+-- de item (dato duro de la API de GitHub, aceptado por el usuario) (02 §2).
+create type source_kind      as enum ('paste','pdf','docx','image','url','github','manual');
 create type ingestion_status as enum ('pending','parsing','extracted','failed','reviewed');
 create type item_kind        as enum
   ('basics','summary','work','education','project','skill',
    'certification','language','publication','link','bullet');
-create type item_origin      as enum ('extracted','manual','ai_rephrased','ai_translated');
+create type item_origin      as enum ('extracted','manual','ai_rephrased','ai_translated','api');
 create type staged_status    as enum ('pending','accepted','rejected','merged');
 
 -- ── 1 · Fuentes y procedencia ───────────────────────────────────────────────
@@ -166,8 +168,9 @@ create index on variant_items (variant_id, sort_order);
 create table user_settings (
   user_id     uuid primary key references auth.users(id) on delete cascade,
   ui_lang     text not null default 'es',
-  theme       text not null default 'obsidian',   -- obsidian | porcelain
-  llm_api_key text,                                -- BYOK. CIFRADO. Nunca al cliente.
+  theme       text not null default 'dark',        -- dark (grafito) | light (porcelana)
+  ai_enabled  boolean not null default true,       -- el toggle global de IA (02 §2)
+  llm_api_key text,                                 -- BYOK. CIFRADO. Nunca al cliente.
   created_at  timestamptz not null default now(),
   updated_at  timestamptz not null default now()
 );
@@ -221,7 +224,8 @@ create trigger t_variant_item_ownership
 
 -- ── 7 · RLS — obligatorio en todas las tablas ───────────────────────────────
 -- user_id está denormalizado a propósito en cada tabla para evitar joins en las
--- políticas. La política "own rows" es idéntica en todas.
+-- políticas. La política "own rows" es idéntica en todas. Idempotente: se puede
+-- re-ejecutar sin error (drop policy if exists antes de create).
 do $$
 declare t text;
 begin
@@ -231,6 +235,7 @@ begin
     'job_descriptions','cv_variants','variant_items','user_settings'
   ] loop
     execute format('alter table %I enable row level security;', t);
+    execute format('drop policy if exists "own rows" on %I;', t);
     execute format(
       'create policy "own rows" on %I for all using (user_id = auth.uid()) with check (user_id = auth.uid());',
       t
@@ -238,8 +243,34 @@ begin
   end loop;
 end $$;
 
--- ── 8 · Storage (nota) ──────────────────────────────────────────────────────
--- Bucket privado 'sources', path {user_id}/{source_id}/{filename}. Policy que
--- compara el primer segmento del path contra auth.uid(). URLs firmadas de
--- expiración corta. Los archivos NUNCA pasan por una Route Handler (límite
--- 4,5 MB de Vercel): subida directa a Storage con URL firmada. (02 §1, §4.1)
+-- ── 8 · Alta de usuario: cada registro nace con su master + ajustes ──────────
+-- Un master_profiles por usuario (unique user_id) ES la tesis. Se crea en el
+-- alta para que la app nunca tenga que "crear el master si no existe".
+create or replace function handle_new_user()
+returns trigger security definer set search_path = public as $$
+begin
+  insert into master_profiles (user_id) values (new.id) on conflict (user_id) do nothing;
+  insert into user_settings   (user_id) values (new.id) on conflict (user_id) do nothing;
+  return new;
+end;
+$$ language plpgsql;
+
+drop trigger if exists on_auth_user_created on auth.users;
+create trigger on_auth_user_created
+  after insert on auth.users
+  for each row execute function handle_new_user();
+
+-- ── 9 · Storage — bucket privado 'sources' ──────────────────────────────────
+-- Path {user_id}/{source_id}/{filename}. Los archivos NUNCA pasan por una Route
+-- Handler (límite 4,5 MB de Vercel → 413): subida directa a Storage con URL
+-- firmada de expiración corta (02 §1, §4.1). La policy compara el primer
+-- segmento del path contra auth.uid().
+insert into storage.buckets (id, name, public)
+values ('sources', 'sources', false)
+on conflict (id) do nothing;
+
+drop policy if exists "sources own files" on storage.objects;
+create policy "sources own files" on storage.objects
+  for all to authenticated
+  using (bucket_id = 'sources' and (storage.foldername(name))[1] = auth.uid()::text)
+  with check (bucket_id = 'sources' and (storage.foldername(name))[1] = auth.uid()::text);
