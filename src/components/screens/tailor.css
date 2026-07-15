@@ -1,0 +1,73 @@
+/* ── tailor.html — evidencia, no score. MURO. ──
+   PORTE LITERAL del 2º <style> de corpus-design/04-pantallas/tailor.html
+   (fuera de data-corpus-system). Sin @keyframes propios. Clases sin renombrar.
+   Ver docs/spec/pantallas/tailor.md. */
+.tl-bar{position:sticky;top:var(--header-h);z-index:9;height:52px;background:color-mix(in srgb,var(--bg) 88%,transparent);
+  backdrop-filter:blur(8px);border-bottom:1px solid var(--border)}
+.tl-bar .c-container{height:100%;display:flex;align-items:center;gap:14px}
+.tl-main{flex:1;padding:26px 0 120px}
+.tl-grid{display:grid;grid-template-columns:380px 1fr;gap:26px;align-items:start}
+.tl-left{position:sticky;top:calc(var(--header-h) + 52px + 20px)}
+.tl-left .c-textarea{min-height:300px;font-size:13px;line-height:1.65}
+.tl-left .foot{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:12px}
+.tl-left .meta{font:400 var(--fs-micro)/1.5 var(--font-mono);color:var(--text-subtle)}
+.tl-work{margin-top:14px;font:400 var(--fs-data)/1.8 var(--font-mono);color:var(--text-muted);display:none}
+.tl-work.show{display:block}
+/* resultado */
+.tl-res{min-width:0}
+.tl-hint{padding:60px 30px;text-align:center;color:var(--text-muted);font-size:13.5px;line-height:1.8}
+.tl-hint .t-overline{display:block;margin-bottom:12px}
+/* título */
+.tl-title{padding:16px 20px;display:flex;gap:14px;align-items:baseline;flex-wrap:wrap}
+.tl-title .pair{font:400 13px/1.6 var(--font-sans);color:var(--text-muted)}
+.tl-title .pair b{color:var(--text);font-weight:500}
+.tl-title .pair .arrow{color:var(--text-subtle);padding:0 4px}
+.tl-title .act{margin-left:auto;display:flex;align-items:center;gap:10px}
+.tl-title .why{font:400 var(--fs-micro)/1.5 var(--font-mono);color:var(--text-subtle)}
+/* grupos */
+.tl-g{margin-top:26px}
+.tl-gh{display:flex;align-items:baseline;gap:12px;padding-bottom:8px}
+.tl-gh .g-mark{font:500 12px/1 var(--font-mono)}
+.tl-gh .n{font:400 var(--fs-micro)/1 var(--font-mono);color:var(--text-subtle)}
+.tl-gh .why{margin-left:auto;font:400 var(--fs-micro)/1.4 var(--font-mono);color:var(--text-subtle)}
+.tl-rows{border:1px solid var(--border);border-radius:var(--radius-md);overflow:hidden}
+.tl-row{display:flex;gap:14px;align-items:baseline;padding:11px 18px;background:var(--surface);font-size:13px;line-height:1.55}
+.tl-row+.tl-row{border-top:1px solid var(--border)}
+.tl-row .k{font:500 13px/1.4 var(--font-sans);min-width:150px}
+.tl-row .d{flex:1;color:var(--text-muted);font:400 var(--fs-data)/1.6 var(--font-mono)}
+.tl-row .act{flex:none}
+.tl-row .act button{font:500 var(--fs-micro)/1 var(--font-mono);padding:8px 11px;border:1px solid var(--border-strong);border-radius:6px;color:var(--text-muted)}
+.tl-row .act button:hover{color:var(--accent-text);border-color:var(--border-patina)}
+.tl-row .act .done{color:var(--ver-ok);border-color:transparent;font:500 var(--fs-micro)/1 var(--font-mono)}
+.tl-g--have .g-mark{color:var(--ver-ok)}
+.tl-g--add .g-mark{color:var(--accent-text)}
+.tl-g--gap .g-mark{color:var(--text-subtle)}
+.tl-gap-note{padding:12px 18px;border-top:1px dashed var(--border);background:var(--surface-sunken);
+  font:400 var(--fs-data)/1.7 var(--font-sans);color:var(--text-muted)}
+/* reformulaciones: original ⇄ propuesto, una a una */
+.tl-ref{margin-top:34px}
+.tl-prop{margin-top:12px;overflow:hidden}
+.tl-phead{display:flex;gap:10px;align-items:baseline;padding:12px 18px;border-bottom:1px solid var(--border)}
+.tl-phead .t-overline{font-size:10px}
+.tl-phead .trace{font:400 var(--fs-micro)/1.5 var(--font-mono);color:var(--text-subtle)}
+.tl-phead .c-ver{margin-left:auto}
+.tl-cols{display:grid;grid-template-columns:1fr 1fr;gap:1px;background:var(--border)}
+.tl-cols>div{background:var(--surface);padding:14px 18px;font-size:13px;line-height:1.6}
+.tl-cols .lbl{display:block;font:500 9px/1 var(--font-mono);letter-spacing:.12em;text-transform:uppercase;color:var(--text-subtle);margin-bottom:8px}
+.tl-cols .orig{color:var(--text-muted)}
+.tl-cols .prop b{color:var(--text);font-weight:500;background:rgba(95,198,169,.13);border-radius:2px;padding:0 2px}
+.tl-pfoot{display:flex;gap:8px;align-items:center;padding:11px 18px;border-top:1px solid var(--border)}
+.tl-pfoot .warn{font:400 var(--fs-micro)/1.5 var(--font-mono);color:var(--danger)}
+.tl-pfoot .sp{margin-left:auto;display:flex;gap:8px}
+.tl-pfoot button{font:500 var(--fs-micro)/1 var(--font-mono);padding:8px 12px;border:1px solid var(--border-strong);border-radius:6px;color:var(--text-muted)}
+.tl-pfoot button:hover{color:var(--text);border-color:var(--border-patina)}
+.tl-pfoot .acc:hover{color:var(--ver-ok)}
+.tl-pfoot .rej:hover{color:var(--danger)}
+@media (max-width:1024px){.tl-grid{grid-template-columns:1fr}.tl-left{position:static}}
+@media (max-width:768px){.tl-cols{grid-template-columns:1fr}.tl-row{flex-wrap:wrap}.tl-row .k{min-width:0}}
+/* a11y (spec §8): los botones de fila/pie quedan ~28–30px de alto; el handoff
+   exige 44px mínimo en móvil. Subimos su alto en el breakpoint táctil SIN tocar
+   clases ni el aspecto de escritorio. */
+@media (max-width:768px){
+  .tl-row .act button,.tl-pfoot button{min-height:44px}
+}

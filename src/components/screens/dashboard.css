@@ -1,0 +1,66 @@
+/* ── dashboard.html — el estado de tu carrera, no un saludo ──
+   PORTE LITERAL del 2º <style> de corpus-design/04-pantallas/dashboard.html
+   (fuera de data-corpus-system). Sin @keyframes propios: usa cPulse, cSkel,
+   c-enter del sistema. Clases sin renombrar: son el contrato diseño↔código. */
+.db-main{flex:1;padding:26px 0 90px}
+.db-strip{display:flex;align-items:center;gap:18px;flex-wrap:wrap;margin-bottom:20px}
+.db-strip .t-overline{letter-spacing:.14em}
+.db-strip .acts{margin-left:auto;display:flex;gap:10px}
+.db-bento{display:grid;grid-template-columns:repeat(12,1fr);gap:2px}
+.db-cell{background:var(--surface);border-radius:0;padding:0;min-width:0}
+.db-bento .db-cell:first-child{border-radius:var(--radius-md) 0 0 0}
+.db-ch{display:flex;align-items:baseline;gap:10px;padding:16px 20px 12px}
+.db-ch .t-overline{font-size:10px}
+.db-ch .n{font:400 var(--fs-micro)/1 var(--font-mono);color:var(--text-subtle)}
+.db-ch a{margin-left:auto;font:500 var(--fs-micro)/1 var(--font-mono)}
+/* variantes */
+.db-v{grid-column:span 7;display:flex;flex-direction:column}
+.db-vrow{display:grid;grid-template-columns:1fr auto auto;gap:2px 16px;align-items:center;
+  padding:12px 20px;border-top:1px solid var(--border);text-decoration:none;color:inherit}
+.db-vrow:hover{background:var(--surface-elevated);text-decoration:none;color:inherit}
+.db-vrow .nm{font:500 14px/1.3 var(--font-sans);display:flex;align-items:center;gap:8px}
+.db-vrow .obj{grid-column:1;font:400 var(--fs-micro)/1.4 var(--font-mono);color:var(--text-subtle)}
+.db-vrow .st{grid-row:span 2;font:400 var(--fs-micro)/1.5 var(--font-mono);color:var(--text-subtle);text-align:right}
+.db-vrow .st .old{color:var(--text-muted);display:flex;align-items:center;gap:6px;justify-content:flex-end}
+.db-vrow .pdf{grid-row:span 2;font:500 var(--fs-micro)/1 var(--font-mono);color:var(--text-muted);
+  border:1px solid var(--border);border-radius:5px;padding:8px 10px}
+.db-vrow .pdf:hover{color:var(--accent-text);border-color:var(--border-patina)}
+/* salud + staging */
+.db-side{grid-column:span 5;display:grid;grid-template-rows:auto auto;gap:2px;background:transparent}
+.db-s{background:var(--surface)}
+.db-srow{display:flex;align-items:baseline;gap:12px;padding:11px 20px;border-top:1px solid var(--border);
+  font-size:13px;color:var(--text-muted);text-decoration:none}
+.db-srow:hover{background:var(--surface-elevated);text-decoration:none;color:var(--text)}
+.db-srow .k{font:500 15px/1 var(--font-mono);color:var(--text);min-width:26px}
+.db-srow .go{margin-left:auto;color:var(--text-subtle)}
+.db-fine{padding:12px 20px 16px;font:400 var(--fs-micro)/1.7 var(--font-mono);color:var(--text-subtle)}
+.db-stg{display:flex;align-items:center;gap:14px;padding:16px 20px;text-decoration:none;color:inherit}
+.db-stg:hover{background:var(--surface-elevated);text-decoration:none;color:inherit}
+.db-stg .k{font:500 26px/1 var(--font-mono)}
+.db-stg .tx{font-size:13px;color:var(--text-muted)}
+.db-stg .go{margin-left:auto;color:var(--accent-text);font:500 var(--fs-micro)/1 var(--font-mono)}
+/* fuentes */
+.db-f{grid-column:span 12;background:transparent;display:grid;grid-template-columns:repeat(4,1fr);gap:1px}
+.db-fcell{background:var(--surface);padding:14px 20px 16px;min-height:104px}
+.db-fcell .nm{font:500 13px/1 var(--font-mono)}
+.db-fcell .facts{margin-top:8px;font:400 var(--fs-micro)/1.7 var(--font-mono);color:var(--text-subtle)}
+.db-fcell .new{margin-top:8px;display:inline-flex;align-items:center;gap:7px;font:500 var(--fs-micro)/1 var(--font-mono);color:var(--accent-text)}
+.db-fcell .new:hover{text-decoration:underline}
+.db-fcell .quiet{margin-top:8px;font:400 var(--fs-micro)/1 var(--font-mono);color:var(--text-subtle)}
+/* vacío — día 1: ni deprimente ni fanfarria */
+.db-empty{flex:1;display:none;flex-direction:column;align-items:center;justify-content:center;
+  text-align:center;padding:80px var(--container-pad) 120px}
+.db-empty.show{display:flex}
+.db-empty h1{font-size:var(--fs-display);max-width:18ch}
+.db-empty .sub{margin-top:16px;color:var(--text-muted);font-size:var(--fs-lead);max-width:46ch}
+.db-doors{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:44px;width:100%;max-width:720px;text-align:left}
+.db-door{padding:24px 26px 26px;text-decoration:none;color:inherit;display:block}
+.db-door:hover{text-decoration:none;color:inherit;border-color:var(--border-patina)}
+.db-door .t-overline{font-size:10px}
+.db-door h3{margin-top:10px;font-size:17px}
+.db-door p{margin-top:8px;font-size:var(--fs-ui);color:var(--text-muted);line-height:1.6}
+.db-door .go{display:inline-block;margin-top:14px;font:500 var(--fs-ui)/1 var(--font-sans);color:var(--accent-text)}
+.db-empty .fine{margin-top:34px;font:400 var(--fs-micro)/1.7 var(--font-mono);color:var(--text-subtle)}
+@media (max-width:1024px){.db-v{grid-column:span 12}.db-side{grid-column:span 12}.db-f{grid-template-columns:repeat(2,1fr)}}
+@media (max-width:768px){.db-doors{grid-template-columns:1fr}.db-strip .acts{width:100%}}
+@media (max-width:480px){.db-f{grid-template-columns:1fr}.db-vrow{grid-template-columns:1fr auto}.db-vrow .pdf{display:none}}

@@ -1,0 +1,35 @@
+/* ── variantes.html — MURO. Vistas de tu master; los overrides tuyos ganan. ──
+   PORTE LITERAL del 2º <style> de corpus-design/04-pantallas/variantes.html
+   (fuera de data-corpus-system). Sin @keyframes propios: todo el movimiento
+   viene del sistema. Clases sin renombrar: son el contrato diseño↔código. */
+.vr-main{flex:1;padding:30px 0 110px}
+.vr-lead{display:flex;align-items:baseline;justify-content:space-between;gap:18px;flex-wrap:wrap;margin-bottom:18px}
+.vr-lead p{color:var(--text-muted);font-size:var(--fs-ui);max-width:60ch}
+.vr-lead p b{color:var(--text);font-weight:500}
+.vr-list{border:1px solid var(--border);border-radius:var(--radius-md);overflow:hidden;margin-top:8px}
+.vr-row{background:var(--surface);border-top:1px solid var(--border);padding:0}
+.vr-row:first-child{border-top:0}
+.vr-top{display:grid;grid-template-columns:1fr auto auto auto;gap:4px 18px;align-items:center;padding:14px 20px;cursor:pointer}
+.vr-top:hover{background:var(--surface-elevated)}
+.vr-top .nm{font:500 14.5px/1.3 var(--font-sans);display:flex;align-items:center;gap:9px}
+.vr-top .obj{grid-column:1;font:400 var(--fs-micro)/1.4 var(--font-mono);color:var(--text-subtle)}
+.vr-top .meta{grid-row:span 2;font:400 var(--fs-micro)/1.6 var(--font-mono);color:var(--text-subtle);text-align:right}
+.vr-top .meta .old{color:var(--text-muted)}
+.vr-top .pdf{grid-row:span 2;font:500 var(--fs-micro)/1 var(--font-mono);color:var(--text-muted);border:1px solid var(--border);border-radius:5px;padding:9px 11px}
+.vr-top .pdf:hover{color:var(--accent-text);border-color:var(--border-patina)}
+.vr-top .open{grid-row:span 2;font:500 var(--fs-ui)/1 var(--font-sans);color:var(--accent-text)}
+/* detalle de desactualización: qué cambió, decides tú */
+.vr-diff{display:none;border-top:1px dashed var(--border);background:var(--surface-sunken);padding:14px 20px 16px}
+.vr-row.open .vr-diff{display:block}
+.vr-diff .t-overline{font-size:10px}
+.vr-dline{display:flex;gap:14px;align-items:baseline;margin-top:10px;font:400 var(--fs-data)/1.6 var(--font-mono)}
+.vr-dline .was{color:var(--text-subtle);text-decoration:line-through;text-decoration-color:var(--border-strong)}
+.vr-dline .now{color:var(--text)}
+.vr-dacts{display:flex;gap:8px;margin-top:12px}
+.vr-dacts button{font:500 var(--fs-micro)/1 var(--font-mono);padding:8px 11px;border:1px solid var(--border-strong);border-radius:6px;color:var(--text-muted)}
+.vr-dacts button:hover{color:var(--text);border-color:var(--border-patina)}
+.vr-dacts .prim{color:var(--accent-text);border-color:var(--border-patina)}
+.vr-empty{max-width:560px;margin:90px auto 0;text-align:center;display:none}
+.vr-empty.show{display:block}
+.vr-empty p{margin-top:14px;color:var(--text-muted);line-height:1.7}
+@media (max-width:768px){.vr-top{grid-template-columns:1fr auto}.vr-top .pdf,.vr-top .meta{display:none}}

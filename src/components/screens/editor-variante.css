@@ -1,0 +1,128 @@
+/* ── editor-variante.html — la pantalla más importante. MURO. ──
+   PORTE LITERAL del 2º <style> de corpus-design/04-pantallas/editor-variante.html
+   (fuera de data-corpus-system, líneas 488–606). Clases SIN renombrar: son el
+   contrato diseño↔código. Sin @keyframes propios (el movimiento vive en motion.css). */
+.ed-bar{position:sticky;top:var(--header-h);z-index:9;height:52px;background:color-mix(in srgb,var(--bg) 88%,transparent);
+  backdrop-filter:blur(8px);border-bottom:1px solid var(--border)}
+.ed-bar .c-container{max-width:none;height:100%;display:flex;align-items:center;gap:14px}
+.ed-bar .bk{font:500 var(--fs-ui)/1 var(--font-sans);color:var(--text-muted)}
+.ed-bar .nm{font:600 14px/1 var(--font-sans)}
+.ed-bar .st{font:400 var(--fs-micro)/1 var(--font-mono);color:var(--text-subtle)}
+.ed-bar .acts{margin-left:auto;display:flex;gap:8px;align-items:center}
+.ed-grid{display:grid;grid-template-columns:290px minmax(380px,1fr) 470px;gap:1px;background:var(--border);
+  height:calc(100vh - var(--header-h) - 52px);min-height:480px}
+.ed-col{background:var(--bg);overflow-y:auto;overscroll-behavior:contain}
+.ed-col--lib{background:var(--surface-sunken)}
+.ed-colh{position:sticky;top:0;z-index:2;display:flex;align-items:baseline;gap:10px;padding:14px 18px 10px;
+  background:inherit;border-bottom:1px solid var(--border)}
+.ed-colh .t-overline{font-size:10px}
+.ed-colh .n{font:400 10px/1 var(--font-mono);color:var(--text-subtle)}
+/* ── librería (master) ── */
+.lib-search{margin:12px 14px 4px}
+.lib-search input{height:34px;font-size:var(--fs-data)}
+.lib-g{margin-top:14px}
+.lib-g .t-overline{display:block;padding:0 18px 8px;font-size:10px}
+.lib-row{display:flex;align-items:baseline;gap:8px;padding:8px 12px 8px 18px;font-size:12.5px;line-height:1.45;color:var(--text-muted)}
+.lib-row:hover{background:var(--surface)}
+.lib-row .tx{flex:1;min-width:0}
+.lib-row.in .tx{color:var(--text-subtle)}
+.lib-row .add{flex:none;width:24px;height:24px;border-radius:5px;border:1px solid var(--border-strong);
+  font:500 13px/1 var(--font-mono);color:var(--text-muted);display:grid;place-items:center}
+.lib-row .add:hover{color:var(--ink-on-patina);background:var(--patina-500);border-color:transparent}
+.lib-row.in .add{border-color:transparent;color:var(--ver-ok)}
+.lib-row .c-ver{font-size:9px}
+/* ── composición (la variante) ── */
+.var-obj{margin:16px 18px 6px;padding:16px 18px}
+.var-obj label{display:flex;align-items:baseline;gap:10px;font:500 10px/1 var(--font-mono);letter-spacing:.12em;text-transform:uppercase;color:var(--text-subtle)}
+.var-obj input{margin-top:10px;font:600 16px/1.2 var(--font-sans);height:42px;background:var(--surface-sunken)}
+.var-obj .hint{margin-top:8px;font:400 var(--fs-micro)/1.6 var(--font-mono);color:var(--text-subtle)}
+.var-obj .hint b{color:var(--text-muted);font-weight:500}
+.var-g{margin:18px 18px 0}
+.var-g>.gh{display:flex;align-items:baseline;gap:10px;padding-bottom:8px}
+.var-g>.gh .t-overline{font-size:10px}
+.var-g>.gh .n{font:400 10px/1 var(--font-mono);color:var(--text-subtle)}
+.var-exp{margin-top:10px;border:1px solid var(--border);border-radius:var(--radius-md);background:var(--surface);overflow:hidden}
+.var-eh{display:flex;align-items:baseline;gap:10px;padding:12px 14px 10px}
+.var-eh .tt{font:600 13.5px/1.3 var(--font-sans)}
+.var-eh .org{font:400 10.5px/1.3 var(--font-mono);color:var(--text-subtle)}
+.var-b{position:relative;display:flex;gap:8px;align-items:baseline;padding:8px 14px 8px 10px;border-top:1px solid var(--border);font-size:12.5px;line-height:1.5}
+.var-b .grip{flex:none;cursor:grab;color:var(--text-subtle);font-size:11px;padding:2px 2px 0;user-select:none}
+.var-b.dragging{opacity:.35}
+.var-b .tx{flex:1;min-width:0;color:var(--text-muted)}
+.var-b .tx[contenteditable="true"]{outline:none;color:var(--text);background:var(--surface-sunken);border-radius:4px;padding:2px 6px;margin:-2px -6px}
+.var-b.hid .tx{opacity:.38;text-decoration:line-through;text-decoration-color:var(--border-strong)}
+.var-b.ovr{box-shadow:inset 2px 0 0 var(--patina-500)}
+.var-b .bacts{flex:none;display:flex;gap:1px;opacity:0}
+.var-b:hover .bacts{opacity:1}
+.var-b .bacts button{font:400 11px/1 var(--font-mono);color:var(--text-subtle);padding:4px 6px;border-radius:4px}
+.var-b .bacts button:hover{color:var(--text);background:var(--surface-elevated)}
+.var-orig{display:none;gap:8px;align-items:baseline;padding:7px 14px 9px 24px;border-top:1px dashed var(--border);
+  font:400 11px/1.55 var(--font-mono);color:var(--text-subtle);background:var(--surface-sunken)}
+.var-b.ovr+.var-orig{display:flex}
+.var-orig .rv{margin-left:auto;flex:none;font:500 10px/1 var(--font-mono);color:var(--accent-text);text-transform:uppercase;letter-spacing:.08em}
+.var-orig .rv:hover{text-decoration:underline}
+.var-chips{display:flex;flex-wrap:wrap;gap:6px;padding:4px 0 0}
+.var-chips .c-chip button{color:var(--text-subtle);font-size:12px;line-height:1;padding:0 0 0 2px}
+.var-chips .c-chip button:hover{color:var(--danger)}
+.var-empty{margin:60px 24px;text-align:center;color:var(--text-muted);font-size:13px;line-height:1.7}
+.var-empty .t-overline{display:block;margin-bottom:12px}
+/* ── preview (porcelana dentro de grafito) ── */
+.pv-col{display:flex;flex-direction:column;background:var(--surface-sunken)}
+.pv-tools{position:sticky;top:0;z-index:2;display:flex;align-items:center;gap:12px;padding:12px 16px;
+  background:var(--surface-sunken);border-bottom:1px solid var(--border)}
+.pv-seg{display:flex;border:1px solid var(--border-strong);border-radius:6px;overflow:hidden}
+.pv-seg button{font:500 var(--fs-micro)/1 var(--font-mono);letter-spacing:.04em;padding:8px 11px;color:var(--text-muted)}
+.pv-seg button[aria-pressed="true"]{color:var(--text);background:var(--surface-elevated);box-shadow:inset 0 0 0 1px var(--border-patina)}
+.pv-pages{margin-left:auto;font:500 var(--fs-micro)/1 var(--font-mono);color:var(--text-muted)}
+.pv-pages .warn{color:var(--danger)}
+.pv-scroll{flex:1;overflow-y:auto;padding:18px}
+.pv-fit{position:relative;margin:0 auto}
+.pv-doc{position:relative}
+.pv-pagewrap{transform-origin:0 0}
+.pv-page{position:relative;width:816px;height:1056px;background:#FFFFFF;color:#14181A;
+  box-shadow:0 2px 24px rgba(0,0,0,.5);margin-bottom:30px;overflow:hidden}
+.pv-page .inner{position:absolute;inset:68px 76px;font:400 13.3px/1.5 var(--font-sans)}
+.pv-pnum{position:absolute;right:-56px;top:8px;font:500 10px/1 var(--font-mono);color:var(--text-subtle)}
+.pv-p3{outline:2px dashed color-mix(in srgb,var(--danger) 55%,transparent);outline-offset:4px}
+/* tipografía del documento (espejo de 05-documento-cv, 1pt≈1.333px) */
+.cvd-name{font:600 29px/1.15 var(--font-display);color:#1F6E5A;letter-spacing:.002em}
+.cvd-label{margin-top:3px;font:500 14.7px/1.3 var(--font-sans);color:#14181A}
+.cvd-contact{margin-top:8px;font:400 12px/1.5 var(--font-sans);color:#454B49}
+.cvd-h{margin:22px 0 6px;font:600 12px/1 var(--font-sans);letter-spacing:.12em;text-transform:uppercase;color:#1F6E5A;
+  padding-bottom:5px;border-bottom:1px solid #D9DCD8}
+.cvd-sum{color:#14181A}
+.cvd-skline{margin-top:3px}
+.cvd-skline b{font-weight:600}
+.cvd-erow{display:flex;justify-content:space-between;align-items:baseline;margin-top:12px}
+.cvd-erow .t{font-weight:600;font-size:14px}
+.cvd-erow .d{font:400 12px/1.4 var(--font-sans);color:#454B49;white-space:nowrap;padding-left:16px}
+.cvd-org{font-size:12.7px;color:#454B49;margin-top:1px}
+.cvd-b{margin-top:5px;padding-left:16px;text-indent:-10px}
+.cvd-b .num{font-variant-numeric:tabular-nums}
+.cvd-mini{margin-top:4px}
+/* rayos-X */
+.pv-xray{position:relative}
+.pv-raw{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-md);
+  padding:26px 28px;font:400 11.5px/1.75 var(--font-mono);color:var(--text-muted);white-space:pre-wrap;overflow:auto}
+.pv-raw .cap{display:block;margin-bottom:16px;font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--text-subtle)}
+.pv-foot{padding:10px 16px;border-top:1px solid var(--border);font:400 10px/1.6 var(--font-mono);color:var(--text-subtle)}
+@media (max-width:1240px){.ed-grid{grid-template-columns:250px 1fr 400px}}
+@media (max-width:1024px){
+  .ed-grid{grid-template-columns:1fr;height:auto}
+  .ed-col{max-height:none}
+  .ed-col--lib,.pv-col{display:none}
+  .ed-grid[data-view="master"] .ed-col--lib{display:block}
+  .ed-grid[data-view="master"] .ed-col--mid{display:none}
+  .ed-grid[data-view="preview"] .pv-col{display:flex}
+  .ed-grid[data-view="preview"] .ed-col--mid{display:none}
+  .ed-tabs{display:flex!important}
+}
+.ed-tabs{display:none;position:sticky;top:calc(var(--header-h) + 52px);z-index:8;background:var(--bg);border-bottom:1px solid var(--border);padding:8px var(--container-pad);gap:6px}
+.ed-tabs button{font:500 var(--fs-micro)/1 var(--font-mono);padding:8px 12px;border:1px solid var(--border);border-radius:6px;color:var(--text-muted)}
+.ed-tabs button[aria-pressed="true"]{color:var(--accent-text);border-color:var(--border-patina);background:var(--surface)}
+
+/* ── Augmentación de accesibilidad (spec §8) — NO cambia ninguna clase ────────
+   Las acciones de viñeta (ocultar/afinar/quitar) están en opacity:0 hasta hover;
+   sin esto son inalcanzables al tabular con teclado. Revelarlas también con
+   :focus-within cierra el hueco sin tocar el aspecto en reposo. */
+.var-b:focus-within .bacts{opacity:1}

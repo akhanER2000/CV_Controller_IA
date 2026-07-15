@@ -1,0 +1,42 @@
+/* ── fuentes.html — MURO. Inventario de fuentes vivas; NO monta la aurora. ──
+   PORTE LITERAL del 2º <style> de corpus-design/04-pantallas/fuentes.html
+   (fuera de data-corpus-system). Sin @keyframes propios. Clases sin renombrar. */
+.fu-main{flex:1;padding:30px 0 120px}
+.fu-lead{display:flex;align-items:baseline;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:16px}
+.fu-lead p{color:var(--text-muted);font-size:var(--fs-ui);max-width:62ch}
+.fu-card{margin-top:14px;overflow:hidden}
+.fu-h{display:flex;align-items:baseline;gap:12px;padding:16px 22px 12px;flex-wrap:wrap}
+.fu-h .nm{font:500 15px/1 var(--font-mono)}
+.fu-h .tag{font:500 9px/1 var(--font-mono);letter-spacing:.1em;text-transform:uppercase;color:var(--text-subtle);border:1px solid var(--border);border-radius:4px;padding:4px 7px}
+.fu-h .tag.star{color:var(--accent-text);border-color:var(--border-patina)}
+.fu-h .acts{margin-left:auto;display:flex;gap:8px}
+.fu-facts{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:var(--border);border-top:1px solid var(--border)}
+.fu-facts>div{background:var(--surface);padding:12px 22px 14px}
+.fu-facts .v{font:500 17px/1.1 var(--font-mono)}
+.fu-facts .k{margin-top:4px;font:400 var(--fs-micro)/1.4 var(--font-sans);color:var(--text-muted)}
+.fu-new{display:flex;align-items:center;gap:10px;padding:12px 22px;border-top:1px solid var(--border);
+  font:400 var(--fs-data)/1.5 var(--font-mono);color:var(--text-muted)}
+.fu-new b{color:var(--accent-text);font-weight:500}
+.fu-new .go{margin-left:auto}
+.fu-note{padding:11px 22px 15px;border-top:1px dashed var(--border);font:400 var(--fs-micro)/1.7 var(--font-mono);color:var(--text-subtle)}
+/* selector de repos */
+.fu-repos{display:none;border-top:1px solid var(--border);background:var(--surface-sunken)}
+.fu-repos.open{display:block}
+.fu-rh{display:flex;align-items:baseline;gap:12px;padding:12px 22px;font:400 var(--fs-micro)/1.5 var(--font-mono);color:var(--text-muted)}
+.fu-rh b{color:var(--text);font-weight:500}
+.fu-repo{display:flex;align-items:baseline;gap:12px;padding:9px 22px;border-top:1px solid var(--border);font:400 var(--fs-data)/1.5 var(--font-mono)}
+.fu-repo:hover{background:var(--surface)}
+.fu-repo input{accent-color:var(--patina-500);transform:translateY(1px)}
+.fu-repo .nm{color:var(--text);min-width:170px}
+.fu-repo .meta{color:var(--text-subtle);flex:1}
+.fu-repo .why{color:var(--text-subtle);font-size:10px;letter-spacing:.06em;text-transform:uppercase}
+.fu-repo.off .nm,.fu-repo.off .meta{color:var(--text-subtle)}
+/* linkedin */
+.fu-li p{padding:2px 22px 14px;color:var(--text-muted);font-size:13px;line-height:1.65;max-width:70ch}
+.fu-li .vias{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:var(--border);border-top:1px solid var(--border)}
+.fu-li .vias>a{background:var(--surface);padding:13px 18px;font:400 var(--fs-data)/1.6 var(--font-sans);color:var(--text-muted);text-decoration:none}
+.fu-li .vias>a:hover{background:var(--surface-elevated);color:var(--text)}
+.fu-li .vias b{display:block;color:var(--text);font-weight:500;margin-bottom:3px}
+.fu-add{margin-top:22px;display:flex;gap:10px;flex-wrap:wrap}
+.fu-add input{max-width:420px}
+@media (max-width:768px){.fu-facts{grid-template-columns:repeat(2,1fr)}.fu-li .vias{grid-template-columns:1fr}}

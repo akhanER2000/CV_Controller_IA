@@ -1,0 +1,43 @@
+/* ── salud.html — sin score, sin barras, sin umbrales. Solo lo que puede fallar. ──
+   PORTE LITERAL del 2º <style> de corpus-design/04-pantallas/salud.html
+   (fuera de data-corpus-system). Sin @keyframes propios. Clases sin renombrar:
+   sl-bar, sl-main, sl-col, sl-lead, sl-list, sl-item, sl-h, sl-d, sl-cite,
+   sl-built, sl-brow, sl-ok son el contrato diseño↔código. */
+.sl-bar{position:sticky;top:var(--header-h);z-index:9;height:52px;background:color-mix(in srgb,var(--bg) 88%,transparent);
+  backdrop-filter:blur(8px);border-bottom:1px solid var(--border)}
+.sl-bar .c-container{height:100%;display:flex;align-items:center;gap:14px}
+.sl-main{flex:1;padding:34px 0 120px}
+.sl-col{max-width:820px;margin-inline:auto}
+.sl-lead{color:var(--text-muted);font-size:var(--fs-ui);max-width:64ch;margin-top:8px}
+.sl-lead b{color:var(--text);font-weight:500}
+.sl-list{margin-top:22px}
+.sl-item{margin-top:12px;overflow:hidden}
+.sl-h{display:flex;gap:14px;align-items:baseline;padding:14px 20px}
+.sl-h .mark{font:500 13px/1 var(--font-mono);color:var(--danger);flex:none}
+.sl-h .tt{font:500 14px/1.45 var(--font-sans);flex:1}
+.sl-h .src{flex:none;font:500 9.5px/1 var(--font-mono);letter-spacing:.08em;text-transform:uppercase;
+  color:var(--text-subtle);border:1px solid var(--border);border-radius:4px;padding:4px 7px;cursor:pointer}
+.sl-h .src:hover{color:var(--accent-text);border-color:var(--border-patina)}
+.sl-h .fix{flex:none}
+.sl-d{padding:0 20px 14px 47px;color:var(--text-muted);font-size:13px;line-height:1.65;max-width:74ch}
+.sl-cite{display:none;margin:0 20px 16px 47px;padding:11px 15px;background:var(--surface-sunken);
+  border-left:2px solid var(--border-strong);border-radius:0 6px 6px 0;
+  font:400 var(--fs-micro)/1.8 var(--font-mono);color:var(--text-muted)}
+.sl-cite.open{display:block}
+.sl-cite b{color:var(--text);font-weight:500}
+/* lo garantizado: educación plegada, no teatro */
+.sl-built{margin-top:36px}
+.sl-built>button{width:100%;text-align:left;display:flex;gap:12px;align-items:baseline;padding:13px 20px;
+  border:1px dashed var(--border-strong);border-radius:var(--radius-md);color:var(--text-muted);
+  font:400 var(--fs-data)/1.5 var(--font-mono)}
+.sl-built>button:hover{border-color:var(--border-patina);color:var(--text)}
+.sl-built .rows{display:none;margin-top:10px;border:1px solid var(--border);border-radius:var(--radius-md);overflow:hidden}
+.sl-built.open .rows{display:block}
+.sl-brow{display:flex;gap:12px;align-items:baseline;padding:10px 18px;background:var(--surface);font:400 var(--fs-data)/1.6 var(--font-mono);color:var(--text-subtle)}
+.sl-brow+.sl-brow{border-top:1px solid var(--border)}
+.sl-brow b{color:var(--text-muted);font-weight:500}
+.sl-ok{display:none;text-align:center;margin-top:70px}
+.sl-ok.show{display:block}
+.sl-ok .mark{font:400 30px/1 var(--font-mono);color:var(--ver-ok)}
+.sl-ok p{margin-top:14px;color:var(--text-muted);line-height:1.7}
+@media (max-width:768px){.sl-h{flex-wrap:wrap}.sl-d,.sl-cite{padding-left:20px;margin-left:20px}}

@@ -1,0 +1,37 @@
+/* ── ingesta.html — la espera como ruta propia. VENTANA + aurora ACTIVA. ──
+   PORTE LITERAL del 2º <style> de corpus-design/04-pantallas/ingesta.html
+   (fuera de data-corpus-system). Sin @keyframes propios: usa cSpin, cShimmer,
+   cEnter del sistema (globals.css §2). Clases sin renombrar: son el contrato. */
+.in-main{flex:1;display:flex;flex-direction:column;align-items:center;padding:70px var(--container-pad) 110px;text-align:center}
+.in-col{width:100%;max-width:600px;display:flex;flex-direction:column;align-items:center}
+.in-count{margin-top:34px;font:500 76px/1 var(--font-mono);letter-spacing:-.04em;font-variant-numeric:tabular-nums}
+.in-cap{margin-top:10px;color:var(--text-muted);font-size:var(--fs-ui)}
+.in-log{width:100%;margin-top:38px;text-align:left;padding:8px 0}
+.in-row{display:grid;grid-template-columns:34px 1fr auto;align-items:baseline;gap:0 10px;
+  padding:11px 22px;font:400 var(--fs-data)/1.5 var(--font-mono)}
+.in-row+.in-row{border-top:1px solid var(--border)}
+.in-row .st{text-align:center;color:var(--text-subtle)}
+.in-row.is-run .st{color:var(--accent-text)}
+.in-row.is-ok .st{color:var(--ver-ok)}
+.in-row.is-err .st{color:var(--ver-none)}
+.in-row .src{color:var(--text)}
+.in-row .det{color:var(--text-subtle);text-align:right}
+.in-row.is-err .det{color:var(--danger)}
+.in-acts{grid-column:2/4;display:flex;gap:8px;margin-top:8px}
+.in-acts button{font:500 var(--fs-micro)/1 var(--font-mono);padding:7px 10px;border:1px solid var(--border-strong);border-radius:5px;color:var(--text-muted)}
+.in-acts button:hover{color:var(--text);border-color:var(--border-patina)}
+.in-hint{margin-top:26px;font:400 var(--fs-micro)/1.8 var(--font-mono);color:var(--text-subtle)}
+.in-fin{width:100%;max-width:600px;display:none;flex-direction:column;align-items:center}
+.in-fin.show{display:flex}
+.fin-panel{width:100%;margin-top:36px;text-align:left;overflow:hidden}
+.fin-head{display:flex;align-items:baseline;justify-content:space-between;padding:20px 24px 16px}
+.fin-head .n{font:500 40px/1 var(--font-mono);letter-spacing:-.03em}
+.fin-head .l{color:var(--text-muted);font-size:var(--fs-ui)}
+.fin-noev{display:flex;align-items:center;gap:10px;padding:14px 24px;border-top:1px dashed color-mix(in srgb,var(--danger) 45%,transparent);
+  font:400 var(--fs-data)/1.5 var(--font-sans);color:var(--text-muted)}
+@media (max-width:768px){.in-count{font-size:56px}}
+@media (max-width:480px){.in-row{grid-template-columns:24px 1fr;padding:10px 14px}.in-row .det{grid-column:2;text-align:left}}
+
+/* A11y — hueco real de la spec §8.4 (sin cambiar clases): los botones de
+   recuperación de error miden ~26px; handoff exige ≥44px en móvil. */
+@media (max-width:480px){.in-acts button{min-height:44px}}

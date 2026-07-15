@@ -1,0 +1,111 @@
+/* ── importar.html — VENTANA. Vuélcalo: pega lo que tengas, cita la evidencia. ──
+   PORTE LITERAL del 2º <style> de corpus-design/04-pantallas/importar.html
+   (fuera de data-corpus-system). Sin @keyframes propios: reutiliza los del
+   sistema (cWordIn, cCharIn, cEnter, cShimmer, cSpin…). Clases sin renombrar. */
+.imp-main{flex:1;display:flex;flex-direction:column;align-items:center;padding:64px var(--container-pad) 96px}
+.imp-col{width:100%;max-width:760px;display:flex;flex-direction:column;align-items:center;text-align:center}
+.imp-col>.t-overline{margin-bottom:22px}
+.imp-h1{font-size:var(--fs-hero);max-width:15ch}
+.imp-h1 em{font-style:italic}
+.imp-sub{max-width:52ch;margin-top:18px;color:var(--text-muted);font-size:var(--fs-lead);line-height:1.65}
+.imp-box{width:100%;margin-top:40px;text-align:left;overflow:hidden}
+.imp-box.is-drag{border-color:var(--border-patina);box-shadow:0 0 0 3px color-mix(in srgb,var(--patina-300) 14%,transparent),var(--shadow-2)}
+.imp-ta{display:block;width:100%;background:transparent;border:0;resize:none;color:var(--text);
+  font:400 15px/1.7 var(--font-sans);padding:26px 28px 14px;min-height:240px;max-height:50vh;overflow:auto}
+.imp-ta:focus{outline:none}
+.imp-ta::placeholder{color:var(--text-subtle);opacity:.85}
+.imp-meta{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:10px 28px 14px;
+  font:400 var(--fs-micro)/1 var(--font-mono);color:var(--text-subtle)}
+.imp-meta .acts{display:flex;gap:4px}
+.imp-meta button{font:500 var(--fs-micro)/1 var(--font-mono);color:var(--text-muted);padding:6px 8px;border-radius:5px}
+.imp-meta button:hover{color:var(--accent-text);background:var(--surface)}
+.imp-detect{padding:0 28px 6px;display:none}
+.imp-detect.has{display:block}
+.imp-detect .t-overline{display:block;margin-bottom:10px;font-size:10px}
+.imp-chips{display:flex;flex-wrap:wrap;gap:8px}
+.imp-files{padding:0 28px 8px;display:none}
+.imp-files.has{display:block}
+.imp-file{display:flex;align-items:center;gap:12px;padding:9px 12px;margin-bottom:6px;
+  background:var(--surface-sunken);border:1px solid var(--border);border-radius:var(--radius-sm);
+  font:400 var(--fs-data)/1 var(--font-mono);color:var(--text)}
+.imp-file .sz{color:var(--text-subtle)}
+.imp-file .tag{margin-left:auto;color:var(--text-subtle);font-size:10px;letter-spacing:.08em;text-transform:uppercase}
+.imp-file .rm{color:var(--text-subtle);padding:2px 6px;border-radius:4px;line-height:1}
+.imp-file .rm:hover{color:var(--danger);background:var(--danger-quiet)}
+.imp-drop{margin:0 28px 24px;padding:16px;border:1px dashed var(--border-strong);border-radius:var(--radius-sm);
+  text-align:center;font:400 var(--fs-data)/1.6 var(--font-mono);color:var(--text-subtle);cursor:pointer;transition:border-color .14s,color .14s}
+.imp-drop:hover{border-color:var(--border-patina);color:var(--text-muted)}
+.imp-drop b{color:var(--text-muted);font-weight:500}
+/* LinkedIn: el momento de honestidad. Guía, no error. */
+.imp-li{width:100%;margin-top:14px;text-align:left;padding:22px 26px}
+.imp-li h3{font-size:15px;margin-bottom:4px}
+.imp-li>p{color:var(--text-muted);font-size:var(--fs-ui);max-width:58ch}
+.imp-li ol{list-style:none;padding:0;margin:16px 0 0;display:flex;flex-direction:column}
+.imp-li li{display:grid;grid-template-columns:28px 1fr;gap:2px 14px;padding:13px 0;border-top:1px solid var(--border)}
+.imp-li li .n{grid-row:span 2;font:500 13px/1.4 var(--font-mono);color:var(--accent-text)}
+.imp-li li .h{font:500 var(--fs-ui)/1.4 var(--font-sans);color:var(--text)}
+.imp-li li .d{font:400 var(--fs-data)/1.6 var(--font-sans);color:var(--text-muted)}
+.imp-li li .d .c-kbd{margin:0 1px}
+.imp-cta{margin-top:40px;display:flex;flex-direction:column;align-items:center;gap:18px}
+.imp-alt{font-size:var(--fs-ui)}
+.imp-note{margin-top:46px;max-width:52ch;font:400 var(--fs-micro)/1.8 var(--font-mono);color:var(--text-subtle)}
+.imp-note .c-divider{margin-bottom:18px}
+/* ── Ingesta: la espera ── */
+.ing-col{width:100%;max-width:600px;display:flex;flex-direction:column;align-items:center;text-align:center;padding-top:34px}
+.ing-count{margin-top:34px;font:500 76px/1 var(--font-mono);letter-spacing:-.04em;font-variant-numeric:tabular-nums}
+.ing-cap{margin-top:10px;color:var(--text-muted);font-size:var(--fs-ui)}
+.ing-log{width:100%;margin-top:38px;text-align:left;padding:8px 0}
+.ing-row{display:grid;grid-template-columns:34px 1fr auto;align-items:baseline;gap:0 10px;
+  padding:11px 22px;font:400 var(--fs-data)/1.5 var(--font-mono)}
+.ing-row+.ing-row{border-top:1px solid var(--border)}
+.ing-row .st{text-align:center;color:var(--text-subtle)}
+.ing-row.is-run .st{color:var(--accent-text)}
+.ing-row.is-ok .st{color:var(--ver-ok)}
+.ing-row.is-err .st{color:var(--ver-none)}
+.ing-row .src{color:var(--text)}
+.ing-row .det{color:var(--text-subtle);text-align:right}
+.ing-row.is-err .det{color:var(--danger)}
+.ing-err-acts{grid-column:2/4;display:flex;gap:8px;margin-top:8px}
+.ing-err-acts button{font:500 var(--fs-micro)/1 var(--font-mono);padding:7px 10px;border:1px solid var(--border-strong);border-radius:5px;color:var(--text-muted)}
+.ing-err-acts button:hover{color:var(--text);border-color:var(--border-patina)}
+.ing-hint{margin-top:26px;font:400 var(--fs-micro)/1.7 var(--font-mono);color:var(--text-subtle)}
+/* ── Fin: el único shimmer del producto ── */
+.fin-col{width:100%;max-width:600px;display:flex;flex-direction:column;align-items:center;text-align:center;padding-top:24px}
+.fin-panel{width:100%;margin-top:36px;text-align:left;overflow:hidden}
+.fin-head{display:flex;align-items:baseline;justify-content:space-between;padding:20px 24px 16px}
+.fin-head .n{font:500 40px/1 var(--font-mono);letter-spacing:-.03em}
+.fin-head .l{color:var(--text-muted);font-size:var(--fs-ui)}
+.fin-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:var(--border);border-top:1px solid var(--border)}
+.fin-cell{background:var(--surface);padding:14px 16px 16px}
+.fin-cell .v{font:500 22px/1 var(--font-mono)}
+.fin-cell .k{margin-top:6px;font:400 var(--fs-micro)/1.4 var(--font-sans);color:var(--text-muted)}
+.fin-noev{display:flex;align-items:center;gap:10px;padding:14px 24px;border-top:1px dashed color-mix(in srgb,var(--danger) 45%,transparent);
+  font:400 var(--fs-data)/1.5 var(--font-sans);color:var(--text-muted)}
+.fin-cta{margin-top:36px;display:flex;flex-direction:column;align-items:center;gap:14px}
+.fin-sub{font:400 var(--fs-data)/1.6 var(--font-mono);color:var(--text-subtle)}
+/* header */
+.hd-crumb{display:flex;align-items:center;gap:14px}
+.hd-sep{width:1px;height:18px;background:var(--border-strong)}
+.hd-step{font:500 var(--fs-micro)/1 var(--font-mono);letter-spacing:.14em;color:var(--text-muted)}
+.hd-right{margin-left:auto;display:flex;align-items:center;gap:16px}
+.hd-lang{display:flex;font:500 var(--fs-micro)/1 var(--font-mono);border:1px solid var(--border-strong);border-radius:5px;overflow:hidden}
+.hd-lang span{padding:6px 8px;color:var(--text-subtle)}
+.hd-lang span[data-on]{color:var(--text);background:var(--surface-elevated)}
+.hd-av{width:28px;height:28px;border-radius:50%;background:var(--surface-elevated);border:1px solid var(--border-strong);
+  display:grid;place-items:center;font:500 10px/1 var(--font-mono);color:var(--text-muted)}
+@media (max-width:768px){
+  .imp-h1{font-size:40px}
+  .imp-main{padding-top:40px}
+  .imp-ta{min-height:190px;padding:20px 20px 10px}
+  .imp-meta,.imp-detect,.imp-files{padding-inline:20px}
+  .imp-drop{margin-inline:20px}
+  .fin-grid{grid-template-columns:repeat(2,1fr)}
+  .ing-count{font-size:56px}
+  .hd-step{display:none}
+}
+@media (max-width:480px){
+  .imp-h1{font-size:32px}
+  .imp-sub{font-size:var(--fs-body)}
+  .ing-row{grid-template-columns:24px 1fr;padding:10px 14px}
+  .ing-row .det{grid-column:2;text-align:left;margin-top:2px}
+}

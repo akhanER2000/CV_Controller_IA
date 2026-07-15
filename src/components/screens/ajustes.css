@@ -1,0 +1,34 @@
+/* ── ajustes.html — MURO. El tema y la IA se cambian AQUÍ y se ve en vivo. ──
+   PORTE LITERAL del 2º <style> de corpus-design/04-pantallas/ajustes.html
+   (fuera de data-corpus-system). Sin @keyframes propios: todo el movimiento
+   sale de motion.css (sistema). Clases sin renombrar — son el contrato. */
+.aj-main{flex:1;padding:34px 0 130px}
+.aj-col{max-width:760px;margin-inline:auto}
+.aj-g{margin-top:34px}
+.aj-gh{display:flex;align-items:baseline;gap:12px;padding-bottom:8px}
+.aj-row{display:flex;gap:18px;align-items:center;padding:16px 20px;background:var(--surface);border:1px solid var(--border);border-top:0}
+.aj-rows{border-top:1px solid var(--border);border-radius:var(--radius-md);overflow:hidden;margin-top:10px}
+.aj-rows .aj-row:first-child{border-top:1px solid var(--border)}
+.aj-row .k{min-width:170px}
+.aj-row .k b{display:block;font:500 14px/1.3 var(--font-sans);color:var(--text)}
+.aj-row .k span{display:block;margin-top:3px;font:400 var(--fs-micro)/1.6 var(--font-mono);color:var(--text-subtle)}
+.aj-row .v{flex:1;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+/* segmentos */
+.aj-seg{display:flex;border:1px solid var(--border-strong);border-radius:6px;overflow:hidden}
+.aj-seg button{font:500 var(--fs-micro)/1 var(--font-mono);letter-spacing:.04em;padding:9px 13px;color:var(--text-muted)}
+.aj-seg button[aria-pressed="true"]{color:var(--text);background:var(--surface-elevated);box-shadow:inset 0 0 0 1px var(--border-patina)}
+/* switch */
+.aj-sw{position:relative;width:42px;height:24px;border-radius:12px;background:var(--surface-sunken);border:1px solid var(--border-strong);transition:background .14s,border-color .14s;flex:none}
+.aj-sw::after{content:"";position:absolute;top:3px;left:3px;width:16px;height:16px;border-radius:50%;background:var(--text-muted);transition:transform .18s var(--ease-standard),background .14s}
+.aj-sw[aria-checked="true"]{background:var(--patina-700);border-color:transparent}
+.aj-sw[aria-checked="true"]::after{transform:translateX(18px);background:#EAF5F1}
+.aj-note{margin-top:10px;padding:12px 16px;border:1px dashed var(--border-strong);border-radius:var(--radius-sm);
+  font:400 var(--fs-data)/1.7 var(--font-sans);color:var(--text-muted);display:none}
+.aj-note.show{display:block}
+.aj-note b{color:var(--text);font-weight:500}
+/* peligro con calma */
+.aj-danger .aj-row{background:color-mix(in srgb,var(--danger) 3%,var(--surface))}
+.aj-confirm{display:none;gap:8px;align-items:center;flex-wrap:wrap}
+.aj-confirm.show{display:flex}
+.aj-confirm input{max-width:200px;height:34px;font-size:var(--fs-data)}
+@media (max-width:768px){.aj-row{flex-direction:column;align-items:flex-start}.aj-row .k{min-width:0}}
