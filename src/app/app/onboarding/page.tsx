@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { AuroraCanvas } from "@/components/AuroraCanvas";
+import { Aurora } from "@/components/Aurora";
 
 /**
  * Las dos puertas de entrada — visualmente simétricas, ninguna de segunda.
@@ -10,7 +10,8 @@ import { AuroraCanvas } from "@/components/AuroraCanvas";
 export default function Onboarding() {
   return (
     <main className="onb c-window">
-      <AuroraCanvas active />
+      {/* active es exclusivo de la ingesta; onboarding es ventana en calma */}
+      <Aurora state="calm" />
       <div className="onb__inner c-panel-in">
         <p className="onb__eyebrow">Tu registro canónico</p>
         <h1 className="onb__title">Empieza por una de dos puertas.</h1>

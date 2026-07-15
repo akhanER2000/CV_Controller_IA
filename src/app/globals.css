@@ -1,782 +1,587 @@
 @import "tailwindcss";
-@import "../styles/tokens.css";
-/* ── kit de movimiento (inline desde 02-sistema/canon-motion.css) ── */
-/* ============================================================================
-   CANON · canon-motion.css
-   La librería de movimiento del producto. NO es una descripción: es el código.
-   Depende de los tokens de 02-sistema/tokens.css (--dur-*, --ease-*, --gold-*).
 
-   Reglas:
-   · Solo se anima transform, opacity y filter. Nunca width/height/top/box-shadow.
-   · Cada animación tiene su equivalencia sin movimiento (§ reduce al final).
-   · La escala de ceremonia (0..3) determina la duración. Ver canon-motion.md.
+/* ============================================================================
+   CORPUS · globals.css
+   ────────────────────────────────────────────────────────────────────────────
+   Este archivo es el PORTE LITERAL del sistema canónico del paquete de diseño:
+
+     corpus-design/02-sistema/tokens.css   → §1
+     corpus-design/02-sistema/base.css     → §2
+     corpus-design/02-sistema/aurora.css   → §3
+     corpus-design/02-sistema/motion.css   → §4
+
+   Copiados íntegros, sin adaptar. Los nombres de clase NO CAMBIAN: son el
+   contrato diseño↔código. Si editas el sistema en el paquete de diseño,
+   re-inyecta aquí — no "interpretes" la diferencia.
+
+   Lo único que se añade aquí y no está en el paquete: los @font-face (§0),
+   porque el paquete carga las fuentes desde el CDN de Google y producción las
+   auto-hospeda (handoff.md: "En producción, self-host con subsetting").
+   Son los MISMOS .ttf que registra el renderer del PDF (src/lib/fonts/) →
+   cero deriva entre lo que se ve en pantalla y lo que sale impreso.
    ============================================================================ */
 
-/* ── Fallback de tokens: si se abre este archivo aislado, sigue funcionando ── */
-:root{
-  --dur-instant:80ms; --dur-fast:140ms; --dur-base:220ms;
-  --dur-slow:360ms;   --dur-deliberate:640ms;
-  --ease-standard:cubic-bezier(.2,0,0,1);
-  --ease-decelerate:cubic-bezier(0,0,0,1);
-  --ease-accelerate:cubic-bezier(.3,0,1,1);
-  --ease-spring:cubic-bezier(.34,1.24,.64,1);
-
-  /* Ritmo del escalonado (ceremonia 3) */
-  --stagger-step:40ms;    /* retraso entre hermanos */
-  --stagger-max:24;       /* tope de items animados; el resto entra de golpe */
+/* ════════════════════════════════════════════════════════════════════════════
+   §0 · FUENTES AUTO-HOSPEDADAS
+   Las familias se llaman exactamente como las nombra tokens.css.
+   ════════════════════════════════════════════════════════════════════════════ */
+@font-face {
+  font-family: "Geist";
+  src: url("../lib/fonts/Geist-Regular.ttf") format("truetype");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Geist";
+  src: url("../lib/fonts/Geist-Medium.ttf") format("truetype");
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Geist";
+  src: url("../lib/fonts/Geist-SemiBold.ttf") format("truetype");
+  font-weight: 600;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Geist";
+  src: url("../lib/fonts/Geist-Bold.ttf") format("truetype");
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Geist Mono";
+  src: url("../lib/fonts/GeistMono-Regular.ttf") format("truetype");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Geist Mono";
+  src: url("../lib/fonts/GeistMono-Medium.ttf") format("truetype");
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Playfair Display";
+  src: url("../lib/fonts/PlayfairDisplay-500.ttf") format("truetype");
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Playfair Display";
+  src: url("../lib/fonts/PlayfairDisplay-600.ttf") format("truetype");
+  font-weight: 600;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Playfair Display";
+  src: url("../lib/fonts/PlayfairDisplay-Italic500.ttf") format("truetype");
+  font-weight: 500;
+  font-style: italic;
+  font-display: swap;
 }
 
 /* ============================================================================
-   CEREMONIA 0 · INSTANTÁNEO (0–80 ms)
-   Acciones que el usuario repite decenas de veces al día.
-   Solo color y opacidad. Cero desplazamiento. Cero espera.
+   §1 · tokens.css  ── COPIA ÍNTEGRA DE corpus-design/02-sistema/tokens.css
    ============================================================================ */
 
-.c-interactive{
-  transition:
-    color         var(--dur-instant) var(--ease-standard),
-    background-color var(--dur-instant) var(--ease-standard),
-    border-color  var(--dur-instant) var(--ease-standard),
-    opacity       var(--dur-instant) var(--ease-standard);
-}
-
-/* ── El hairline dorado como SISTEMA DE ESTADOS (no un adorno) ──
-   Sustituye a los fondos de color. Un borde, no un relleno. */
-.c-hairline{
-  position:relative;
-  border:1px solid var(--border);
-  transition:border-color var(--dur-fast) var(--ease-standard);
-}
-.c-hairline:hover        { border-color:var(--border-strong,rgba(255,255,255,.16)); }
-.c-hairline[data-state="active"],
-.c-hairline[data-state="selected"]{ border-color:var(--border-gold,rgba(231,194,79,.55)); }
-
-/* El glow sutil SOLO en el elemento activo. Nunca en más de uno por vista. */
-.c-hairline[data-state="active"]::after{
-  content:""; position:absolute; inset:-1px; border-radius:inherit; pointer-events:none;
-  box-shadow:0 0 0 1px var(--border-gold), 0 0 12px -2px rgba(212,175,55,.28);
-  opacity:0; animation:c-glow-in var(--dur-base) var(--ease-decelerate) forwards;
-}
-@keyframes c-glow-in{ to{ opacity:1 } }
-
-/* ── Override presente: la arista dorada IZQUIERDA. Se ve sin leer. ── */
-.c-override{ box-shadow:inset 2px 0 0 0 var(--gold-500,#D4AF37); }
-
-/* ── Foco visible SIEMPRE. Nunca outline:none sin reemplazo. ── */
-.c-focusable:focus-visible{
-  outline:2px solid var(--focus-ring,#E7C24F);
-  outline-offset:2px;
-  border-radius:4px;
-}
-
 /* ============================================================================
-   CEREMONIA 1 · CONFIRMACIÓN (120–200 ms)
-   Aceptar un item, añadirlo a la variante, revertir un override.
+   CORPUS · Sistema "GRAFITO · PÁTINA · PORCELANA"
+   Tokens verificados. Cada ratio calculado con la fórmula de luminancia WCAG.
+   NO alteres estos valores: los contrastes están comprobados uno a uno.
+
+   ── EL CONCEPTO ──────────────────────────────────────────────────────────
+   El COBRE es el conductor de la electrónica. No el oro: las pistas de todo
+   circuito impreso del mundo son de cobre. Y el cobre, con el tiempo, se
+   oxida y se vuelve VERDE — esa es la pátina, el cardenillo, el verde de la
+   Estatua de la Libertad.
+
+   La pátina es LA MARCA QUE EL TIEMPO DEJA SOBRE EL METAL.
+   Y una carrera es exactamente eso: la marca que el tiempo deja sobre alguien.
+
+   Por eso el acento es verde y no dorado. No es un cambio de gusto:
+   es una metáfora más exacta para lo que este producto hace.
+
+   Tres minerales, tres roles:
+     GRAFITO   — la piedra. El sustrato. Negro con sesgo frío, no negro puro.
+     PÁTINA    — el verde del cobre oxidado. El acento. Valor y acción.
+     PORCELANA — el blanco cocido. El tema claro. El papel del documento.
+
+   Metales de apoyo (COBRE, PLATA, ACERO): viven SOLO en la atmósfera del
+   shader de fondo. NUNCA en la UI. Atmósfera ≠ señal.
    ============================================================================ */
 
-/* Un item aceptado en staging: se asienta. Un solo pulso, sin rebote payaso. */
-@keyframes c-confirm{
-  0%  { transform:scale(1);     background-color:transparent; }
-  35% { transform:scale(1.012); background-color:rgba(212,175,55,.10); }
-  100%{ transform:scale(1);     background-color:transparent; }
-}
-.c-confirm{ animation:c-confirm var(--dur-base) var(--ease-spring); }
+:root {
+  /* ── ESCALA DE PÁTINA (el acento — compartida entre temas) ─────────────── */
+  --patina-100: #7FD1BE;  /* brillos, shimmer, extremo claro de gradientes    · 10.99:1 sobre grafito */
+  --patina-300: #5FC6A9;  /* pátina luminosa · ENLACES Y FOCUS EN GRAFITO     ·  9.47:1 ✓ AA          */
+  --patina-500: #43B3A0;  /* ★ PÁTINA DE MARCA · acento, CTA                  ·  7.66:1 ✓ AA          */
+  --patina-700: #1F6E5A;  /* pátina profunda · TEXTO/ENLACES SOBRE PORCELANA  ·  5.74:1 ✓ AA sobre claro */
+  --patina-900: #17564A;  /* verde bronce · hover de enlaces en claro         ·  7.99:1 sobre porcelana */
 
-/* Un item que sale de la lista (descartado / quitado de la variante) */
-@keyframes c-dismiss{
-  to{ opacity:0; transform:translateX(8px) scale(.98); }
-}
-.c-dismiss{ animation:c-dismiss var(--dur-fast) var(--ease-accelerate) forwards; }
+  /* Texto sobre pátina: SIEMPRE tinta, NUNCA blanco.
+     #06110E sobre patina-500 → 7.49:1 ✓    ·    blanco sobre patina-500 → 2.56:1 ✗ FALLA */
+  --ink-on-patina: #06110E;
 
-/* ============================================================================
-   CEREMONIA 1 · dividerDraw — LA HAIRLINE QUE SE DIBUJA
-   Bajo cada encabezado de sección. Enseña la estructura la PRIMERA vez.
-   Nunca dos veces en la misma sesión (lo garantiza canon-motion.js).
-   ============================================================================ */
-
-.c-divider{
-  position:relative; height:1px; background:var(--border);
-  overflow:hidden;
-}
-.c-divider::after{
-  content:""; position:absolute; inset:0;
-  background:linear-gradient(90deg,
-    var(--gold-500,#D4AF37) 0%,
-    var(--gold-700,#8A6414) 45%,
-    transparent 100%);
-  transform:scaleX(0); transform-origin:left center;
-}
-.c-divider.is-drawn::after{
-  animation:c-divider-draw var(--dur-deliberate) var(--ease-decelerate) forwards;
-}
-@keyframes c-divider-draw{ to{ transform:scaleX(1) } }
-
-/* ============================================================================
-   CEREMONIA 3 · EL MOMENTO ESTELAR
-   El escalonado de items al terminar la ingesta. Ver tu carrera aparecer,
-   item por item, ES el producto entero en tres segundos.
-   Se dispara con .c-stagger en el contenedor (canon-motion.js pone los delays).
-   ============================================================================ */
-
-.c-stagger > .c-stagger-item{
-  opacity:0;
-  transform:translateY(12px);
-}
-.c-stagger.is-running > .c-stagger-item{
-  animation:c-rise var(--dur-slow) var(--ease-decelerate) forwards;
-  animation-delay:var(--d,0ms);
-}
-@keyframes c-rise{
-  to{ opacity:1; transform:translateY(0); }
-}
-/* Los items por encima de --stagger-max entran de golpe: con 100 items,
-   escalonarlos todos dura un minuto y deja de ser magia para ser tortura. */
-.c-stagger.is-running > .c-stagger-item.c-no-stagger{
-  animation:c-rise var(--dur-fast) var(--ease-decelerate) forwards;
-  animation-delay:0ms;
+  /* ── METALES DE ATMÓSFERA (solo el shader de fondo. Prohibidos en la UI) ── */
+  --copper:  #B87333;   /* cobre crudo — el conductor antes de oxidarse */
+  --silver:  #ADB6C2;   /* plata/platino — el metal frío */
+  --steel:   #7C8794;   /* acero — el metal en reposo */
 }
 
-/* ── Contador que sube mientras la IA extrae. Honesto: cuenta lo real. ── */
-.c-tick{ font-family:var(--font-mono); font-variant-numeric:tabular-nums; }
+/* ══════════════════════════════════════════════════════════════════════════
+   TEMA OSCURO — "GRAFITO" (por defecto)
+   ══════════════════════════════════════════════════════════════════════════ */
+[data-theme="dark"], :root {
+  --bg:               #0A0C0B;   /* grafito. Negro con sesgo verde-frío: es piedra, no vacío. */
+  --surface:          #121615;
+  --surface-elevated: #1A201E;
+  --surface-sunken:   #070908;
 
-/* ============================================================================
-   CEREMONIA 3 · EL ÚNICO SHIMMER DEL PRODUCTO
-   Cuando la IA termina de extraer. Una vez. En ningún otro sitio.
-   Un shimmer que aparece dos veces deja de ser un momento y pasa a ser un tic.
-   ============================================================================ */
+  --text:        #F2F4F2;   /* 16.50:1 sobre surface ✓ */
+  --text-muted:  #AFB6B3;   /*  8.83:1 ✓               */
+  --text-subtle: #7E8784;   /*  4.94:1 ✓ AA (límite)   */
 
-@keyframes c-shimmer{
-  0%  { transform:translateX(-120%); }
-  100%{ transform:translateX(120%); }
-}
-.c-shimmer{ position:relative; overflow:hidden; }
-.c-shimmer.is-firing::before{
-  content:""; position:absolute; inset:0; pointer-events:none;
-  background:linear-gradient(105deg,
-    transparent 30%,
-    rgba(246,226,162,.00) 42%,
-    rgba(246,226,162,.22) 50%,
-    rgba(246,226,162,.00) 58%,
-    transparent 70%);
-  animation:c-shimmer 1100ms var(--ease-standard) 1;
-}
+  --border:        rgba(255, 255, 255, 0.08);
+  --border-strong: rgba(255, 255, 255, 0.16);
+  --border-patina: rgba(95, 198, 169, 0.55);   /* ★ el "hairline de pátina" — el sistema de estados */
 
-/* ============================================================================
-   CEREMONIA 2 · ★ EL BLUR-IN DEL TOGGLE "CÓMO LO LEE EL ATS"
-   El efecto más caro del producto, y el que lo define.
-   El PDF se desenfoca, pierde el color, y del desenfoque resuelve el texto
-   crudo del parser. No es decoración: es la metáfora. Así te ve la máquina.
-   ============================================================================ */
+  --accent:      var(--patina-500);
+  --accent-text: var(--patina-300);   /* la pátina como TEXTO sobre oscuro (luminosa) */
+  --link:        var(--patina-300);
+  --link-hover:  var(--patina-100);
+  --focus-ring:  var(--patina-300);
 
-.c-xray{ position:relative; isolation:isolate; }
-
-.c-xray__doc,
-.c-xray__raw{
-  transition:
-    opacity   var(--dur-slow) var(--ease-standard),
-    filter    var(--dur-slow) var(--ease-standard),
-    transform var(--dur-slow) var(--ease-standard);
+  --danger:       #E06055;
+  --danger-quiet: rgba(224, 96, 85, 0.18);
 }
 
-/* Estado normal: el documento, nítido y en color. El texto crudo, oculto. */
-.c-xray__doc{ opacity:1; filter:blur(0) saturate(1); transform:scale(1); }
-.c-xray__raw{
-  opacity:0; filter:blur(10px) saturate(0); transform:scale(1.01);
-  position:absolute; inset:0; pointer-events:none;
-  font-family:var(--font-mono); color:var(--text-muted);
-  white-space:pre-wrap; overflow:auto;
+/* ══════════════════════════════════════════════════════════════════════════
+   TEMA CLARO — "PORCELANA"
+   ══════════════════════════════════════════════════════════════════════════ */
+[data-theme="light"] {
+  --bg:             #F7F8F6;   /* porcelana: blanco cocido, con cuerpo. No #FFF. */
+  --surface:        #FFFFFF;
+  --surface-sunken: #EDEFEC;
+
+  --text:        #14181A;   /* 16.77:1 ✓ */
+  --text-muted:  #454B49;   /*  8.37:1 ✓ */
+  --text-subtle: #6C7370;   /*  4.56:1 ✓ AA (límite) */
+
+  --border:        rgba(20, 24, 26, 0.08);
+  --border-strong: rgba(20, 24, 26, 0.16);
+  --border-patina: rgba(31, 110, 90, 0.55);
+
+  --accent:      var(--patina-700);   /* sobre claro, la pátina se vuelve TINTA */
+  --accent-text: var(--patina-700);   /* 5.74:1 ✓ AA — patina-500 aquí FALLA (2.41:1) */
+  --link:        var(--patina-700);
+  --link-hover:  var(--patina-900);
+  --focus-ring:  var(--patina-700);
+
+  --danger:       #B23B31;
+  --danger-quiet: rgba(178, 59, 49, 0.12);
 }
 
-/* Estado rayos-X: el documento se desviste. */
-.c-xray[data-mode="raw"] .c-xray__doc{
-  opacity:0; filter:blur(12px) saturate(0); transform:scale(.995);
-}
-.c-xray[data-mode="raw"] .c-xray__raw{
-  opacity:1; filter:blur(0) saturate(1); transform:scale(1);
-  pointer-events:auto;
-}
+/* ══════════════════════════════════════════════════════════════════════════
+   REGLAS DE LA PÁTINA (heredadas del sistema original, con el nuevo mineral)
+   ══════════════════════════════════════════════════════════════════════════
 
-/* ============================================================================
-   CEREMONIA 2 · Transiciones de panel / vista
-   ============================================================================ */
+   ESCASA      · ≤ 1 elemento de pátina dominante por vista. El resto,
+                 hairlines y texto. Si todo es verde, nada lo es.
+   INTENCIONAL · La pátina SIEMPRE significa "valor o acción": enlace, CTA,
+                 foco, métrica destacada, borde activo. Nunca relleno, nunca
+                 fondo masivo.
+   VIVA        · En grafito brilla (patina-300/500, glow, shimmer).
+                 En porcelana se vuelve tinta (patina-700/900).
 
-@keyframes c-panel-in{
-  from{ opacity:0; transform:translateY(8px); }
-  to  { opacity:1; transform:translateY(0);   }
-}
-.c-panel-in{ animation:c-panel-in var(--dur-base) var(--ease-decelerate); }
+   ⚠️ NUNCA texto blanco sobre un botón de pátina: 2.56:1, falla clamorosamente.
+      Usa --ink-on-patina (#06110E → 7.49:1).
 
-/* ============================================================================
-   ESTADOS DE IA — la espera es real (5–40 s). Diséñala, no la castigues.
-   ============================================================================ */
+   ⚠️ NUNCA patina-500 como texto sobre porcelana: 2.41:1, falla.
+      Sobre claro, el acento es patina-700.
+   ══════════════════════════════════════════════════════════════════════════ */
 
-/* Pensando: respiración lenta. Nunca un spinner girando: gira = "colgado". */
-@keyframes c-breathe{
-  0%,100%{ opacity:.45 } 50%{ opacity:1 }
-}
-.c-thinking{ animation:c-breathe 1600ms var(--ease-standard) infinite; }
+/* ── MOTION (el easing real de la referencia, verificado en su CSS) ───────── */
+:root {
+  --ease-signature:  cubic-bezier(0.16, 1, 0.3, 1);   /* ★ easeOutExpo — la firma del movimiento */
+  --ease-standard:   cubic-bezier(0.2, 0, 0, 1);
+  --ease-decelerate: cubic-bezier(0, 0, 0, 1);
+  --ease-accelerate: cubic-bezier(0.3, 0, 1, 1);
+  --ease-spring:     cubic-bezier(0.34, 1.24, 0.64, 1);
 
-/* Skeleton mientras se extrae: barrido de oro apagadísimo, no gris de Bootstrap */
-@keyframes c-skeleton{
-  to{ background-position:200% 0 }
-}
-.c-skeleton{
-  background:linear-gradient(90deg,
-    var(--surface,#141418) 0%,
-    rgba(212,175,55,.06) 50%,
-    var(--surface,#141418) 100%);
-  background-size:200% 100%;
-  animation:c-skeleton 1400ms linear infinite;
-  border-radius:4px; color:transparent!important;
+  --dur-instant:    80ms;
+  --dur-fast:      140ms;
+  --dur-base:      220ms;
+  --dur-slow:      360ms;
+  --dur-deliberate: 640ms;
+  --dur-reveal:    900ms;   /* el reveal de tarjetas de la referencia */
+
+  /* Escalonado (verificado en la referencia: 80/160/240/320/400 ms) */
+  --stagger-step: 80ms;
+
+  /* Intensidad del fondo vivo. Un solo número gobierna todo el humo. */
+  --aurora-strength: 0.55;   /* 0.35 discreto · 0.55 ★ · 0.8 fuerte */
 }
 
-/* Propuesta de IA pendiente de revisión: pulso MUY leve en la arista.
-   No pide atención a gritos: la pide con educación. */
-@keyframes c-pending{
-  0%,100%{ border-color:var(--border) }
-  50%    { border-color:var(--border-gold,rgba(231,194,79,.55)) }
-}
-.c-pending{ animation:c-pending 2400ms var(--ease-standard) infinite; }
-
-/* NO VERIFICADO — el estado más importante del producto.
-   Nunca solo color: lleva SIEMPRE texto e icono. */
-.c-unverified{
-  border-left:2px dashed var(--danger,#C4453A);
-  padding-left:10px;
-}
-
-/* ============================================================================
-   FONDO VIVO — SOLO en la pantalla de espera de la ingesta.
-   Único sitio del producto donde algo se mueve sin que el usuario lo pida:
-   no hay contenido con el que interferir y la espera es real.
-   Un tono. Oro sobre obsidiana. Nada de la nebulosa multicolor de la referencia.
-   ============================================================================ */
-
-@keyframes c-drift{
-  0%  { transform:translate3d(-6%,-4%,0) scale(1.05) rotate(0deg);   }
-  50% { transform:translate3d( 4%, 3%,0) scale(1.15) rotate(6deg);   }
-  100%{ transform:translate3d(-6%,-4%,0) scale(1.05) rotate(0deg);   }
-}
-.c-aurora{
-  position:absolute; inset:0; overflow:hidden; pointer-events:none; z-index:0;
-}
-.c-aurora::before,
-.c-aurora::after{
-  content:""; position:absolute; width:70%; aspect-ratio:1; border-radius:50%;
-  filter:blur(90px);
-}
-.c-aurora::before{
-  top:-15%; left:-10%;
-  background:radial-gradient(circle, rgba(212,175,55,.16) 0%, transparent 65%);
-  animation:c-drift 26s ease-in-out infinite;
-}
-.c-aurora::after{
-  bottom:-20%; right:-10%;
-  background:radial-gradient(circle, rgba(231,194,79,.09) 0%, transparent 65%);
-  animation:c-drift 34s ease-in-out infinite reverse;
-}
-
-/* ============================================================================
-   SCROLL-REVEAL — PROHIBIDO EN LA APP.
-   Una herramienta no revela su contenido al hacer scroll. Si tengo 200 items
-   y cada uno hace fade-in al entrar en viewport, NO PUEDO TRABAJAR.
-   Permitido solo en documentos largos de lectura (ajustes, "cómo funciona").
-   ============================================================================ */
-
-.c-doc .c-reveal{ opacity:0; transform:translateY(10px); }
-.c-doc .c-reveal.is-in{
-  animation:c-rise var(--dur-base) var(--ease-decelerate) forwards;
-}
-
-/* ============================================================================
-   PREFERS-REDUCED-MOTION — sin excepciones.
-   Cada animación pierde el MOVIMIENTO, nunca la INFORMACIÓN.
-   ============================================================================ */
-
-@media (prefers-reduced-motion: reduce){
-  *,*::before,*::after{
-    animation-duration:.001ms!important;
-    animation-iteration-count:1!important;
-    transition-duration:.001ms!important;
-    scroll-behavior:auto!important;
-  }
-  /* El contenido escalonado: aparece. Sin subir, sin retraso. */
-  .c-stagger > .c-stagger-item{ opacity:1!important; transform:none!important; }
-  /* La hairline: está dibujada. No se dibuja. */
-  .c-divider::after{ transform:scaleX(1)!important; }
-  /* El blur-in: corte limpio. Comunica lo mismo sin desenfoque. */
-  .c-xray__doc,.c-xray__raw{ filter:none!important; transform:none!important; }
-  /* El shimmer: no existe. El cambio de estado ya se ve por otra vía. */
-  .c-shimmer.is-firing::before{ display:none!important; }
-  /* Pensando: opacidad fija, legible. */
-  .c-thinking{ opacity:.75!important; }
-  /* Skeleton: bloque quieto. */
-  .c-skeleton{ animation:none!important; background:var(--surface,#141418)!important; }
-  /* Pendiente: la arista, dorada y fija. */
-  .c-pending{ border-color:var(--border-gold,rgba(231,194,79,.55))!important; }
-  /* Aurora: quieta. */
-  .c-aurora::before,.c-aurora::after{ animation:none!important; }
-}
-
-/* ── aurora (inline desde 02-sistema/canon-aurora.css) ── */
-/* ============================================================================
-   CANON · canon-aurora.css   —  v3, CALIBRADO EN NAVEGADOR REAL
-   El sistema de VENTANAS, MUROS Y VELOS. Esto es lo que hace que el humo
-   se VEA donde debe y NO ESTORBE donde no debe.
-
-   ── POR QUÉ NO SE VEÍA (v2) ──────────────────────────────────────────────
-   No era el shader. Lo ejecuté en GPU y leí los píxeles: luminancia máxima
-   73/255, 53% de píxeles visibles. El shader pintaba humo perfectamente.
-   EL VELO SE LO COMÍA:
-       .c-scrim--radial  →  rgba(5,5,8, .86)   ← 86% de negro encima
-       73 * (1 - 0.86)   =   10/255            ← invisible
-   Más los degradados de borde de 120px, que tapaban media sección.
-   Verificado con captura comparativa: velo .86 = negro · velo .25 = humo.
-
-   ── EL MECANISMO (forense de la referencia) ──────────────────────────────
-   No hay un "blackout" encima del humo. Es al revés:
-     1. El humo vive en una capa FIJA al fondo (z-index: 0).
-     2. El contenedor de página es OPACO (#050508). Eso lo TAPA.
-     3. Algunas secciones se declaran TRANSPARENTES → son VENTANAS.
-   Verificado sección por sección en su página:
-     🔓 Hero · 🧱 Audience · 🧱 Transmutation · 🔓 Features · 🔓 Speed ·
-     🧱 Proof · 🔓 Pricing · 🧱 Philosophy · 🔓 Compare · 🔓 Calculator
-   Al bajar, el humo APARECE Y DESAPARECE. El fondo respira.
-   Y donde hay trabajo que leer, HAY MURO.
-   ============================================================================ */
-
-/* ── 0 · ★ EL DIAL MAESTRO ────────────────────────────────────────────────
-   La referencia aplica opacity:0.15 a TODA la capa del canvas (verificado:
-   three.js r183, contenedor fixed, opacity 0.15). Es el mando de intensidad.
-   Un solo número gobierna cuánto humo hay en todo el producto.               */
-:root{
-  --aurora-strength: 0.9;   /* 0 = apagado · 0.35 discreto · 0.55 · 0.9 ★ visible */
-}
-
-/* ── 1 · LA CAPA DEL HUMO ─────────────────────────────────────────────────── */
-.c-aurora-gl{
-  position:fixed; inset:0;
-  z-index:0;
-  pointer-events:none;              /* nunca intercepta un clic */
-  overflow:hidden;
-  opacity:var(--aurora-strength);   /* ← el dial */
-}
-
-/* Sin WebGL2 o con reduce-motion → degradado estático, mismos metales, cero GPU */
-.c-aurora-gl.is-static{
-  background:
-    radial-gradient(58% 48% at 18% 12%, rgba(212,175,55,.16), transparent 70%),
-    radial-gradient(45% 40% at 78% 30%, rgba(184,115,51,.11), transparent 70%),
-    radial-gradient(50% 45% at 60% 88%, rgba(173,182,194,.08), transparent 70%),
-    var(--bg,#0B0B0D);
-}
-
-/* ── 2 · EL MURO — donde hay trabajo que leer ─────────────────────────────── */
-/* El contenido denso va SIEMPRE sobre muro. El humo no compite con el trabajo. */
-.c-wall{
-  position:relative; z-index:1;
-  background:var(--obsidian-deep,#050508);
-}
-
-/* ── 3 · LA VENTANA — donde el humo asoma ─────────────────────────────────── */
-.c-window{
-  position:relative; z-index:1;
-  background:transparent;           /* ← el humo de la capa fija se ve aquí */
-}
-
-/* Difuminado en los bordes: el humo no "corta" en seco contra el muro.
-   ⚠️ 64px, NO 120px. Con 120 y una sección corta, los dos degradados se
-   solapaban y tapaban la sección entera. Ese fue el segundo asesino del humo. */
-.c-window::before,
-.c-window::after{
-  content:""; position:absolute; left:0; right:0; height:64px;
-  pointer-events:none; z-index:0;
-}
-.c-window::before{ top:0;    background:linear-gradient(to bottom, var(--obsidian-deep,#050508), transparent); }
-.c-window::after { bottom:0; background:linear-gradient(to top,    var(--obsidian-deep,#050508), transparent); }
-
-/* ── 4 · EL VELO (scrim) — cuando hay TEXTO encima del humo ───────────────── */
-/* ★ VALORES CALIBRADOS MIRANDO CAPTURAS REALES, no a ojo.
-   Regla: usa siempre el MÍNIMO que deje leer cómodamente.
-   El humo tiene una luminancia máxima de 73/255 — no aguanta un velo pesado. */
-.c-scrim{ position:relative; z-index:1; }
-.c-scrim::before{
-  content:""; position:absolute; inset:0; z-index:-1; pointer-events:none;
-  background:rgba(5,5,8,.28);            /* ★ era .55 → invisibilizaba el humo */
-}
-.c-scrim--light::before { background:rgba(5,5,8,.15); }   /* casi nada */
-.c-scrim--heavy::before { background:rgba(5,5,8,.45); }   /* texto denso */
-
-/* Velo radial: oscurece bajo el texto y deja los bordes limpios.
-   El mejor para un titular centrado sobre humo. */
-.c-scrim--radial::before{
-  background:radial-gradient(65% 75% at 50% 50%,
-    rgba(5,5,8,.55),                     /* ★ era .86 → negro total */
-    rgba(5,5,8,.18) 70%,
-    transparent);
-}
-
-/* ── 5 · PANEL — la superficie sobre la que se trabaja ────────────────────── */
-/* Vidrio ahumado. Deja intuir el humo detrás SIN comerse una sola letra.
-   Es lo que permite tener un dashboard legible Y un fondo vivo a la vez. */
-.c-panel{
-  position:relative; z-index:1;
-  background:rgba(20,20,24,.72);
-  backdrop-filter:blur(14px) saturate(1.1);
-  -webkit-backdrop-filter:blur(14px) saturate(1.1);
-  border:1px solid var(--border,rgba(255,255,255,.08));
-  border-radius:12px;
-}
-/* Panel sólido: listas densas y el editor. CERO transparencia.
-   Con 200 items que leer, el humo detrás es ruido. Punto. */
-.c-panel--solid{
-  background:var(--surface,#141418);
-  backdrop-filter:none; -webkit-backdrop-filter:none;
-}
-@supports not (backdrop-filter: blur(1px)){
-  .c-panel{ background:rgba(20,20,24,.94); }
-}
-
-/* ── 6 · REGLA DE ORO ─────────────────────────────────────────────────────── */
-/*
-   ✅ VENTANA (humo visible):  login · onboarding · espera de la ingesta ·
-                               dashboard VACÍO del día 1 · cabeceras de sección
-   🧱 MURO (humo tapado):      master con 200 items · editor de variante ·
-                               staging · tailoring · el documento
-                               → donde hay trabajo, el trabajo gana. Siempre.
-*/
-
-@media (prefers-reduced-motion: reduce){
-  .c-aurora-gl canvas{ display:none; }
+/* ── TIPOGRAFÍA (sin cambios: el reparto de tres voces ES el posicionamiento) ── */
+:root {
+  --font-display: "Playfair Display", Georgia, "Times New Roman", serif;  /* criterio, escritura */
+  --font-sans:    "Geist", ui-sans-serif, system-ui, -apple-system, sans-serif;  /* producto */
+  --font-mono:    "Geist Mono", ui-monospace, "SF Mono", monospace;       /* datos, evidencia */
 }
 
 
 /* ============================================================================
-   Puentes hacia el sistema de diseño heredado
-   - #050508 (sustrato del sistema ventana/muro) promovido a token, según
-     handoff.md §7.1 (el original solo lo tenía como fallback inline).
-   - Las fuentes se cargan con next/font (self-hosted, sin CDN) y se enchufan
-     a los tokens --font-* que consume tokens.css.
+   EXTENSIONES DE PRODUCTO — capa aditiva. NO altera ningún valor verificado.
    ============================================================================ */
 :root {
-  --obsidian-deep: #050508;
-  --font-display: var(--font-playfair), Georgia, "Times New Roman", serif;
-  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
-  --font-mono: var(--font-geist-mono), ui-monospace, "SF Mono", "Roboto Mono", monospace;
+  /* Geometría (valores medidos en la referencia) */
+  --radius-xs: 3px; --radius-sm: 6px; --radius-md: 8px; --radius-lg: 12px;
+  --control-h: 40px; --control-h-lg: 44px; --control-h-hero: 62px;
+  --container: 1200px; --container-pad: 24px;
+  --header-h: 64px;
+
+  /* Espaciado (base 4) */
+  --sp-1: 4px; --sp-2: 8px; --sp-3: 12px; --sp-4: 16px; --sp-5: 24px;
+  --sp-6: 32px; --sp-7: 48px; --sp-8: 64px; --sp-9: 96px; --sp-10: 160px;
+  /* 160px = ritmo de sección de lectura/ceremonia. La app trabaja a 48–64px. */
+
+  /* Tipo (px / line-height) */
+  --fs-micro: 11px;  /* meta, overlines, chips */
+  --fs-data: 12px;   /* filas densas, mono */
+  --fs-ui: 13px;     /* controles, labels */
+  --fs-body: 14px;   /* base */
+  --fs-lead: 16px;
+  --fs-h3: 20px; --fs-h2: 28px; --fs-display: 44px; --fs-hero: 56px;
+
+  /* Capas */
+  --z-aurora: 0; --z-page: 1; --z-header: 10; --z-overlay: 100;
+
+  /* Sombras y glow (grafito) */
+  --shadow-1: 0 1px 2px rgba(0,0,0,.45);
+  --shadow-2: 0 12px 40px rgba(0,0,0,.4);
+  --glow-patina: 0 12px 40px rgba(67,179,160,.15);
+
+  /* Verificación — nunca solo color: siempre icono + texto + (en "sin evidencia") borde punteado */
+  --ver-ok: var(--patina-300);
+  --ver-partial: var(--text-muted);
+  --ver-none: var(--danger);
 }
 
-html, body { min-height: 100dvh; }
-
-/* ── Toggle de tema (Obsidiana ⇄ Porcelana) ──────────────────────────────── */
-.theme-toggle {
-  position: fixed; top: 18px; right: 18px; z-index: var(--z-sticky, 100);
-  font-family: var(--font-mono); font-size: 11.5px; letter-spacing: .08em;
-  text-transform: uppercase; cursor: pointer;
-  padding: 7px 14px; border-radius: var(--radius-pill);
-  background: var(--surface); color: var(--text-muted);
-  border: 1px solid var(--border-strong);
-}
-.theme-toggle:hover { color: var(--accent-text); border-color: var(--border-gold); }
 
 /* ============================================================================
-   Pantalla AUTH — capa ATMOSFÉRICA (la aurora asoma)
+   §2 · base.css  ── COPIA ÍNTEGRA DE corpus-design/02-sistema/base.css
    ============================================================================ */
-.auth {
-  position: relative; min-height: 100dvh;
-  display: grid; place-items: center; padding: 24px;
-}
-.auth__card {
-  position: relative; z-index: 1;
-  width: 100%; max-width: 408px; padding: 40px 36px;
-  display: flex; flex-direction: column; gap: var(--space-5);
-}
-.auth__brand {
-  font-family: var(--font-mono); font-size: 12px; letter-spacing: .28em;
-  text-transform: uppercase; color: var(--text-subtle);
-  display: flex; align-items: center; gap: 10px;
-}
-.auth__brand::before { content: ""; width: 20px; height: 1px; background: var(--border-gold); }
-.auth__title {
-  font-family: var(--font-display); font-weight: 600; letter-spacing: -.01em;
-  font-size: var(--fs-h2); line-height: var(--lh-heading); color: var(--text); margin: 0;
-  text-wrap: balance;
-}
-.auth__sub { color: var(--text-muted); font-size: var(--fs-body-sm); margin: -8px 0 0; }
-.auth__fields { display: flex; flex-direction: column; gap: var(--space-4); }
-.field { display: flex; flex-direction: column; gap: var(--field-gap); }
-.field label {
-  font-family: var(--font-mono); font-size: var(--fs-overline); letter-spacing: .12em;
-  text-transform: uppercase; color: var(--text-subtle);
-}
-.field input {
-  height: var(--control-h-lg); padding: 0 var(--control-pad-x);
-  background: var(--surface-sunken); color: var(--text);
-  border: 1px solid var(--border-strong); border-radius: var(--radius-md);
-  font-family: var(--font-sans); font-size: var(--ui-fs);
-}
-.field input:focus-visible { outline: none; box-shadow: var(--shadow-focus); border-color: var(--border-gold); }
-.btn {
-  height: var(--control-h-lg); border-radius: var(--radius-md); cursor: pointer;
-  font-family: var(--font-sans); font-size: var(--ui-fs); font-weight: var(--fw-medium);
-  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
-  border: 1px solid transparent; transition: all var(--dur-fast) var(--ease-standard);
-}
-.btn--gold { background: var(--accent); color: var(--on-accent); }
-.btn--gold:hover { filter: brightness(1.06); }
-.btn--ghost { background: transparent; color: var(--text); border-color: var(--border-strong); }
-.btn--ghost:hover { border-color: var(--border-gold); color: var(--accent-text); }
-.auth__oauth { display: flex; flex-direction: column; gap: var(--space-3); }
-.auth__hint { font-size: var(--fs-caption); color: var(--text-subtle); text-align: center; margin: 0; }
-.auth__row { display: flex; justify-content: space-between; font-size: var(--fs-body-sm); }
-.auth__row a { color: var(--link); }
-.auth__legal {
-  font-family: var(--font-mono); font-size: var(--fs-caption); color: var(--text-subtle);
-  text-align: center; margin: 0; line-height: 1.5;
-}
-.auth__sep { display: flex; align-items: center; gap: 12px; color: var(--text-subtle); font-size: var(--fs-caption); }
-.auth__sep::before, .auth__sep::after { content: ""; flex: 1; height: 1px; background: var(--border); }
-.auth__error { color: var(--danger-quiet); font-size: var(--fs-body-sm); margin: 0; }
-.auth__ok { color: var(--success-quiet); font-size: var(--fs-body-sm); margin: 0; }
-
-/* textarea genérico (comparte estilo con .field input) */
-.field textarea {
-  padding: var(--control-pad-y) var(--control-pad-x); resize: vertical; min-height: 64px;
-  background: var(--surface-sunken); color: var(--text);
-  border: 1px solid var(--border-strong); border-radius: var(--radius-md);
-  font-family: var(--font-sans); font-size: var(--ui-fs); line-height: 1.5;
-}
-.field textarea:focus-visible { outline: none; box-shadow: var(--shadow-focus); border-color: var(--border-gold); }
 
 /* ============================================================================
-   LANDING
+   CORPUS · base.css — resets, tipografía, controles, superficies
+   Requiere tokens.css. Sin animación aquí (eso vive en motion.css).
    ============================================================================ */
-.landing { position: relative; min-height: 100dvh; display: grid; place-items: center; padding: 24px; text-align: center; }
-.landing__inner { position: relative; z-index: 1; max-width: 640px; display: flex; flex-direction: column; align-items: center; gap: var(--space-5); }
-.landing__eyebrow { font-family: var(--font-mono); font-size: 12px; letter-spacing: .28em; text-transform: uppercase; color: var(--text-subtle); margin: 0; }
-.landing__title { font-family: var(--font-display); font-weight: 700; font-size: var(--fs-display); line-height: 1.05; letter-spacing: -.02em; color: var(--text); margin: 0; text-wrap: balance; }
-.landing__title em { font-style: italic; color: var(--accent-text); }
-.landing__lede { color: var(--text-muted); font-size: var(--fs-body-lg); line-height: 1.6; margin: 0; max-width: 52ch; }
-.landing__cta { margin-top: var(--space-2); display: inline-flex; align-items: center; height: var(--control-h-lg); padding: 0 var(--space-6); border-radius: var(--radius-md); background: var(--accent); color: var(--on-accent); font-weight: var(--fw-medium); }
-.landing__cta:hover { filter: brightness(1.06); text-decoration: none; }
-.landing__note { font-family: var(--font-mono); font-size: var(--fs-caption); color: var(--text-subtle); margin: 0; }
+*,*::before,*::after{box-sizing:border-box}
+html{height:100%}
+body{margin:0;min-height:100%;background:var(--bg);color:var(--text);
+  font:400 var(--fs-body)/1.55 var(--font-sans);
+  -webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
+h1,h2,h3,h4,p,ul,ol,figure{margin:0}
+h1{font:500 var(--fs-display)/1.08 var(--font-display);letter-spacing:-.015em}
+h2{font:500 var(--fs-h2)/1.18 var(--font-display);letter-spacing:-.01em}
+h3{font:600 var(--fs-h3)/1.3 var(--font-sans)}
+a{color:var(--link);text-decoration:none}
+a:hover{color:var(--link-hover);text-decoration:underline;text-underline-offset:3px}
+::selection{background:rgba(67,179,160,.28)}
+:focus-visible{outline:2px solid var(--focus-ring);outline-offset:2px;border-radius:2px}
+button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:pointer}
+::-webkit-scrollbar{width:10px;height:10px}
+::-webkit-scrollbar-thumb{background:var(--border-strong);border-radius:5px;border:2px solid transparent;background-clip:content-box}
+::-webkit-scrollbar-track{background:transparent}
+
+/* ── Página y capas ── */
+.c-page{position:relative;z-index:var(--z-page);min-height:100vh;display:flex;flex-direction:column}
+.c-container{width:100%;max-width:var(--container);margin-inline:auto;padding-inline:var(--container-pad)}
+
+/* ── Header 64px sticky ── */
+.c-header{position:sticky;top:0;z-index:var(--z-header);height:var(--header-h);
+  backdrop-filter:blur(4px) saturate(1.5);-webkit-backdrop-filter:blur(4px) saturate(1.5);
+  background:color-mix(in srgb,var(--bg) 74%,transparent);border-bottom:1px solid var(--border)}
+.c-header>.c-container{height:100%;display:flex;align-items:center;gap:var(--sp-5)}
+.c-logo{font:500 19px/1 var(--font-display);color:var(--text);letter-spacing:.005em}
+.c-logo::after{content:"";display:inline-block;width:5px;height:5px;margin-left:4px;
+  background:var(--patina-500);border-radius:1px;vertical-align:super}
+a.c-logo:hover{text-decoration:none;color:var(--text)}
+.hd-nav{display:flex;gap:2px}
+.hd-nav a{font:500 var(--fs-ui)/1 var(--font-sans);color:var(--text-muted);padding:9px 12px;border-radius:6px}
+.hd-nav a:hover{color:var(--text);text-decoration:none;background:var(--surface)}
+.hd-nav a[aria-current="page"]{color:var(--accent-text);background:var(--surface)}
+.hd-right{margin-left:auto;display:flex;align-items:center;gap:14px}
+.hd-lang{display:flex;font:500 var(--fs-micro)/1 var(--font-mono);border:1px solid var(--border-strong);border-radius:5px;overflow:hidden}
+.hd-lang span{padding:6px 8px;color:var(--text-subtle)}
+.hd-lang span[data-on]{color:var(--text);background:var(--surface-elevated)}
+.hd-av{width:28px;height:28px;border-radius:50%;background:var(--surface-elevated);border:1px solid var(--border-strong);display:grid;place-items:center;font:500 10px/1 var(--font-mono);color:var(--text-muted);flex:none}
+@media (max-width:768px){.hd-nav{display:none}}
+
+/* ── Voces tipográficas ── */
+.t-display{font-family:var(--font-display)}
+.t-mono{font-family:var(--font-mono)}
+.t-num{font-family:var(--font-mono);font-size:.94em;letter-spacing:-.01em}
+.t-overline{font:500 var(--fs-micro)/1 var(--font-mono);letter-spacing:.16em;text-transform:uppercase;color:var(--text-subtle)}
+.t-muted{color:var(--text-muted)}
+.t-subtle{color:var(--text-subtle)}
+.t-accent{color:var(--accent-text)}
+.t-lead{font-size:var(--fs-lead);line-height:1.6}
+.t-micro{font-size:var(--fs-micro)}
+.t-data{font:400 var(--fs-data)/1.5 var(--font-mono)}
+
+/* ── Botones ─────────────────────────────────────────────────────────────────
+   ⚠ Sobre relleno de pátina el texto es SIEMPRE tinta (--ink-on-patina).
+   Blanco sobre patina-500 = 2.56:1, falla. */
+.c-btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;
+  height:var(--control-h);padding:0 18px;border-radius:var(--radius-sm);
+  font:500 var(--fs-ui)/1 var(--font-sans);letter-spacing:.01em;white-space:nowrap;
+  border:1px solid var(--border-strong);background:var(--surface-elevated);color:var(--text);
+  transition:color .14s,background-color .14s,border-color .14s;user-select:none}
+.c-btn:hover{border-color:var(--border-patina);color:var(--text);text-decoration:none}
+.c-btn--patina{background:var(--patina-500);border-color:transparent;color:var(--ink-on-patina)}
+.c-btn--patina:hover{background:var(--patina-300);color:var(--ink-on-patina)}
+.c-btn--quiet{background:transparent;border-color:transparent;color:var(--text-muted)}
+.c-btn--quiet:hover{color:var(--text);border-color:var(--border)}
+.c-btn--lg{height:var(--control-h-lg);padding:0 22px;font-size:var(--fs-body)}
+.c-btn--hero{height:var(--control-h-hero);padding:0 34px;font-size:15px;border-radius:var(--radius-md)}
+.c-btn[disabled],.c-btn[aria-disabled="true"]{opacity:.42;pointer-events:none}
+/* Botón "forge" (anatomía de la referencia, en pátina). El glow y el filamento
+   viven en motion.css; esto es el estado base, legible sin animación. */
+.c-forge{position:relative;display:inline-flex;border-radius:var(--radius-md)}
+.c-btn--forge{position:relative;z-index:1;overflow:hidden;background:var(--bg);
+  color:var(--accent-text);border:1px solid var(--patina-700)}
+.c-btn--forge:hover{color:var(--text);border-color:var(--patina-500)}
+[data-theme="light"] .c-btn--forge:hover{color:var(--patina-900)}
+
+/* ── Campos ── */
+.c-input,.c-textarea{width:100%;background:var(--surface-sunken);color:var(--text);
+  border:1px solid var(--border);border-radius:var(--radius-sm);
+  font:400 var(--fs-body)/1.55 var(--font-sans);padding:10px 14px;transition:border-color .14s,box-shadow .14s}
+.c-textarea{resize:vertical;min-height:120px}
+.c-input::placeholder,.c-textarea::placeholder{color:var(--text-subtle)}
+.c-input:focus,.c-textarea:focus{outline:none;border-color:var(--focus-ring);
+  box-shadow:0 0 0 3px color-mix(in srgb,var(--focus-ring) 16%,transparent)}
+.c-label{display:block;font:500 var(--fs-ui)/1 var(--font-sans);color:var(--text-muted);margin-bottom:8px}
+
+/* ── Superficies ── */
+.c-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-md)}
+.c-card--elevated{background:var(--surface-elevated)}
+.c-hairgrid{display:grid;gap:1px}
+.c-hairgrid--bento{gap:2px}
+.c-hairgrid>*{background:var(--surface);border-radius:0}
+.c-override{border-left:2px solid var(--border-patina)}
+
+/* ── Chips y filas de datos ── */
+.c-chip{display:inline-flex;align-items:center;gap:7px;height:26px;padding:0 10px;
+  border-radius:var(--radius-sm);border:1px solid var(--border-strong);
+  background:var(--surface-elevated);font:400 var(--fs-micro)/1 var(--font-mono);color:var(--text-muted)}
+.c-chip b{color:var(--text);font-weight:500}
+.c-chip .dot{width:5px;height:5px;border-radius:50%;background:var(--text-subtle);flex:none}
+.c-chip--ok .dot{background:var(--patina-300)}
+.c-kbd{font:500 var(--fs-micro)/1 var(--font-mono);color:var(--text-muted);
+  border:1px solid var(--border-strong);border-bottom-width:2px;border-radius:4px;
+  padding:2px 6px;background:var(--surface-elevated);white-space:nowrap}
+
+/* ── Niveles de verificación — nunca solo color ── */
+.c-ver{display:inline-flex;align-items:center;gap:6px;
+  font:500 var(--fs-micro)/1 var(--font-mono);letter-spacing:.08em;text-transform:uppercase}
+.c-ver::before{font-size:9px}
+.c-ver--ok{color:var(--ver-ok)}.c-ver--ok::before{content:"●"}
+.c-ver--partial{color:var(--ver-partial)}.c-ver--partial::before{content:"◐"}
+.c-ver--none{color:var(--ver-none)}.c-ver--none::before{content:"⚠";font-size:11px}
+.c-noev{border:1px dashed color-mix(in srgb,var(--danger) 55%,transparent)!important}
+
+/* ── Skeleton (estado base; el pulso está en motion.css) ── */
+.c-skel{background:var(--surface-elevated);border-radius:4px;color:transparent!important;user-select:none}
+
+/* ── Panel meta de revisión (no es producto: convención de entrega) ── */
+.demo{position:fixed;right:14px;bottom:14px;z-index:var(--z-overlay);display:flex;gap:3px;align-items:center;
+  padding:5px 6px;border:1px solid var(--border);border-radius:8px;
+  background:color-mix(in srgb,var(--surface-elevated) 86%,transparent);
+  backdrop-filter:blur(10px);font:500 10px/1 var(--font-mono);letter-spacing:.06em}
+.demo>span{color:var(--text-subtle);padding:0 5px;text-transform:uppercase}
+.demo button{padding:5px 8px;border-radius:5px;color:var(--text-muted);font:inherit;text-transform:uppercase}
+.demo button:hover{color:var(--text);background:var(--surface)}
+.demo button[aria-pressed="true"]{color:var(--accent-text);background:var(--surface);box-shadow:inset 0 0 0 1px var(--border-patina)}
+@media (max-width:768px){.demo{right:8px;bottom:8px}}
+
 
 /* ============================================================================
-   APP SHELL
+   §3 · aurora.css  ── COPIA ÍNTEGRA DE corpus-design/02-sistema/aurora.css
    ============================================================================ */
-.shell { min-height: 100dvh; display: flex; flex-direction: column; }
-.shell__top { position: sticky; top: 0; z-index: var(--z-sticky); display: flex; align-items: center; gap: var(--space-6); height: var(--topbar-h); padding: 0 var(--space-6); background: var(--surface); border-bottom: 1px solid var(--border); }
-.shell__brand { font-family: var(--font-display); font-weight: 600; font-size: 18px; color: var(--text); }
-.shell__brand:hover { text-decoration: none; color: var(--accent-text); }
-.shell__nav { display: flex; gap: var(--space-2); }
-.shell__link { padding: 6px 12px; border-radius: var(--radius-md); font-size: var(--ui-fs); color: var(--text-muted); }
-.shell__link:hover { color: var(--text); text-decoration: none; background: var(--surface-elevated); }
-.shell__link.is-active { color: var(--accent-text); background: var(--surface-elevated); }
-.shell__right { margin-left: auto; display: flex; align-items: center; gap: var(--space-4); }
-.shell__switch { display: flex; align-items: center; gap: 8px; font-family: var(--font-mono); font-size: 11px; text-transform: uppercase; letter-spacing: .1em; color: var(--text-subtle); }
-.shell__switch select { height: var(--control-h); padding: 0 var(--control-pad-x); background: var(--surface-sunken); color: var(--text); border: 1px solid var(--border-strong); border-radius: var(--radius-md); font-family: var(--font-sans); font-size: var(--ui-fs); }
-.shell__theme { width: 36px; height: 36px; border-radius: var(--radius-pill); background: var(--surface-sunken); color: var(--text-muted); border: 1px solid var(--border-strong); cursor: pointer; font-size: 15px; }
-.shell__theme:hover { color: var(--accent-text); border-color: var(--border-gold); }
-.shell__main { flex: 1; }
 
 /* ============================================================================
-   PÁGINAS DE TRABAJO
+   CORPUS · aurora.css — el fondo vivo y su gramática de capas
+   ventana / muro / velo / panel  ·  el dial es --aurora-strength (tokens.css)
+   El humo NUNCA lleva contenido. Atmósfera ≠ señal.
    ============================================================================ */
-.page { max-width: 900px; margin: 0 auto; padding: var(--space-10) var(--space-6) var(--space-24); }
-.page__head { margin-bottom: var(--space-8); }
-.page__eyebrow { font-family: var(--font-mono); font-size: 11px; letter-spacing: .18em; text-transform: uppercase; color: var(--text-subtle); margin: 0 0 10px; }
-.page__title { font-family: var(--font-display); font-weight: 600; font-size: var(--fs-h1); line-height: 1.1; letter-spacing: -.01em; color: var(--text); margin: 0; }
-.page__titleedit { font-family: var(--font-display); font-weight: 600; font-size: var(--fs-h1); line-height: 1.1; letter-spacing: -.01em; color: var(--text); background: transparent; border: none; border-bottom: 1px dashed var(--border-strong); padding: 2px 0; width: 100%; }
-.page__titleedit:focus-visible { outline: none; border-bottom-color: var(--border-gold); }
-.page__sub { color: var(--text-muted); margin: 10px 0 0; }
-.page__foot { color: var(--text-subtle); font-size: var(--fs-body-sm); margin-top: var(--space-10); }
 
-.kpis4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1px; background: var(--border); border: 1px solid var(--border); border-radius: var(--radius-lg); overflow: hidden; margin-bottom: var(--space-8); }
-.kpi { background: var(--surface); padding: var(--space-5); }
-.kpi__n { font-family: var(--font-display); font-size: 30px; font-weight: 700; color: var(--accent-text); line-height: 1; }
-.kpi__k { font-family: var(--font-mono); font-size: 10.5px; text-transform: uppercase; letter-spacing: .12em; color: var(--text-subtle); margin-top: 10px; }
+/* El contenedor del humo: fijo, detrás de todo, sin eventos */
+.c-aurora{position:fixed;inset:0;z-index:var(--z-aurora);pointer-events:none;overflow:hidden;
+  background:var(--bg)}
+.c-aurora canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
 
-.cards2 { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-4); }
-.card { display: flex; flex-direction: column; gap: 8px; padding: var(--space-6); background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); }
-.card:hover { border-color: var(--border-gold); text-decoration: none; }
-.card h3 { font-family: var(--font-sans); font-size: 17px; font-weight: 600; color: var(--text); margin: 0; }
-.card p { color: var(--text-muted); font-size: var(--fs-body-sm); margin: 0; }
-.card__go { margin-top: 6px; color: var(--accent-text); font-size: var(--fs-body-sm); }
+/* Fallback estático (sin WebGL2 o con prefers-reduced-motion):
+   misma información atmosférica, cero movimiento. */
+.c-aurora-fallback{position:absolute;inset:-12%;
+  opacity:calc(var(--aurora-strength)*.5);filter:blur(48px);
+  background:
+    radial-gradient(42% 34% at 22% 30%, rgba(67,179,160,.34), transparent 70%),
+    radial-gradient(30% 26% at 74% 18%, rgba(184,115,51,.16), transparent 70%),
+    radial-gradient(36% 30% at 62% 78%, rgba(173,182,194,.12), transparent 70%),
+    radial-gradient(26% 22% at 38% 66%, rgba(31,110,90,.28), transparent 70%)}
 
-/* Secciones con encabezado + hairline dorada que se dibuja */
-.dsec { margin-bottom: var(--space-8); }
-.sechd { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-4); margin-bottom: var(--space-2); }
-.sech { font-family: var(--font-display); font-weight: 600; font-size: 17px; letter-spacing: -.01em; color: var(--text); margin: 0; }
-.meta { font-family: var(--font-mono); font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: var(--text-subtle); }
-.c-divider { margin: var(--space-2) 0 var(--space-5); }
+/* ── La gramática ventana / muro ─────────────────────────────────────────────
+   El humo no se tapa con un velo por defecto: las secciones son OPACAS (muro)
+   y algunas se declaran transparentes (ventana). Donde hay trabajo que leer,
+   hay muro. El fondo respira entre ambas. */
+.c-window{position:relative;background:transparent}
+.c-wall{position:relative;background:var(--bg)}
+.c-wall--surface{background:var(--surface)}
 
-/* ── Dashboard VFinal: parrilla de variantes + paneles ── */
-.dash { max-width: 1080px; }
-.sechd__right { display: flex; align-items: center; gap: var(--space-4); }
-.btn--sm { height: 30px; padding: 0 12px; font-size: var(--ui-fs-sm); }
+/* Velo: cuando hay texto directamente sobre una ventana.
+   Usa siempre el mínimo que deje leer. */
+.c-scrim{position:relative}
+.c-scrim::before{content:"";position:absolute;inset:0;z-index:-1;pointer-events:none;
+  background:color-mix(in srgb,var(--bg) 55%,transparent)}
+.c-scrim--soft::before{background:color-mix(in srgb,var(--bg) 35%,transparent)}
+.c-scrim--edge::before{background:linear-gradient(180deg,
+  color-mix(in srgb,var(--bg) 78%,transparent),
+  color-mix(in srgb,var(--bg) 30%,transparent) 40%,
+  color-mix(in srgb,var(--bg) 30%,transparent) 60%,
+  color-mix(in srgb,var(--bg) 78%,transparent))}
 
-.vgrid { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--space-3); }
-.vcard { display: flex; flex-direction: column; gap: 10px; padding: 15px 16px; background: var(--surface); border-radius: var(--radius-lg); }
-.vcard.is-gold { box-shadow: inset 2px 0 0 0 var(--gold-500); }
-.vt { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
-.vname { font-family: var(--font-sans); font-weight: 600; font-size: 14px; color: var(--text); min-width: 0; }
-.vname:hover { color: var(--accent-text); text-decoration: none; }
-.pageb { flex: none; font-family: var(--font-mono); font-weight: 500; font-size: 10px; color: var(--text-muted); border: 1px solid var(--border-strong); border-radius: var(--radius-sm); padding: 2px 6px; text-transform: uppercase; letter-spacing: .05em; }
-.vrole { font-family: var(--font-mono); font-size: 11.5px; color: var(--text-subtle); margin: 0; }
-.vfoot { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding-top: 10px; border-top: 1px solid var(--border); }
-.vacts { display: flex; gap: 6px; }
-.vdel { width: 26px; height: 26px; border-radius: var(--radius-sm); background: transparent; border: 1px solid transparent; color: var(--text-subtle); cursor: pointer; font-size: 16px; line-height: 1; }
-.vdel:hover { color: var(--danger-quiet); border-color: var(--border-strong); }
+/* Panel: vidrio ahumado. Deja intuir el humo sin comerse una letra. */
+.c-panel{position:relative;
+  background:color-mix(in srgb,var(--surface) 64%,transparent);
+  backdrop-filter:blur(14px) saturate(1.15);-webkit-backdrop-filter:blur(14px) saturate(1.15);
+  border:1px solid var(--border);border-radius:var(--radius-lg);box-shadow:var(--shadow-2)}
+[data-theme="light"] .c-panel{background:color-mix(in srgb,var(--surface) 78%,transparent)}
 
-.door { display: flex; flex-direction: column; align-items: flex-start; gap: var(--space-3); padding: var(--space-6); background: var(--surface); border-radius: var(--radius-xl); }
-.dnum { font-family: var(--font-mono); font-size: 11px; text-transform: uppercase; letter-spacing: .14em; color: var(--accent-text); margin: 0; }
-.door h3 { font-family: var(--font-display); font-weight: 600; font-size: 20px; color: var(--text); margin: 0; }
-.door p { color: var(--text-muted); font-size: var(--fs-body-sm); margin: 0; max-width: 52ch; }
 
-.dpanel { display: flex; align-items: center; justify-content: space-between; gap: var(--space-6); flex-wrap: wrap; padding: var(--space-6); background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); }
-.dstats { display: flex; gap: var(--space-8); flex-wrap: wrap; }
-.dstat { display: flex; flex-direction: column; gap: 4px; }
-.dstat__n { font-family: var(--font-display); font-weight: 700; font-size: 28px; color: var(--accent-text); line-height: 1; }
-.dstat__k { font-family: var(--font-mono); font-size: 10.5px; text-transform: uppercase; letter-spacing: .12em; color: var(--text-subtle); }
+/* ============================================================================
+   §4 · motion.css  ── COPIA ÍNTEGRA DE corpus-design/02-sistema/motion.css
+   EL KIT DE MOVIMIENTO. Ya se perdió una vez en el porte: no vuelve a pasar.
+   7 @keyframes (cWordIn cCharIn cEnter cShimmer cPulse cSkel cSpin) ·
+   las clases con sus nombres exactos.
+   ============================================================================ */
 
-@media (max-width: 1024px) { .vgrid { grid-template-columns: repeat(2, 1fr); } }
-@media (max-width: 720px) { .vgrid { grid-template-columns: 1fr; } }
+/* ============================================================================
+   CORPUS · motion.css — TODOS los keyframes y estados de movimiento
+   Regla: una animación se gana su lugar si comunica un cambio de estado.
+   Presupuestos: C0 instantáneo 0–80ms · C1 confirmación 120–200ms ·
+                 C2 transición 250–400ms · C3 ceremonia 600–1200ms
+   TODO el movimiento vive bajo prefers-reduced-motion: no-preference.
+   Los estados base (fuera del media) son los finales: se pierde el movimiento,
+   nunca la información.
+   ============================================================================ */
 
-/* ── Onboarding: las dos puertas (ventana + aurora) ── */
-.onb { position: relative; min-height: calc(100dvh - var(--topbar-h)); display: grid; place-items: center; padding: var(--space-10) var(--space-6); }
-.onb__inner { position: relative; z-index: 1; max-width: 920px; width: 100%; text-align: center; display: flex; flex-direction: column; align-items: center; gap: var(--space-5); }
-.onb__eyebrow { font-family: var(--font-mono); font-size: 11.5px; letter-spacing: .24em; text-transform: uppercase; color: var(--text-subtle); margin: 0; }
-.onb__title { font-family: var(--font-display); font-weight: 700; font-size: var(--fs-display); line-height: 1.05; letter-spacing: -.02em; color: var(--text); margin: 0; text-wrap: balance; }
-.onb__lede { color: var(--text-muted); font-size: var(--fs-body-lg); margin: 0; max-width: 56ch; }
-.onb__doors { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-4); width: 100%; margin-top: var(--space-4); text-align: left; }
-.onb__door { display: flex; flex-direction: column; gap: var(--space-3); padding: var(--space-6); background: var(--surface); border-radius: var(--radius-xl); }
-.onb__dtag { font-family: var(--font-mono); font-size: 11px; text-transform: uppercase; letter-spacing: .14em; color: var(--accent-text); margin: 0; }
-.onb__dtitle { font-family: var(--font-display); font-weight: 600; font-size: 20px; line-height: 1.2; color: var(--text); margin: 0; }
-.onb__dbody { color: var(--text-muted); font-size: var(--fs-body-sm); line-height: 1.6; margin: 0; }
-.onb__dbody strong { color: var(--text); font-weight: 600; }
-.onb__spacer { flex: 1; min-height: 8px; }
-.onb__chips { display: flex; flex-wrap: wrap; gap: 6px; }
-.onb__chips span { font-family: var(--font-mono); font-size: 11px; padding: 4px 9px; border-radius: var(--radius-sm); border: 1px solid var(--border-strong); color: var(--text-muted); }
-.onb__foot { font-family: var(--font-mono); font-size: var(--fs-caption); color: var(--text-subtle); margin: 0; }
-.onb__door .btn { align-self: flex-start; }
-@media (max-width: 720px) { .onb__doors { grid-template-columns: 1fr; } }
+/* ── Estados base, siempre legibles ── */
+[data-reveal]{opacity:1}
+[hidden]{display:none!important}
+.c-divider{display:block;height:1px;border:0;margin:0;transform-origin:0 50%;
+  background:linear-gradient(90deg,transparent,var(--border-strong) 12%,var(--border-strong) 88%,transparent)}
+.c-divider--patina{background:linear-gradient(90deg,transparent,var(--border-patina) 30%,var(--border-patina) 70%,transparent)}
+.c-w,.c-ch{display:inline-block}
+.c-shimmer{position:relative;overflow:hidden}
+.c-spot{position:relative;overflow:hidden}
+.c-spot::after{content:"";position:absolute;inset:0;opacity:0;pointer-events:none;
+  background:radial-gradient(400px circle at var(--mx,50%) var(--my,50%),rgba(255,255,255,.05),transparent 60%);
+  transition:opacity .3s}
+[data-theme="light"] .c-spot::after{background:radial-gradient(400px circle at var(--mx,50%) var(--my,50%),rgba(20,24,26,.035),transparent 60%)}
+.c-spot:hover::after{opacity:1}
+.c-pulse-dot{display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--patina-300);flex:none}
 
-/* ── Salud: chequeo sin score ── */
-.salud__intro { color: var(--text-muted); font-size: var(--fs-body); max-width: 64ch; margin: 0 0 var(--space-6); }
-.salud__list { list-style: none; margin: 0; padding: 0; }
-.salud__item { display: flex; gap: var(--space-4); padding: var(--space-5) 0; border-top: 1px solid var(--border); }
-.salud__item:first-child { border-top: none; }
-.salud__icon { flex: none; width: 22px; font-size: 15px; line-height: 1.5; color: var(--gold-300); }
-.salud__item--info .salud__icon { color: var(--text-subtle); }
-.salud__icon--ok { color: var(--success-quiet); }
-.salud__msgwrap { display: flex; flex-direction: column; gap: 4px; }
-.salud__msg { color: var(--text); font-size: var(--fs-body); margin: 0; }
-.salud__src { font-family: var(--font-mono); font-size: var(--fs-caption); color: var(--text-subtle); margin: 0; }
-.salud__clear { display: flex; gap: var(--space-4); padding: var(--space-6); background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); }
-.salud__note { margin-top: var(--space-8); padding-top: var(--space-4); border-top: 1px solid var(--border); font-size: var(--fs-body-sm); color: var(--text-subtle); max-width: 68ch; }
+/* ── Rayos-X: el documento se desviste (C2 · 360ms) ── */
+.c-xray{position:relative}
+.c-xray__raw{position:absolute;inset:0;opacity:0;filter:blur(12px) saturate(0);pointer-events:none}
+.c-xray[data-mode="raw"] .c-xray__doc{opacity:0;filter:blur(12px) saturate(0);pointer-events:none}
+.c-xray[data-mode="raw"] .c-xray__raw{opacity:1;filter:blur(0) saturate(1);pointer-events:auto}
 
-/* ── Fuentes (shell) ── */
-.src__list { display: flex; flex-direction: column; gap: var(--space-3); }
-.src { display: flex; flex-direction: column; gap: 6px; padding: var(--space-5); background: var(--surface); border-radius: var(--radius-lg); }
-.src__head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-4); }
-.src__name { font-family: var(--font-display); font-weight: 600; font-size: 18px; color: var(--text); margin: 0; }
-.src__stars { flex: none; font-size: 12px; color: var(--accent-text); letter-spacing: 2px; }
-.src__note { color: var(--text-muted); font-size: var(--fs-body-sm); margin: 0; }
-.src__detail { color: var(--text-subtle); font-size: var(--fs-caption); margin: 0; }
-.src__foot { display: flex; align-items: center; gap: var(--space-3); margin-top: 6px; }
-.src .btn[disabled] { opacity: .5; cursor: not-allowed; }
-.src__soon { font-family: var(--font-mono); font-size: 10.5px; text-transform: uppercase; letter-spacing: .1em; color: var(--text-subtle); }
+@media (prefers-reduced-motion: no-preference){
 
-/* ── Staging ★: revisión con procedencia ── */
-.batch { display: flex; align-items: center; justify-content: space-between; gap: var(--space-4); flex-wrap: wrap; background: var(--surface); border: 1px solid var(--border); border-left: 2px solid var(--border-gold); border-radius: var(--radius-lg); padding: 12px 16px; margin-bottom: var(--space-5); font-size: var(--fs-body-sm); color: var(--text-muted); }
-.batch strong { color: var(--text); font-weight: 600; }
-.stg__list { list-style: none; margin: 0; padding: 0; }
-.stg__item { padding: var(--space-5) 0; border-top: 1px solid var(--border); }
-.stg__item:first-child { border-top: none; }
-.stg__preview { color: var(--text); font-size: var(--fs-body); line-height: 1.5; margin: 0 0 10px; }
-.stg__meta { display: flex; align-items: center; gap: var(--space-3); flex-wrap: wrap; }
-.stg__origin { font-family: var(--font-mono); font-size: 11px; color: var(--text-subtle); }
-.stg__evtoggle { background: none; border: none; padding: 0; color: var(--accent-text); font-size: var(--fs-caption); cursor: pointer; text-decoration: underline; text-underline-offset: 2px; }
-.stg__ev { margin: 10px 0 0; padding: 10px 12px; background: var(--surface-sunken); border-radius: var(--radius-md); font-family: var(--font-mono); font-size: 12px; color: var(--text-muted); line-height: 1.55; }
-.stg__ev--unv { color: var(--danger-quiet); background: transparent; border-left: 2px dashed var(--danger); border-radius: 0; }
-.stg__acts { display: flex; gap: var(--space-2); margin-top: 12px; }
-.lvl { display: inline-flex; align-items: center; gap: 5px; height: 20px; padding: 0 9px; border-radius: var(--radius-pill); font-family: var(--font-sans); font-weight: 500; font-size: 11px; white-space: nowrap; }
-.lvl-ver { background: rgba(231,194,79,.14); border: 1px solid var(--border-gold); color: var(--gold-300); }
-.lvl-par { background: rgba(255,255,255,.05); border: 1px solid var(--border-strong); color: var(--text-muted); }
-.lvl-unv { background: transparent; border: 1px solid var(--danger-quiet); color: var(--danger-quiet); }
+/* ── Reveal (C3, solo montaje ceremonial o documentos de lectura) ──
+   opacity + blur + translateY → limpio · 0.9s · escalonado con --d */
+[data-reveal]{opacity:0;filter:blur(5px);transform:translateY(14px);
+  transition:opacity var(--dur-reveal) var(--ease-signature),
+             filter var(--dur-reveal) var(--ease-signature),
+             transform var(--dur-reveal) var(--ease-signature);
+  transition-delay:var(--d,0ms)}
+[data-reveal][data-visible]{opacity:1;filter:blur(0);transform:none}
+[data-reveal="soft"]{transform:translateY(8px);filter:blur(3px)}
+[data-reveal="far"]{transform:translateY(30px);filter:blur(6px)}
 
-/* ── Editor · densidad editorial (diseño VFinal master) ── */
-.page.ed { max-width: 1080px; padding-top: var(--space-6); }
-.ed .page__title { font-size: 22px; line-height: 1.15; }
-.ed .page__head { margin-bottom: var(--space-4); }
-.ed__toolbar { display: flex; align-items: center; justify-content: space-between; gap: var(--space-4); margin-bottom: var(--space-8); flex-wrap: wrap; }
-.ed__count { font-family: var(--font-mono); font-size: 11px; text-transform: uppercase; letter-spacing: .1em; color: var(--text-subtle); }
-.ed__sec { margin-bottom: var(--space-8); }
-.ed__h2 { font-family: var(--font-display); font-size: 17px; font-weight: 600; text-transform: none; letter-spacing: -.01em; color: var(--text); margin: 0; padding: 0; border-bottom: none; }
-.ed__sechead { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
-.ed .c-divider { margin: 0 0 var(--space-4); }
-.ed .btn { height: 34px; padding: 0 14px; font-size: var(--ui-fs-sm); }
-.ed__add { font-family: var(--font-mono); font-size: 12px; color: var(--accent-text); background: transparent; border: 1px solid var(--border-gold); border-radius: var(--radius-md); padding: 5px 12px; cursor: pointer; }
-.ed__add:hover { background: var(--surface-elevated); }
-.ed__add--sm { font-size: 11px; padding: 3px 9px; }
-.ed__grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-4); margin-bottom: var(--space-4); }
-.ed__grid3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: var(--space-4); margin-bottom: var(--space-4); }
-.ed__row3 { display: grid; grid-template-columns: 1fr 1fr auto; gap: var(--space-4); align-items: end; margin-bottom: var(--space-3); }
-.ed__stack { display: flex; flex-direction: column; gap: 8px; margin-bottom: var(--space-4); align-items: flex-start; }
-.ed__card { background: transparent; border: none; border-top: 1px solid var(--border); border-radius: 0; padding: var(--space-5) 0; margin: 0; }
-.ed__card:first-of-type { border-top: none; padding-top: var(--space-3); }
-.ed__list { margin-top: var(--space-3); }
-.ed__listhead { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; font-family: var(--font-mono); font-size: 11px; text-transform: uppercase; letter-spacing: .1em; color: var(--text-subtle); }
-.ed__listrow { display: flex; gap: 8px; align-items: flex-start; margin-bottom: 8px; }
-.ed__listinput { flex: 1; padding: var(--control-pad-y) var(--control-pad-x); background: var(--surface-sunken); color: var(--text); border: 1px solid var(--border-strong); border-radius: var(--radius-md); font-family: var(--font-sans); font-size: var(--ui-fs); line-height: 1.5; resize: vertical; }
-.ed__listinput:focus-visible { outline: none; box-shadow: var(--shadow-focus); border-color: var(--border-gold); }
-.ed__remove { font-family: var(--font-mono); font-size: 12px; color: var(--text-subtle); background: transparent; border: 1px solid var(--border-strong); border-radius: var(--radius-md); padding: 5px 12px; cursor: pointer; }
-.ed__remove:hover { color: var(--danger-quiet); border-color: var(--danger-quiet); }
-.ed__remove--sm { padding: 6px 10px; line-height: 1; }
-.ed__photo { display: flex; gap: var(--space-4); align-items: flex-start; margin-top: var(--space-3); }
-.ed__photoprev { width: 84px; height: 104px; flex: none; border: 1px solid var(--border-strong); border-radius: var(--radius-md); overflow: hidden; display: grid; place-items: center; background: var(--surface-sunken); color: var(--text-subtle); font-size: 11px; font-family: var(--font-mono); }
-.ed__photoprev img { width: 100%; height: 100%; object-fit: cover; }
-.ed__photoactions { display: flex; flex-direction: column; gap: 8px; }
-.ed__photobtns { display: flex; gap: 8px; }
-.ed__filelabel { cursor: pointer; display: inline-flex; align-items: center; }
-.ed__phototip { font-size: var(--fs-caption); color: var(--text-subtle); margin: 0; max-width: 48ch; line-height: 1.5; }
-.cv__photochk { display: inline-flex; align-items: center; gap: 7px; font-size: var(--ui-fs-sm); color: var(--text-muted); font-family: var(--font-sans); cursor: pointer; }
+/* Escalonado CSS puro para composiciones estáticas (80ms por paso, 5 pasos) */
+.c-stagger-css>*:nth-child(1){--d:80ms}.c-stagger-css>*:nth-child(2){--d:160ms}
+.c-stagger-css>*:nth-child(3){--d:240ms}.c-stagger-css>*:nth-child(4){--d:320ms}
+.c-stagger-css>*:nth-child(5){--d:400ms}.c-stagger-css>*:nth-child(n+6){--d:480ms}
 
-/* ── CV ── */
-.cv__head { display: flex; align-items: flex-end; justify-content: space-between; gap: var(--space-4); flex-wrap: wrap; }
-.cv__actions { display: flex; align-items: center; gap: var(--space-3); }
-.xraytabs { display: inline-flex; border: 1px solid var(--border-strong); border-radius: var(--radius-md); overflow: hidden; }
-.xraytabs button { padding: 8px 14px; background: var(--surface); color: var(--text-muted); border: none; cursor: pointer; font-family: var(--font-sans); font-size: var(--ui-fs-sm); }
-.xraytabs button.is-on { background: var(--surface-elevated); color: var(--accent-text); }
-.cv__stage { position: relative; margin-top: var(--space-6); background: var(--surface-sunken); border: 1px solid var(--border); border-radius: var(--radius-lg); overflow: hidden; min-height: 78vh; }
-.cv__doc { height: 100%; }
-.cv__frame { width: 100%; height: 78vh; border: 0; background: #fff; display: block; }
-/* .cv__raw es también .c-xray__raw (absolute inset:0, blur→resuelve). Solo le
-   damos fondo opaco y padding para que se lea sobre el PDF que se desvanece. */
-.cv__raw { margin: 0; padding: var(--space-6); background: var(--surface-sunken); font-size: 12.5px; line-height: 1.7; }
-.cv__loading, .cv__err { display: grid; place-items: center; height: 78vh; text-align: center; color: var(--text-subtle); font-family: var(--font-mono); font-size: 13px; }
-.cv__err { color: var(--danger-quiet); }
-.cv__hint { margin-top: var(--space-3); font-family: var(--font-mono); font-size: var(--fs-caption); color: var(--text-subtle); }
+/* ── El hairline que se dibuja (1s) ── */
+.c-divider{transform:scaleX(0);transition:transform 1s var(--ease-signature);transition-delay:var(--d,0ms)}
+.c-divider[data-visible]{transform:scaleX(1)}
 
-/* ── Importar · "pega lo que tengas" ─────────────────────────────────────── */
-.imp__box {
-  width: 100%; margin-top: var(--space-5); padding: var(--space-5);
-  background: var(--surface-sunken); color: var(--text);
-  border-radius: 8px; font-family: var(--font-sans); font-size: 14.5px; line-height: 1.7;
-  resize: vertical; min-height: 260px;
-}
-.imp__box::placeholder { color: var(--text-subtle); }
-.imp__cta { display: flex; align-items: center; gap: var(--space-4); margin-top: var(--space-5); flex-wrap: wrap; }
-.imp__hint { font-family: var(--font-mono); font-size: var(--fs-caption); color: var(--text-subtle); }
-.imp__err { margin-top: var(--space-4); color: var(--danger-quiet); font-family: var(--font-mono); font-size: 13px; }
-.imp__wait { margin-top: var(--space-5); padding: var(--space-6); border-radius: 8px; display: flex; align-items: center; gap: var(--space-4); color: var(--text-subtle); }
-.imp__wait .c-thinking { width: 10px; height: 10px; border-radius: 50%; background: var(--gold-500, #D4AF37); flex: none; }
-.imp__sources { display: flex; flex-wrap: wrap; gap: var(--space-3); margin-top: var(--space-4); }
-.imp__src { padding: 4px 12px; border-radius: 999px; font-family: var(--font-mono); font-size: 12px; color: var(--text-subtle); }
-.imp__note { margin-top: var(--space-5); padding: var(--space-5); background: var(--surface-sunken); border-radius: 8px; font-size: 14px; line-height: 1.7; color: var(--text); }
+/* ── wordReveal / charReveal (C3, titulares ceremoniales) ── */
+.c-w{opacity:0;filter:blur(6px);transform:translateY(24px);
+  animation:cWordIn .8s var(--ease-signature) forwards;animation-delay:calc(var(--i)*70ms)}
+.c-ch{opacity:0;filter:blur(4px);
+  animation:cCharIn .4s var(--ease-signature) forwards;animation-delay:calc(var(--i)*24ms)}
+@keyframes cWordIn{to{opacity:1;filter:blur(0);transform:none}}
+@keyframes cCharIn{to{opacity:1;filter:blur(0)}}
 
-@media (max-width: 720px) {
-  .kpis4 { grid-template-columns: repeat(2, 1fr); }
-  .cards2, .ed__grid2, .ed__grid3 { grid-template-columns: 1fr; }
-  .ed__row3 { grid-template-columns: 1fr; }
-  .shell__nav { display: none; }
-}
+/* ── Entrada de estado (C2 · 360ms) — cambio de vista dentro de una pantalla ── */
+.c-enter{animation:cEnter .36s var(--ease-signature)}
+@keyframes cEnter{from{opacity:0;transform:translateY(10px);filter:blur(3px)}}
+
+/* ── EL shimmer. Hay UNO en todo el producto (fin de ingesta). C3 · 1.15s ── */
+.c-shimmer.is-play::after{content:"";position:absolute;inset:-2px;pointer-events:none;mix-blend-mode:screen;
+  background:linear-gradient(100deg,transparent 32%,rgba(127,209,190,.14) 44%,rgba(127,209,190,.55) 50%,rgba(127,209,190,.14) 56%,transparent 68%);
+  transform:translateX(-130%);animation:cShimmer 1.15s var(--ease-signature) 1 both}
+[data-theme="light"] .c-shimmer.is-play::after{mix-blend-mode:multiply;
+  background:linear-gradient(100deg,transparent 32%,rgba(31,110,90,.08) 44%,rgba(31,110,90,.28) 50%,rgba(31,110,90,.08) 56%,transparent 68%)}
+@keyframes cShimmer{to{transform:translateX(130%)}}
+
+/* ── Rayos-X: la transición ── */
+.c-xray__doc,.c-xray__raw{transition:opacity var(--dur-slow) var(--ease-signature),filter var(--dur-slow) var(--ease-signature)}
+
+/* ── Pulso lento (variantes desactualizadas) ── */
+.c-pulse-dot{animation:cPulse 2.8s ease-in-out infinite}
+@keyframes cPulse{0%,100%{opacity:.35}50%{opacity:1}}
+
+/* ── Skeleton (carga) — pulso neutro, NO es el shimmer ── */
+.c-skel{animation:cSkel 1.6s ease-in-out infinite}
+@keyframes cSkel{50%{opacity:.55}}
+
+/* ── Spinner de progreso (⟳ en líneas de log) ── */
+.c-spin{display:inline-block;animation:cSpin 1.2s linear infinite}
+@keyframes cSpin{to{transform:rotate(360deg)}}
+
+/* ── Botón forge: glow + filamento + lift (hover, C1) ── */
+.c-forge::before{content:"";position:absolute;inset:-6px;z-index:0;border-radius:12px;
+  background:var(--patina-500);opacity:.12;filter:blur(14px);
+  transition:opacity .5s var(--ease-signature),filter .5s var(--ease-signature)}
+.c-forge:hover::before{opacity:.3;filter:blur(20px)}
+.c-btn--forge{transition:color .4s var(--ease-signature),border-color .4s var(--ease-signature),
+  transform .4s var(--ease-signature),box-shadow .4s var(--ease-signature)}
+.c-btn--forge::before{content:"";position:absolute;top:50%;left:0;right:0;height:1px;opacity:.5;z-index:-1;
+  background:linear-gradient(90deg,transparent 10%,var(--patina-500) 50%,transparent 90%);
+  transition:.6s var(--ease-signature)}
+.c-btn--forge:hover{transform:translateY(-2px);box-shadow:var(--glow-patina)}
+.c-btn--forge:hover::before{opacity:1;height:2px;top:35%;
+  box-shadow:0 0 20px var(--patina-500),0 0 40px rgba(67,179,160,.3)}
+.c-btn--forge:active{transform:translateY(0)}
+
+/* Lift genérico de tarjeta interactiva (C1) — solo transform/opacity */
+.c-lift{transition:transform .2s var(--ease-signature)}
+.c-lift:hover{transform:translateY(-2px)}
+
+}/* fin no-preference */

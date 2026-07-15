@@ -1,0 +1,19 @@
+/* ── auth.html — VENTANA, aurora en calma. Serena, sin promesas infladas. ──
+   PORTE LITERAL del 2º <style> de corpus-design/04-pantallas/auth.html (fuera de
+   data-corpus-system). Los nombres de clase NO cambian. */
+.au-main{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:60px var(--container-pad) 90px}
+.au-brand{font:500 26px/1 var(--font-display)}
+.au-brand::after{content:"";display:inline-block;width:6px;height:6px;margin-left:5px;background:var(--patina-500);border-radius:1px;vertical-align:super}
+.au-claim{margin-top:14px;color:var(--text-muted);font-size:var(--fs-lead);text-align:center;max-width:40ch}
+.au-panel{width:100%;max-width:400px;margin-top:36px;padding:28px 28px 24px}
+.au-panel h2{font:600 17px/1.3 var(--font-sans)}
+.au-f{margin-top:16px}
+.au-err{display:none;margin-top:16px;padding:11px 14px;border:1px solid color-mix(in srgb,var(--danger) 45%,transparent);
+  border-radius:var(--radius-sm);background:var(--danger-quiet);font:400 var(--fs-data)/1.6 var(--font-sans);color:var(--text)}
+.au-err.show{display:block}
+.au-cta{margin-top:20px;width:100%}
+.au-cta .c-btn{width:100%}
+.au-alt{margin-top:14px;display:grid;gap:8px}
+.au-alt .c-btn{width:100%}
+.au-links{margin-top:18px;display:flex;justify-content:space-between;font-size:var(--fs-ui)}
+.au-fine{margin-top:30px;max-width:44ch;text-align:center;font:400 var(--fs-micro)/1.8 var(--font-mono);color:var(--text-subtle)}

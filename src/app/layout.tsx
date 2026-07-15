@@ -1,17 +1,13 @@
 import type { Metadata } from "next";
-import { GeistSans } from "geist/font/sans";
-import { GeistMono } from "geist/font/mono";
-import { Playfair_Display } from "next/font/google";
-import { CanonRuntime } from "@/components/CanonRuntime";
+import { CorpusRuntime } from "@/components/CorpusRuntime";
 import "./globals.css";
 
-const playfair = Playfair_Display({
-  subsets: ["latin"],
-  variable: "--font-playfair",
-  weight: ["500", "600", "700", "800"],
-  style: ["normal", "italic"],
-  display: "swap",
-});
+/*
+ * Las fuentes (Geist, Geist Mono, Playfair Display) se auto-hospedan vía
+ * @font-face en globals.css (§0), con los MISMOS .ttf que registra el renderer
+ * del PDF (src/lib/fonts/). Se referencian por nombre de familia — exactamente
+ * como las nombra tokens.css — así que no hay wiring de next/font aquí.
+ */
 
 export const metadata: Metadata = {
   title: "Corpus — El sistema de registro de tu carrera",
@@ -21,14 +17,10 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html
-      lang="es"
-      className={`${GeistSans.variable} ${GeistMono.variable} ${playfair.variable}`}
-      suppressHydrationWarning
-    >
+    <html lang="es" data-theme="dark" suppressHydrationWarning>
       <body>
         {children}
-        <CanonRuntime />
+        <CorpusRuntime />
       </body>
     </html>
   );
