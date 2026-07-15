@@ -1,34 +1,27 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useBoot } from "@/lib/corpus/runtime";
+import { useLang } from "@/lib/i18n";
+import { createClient } from "@/lib/supabase/client";
+import { supabaseEnabled } from "@/lib/supabase/config";
 import "./ajustes.css";
 
 /* ============================================================================
-   Ajustes — porte de corpus-design/04-pantallas/ajustes.html
-   (ver docs/spec/pantallas/ajustes.md). MURO: NO monta la aurora — donde hay
-   trabajo, el trabajo gana.
+   Ajustes — porte de corpus-design/04-pantallas/ajustes.html, ahora CABLEADO a
+   persistencia real (user_settings). MURO: no monta la aurora.
 
-   El corazón de la pantalla: el tema se cambia AQUÍ y se ve en vivo, escribiendo
-   document.documentElement.dataset.theme (global, en <html>, no en un contexto).
-   Toggle de IA con el modo manual como legítimo (no degradado). BYOK. Exportar.
-   Borrar con doble confirmación tipeada (escribe BORRAR).
-
-   Fidelidad e interacciones REALES de producto (no la demo):
-   - theme(dark|light|auto): 'auto' se resuelve una vez con matchMedia; el botón
-     Sistema queda presionado aunque el data-theme diga dark/light. No persiste.
-   - ia(on): conmuta #iaLabel y muestra la nota del modo manual con la IA apagada.
-   - BYOK: el input se habilita salvo con "Incluida" (por value, no por texto) y
-     recibe foco al elegir Anthropic/Gemini.
-   - Borrado: #btnDel2 se habilita solo con "BORRAR" (trim, sensible a mayúsculas).
-   - M.boot() dibuja los 4 hairlines .c-divider (arrancan en scaleX(0)).
-
-   Cierres de a11y (spec §8) sin tocar clases: nombres accesibles en los inputs,
-   live regions en el cambio de modo de IA, y el foco vuelve a #btnDel al cancelar
-   el borrado (la referencia lo dejaba huérfano). El panel .demo NO se porta.
-   El alert() de maqueta se sustituye por un status accesible; el borrado real
-   queda pendiente de backend (ver issues).
+   Qué persiste y cómo:
+   - Idioma: reutiliza el motor i18n (useLang) → re-render en vivo + user_settings.ui_lang.
+   - Tema: se aplica al instante (data-theme) + localStorage + user_settings.theme.
+   - IA activada: al instante + user_settings.ai_enabled.
+   - Nombre visible: con botón "Guardar" → display_name.
+   - Tu clave (BYOK): con botón "Guardar clave" → llm_api_key (null = Incluida).
+     La clave NUNCA vuelve del servidor (solo se sabe si hay una).
+   - Exportar: descarga real del master + variantes en JSON.
+   - Borrar: confirmación tipeada (BORRAR) → borrado real de la cuenta.
    ============================================================================ */
 
 type ThemeSel = "dark" | "light" | "auto";
@@ -36,26 +29,35 @@ type Provider = "Incluida" | "Anthropic" | "Gemini";
 
 const IA_ON = "encendida — nunca inventa; solo selecciona, reordena y reformula con origen";
 const IA_OFF = "apagada — modo manual completo";
+const THEME_KEY = "corpus-theme";
+
+async function saveSettings(patch: Record<string, unknown>) {
+  if (!supabaseEnabled) return;
+  await fetch("/api/account/settings", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(patch),
+  });
+}
 
 export function AjustesScreen() {
-  // Cuenta (editable en el mock)
-  const [name, setName] = useState("Diego Gatica Morales");
-  const [email, setEmail] = useState("diego.gatica@ejemplo.cl");
+  const router = useRouter();
+  const { lang, setLang } = useLang();
 
-  // Idioma (solo visual, como la referencia) y tema (en vivo, global)
-  const [lang, setLang] = useState<"es" | "en">("es");
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
   const [themeSel, setThemeSel] = useState<ThemeSel>("dark");
-
-  // IA + BYOK
   const [iaOn, setIaOn] = useState(true);
   const [provider, setProvider] = useState<Provider>("Incluida");
   const [byok, setByok] = useState("");
+  const [hasKey, setHasKey] = useState(false);
   const byokDisabled = provider === "Incluida";
+  const [flash, setFlash] = useState<string | null>(null);
 
-  // Borrado con doble confirmación tipeada
   const [delOpen, setDelOpen] = useState(false);
   const [delWord, setDelWord] = useState("");
   const [delMsg, setDelMsg] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
   const delReady = delWord.trim() === "BORRAR";
 
   const byokRef = useRef<HTMLInputElement>(null);
@@ -63,12 +65,38 @@ export function AjustesScreen() {
   const btnDelRef = useRef<HTMLButtonElement>(null);
   const delMounted = useRef(false);
 
-  // CorpusMotion.boot() — dibuja los .c-divider (arrancan en scaleX(0)). Sin
-  // esto los 4 hairlines quedan invisibles. Acotado al <main> con la ref.
   const bootRef = useBoot<HTMLElement>();
 
-  // Tema en vivo: escribe el atributo global en <html>. 'auto' se resuelve una
-  // sola vez (ni persiste ni se suscribe a prefers-color-scheme, como el original).
+  const note = useCallback((msg: string) => {
+    setFlash(msg);
+    window.setTimeout(() => setFlash((m) => (m === msg ? null : m)), 1800);
+  }, []);
+
+  // Cargar los ajustes reales al montar.
+  useEffect(() => {
+    if (!supabaseEnabled) return;
+    let alive = true;
+    fetch("/api/account/settings")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (!alive || !d) return;
+        setName(d.display_name ?? "");
+        setEmail(d.email ?? "");
+        setIaOn(d.ai_enabled ?? true);
+        setHasKey(!!d.hasKey);
+        if (d.hasKey) setProvider("Anthropic");
+        const t = (d.theme as ThemeSel) ?? "dark";
+        setThemeSel(t);
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  // Tema en vivo: resuelve 'auto', escribe data-theme, persiste (localStorage +
+  // user_settings). localStorage guarda el valor RESUELTO (para el anti-flash y
+  // el menú); user_settings guarda la SELECCIÓN (incl. 'auto').
   function applyTheme(t: ThemeSel) {
     const resolved: "dark" | "light" =
       t === "auto"
@@ -77,17 +105,63 @@ export function AjustesScreen() {
           : "dark"
         : t;
     document.documentElement.dataset.theme = resolved;
+    try {
+      localStorage.setItem(THEME_KEY, resolved);
+    } catch {
+      /* noop */
+    }
     setThemeSel(t);
+    void saveSettings({ theme: t });
   }
 
-  // Foco automático al habilitar BYOK (elegir Anthropic/Gemini).
+  function toggleIA() {
+    setIaOn((v) => {
+      const next = !v;
+      void saveSettings({ ai_enabled: next });
+      return next;
+    });
+  }
+
+  function saveName() {
+    void saveSettings({ display_name: name }).then(() => {
+      note("Nombre guardado ✓");
+      window.dispatchEvent(new Event("corpus:profile-updated"));
+    });
+  }
+
+  function saveKey() {
+    const value = byokDisabled ? null : byok.trim() || null;
+    void saveSettings({ llm_api_key: value }).then(() => {
+      setHasKey(!!value);
+      note(value ? "Clave guardada ✓ (cifrada, no se muestra)" : "Se usará la clave incluida ✓");
+    });
+  }
+
+  async function exportAll() {
+    try {
+      const [m, v] = await Promise.all([
+        fetch("/api/master").then((r) => r.json()),
+        fetch("/api/variants").then((r) => r.json()),
+      ]);
+      const blob = new Blob([JSON.stringify({ master: m.items ?? [], variants: v.variants ?? [] }, null, 2)], {
+        type: "application/json",
+      });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "corpus-registro.json";
+      a.click();
+      URL.revokeObjectURL(url);
+      note("Registro descargado ✓");
+    } catch {
+      note("No se pudo exportar");
+    }
+  }
+
   useEffect(() => {
     if (provider !== "Incluida") byokRef.current?.focus();
   }, [provider]);
 
-  // Movimientos de foco del borrado: al abrir → #delWord; al cancelar → #btnDel
-  // (cierra el hueco de la spec §8: la referencia dejaba el foco huérfano). Se
-  // salta la primera ejecución (montaje) para no robar el foco al cargar.
   useEffect(() => {
     if (!delMounted.current) {
       delMounted.current = true;
@@ -106,10 +180,17 @@ export function AjustesScreen() {
     setDelWord("");
     setDelMsg(null);
   }
-  function confirmDelete() {
-    // Maqueta: el borrado destructivo real (y su confirmación por correo) queda
-    // pendiente de backend. No se dispara el alert() de la referencia.
-    setDelMsg("Aquí se borra todo, de verdad, y se confirma por correo.");
+  async function confirmDelete() {
+    setDeleting(true);
+    try {
+      const res = await fetch("/api/account/delete", { method: "POST" });
+      if (!res.ok && res.status !== 204) throw new Error(await res.text());
+      if (supabaseEnabled) await createClient().auth.signOut();
+      router.push("/login");
+    } catch (e) {
+      setDeleting(false);
+      setDelMsg(e instanceof Error ? e.message : "No se pudo borrar. Reintenta.");
+    }
   }
 
   return (
@@ -126,11 +207,6 @@ export function AjustesScreen() {
             <Link href="/app/fuentes">Fuentes</Link>
           </nav>
           <div className="hd-right">
-            <nav className="hd-nav" style={{ display: "flex" }}>
-              <Link href="/app/ajustes" aria-current="page">
-                Ajustes
-              </Link>
-            </nav>
             <div className="hd-lang">
               <span data-on>ES</span>
               <span>EN</span>
@@ -143,6 +219,17 @@ export function AjustesScreen() {
       <main className="aj-main c-wall" data-screen-label="ajustes" ref={bootRef}>
         <div className="c-container aj-col">
           <h2>Ajustes</h2>
+          <span
+            role="status"
+            aria-live="polite"
+            style={{
+              minHeight: "16px",
+              font: "500 var(--fs-micro)/1 var(--font-mono)",
+              color: "var(--accent-text)",
+            }}
+          >
+            {flash}
+          </span>
 
           {/* ── Cuenta ── */}
           <section className="aj-g" data-screen-label="ajustes-cuenta">
@@ -153,30 +240,35 @@ export function AjustesScreen() {
             <div className="aj-rows">
               <div className="aj-row">
                 <span className="k">
-                  <b>Nombre</b>
+                  <b>Nombre visible</b>
+                  <span>el de tu menú, no el del CV</span>
                 </span>
-                <span className="v">
+                <span className="v" style={{ display: "flex", gap: "10px", alignItems: "center" }}>
                   <input
                     className="c-input"
                     style={{ maxWidth: "300px" }}
-                    aria-label="Nombre"
+                    aria-label="Nombre visible"
+                    placeholder="Tu nombre"
                     value={name}
                     onChange={(e) => setName(e.target.value)}
                   />
+                  <button className="c-btn" onClick={saveName}>
+                    Guardar
+                  </button>
                 </span>
               </div>
               <div className="aj-row">
                 <span className="k">
                   <b>Email</b>
-                  <span>el de la cuenta, no el del CV</span>
+                  <span>el de la cuenta · edítalo en Perfil</span>
                 </span>
                 <span className="v">
                   <input
                     className="c-input"
-                    style={{ maxWidth: "300px" }}
+                    style={{ maxWidth: "300px", opacity: 0.7 }}
                     aria-label="Email de la cuenta"
                     value={email}
-                    onChange={(e) => setEmail(e.target.value)}
+                    readOnly
                   />
                 </span>
               </div>
@@ -204,6 +296,9 @@ export function AjustesScreen() {
                       English
                     </button>
                   </span>
+                  <span style={{ font: "400 var(--fs-micro)/1 var(--font-mono)", color: "var(--text-subtle)" }}>
+                    se aplica y se guarda al instante
+                  </span>
                 </span>
               </div>
               <div className="aj-row">
@@ -213,34 +308,17 @@ export function AjustesScreen() {
                 </span>
                 <span className="v">
                   <span className="aj-seg" id="segTheme">
-                    <button
-                      data-t="dark"
-                      aria-pressed={themeSel === "dark"}
-                      onClick={() => applyTheme("dark")}
-                    >
+                    <button data-t="dark" aria-pressed={themeSel === "dark"} onClick={() => applyTheme("dark")}>
                       Grafito
                     </button>
-                    <button
-                      data-t="light"
-                      aria-pressed={themeSel === "light"}
-                      onClick={() => applyTheme("light")}
-                    >
+                    <button data-t="light" aria-pressed={themeSel === "light"} onClick={() => applyTheme("light")}>
                       Porcelana
                     </button>
-                    <button
-                      data-t="auto"
-                      aria-pressed={themeSel === "auto"}
-                      onClick={() => applyTheme("auto")}
-                    >
+                    <button data-t="auto" aria-pressed={themeSel === "auto"} onClick={() => applyTheme("auto")}>
                       Sistema
                     </button>
                   </span>
-                  <span
-                    style={{
-                      font: "400 var(--fs-micro)/1 var(--font-mono)",
-                      color: "var(--text-subtle)",
-                    }}
-                  >
+                  <span style={{ font: "400 var(--fs-micro)/1 var(--font-mono)", color: "var(--text-subtle)" }}>
                     se aplica al instante — mira alrededor
                   </span>
                 </span>
@@ -268,13 +346,10 @@ export function AjustesScreen() {
                     aria-checked={iaOn}
                     aria-label={iaOn ? "IA activada" : "IA desactivada"}
                     aria-describedby="iaNote"
-                    onClick={() => setIaOn((v) => !v)}
+                    onClick={toggleIA}
                   />
                   <span
-                    style={{
-                      font: "400 var(--fs-data)/1.5 var(--font-sans)",
-                      color: "var(--text-muted)",
-                    }}
+                    style={{ font: "400 var(--fs-data)/1.5 var(--font-sans)", color: "var(--text-muted)" }}
                     id="iaLabel"
                     aria-live="polite"
                   >
@@ -285,40 +360,37 @@ export function AjustesScreen() {
               <div className="aj-row">
                 <span className="k">
                   <b>Tu propia clave</b>
-                  <span>BYOK — opcional</span>
+                  <span>BYOK — opcional{hasKey ? " · hay una guardada" : ""}</span>
                 </span>
                 <span className="v">
                   <span className="aj-seg" id="segProv">
-                    <button
-                      aria-pressed={provider === "Incluida"}
-                      onClick={() => setProvider("Incluida")}
-                    >
+                    <button aria-pressed={provider === "Incluida"} onClick={() => setProvider("Incluida")}>
                       Incluida
                     </button>
-                    <button
-                      aria-pressed={provider === "Anthropic"}
-                      onClick={() => setProvider("Anthropic")}
-                    >
+                    <button aria-pressed={provider === "Anthropic"} onClick={() => setProvider("Anthropic")}>
                       Anthropic
                     </button>
-                    <button
-                      aria-pressed={provider === "Gemini"}
-                      onClick={() => setProvider("Gemini")}
-                    >
+                    <button aria-pressed={provider === "Gemini"} onClick={() => setProvider("Gemini")}>
                       Gemini
                     </button>
                   </span>
-                  <input
-                    className="c-input"
-                    id="byok"
-                    ref={byokRef}
-                    placeholder="sk-… (se cifra, solo se usa en tus extracciones)"
-                    style={{ maxWidth: "320px" }}
-                    aria-label="Tu propia clave (BYOK)"
-                    disabled={byokDisabled}
-                    value={byok}
-                    onChange={(e) => setByok(e.target.value)}
-                  />
+                  <span style={{ display: "flex", gap: "10px", alignItems: "center" }}>
+                    <input
+                      className="c-input"
+                      id="byok"
+                      ref={byokRef}
+                      type="password"
+                      placeholder={hasKey ? "•••••••••• (guardada — escribe para cambiarla)" : "sk-… (se cifra, solo se usa en tus extracciones)"}
+                      style={{ maxWidth: "320px" }}
+                      aria-label="Tu propia clave (BYOK)"
+                      disabled={byokDisabled}
+                      value={byok}
+                      onChange={(e) => setByok(e.target.value)}
+                    />
+                    <button className="c-btn" onClick={saveKey}>
+                      {byokDisabled ? "Usar la incluida" : "Guardar clave"}
+                    </button>
+                  </span>
                 </span>
               </div>
             </div>
@@ -334,12 +406,7 @@ export function AjustesScreen() {
           <section className="aj-g aj-danger" data-screen-label="ajustes-datos">
             <div className="aj-gh">
               <span className="t-overline">Tus datos</span>
-              <span
-                style={{
-                  font: "400 var(--fs-micro)/1 var(--font-mono)",
-                  color: "var(--text-subtle)",
-                }}
-              >
+              <span style={{ font: "400 var(--fs-micro)/1 var(--font-mono)", color: "var(--text-subtle)" }}>
                 sin permiso, sin retención hostil
               </span>
             </div>
@@ -348,16 +415,13 @@ export function AjustesScreen() {
               <div className="aj-row">
                 <span className="k">
                   <b>Exportar todo</b>
-                  <span>JSON propio + resume.json estándar</span>
+                  <span>master · variantes (JSON)</span>
                 </span>
                 <span className="v">
-                  <button className="c-btn">Descargar mi registro completo</button>
-                  <span
-                    style={{
-                      font: "400 var(--fs-micro)/1 var(--font-mono)",
-                      color: "var(--text-subtle)",
-                    }}
-                  >
+                  <button className="c-btn" onClick={exportAll}>
+                    Descargar mi registro completo
+                  </button>
+                  <span style={{ font: "400 var(--fs-micro)/1 var(--font-mono)", color: "var(--text-subtle)" }}>
                     master · variantes · overrides · evidencias
                   </span>
                 </span>
@@ -382,12 +446,7 @@ export function AjustesScreen() {
                     Borrar mi cuenta y mis datos
                   </button>
                   <span className={`aj-confirm${delOpen ? " show" : ""}`} id="delConfirm">
-                    <span
-                      style={{
-                        font: "400 var(--fs-data)/1.5 var(--font-sans)",
-                        color: "var(--text-muted)",
-                      }}
-                    >
+                    <span style={{ font: "400 var(--fs-data)/1.5 var(--font-sans)", color: "var(--text-muted)" }}>
                       Escribe <b style={{ fontFamily: "var(--font-mono)" }}>BORRAR</b> para confirmar:
                     </span>
                     <input
@@ -402,24 +461,18 @@ export function AjustesScreen() {
                     <button
                       className="c-btn"
                       id="btnDel2"
-                      disabled={!delReady}
+                      disabled={!delReady || deleting}
                       style={{ background: "var(--danger)", borderColor: "transparent", color: "#FFF" }}
                       onClick={confirmDelete}
                     >
-                      Borrar definitivamente
+                      {deleting ? "Borrando…" : "Borrar definitivamente"}
                     </button>
                     <button className="c-btn c-btn--quiet" id="btnDelNo" onClick={cancelDel}>
                       cancelar
                     </button>
                   </span>
                   {delMsg ? (
-                    <span
-                      role="status"
-                      style={{
-                        font: "400 var(--fs-data)/1.5 var(--font-sans)",
-                        color: "var(--text-muted)",
-                      }}
-                    >
+                    <span role="status" style={{ font: "400 var(--fs-data)/1.5 var(--font-sans)", color: "var(--text-muted)" }}>
                       {delMsg}
                     </span>
                   ) : null}
