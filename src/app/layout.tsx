@@ -18,6 +18,17 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="es" data-theme="dark" suppressHydrationWarning>
+      <head>
+        {/* Anti-flash: fija el tema persistido ANTES del primer paint (evita el
+            parpadeo oscuro para quien usa porcelana). Lee la misma clave que
+            escribe UserMenu. */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html:
+              "try{var t=localStorage.getItem('corpus-theme');if(t==='light'||t==='dark')document.documentElement.dataset.theme=t;}catch(e){}",
+          }}
+        />
+      </head>
       <body>
         {children}
         <CorpusRuntime />
