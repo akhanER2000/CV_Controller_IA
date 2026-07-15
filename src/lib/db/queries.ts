@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { ImportResult, StagedRow } from "@/lib/extract/types";
-import type { ResumeData } from "@/lib/cv/resume";
+import { normalizeLinks, type ResumeData } from "@/lib/cv/resume";
 
 /**
  * Capa de datos del servidor (contra el esquema 0001). Recibe el cliente de
@@ -200,6 +200,37 @@ export async function getMasterItems(sb: SB, userId: string): Promise<MasterItem
   }));
 }
 
+/**
+ * Crea un profile_item MANUAL (origin='manual') en el master del usuario. Es la
+ * acción explícita de "añadir a mano" (p. ej. el bloque de contacto/basics cuando
+ * la cuenta no tiene uno). NADA de procedencia externa: el origen manual es el más
+ * verificable. Devuelve el item recién creado en el shape de MasterItem.
+ */
+export async function createMasterItem(
+  sb: SB,
+  userId: string,
+  kind: string,
+  data: Record<string, unknown>,
+): Promise<MasterItem> {
+  const profileId = await ensureMaster(sb, userId);
+  const { data: row, error } = await sb
+    .from("profile_items")
+    .insert({ profile_id: profileId, user_id: userId, kind, data, origin: "manual" })
+    .select("id,kind,parent_id,data,origin,evidence_snippet,evidence_verified,sort_order")
+    .single();
+  if (error) throw new Error(error.message);
+  return {
+    id: row.id as string,
+    kind: row.kind as string,
+    parentId: (row.parent_id as string | null) ?? null,
+    data: (row.data as Record<string, unknown>) ?? {},
+    origin: (row.origin as string) ?? "manual",
+    evidenceSnippet: (row.evidence_snippet as string | null) ?? null,
+    evidenceVerified: Boolean(row.evidence_verified),
+    sortOrder: (row.sort_order as number) ?? 0,
+  };
+}
+
 /** Momento de última modificación del master (para "variante desactualizada"). */
 async function masterUpdatedAt(sb: SB, userId: string): Promise<string | null> {
   const { data } = await sb
@@ -342,6 +373,12 @@ export async function buildResumeData(sb: SB, userId: string): Promise<ResumeDat
       .map((b) => ({ p1: true, es: str(b.data, "text"), en: str(b.data, "text") })),
   }));
 
+  // Foto y QR son OPT-IN, guardados en la data de basics. photo NUNCA es el avatar
+  // de la UI (user_settings.avatar_url); es una imagen aparte que el usuario sube
+  // para el CV. Aquí solo se leen si el usuario los puso explícitamente.
+  const photo = str(basicsItem, "photo").trim() || undefined;
+  const qrUrl = str((basicsItem.qr as Record<string, unknown>) ?? {}, "url").trim();
+
   return {
     basics: {
       name: str(basicsItem, "name"),
@@ -349,9 +386,11 @@ export async function buildResumeData(sb: SB, userId: string): Promise<ResumeDat
       email: str(basicsItem, "email"),
       phone: str(basicsItem, "phone"),
       location: i18n(str(basicsItem, "location")),
-      links: Array.isArray(basicsItem.links) ? (basicsItem.links as string[]) : [],
+      links: normalizeLinks(basicsItem.links),
       summary: i18n(str(summaryItem, "text")),
     },
+    photo,
+    qr: qrUrl ? { url: qrUrl } : undefined,
     skills: by("skill").map((s) => ({ group: i18n(str(s.data, "group")), items: i18n(str(s.data, "items")) })),
     work,
     projects: by("project").map((p) => ({

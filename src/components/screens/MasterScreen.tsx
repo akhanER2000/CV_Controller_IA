@@ -71,7 +71,24 @@ interface VSummary {
   origin: string;
   evidence: string | null;
 }
+/* Un enlace editable: la etiqueta es para el humano, la URL es lo que lee el ATS. */
+interface VLink {
+  label: string;
+  url: string;
+}
+/* Bloque de contacto (basics) editable. Se imprime en el CUERPO del PDF. */
+interface VBasics {
+  id: string | null;
+  data: Record<string, unknown>;
+  name: string;
+  label: string;
+  email: string;
+  phone: string;
+  location: string;
+  links: VLink[];
+}
 interface MasterView {
+  basics: VBasics | null;
   summary: VSummary | null;
   roles: VRole[];
   skills: VSkill[];
@@ -99,6 +116,45 @@ function originLabel(origin: string): string {
 
 const hasDigit = (s: string) => /\d/.test(s);
 const str = (o: Record<string, unknown>, k: string) => String(o[k] ?? "");
+
+/* Links crudos de la DB (string[] | {label,url}[]) → lista editable de VLink. */
+function toVLinks(raw: unknown): VLink[] {
+  if (!Array.isArray(raw)) return [];
+  const out: VLink[] = [];
+  for (const l of raw) {
+    if (typeof l === "string") {
+      const url = l.trim();
+      if (url) out.push({ label: "", url });
+    } else if (l && typeof l === "object") {
+      const o = l as Record<string, unknown>;
+      const url = String(o.url ?? "").trim();
+      if (url) out.push({ label: String(o.label ?? "").trim(), url });
+    }
+  }
+  return out;
+}
+
+/* VLink[] → forma compacta para persistir: string si no hay etiqueta, si no {label,url}.
+   Descarta enlaces sin URL. Es lo que normalizeLinks (resume.ts) espera. */
+function linksToData(links: VLink[]): (string | { label: string; url: string })[] {
+  return links
+    .map((l) => ({ label: l.label.trim(), url: l.url.trim() }))
+    .filter((l) => l.url)
+    .map((l) => (l.label ? l : l.url));
+}
+
+/* VBasics → data del profile_item basics (conserva campos ajenos en .data). */
+function buildBasicsData(b: VBasics): Record<string, unknown> {
+  return {
+    ...b.data,
+    name: b.name.trim(),
+    label: b.label.trim(),
+    email: b.email.trim(),
+    phone: b.phone.trim(),
+    location: b.location.trim(),
+    links: linksToData(b.links),
+  };
+}
 
 /* ── Datos del MODO LOCAL (persona Diego Gatica). Nunca se usan con Supabase. ── */
 type SrcKey = "tx" | "gh" | "web" | "cv" | "q" | "man";
@@ -184,6 +240,20 @@ const DEMO_ED: VRow[] = [
 
 function buildDemoView(): MasterView {
   return {
+    basics: {
+      id: null,
+      data: {},
+      name: "Diego Gatica Morales",
+      label: "Backend Engineer",
+      email: "diego.gatica@ejemplo.cl",
+      phone: "+56 9 6123 4567",
+      location: "Santiago, Chile (RM)",
+      links: [
+        { label: "GitHub", url: "github.com/dgatica" },
+        { label: "Portfolio", url: "dgatica.cl" },
+        { label: "LinkedIn", url: "linkedin.com/in/diego-gatica" },
+      ],
+    },
     summary: {
       id: null,
       data: {},
@@ -215,6 +285,21 @@ interface ApiItem {
 
 function buildRealView(items: ApiItem[]): MasterView {
   const by = (k: string) => items.filter((i) => i.kind === k);
+
+  const basicsItem = by("basics")[0];
+  const basics: VBasics | null = basicsItem
+    ? {
+        id: basicsItem.id,
+        data: basicsItem.data,
+        name: str(basicsItem.data, "name"),
+        label: str(basicsItem.data, "label"),
+        email: str(basicsItem.data, "email"),
+        phone: str(basicsItem.data, "phone"),
+        location: str(basicsItem.data, "location"),
+        links: toVLinks(basicsItem.data.links),
+      }
+    : null;
+
   const summaryItem = by("summary")[0];
   const summary: VSummary | null = summaryItem
     ? { id: summaryItem.id, data: summaryItem.data, text: str(summaryItem.data, "text"), origin: originLabel(summaryItem.origin), evidence: summaryItem.evidenceSnippet }
@@ -267,7 +352,7 @@ function buildRealView(items: ApiItem[]): MasterView {
     m: str(e.data, "dates") || originLabel(e.origin),
   }));
 
-  return { summary, roles, skills, projects, education };
+  return { basics, summary, roles, skills, projects, education };
 }
 
 const FILTERS: { key: FilterKey; label: string }[] = [
@@ -306,6 +391,10 @@ export function MasterScreen() {
   const groupsRef = useRef<HTMLDivElement>(null);
   const liveRef = useRef<HTMLSpanElement>(null);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Fuente de verdad SÍNCRONA de basics (contacto): basics es UN item con varios
+  // campos, así que cada edición debe fusionar sobre el último estado, no sobre el
+  // del render (o un PATCH pisaría al anterior). El ref siempre trae lo más nuevo.
+  const basicsRef = useRef<VBasics | null>(null);
 
   const noteSaved = useCallback((msg: string) => {
     setSavedNote(msg);
@@ -365,6 +454,93 @@ export function MasterScreen() {
     }
   }, []);
 
+  // ── Contacto (basics) editable ─────────────────────────────────────────────
+  // Persiste el bloque completo (basics es un solo profile_item). En modo local /
+  // demo (id null) saveEdit lo deja en "editado (modo local)" sin inventar guardado.
+  const persistBasics = useCallback(
+    (b: VBasics) => saveEdit(b.id, buildBasicsData(b)),
+    [saveEdit],
+  );
+
+  // Muta basics sobre el ÚLTIMO estado (basicsRef), refresca la vista y —si se pide—
+  // persiste. Devuelve el nuevo basics para encadenar.
+  const mutateBasics = useCallback(
+    (fn: (b: VBasics) => VBasics, persist: boolean) => {
+      const cur = basicsRef.current;
+      if (!cur) return;
+      const next = fn(cur);
+      basicsRef.current = next;
+      setView((prev) => (prev && prev.basics ? { ...prev, basics: next } : prev));
+      if (persist) persistBasics(next);
+    },
+    [persistBasics],
+  );
+
+  // onBlur de un campo escalar del contacto (nombre, título, email, tel, ciudad).
+  const commitBasicsField = useCallback(
+    (field: "name" | "label" | "email" | "phone" | "location") =>
+      (e: React.FocusEvent<HTMLSpanElement>) => {
+        const text = (e.currentTarget.textContent ?? "").trim();
+        const cur = basicsRef.current;
+        if (!cur || (cur[field] ?? "") === text) return;
+        mutateBasics((b) => ({ ...b, [field]: text }), true);
+        const tid = `basics-${field}`;
+        setTouched((prev) => (prev.has(tid) ? prev : new Set(prev).add(tid)));
+      },
+    [mutateBasics],
+  );
+
+  // Enlaces: editar (sin persistir hasta blur), añadir (fila vacía), quitar (persiste).
+  const setLinkField = useCallback(
+    (i: number, field: "label" | "url", value: string) =>
+      mutateBasics((b) => ({ ...b, links: b.links.map((l, idx) => (idx === i ? { ...l, [field]: value } : l)) }), false),
+    [mutateBasics],
+  );
+  const addLink = useCallback(() => mutateBasics((b) => ({ ...b, links: [...b.links, { label: "", url: "" }] }), false), [mutateBasics]);
+  const removeLink = useCallback((i: number) => mutateBasics((b) => ({ ...b, links: b.links.filter((_, idx) => idx !== i) }), true), [mutateBasics]);
+  const persistBasicsNow = useCallback(() => {
+    const b = basicsRef.current;
+    if (b) persistBasics(b);
+  }, [persistBasics]);
+
+  // "Añadir datos de contacto" cuando la cuenta no tiene item basics: POST /api/master.
+  const addBasics = useCallback(() => {
+    const empty: VBasics = { id: null, data: {}, name: "", label: "", email: "", phone: "", location: "", links: [] };
+    if (!supabaseEnabled) {
+      basicsRef.current = empty;
+      setView((prev) => (prev ? { ...prev, basics: empty } : prev));
+      noteSaved("bloque de contacto añadido (modo local)");
+      return;
+    }
+    void (async () => {
+      try {
+        const res = await fetch("/api/master", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ kind: "basics", data: buildBasicsData(empty) }),
+        });
+        if (!res.ok) throw new Error();
+        const { item } = (await res.json()) as { item: { id: string; data: Record<string, unknown> } };
+        const d = item.data ?? {};
+        const created: VBasics = {
+          id: item.id, data: d,
+          name: str(d, "name"), label: str(d, "label"), email: str(d, "email"),
+          phone: str(d, "phone"), location: str(d, "location"), links: toVLinks(d.links),
+        };
+        basicsRef.current = created;
+        setView((prev) => (prev ? { ...prev, basics: created } : prev));
+        noteSaved("bloque de contacto añadido ✓");
+      } catch {
+        noteSaved("no se pudo añadir");
+      }
+    })();
+  }, [noteSaved]);
+
+  // Mantén basicsRef sincronizado cuando la vista se (re)carga.
+  useEffect(() => {
+    basicsRef.current = view?.basics ?? null;
+  }, [view?.basics]);
+
   // Carga real (modo Supabase).
   useEffect(() => {
     if (!supabaseEnabled) return;
@@ -376,7 +552,7 @@ export function MasterScreen() {
         if (!active) return;
         setView(buildRealView((data.items ?? []) as ApiItem[]));
       } catch {
-        if (active) setView({ summary: null, roles: [], skills: [], projects: [], education: [] });
+        if (active) setView({ basics: null, summary: null, roles: [], skills: [], projects: [], education: [] });
       } finally {
         if (active) setLoading(false);
       }
@@ -389,7 +565,7 @@ export function MasterScreen() {
   const v = view;
   const totalBullets = v ? v.roles.reduce((a, e) => a + e.bullets.length, 0) : 0;
   const total = v
-    ? (v.summary ? 1 : 0) + v.roles.length + totalBullets + v.skills.length + v.projects.length + v.education.length
+    ? (v.basics ? 1 : 0) + (v.summary ? 1 : 0) + v.roles.length + totalBullets + v.skills.length + v.projects.length + v.education.length
     : 0;
 
   // «fuentes» = orígenes externos distintos (el manual no cuenta: es la ausencia
@@ -649,6 +825,141 @@ export function MasterScreen() {
     );
   };
 
+  // ── Bloque de contacto (basics) — se imprime EN EL CUERPO del CV ─────────────
+  const cFieldLabel: React.CSSProperties = {
+    flex: "none", width: 78, color: "var(--text-subtle)",
+    font: "400 var(--fs-micro)/1.6 var(--font-mono)",
+  };
+  const cMiss: React.CSSProperties = {
+    flex: "none", font: "400 10px/1.4 var(--font-mono)", color: "var(--text-muted)",
+  };
+  const contactField = (
+    b: VBasics,
+    field: "label" | "email" | "phone" | "location",
+    fieldLabel: string,
+    miss: string,
+  ): ReactNode => {
+    const value = b[field];
+    return (
+      <div className="ms-b" data-basics-field={field}>
+        <span style={cFieldLabel}>{fieldLabel}</span>
+        <span
+          className="tx"
+          contentEditable
+          suppressContentEditableWarning
+          spellCheck={false}
+          role="textbox"
+          aria-label={`Editar ${fieldLabel}`}
+          onKeyDown={editKeyDown}
+          onBlur={commitBasicsField(field)}
+        >
+          {value}
+        </span>
+        {value.trim() ? null : <span style={cMiss}>{miss}</span>}
+      </div>
+    );
+  };
+
+  const linkEditor = (l: VLink, i: number): ReactNode => (
+    <div key={`lk-${i}`} style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+      <input
+        className="c-input"
+        style={{ width: "140px", height: "32px", fontSize: "var(--fs-micro)" }}
+        value={l.label}
+        placeholder="etiqueta (opcional)"
+        aria-label="Etiqueta del enlace"
+        onChange={(e) => setLinkField(i, "label", e.target.value)}
+        onBlur={persistBasicsNow}
+      />
+      <input
+        className="c-input"
+        style={{ flex: 1, minWidth: 0, height: "32px", fontSize: "var(--fs-data)" }}
+        value={l.url}
+        placeholder="url — es lo que lee el ATS (linkedin.com/in/…, github.com/…)"
+        aria-label="URL del enlace"
+        onChange={(e) => setLinkField(i, "url", e.target.value)}
+        onBlur={persistBasicsNow}
+      />
+      <button
+        type="button"
+        aria-label="Quitar enlace"
+        onClick={() => removeLink(i)}
+        style={{ flex: "none", font: "400 13px/1 var(--font-mono)", color: "var(--text-subtle)", padding: "0 6px" }}
+      >
+        ✕
+      </button>
+    </div>
+  );
+
+  const contactCard = (b: VBasics): ReactNode => (
+    <div className="c-card ms-card">
+      <div className="ms-eh">
+        <span
+          className="tt"
+          contentEditable
+          suppressContentEditableWarning
+          spellCheck={false}
+          role="textbox"
+          aria-label="Editar nombre"
+          style={b.name.trim() ? undefined : { minWidth: "140px", display: "inline-block" }}
+          onKeyDown={editKeyDown}
+          onBlur={commitBasicsField("name")}
+        >
+          {b.name}
+        </span>
+        {b.name.trim() ? null : <span className="warn">⚠ falta tu nombre</span>}
+        <span className="meta">
+          <span className="ms-src" style={{ opacity: 1 }}>
+            origen: {MANUAL_LABEL}
+          </span>
+        </span>
+      </div>
+      {contactField(b, "label", "Título", "p. ej. Backend Engineer")}
+      {contactField(b, "email", "Email", "falta — sale vacío en el CV")}
+      {contactField(b, "phone", "Teléfono", "falta — sale vacío en el CV")}
+      {contactField(b, "location", "Ciudad", "p. ej. Santiago, Chile (RM)")}
+      <div className="ms-b" style={{ alignItems: "flex-start" }}>
+        <span style={{ ...cFieldLabel, marginTop: "8px" }}>Enlaces</span>
+        <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: "6px" }}>
+          {b.links.length === 0 ? (
+            <span style={{ ...cMiss, padding: "6px 0" }}>
+              LinkedIn, GitHub, portafolio, un paper, una charla… la etiqueta es para ti; la URL es lo que importa.
+            </span>
+          ) : (
+            b.links.map((l, i) => linkEditor(l, i))
+          )}
+          <button
+            type="button"
+            className="ms-add"
+            style={{ marginTop: "2px", padding: "9px" }}
+            onClick={addLink}
+          >
+            + añadir enlace
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+
+  const contactBlock = (): ReactNode => (
+    <section id="contacto" key="contacto">
+      <div className="ms-gh">
+        <span className="t-overline">Perfil / Contacto</span>
+        <span className="cnt">se imprime en el cuerpo del CV</span>
+      </div>
+      <hr className="c-divider" />
+      <div className="ms-body">
+        {v && v.basics ? (
+          contactCard(v.basics)
+        ) : (
+          <button type="button" className="ms-add" onClick={addBasics}>
+            + Añadir datos de contacto
+          </button>
+        )}
+      </div>
+    </section>
+  );
+
   return (
     <div className="c-page">
       <header className="c-header">
@@ -731,6 +1042,8 @@ export function MasterScreen() {
           <div id="groups" ref={groupsRef}>
             {loading || !v || isEmpty ? null : (
               <>
+                {contactBlock()}
+
                 {v.summary
                   ? groupSection(
                       "resumen",

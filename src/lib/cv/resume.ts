@@ -40,6 +40,18 @@ export interface ResumeEducation {
   dates: I18n;
   p1: boolean;
 }
+
+/**
+ * Un enlace del CV. La `url` es LO QUE IMPORTA (el ATS lee la URL como texto);
+ * `label` es solo para el humano y nunca reemplaza a la URL en el documento.
+ * Retrocompatible: un string suelto = una URL sin etiqueta (el fixture golden).
+ */
+export interface ResumeLink {
+  label?: string;
+  url: string;
+}
+export type ResumeLinkInput = string | ResumeLink;
+
 export interface ResumeData {
   meta?: { variant?: string; pageSize?: string; generatedFrom?: string };
   basics: {
@@ -48,7 +60,7 @@ export interface ResumeData {
     email: string;
     phone: string;
     location: I18n;
-    links: string[];
+    links: ResumeLinkInput[];
     summary: I18n;
   };
   skills: ResumeSkill[];
@@ -62,6 +74,49 @@ export interface ResumeData {
     projects: I18n;
     education: I18n;
   };
+  /**
+   * Foto — OPT-IN explícito (versión "visual"). El CV estándar (y el golden) va
+   * SIN foto. NUNCA es el avatar de la UI: es una imagen (data-URL) que el usuario
+   * sube aparte para el CV. Solo se renderiza si está puesta.
+   */
+  photo?: string;
+  /**
+   * QR honesto — OPT-IN. Si está puesto, se dibuja un QR AL PIE con la URL SIEMPRE
+   * también como TEXTO al lado (el ATS no lee el QR; la URL en texto es la máquina).
+   */
+  qr?: { url: string };
+}
+
+// ── Enlaces: URL (lo que lee el ATS) y etiqueta (solo para el humano) ─────────
+/** La URL de un enlace (string suelto o {label,url}). Es lo que va al documento. */
+export function linkUrl(l: ResumeLinkInput): string {
+  return typeof l === "string" ? l : l.url;
+}
+/** La etiqueta humana opcional (vacía para un string suelto). */
+export function linkLabel(l: ResumeLinkInput): string {
+  return typeof l === "string" ? "" : (l.label ?? "");
+}
+/**
+ * Normaliza `links` crudos (jsonb de la DB, texto pegado) al shape del modelo,
+ * tolerante: strings o {label,url}; descarta lo que no tiene URL. Compacta a
+ * string cuando no hay etiqueta (así el fixture golden sigue siendo string[]).
+ */
+export function normalizeLinks(raw: unknown): ResumeLinkInput[] {
+  if (!Array.isArray(raw)) return [];
+  const out: ResumeLinkInput[] = [];
+  for (const l of raw) {
+    if (typeof l === "string") {
+      const s = l.trim();
+      if (s) out.push(s);
+    } else if (l && typeof l === "object") {
+      const o = l as Record<string, unknown>;
+      const url = String(o.url ?? "").trim();
+      if (!url) continue;
+      const label = String(o.label ?? "").trim();
+      out.push(label ? { label, url } : url);
+    }
+  }
+  return out;
 }
 
 // ── Conectores fijos (documento-cv.md §6) — NO vienen del JSON ────────────────
@@ -117,7 +172,7 @@ export function toPlainText(data: ResumeData, opts: PlainTextOpts = {}): string 
     b.name,
     t(b.label, loc),
     `${CX.email}${b.email}${CX.mid}${CX.tel}${b.phone}${CX.mid}${t(b.location, loc)}`,
-    b.links.join(CX.mid),
+    b.links.map(linkUrl).join(CX.mid),
   ];
 
   // Resumen
@@ -151,6 +206,10 @@ export function toPlainText(data: ResumeData, opts: PlainTextOpts = {}): string 
       lines.push(e.org);
     }
   }
+
+  // QR (opt-in): la URL SIEMPRE también como texto, al pie (orden de lectura).
+  // El fixture golden no lleva qr → esta línea no existe ahí (byte-a-byte intacto).
+  if (data.qr?.url) lines.push("", data.qr.url);
 
   return lines.join("\n") + "\n";
 }

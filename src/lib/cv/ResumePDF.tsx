@@ -1,7 +1,8 @@
-import { Document, Page, View, Text, Font, StyleSheet, renderToBuffer } from "@react-pdf/renderer";
+import { Document, Page, View, Text, Image, Font, StyleSheet, renderToBuffer } from "@react-pdf/renderer";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
-import { selectContent, type ResumeData, type Locale } from "./resume";
+import * as QRCode from "qrcode";
+import { selectContent, linkUrl, type ResumeData, type Locale } from "./resume";
 
 /**
  * El documento CV en @react-pdf/renderer v4, según docs/spec/documento-cv.md.
@@ -64,6 +65,13 @@ const s = StyleSheet.create({
   d: { fontWeight: 400, fontSize: 9.5, lineHeight: 1.3, color: C.mut, paddingLeft: 12 },
   org: { fontSize: 9.5, lineHeight: 1.35, color: C.mut, marginTop: 1 },
   b: { fontSize: 10, lineHeight: 1.45, marginTop: 3, paddingLeft: 11, textIndent: -7.5 },
+  // Foto — OPT-IN (versión "visual"). Nunca en el render por defecto (golden).
+  photo: { width: 84, height: 84, borderRadius: 4, marginBottom: 8, objectFit: "cover" },
+  // QR honesto al pie: el glifo + la URL SIEMPRE como texto (una columna).
+  qrRow: { flexDirection: "row", alignItems: "center", marginTop: 18 },
+  qrImg: { width: 56, height: 56, marginRight: 10 },
+  qrCap: { fontSize: 8.5, lineHeight: 1.4, color: C.mut },
+  qrUrl: { fontSize: 9.5, lineHeight: 1.4, color: C.ink },
 });
 
 export interface RenderOpts {
@@ -71,7 +79,16 @@ export interface RenderOpts {
   onePage?: boolean;
 }
 
-export function ResumePDF({ data, opts = {} }: { data: ResumeData; opts?: RenderOpts }) {
+export function ResumePDF({
+  data,
+  opts = {},
+  qrImage,
+}: {
+  data: ResumeData;
+  opts?: RenderOpts;
+  /** data-URL del QR ya generado (renderResumeToBuffer lo produce desde data.qr). */
+  qrImage?: string;
+}) {
   const loc: Locale = opts.locale ?? "es";
   const onePage = opts.onePage ?? false;
   const tt = <T extends { es: string; en: string }>(v: T) => v[loc];
@@ -81,13 +98,16 @@ export function ResumePDF({ data, opts = {} }: { data: ResumeData; opts?: Render
   return (
     <Document title={`CV — ${b.name}`} author={b.name}>
       <Page size="LETTER" style={s.page}>
+        {/* Foto — solo si el usuario la puso explícitamente. NUNCA es el avatar. */}
+        {data.photo ? <Image src={data.photo} style={s.photo} /> : null}
+
         {/* Cabecera — contacto EN EL CUERPO (no header/footer), con prefijos de texto */}
         <Text style={s.name}>{b.name}</Text>
         <Text style={s.label}>{tt(b.label)}</Text>
         <Text style={s.contact}>
           Email: {b.email} · Tel: {b.phone} · {tt(b.location)}
         </Text>
-        <Text style={s.contact2}>{b.links.join(" · ")}</Text>
+        <Text style={s.contact2}>{b.links.map(linkUrl).join(" · ")}</Text>
 
         {/* Resumen */}
         <Text style={s.h}>{tt(data.headings.summary)}</Text>
@@ -151,11 +171,29 @@ export function ResumePDF({ data, opts = {} }: { data: ResumeData; opts?: Render
             ))}
           </>
         )}
+
+        {/* QR AL PIE — opt-in. El glifo no lo lee el ATS; la URL de al lado, sí.
+            Va al final del todo para no alterar el orden de lectura del documento. */}
+        {qrImage && data.qr?.url ? (
+          <View style={s.qrRow} wrap={false}>
+            <Image src={qrImage} style={s.qrImg} />
+            <View>
+              <Text style={s.qrCap}>Escanea o visita:</Text>
+              <Text style={s.qrUrl}>{data.qr.url}</Text>
+            </View>
+          </View>
+        ) : null}
       </Page>
     </Document>
   );
 }
 
 export async function renderResumeToBuffer(data: ResumeData, opts: RenderOpts = {}): Promise<Buffer> {
-  return renderToBuffer(<ResumePDF data={data} opts={opts} />);
+  // El QR se genera aquí (async) para que ResumePDF siga siendo síncrono: recibe
+  // la data-URL ya lista. Sin data.qr no se genera nada (OFF por defecto).
+  let qrImage: string | undefined;
+  if (data.qr?.url) {
+    qrImage = await QRCode.toDataURL(data.qr.url, { margin: 1, width: 240, errorCorrectionLevel: "M" });
+  }
+  return renderToBuffer(<ResumePDF data={data} opts={opts} qrImage={qrImage} />);
 }

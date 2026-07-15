@@ -1,5 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import type { ResumeData } from "@/lib/cv/resume";
+import { normalizeLinks, type ResumeData } from "@/lib/cv/resume";
 import { ensureMaster, getMasterItems, type MasterItem } from "@/lib/db/queries";
 
 /**
@@ -408,6 +408,10 @@ export async function buildVariantResumeData(
   // El target_title de la variante manda como label; si no hay, cae al del master.
   const label = (owned.target_title ?? "").trim() || str(basicsItem, "label");
 
+  // Foto y QR OPT-IN (guardados en la data de basics). photo NUNCA es el avatar.
+  const photo = str(basicsItem, "photo").trim() || undefined;
+  const qrUrl = str((basicsItem.qr as Record<string, unknown>) ?? {}, "url").trim();
+
   return {
     meta: { variant: owned.name },
     basics: {
@@ -416,9 +420,11 @@ export async function buildVariantResumeData(
       email: str(basicsItem, "email"),
       phone: str(basicsItem, "phone"),
       location: i18n(str(basicsItem, "location")),
-      links: Array.isArray(basicsItem.links) ? (basicsItem.links as string[]) : [],
+      links: normalizeLinks(basicsItem.links),
       summary: i18n(str(summaryItem, "text")),
     },
+    photo,
+    qr: qrUrl ? { url: qrUrl } : undefined,
     skills: by("skill").map((s) => ({ group: i18n(str(s.data, "group")), items: i18n(str(s.data, "items")) })),
     work,
     projects: by("project").map((p) => ({

@@ -78,3 +78,39 @@ describe("CV round-trip ATS · golden (Diego Gatica, 2 páginas, es)", () => {
     expect(one).not.toContain("Turno de soporte");
   });
 });
+
+/**
+ * QR opt-in y HONESTO. Con qr puesto se dibuja un QR al pie, pero la URL SIEMPRE
+ * va también como TEXTO al lado (el ATS no lee el QR). El round-trip debe SEGUIR
+ * pasando: la URL se extrae y el orden de lectura del documento no se rompe.
+ */
+describe("CV round-trip ATS · QR opt-in (la URL en texto, orden intacto)", () => {
+  const QR_URL = "dgatica.cl/portafolio";
+  const withQr: ResumeData = { ...data, qr: { url: QR_URL } };
+  let extractedQr = "";
+
+  beforeAll(async () => {
+    const buf = await renderResumeToBuffer(withQr, { locale: "es", onePage: false });
+    const pdf = await getDocumentProxy(new Uint8Array(buf));
+    const { text } = await extractText(pdf, { mergePages: true });
+    extractedQr = norm(text);
+  });
+
+  it("1 · la URL del QR aparece como TEXTO seleccionable (la máquina la lee)", () => {
+    expect(extractedQr).toContain(QR_URL);
+  });
+
+  it("2 · las líneas del golden siguen EN ORDEN — el QR al pie no rompe la lectura", () => {
+    let cursor = 0;
+    for (const line of golden.split("\n").map(norm).filter(Boolean)) {
+      const idx = extractedQr.indexOf(line, cursor);
+      expect(idx, `fuera de orden o ausente con QR: "${line}"`).toBeGreaterThanOrEqual(0);
+      cursor = idx + line.length;
+    }
+  });
+
+  it("3 · la URL del QR va DESPUÉS de todo el contenido del golden (pie de página)", () => {
+    const lastGolden = golden.split("\n").map(norm).filter(Boolean).pop()!;
+    expect(extractedQr.indexOf(QR_URL)).toBeGreaterThan(extractedQr.indexOf(lastGolden));
+  });
+});
