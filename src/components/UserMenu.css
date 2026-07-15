@@ -1,0 +1,203 @@
+/* ============================================================================
+   UserMenu.css — se importa desde el layout de /app, así que sus reglas son
+   globales dentro del área de la app.
+
+   1) Oculta los duplicados ESTÁTICOS que cada pantalla sigue pintando en su
+      propio <header class="c-header">:
+        · .hd-av   — el avatar "DG" de maqueta
+        · .hd-lang — el toggle ES/EN de maqueta (mi barra trae el real)
+        · .hd-right .hd-nav — el enlace "Ajustes" del extremo derecho (mi menú ya
+          lo ofrece). Se acota a .hd-right para NO tocar la nav principal de la
+          izquierda, que también usa .hd-nav pero cuelga fuera de .hd-right.
+      Mayor especificidad que las definiciones sueltas de los *.css de pantalla
+      (+ !important), así que gana sin depender del orden de carga.
+   2) Monta el menú real como barra fija sobre el header, alineada al mismo
+      contenedor (.c-container) para que caiga justo donde estaban los estáticos.
+
+   Nota: /app/ingesta pinta en su .hd-right un botón propio ("Seguir usando
+   Corpus…") que NO es un duplicado; ahí la barra fija puede solaparlo. Resolverlo
+   exige editar esa pantalla (fuera de la frontera de este agente).
+   ============================================================================ */
+
+.c-header .hd-av,
+.c-header .hd-lang,
+.c-header .hd-right .hd-nav {
+  display: none !important;
+}
+
+/* ── Barra fija, alineada al contenedor del header ─────────────────────────── */
+.um-bar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: var(--header-h);
+  z-index: var(--z-overlay);
+  pointer-events: none; /* deja pasar los clics al header salvo en los controles */
+  display: flex;
+  justify-content: center;
+}
+.um-inner {
+  width: 100%;
+  max-width: var(--container);
+  padding-inline: var(--container-pad);
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 14px;
+}
+.um-lang,
+.um-theme,
+.um-menu {
+  pointer-events: auto;
+}
+
+/* ── Toggle de idioma (mismo lenguaje visual que .hd-lang) ──────────────────── */
+.um-lang {
+  display: flex;
+  font: 500 var(--fs-micro) / 1 var(--font-mono);
+  border: 1px solid var(--border-strong);
+  border-radius: 5px;
+  overflow: hidden;
+}
+.um-lang button {
+  padding: 6px 8px;
+  color: var(--text-subtle);
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  font: inherit;
+  letter-spacing: 0.02em;
+}
+.um-lang button:hover {
+  color: var(--text-muted);
+}
+.um-lang button[aria-pressed="true"] {
+  color: var(--text);
+  background: var(--surface-elevated);
+}
+
+/* ── Toggle de tema ────────────────────────────────────────────────────────── */
+.um-theme {
+  width: 28px;
+  height: 28px;
+  border-radius: 5px;
+  display: grid;
+  place-items: center;
+  background: var(--surface-elevated);
+  border: 1px solid var(--border-strong);
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 13px;
+  line-height: 1;
+  flex: none;
+}
+.um-theme:hover {
+  color: var(--text);
+  border-color: var(--border-patina);
+}
+
+/* ── Avatar ────────────────────────────────────────────────────────────────── */
+.um-menu {
+  position: relative;
+}
+.um-av {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--surface-elevated);
+  border: 1px solid var(--border-strong);
+  display: grid;
+  place-items: center;
+  font: 500 10px / 1 var(--font-mono);
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 0;
+  overflow: hidden;
+  flex: none;
+}
+.um-av:hover {
+  border-color: var(--border-patina);
+  color: var(--text);
+}
+.um-av img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+/* ── Menú desplegable ──────────────────────────────────────────────────────── */
+.um-pop {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  min-width: 216px;
+  padding: 6px;
+  background: var(--surface-elevated);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-2);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.um-id {
+  padding: 8px 10px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 4px;
+}
+.um-id b {
+  font: 500 var(--fs-ui) / 1.2 var(--font-sans);
+  color: var(--text);
+}
+.um-id span {
+  font: 400 var(--fs-micro) / 1.2 var(--font-mono);
+  color: var(--text-subtle);
+  word-break: break-all;
+}
+.um-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 9px 10px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-muted);
+  font: 500 var(--fs-ui) / 1 var(--font-sans);
+  cursor: pointer;
+}
+.um-item:hover,
+.um-item:focus-visible {
+  color: var(--text);
+  background: var(--surface);
+  text-decoration: none;
+}
+.um-item--danger {
+  color: var(--danger);
+}
+.um-item--danger:hover,
+.um-item--danger:focus-visible {
+  color: var(--danger);
+  background: var(--danger-quiet);
+}
+.um-item[disabled] {
+  opacity: 0.5;
+  pointer-events: none;
+}
+.um-sep {
+  height: 1px;
+  border: 0;
+  background: var(--border);
+  margin: 4px 0;
+}
+
+@media (max-width: 640px) {
+  .um-inner {
+    gap: 10px;
+  }
+}

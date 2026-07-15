@@ -1,0 +1,154 @@
+/* ── Cuenta / Perfil — MURO. Mismo lenguaje visual que ajustes (grupos con
+   overline + filas bordeadas), con clases propias cu-* para no depender de la
+   CSS de otra pantalla. Solo tokens y utilidades del sistema. ── */
+.cu-main {
+  flex: 1;
+  padding: 34px 0 130px;
+}
+.cu-col {
+  max-width: 760px;
+  margin-inline: auto;
+}
+.cu-title {
+  font: 500 var(--fs-h2, 22px) / 1.2 var(--font-display, var(--font-sans));
+  color: var(--text);
+}
+.cu-sub {
+  margin-top: 8px;
+  max-width: 62ch;
+  font: 400 var(--fs-data, 13px) / 1.7 var(--font-sans);
+  color: var(--text-muted);
+}
+
+.cu-g {
+  margin-top: 34px;
+}
+.cu-gh {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  padding-bottom: 8px;
+}
+.cu-gh-note {
+  font: 400 var(--fs-micro) / 1 var(--font-mono);
+  color: var(--text-subtle);
+}
+.cu-rows {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  margin-top: 10px;
+}
+.cu-row {
+  display: flex;
+  gap: 18px;
+  align-items: center;
+  padding: 16px 20px;
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+}
+.cu-row:first-child {
+  border-top: 0;
+}
+.cu-row .k {
+  min-width: 170px;
+}
+.cu-row .k b {
+  display: block;
+  font: 500 14px / 1.3 var(--font-sans);
+  color: var(--text);
+}
+.cu-row .k span {
+  display: block;
+  margin-top: 3px;
+  font: 400 var(--fs-micro) / 1.6 var(--font-mono);
+  color: var(--text-subtle);
+}
+.cu-row .v {
+  flex: 1;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+/* Foto */
+.cu-photo {
+  gap: 20px;
+}
+.cu-av {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  overflow: hidden;
+  flex: none;
+  background: var(--surface-elevated);
+  border: 1px solid var(--border-strong);
+  display: grid;
+  place-items: center;
+  font: 500 20px / 1 var(--font-mono);
+  color: var(--text-muted);
+}
+.cu-av img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.cu-photo-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.cu-photo-btns {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.cu-hint {
+  font: 400 var(--fs-micro) / 1.6 var(--font-mono);
+  color: var(--text-subtle);
+}
+
+.cu-actions {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  flex-wrap: wrap;
+  margin-top: 12px;
+}
+.cu-msg {
+  font: 400 var(--fs-data, 13px) / 1.5 var(--font-sans);
+}
+.cu-msg--ok {
+  color: var(--accent-text);
+}
+.cu-msg--err {
+  color: var(--danger);
+}
+.cu-oauth {
+  margin-top: 10px;
+  padding: 12px 16px;
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius-sm);
+  font: 400 var(--fs-data, 13px) / 1.7 var(--font-sans);
+  color: var(--text-muted);
+}
+.cu-need {
+  margin-top: 28px;
+  padding: 16px 20px;
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius-md);
+  font: 400 var(--fs-data, 13px) / 1.7 var(--font-sans);
+  color: var(--text-muted);
+}
+
+@media (max-width: 768px) {
+  .cu-row {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  .cu-row .k {
+    min-width: 0;
+  }
+}
