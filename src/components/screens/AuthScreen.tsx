@@ -1,33 +1,103 @@
 "use client";
 
 import { useState } from "react";
-import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Aurora } from "@/components/Aurora";
 import { useBoot } from "@/lib/corpus/runtime";
+import { createClient } from "@/lib/supabase/client";
+import { supabaseEnabled } from "@/lib/supabase/config";
 import "./auth.css";
 
 /* ============================================================================
-   Auth — porte de corpus-design/04-pantallas/auth.html (ver docs/spec/pantallas/auth.md)
-   Una sola pantalla, dos modos (login · signup). VENTANA con aurora en calma.
-   El estado `error` = login + el bloque de error visible (no un tercer layout).
+   Auth — porte de corpus-design/04-pantallas/auth.html (docs/spec/pantallas/auth.md)
+   con autenticación real de Supabase. Una pantalla, dos modos (login · signup).
+   VENTANA con aurora en calma. El estado `error` = login + el bloque de error.
 
-   El panel `.demo` del HTML NO se porta: es convención de entrega, no producto.
-   Los CTA son navegación de maqueta (a /app y /app/onboarding) hasta que se
-   cablee Supabase en la fase de auth real; entonces esto pasa a <form> real
-   conservando las clases c-btn c-btn--forge c-btn--lg y el wrapper span.c-forge.
+   La spec autoriza convertir el CTA en un <form> real conservando las clases
+   c-btn c-btn--forge c-btn--lg y el wrapper span.c-forge — es lo que se hace aquí.
+   Sin claves de Supabase (modo local) el CTA solo navega (maqueta).
    ============================================================================ */
 
 type Mode = "login" | "signup";
 
 export function AuthScreen({ initial = "login" }: { initial?: Mode }) {
+  const router = useRouter();
   const [mode, setMode] = useState<Mode>(initial);
+  const [email, setEmail] = useState("");
+  const [pw, setPw] = useState("");
+  const [pw2, setPw2] = useState("");
+  const [err, setErr] = useState<string | null>(null);
+  const [info, setInfo] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
   const signup = mode === "signup";
 
-  // CorpusMotion.boot() — obligatorio: los [data-reveal] arrancan en opacity:0.
-  // useBoot() sondea hasta que el runtime vanilla exista y entonces dibuja los
-  // reveals del scope. Sin esto la pantalla se ve en blanco (fallo nº1 de los
-  // ports anteriores: boot() disparado antes de que el script cargue).
   const bootRef = useBoot<HTMLElement>();
+
+  function swap() {
+    setMode(signup ? "login" : "signup");
+    setErr(null);
+    setInfo(null);
+  }
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    setErr(null);
+    setInfo(null);
+
+    if (!supabaseEnabled) {
+      router.push(signup ? "/app/onboarding" : "/app"); // modo local: maqueta
+      return;
+    }
+    if (signup && pw !== pw2) {
+      setErr("Las contraseñas no coinciden.");
+      return;
+    }
+    setBusy(true);
+    const sb = createClient();
+    try {
+      if (signup) {
+        const { data, error } = await sb.auth.signUp({
+          email,
+          password: pw,
+          options: { emailRedirectTo: `${location.origin}/app` },
+        });
+        if (error) throw error;
+        if (data.session) {
+          router.push("/app/onboarding");
+          router.refresh();
+        } else {
+          setInfo("Cuenta creada. Revisa tu correo para confirmarla y luego entra. (Puedes desactivar la confirmación en Supabase → Authentication → Sign In.)");
+        }
+      } else {
+        const { error } = await sb.auth.signInWithPassword({ email, password: pw });
+        if (error) throw error;
+        router.push("/app");
+        router.refresh();
+      }
+    } catch (e) {
+      const msg = (e instanceof Error ? e.message : "").toLowerCase();
+      if (msg.includes("invalid") || msg.includes("credentials")) {
+        setErr("Ese correo y esa contraseña no calzan. No sabemos cuál de los dos falla — así funciona la seguridad.");
+      } else if (msg.includes("already") || msg.includes("registered")) {
+        setErr("Ese correo ya tiene cuenta. Entra desde “Ya tengo cuenta”.");
+      } else if (msg.includes("confirm")) {
+        setErr("Tu correo aún no está confirmado. Revisa tu bandeja, o desactiva la confirmación en Supabase.");
+      } else {
+        setErr(e instanceof Error ? e.message : "No se pudo completar. Reintenta.");
+      }
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function oauth(provider: "google" | "github") {
+    if (!supabaseEnabled) return;
+    setErr(null);
+    await createClient().auth.signInWithOAuth({
+      provider,
+      options: { redirectTo: `${location.origin}/app` },
+    });
+  }
 
   return (
     <div className="c-page">
@@ -40,21 +110,26 @@ export function AuthScreen({ initial = "login" }: { initial?: Mode }) {
           Un registro canónico de tu carrera. Cada CV, una vista de él — no una copia.
         </p>
 
-        <div
+        <form
           className="c-panel au-panel"
           data-reveal
           style={{ "--d": "260ms" } as React.CSSProperties}
+          onSubmit={submit}
         >
           <h2 id="auTitle">{signup ? "Crear cuenta" : "Entrar"}</h2>
 
-          {/* error = login + este bloque visible. Nodo siempre presente; alterna .show */}
-          <div className="au-err" id="auErr" role="alert">
-            Ese correo y esa contraseña no calzan. No sabemos cuál de los dos falla — así funciona la
-            seguridad.{" "}
+          <div className={`au-err${err ? " show" : ""}`} id="auErr" role="alert">
+            {err}{" "}
             <a href="#" style={{ whiteSpace: "nowrap" }}>
               Recuperar acceso →
             </a>
           </div>
+
+          {info ? (
+            <div className="au-err show" role="status" style={{ borderColor: "var(--border-patina)", background: "transparent" }}>
+              {info}
+            </div>
+          ) : null}
 
           <div className="au-f">
             <label className="c-label" htmlFor="em">
@@ -66,6 +141,9 @@ export function AuthScreen({ initial = "login" }: { initial?: Mode }) {
               type="email"
               autoComplete="email"
               placeholder="tu@correo.cl"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              required
             />
           </div>
 
@@ -79,6 +157,9 @@ export function AuthScreen({ initial = "login" }: { initial?: Mode }) {
               type="password"
               autoComplete={signup ? "new-password" : "current-password"}
               placeholder="••••••••••"
+              value={pw}
+              onChange={(e) => setPw(e.target.value)}
+              required
             />
           </div>
 
@@ -92,27 +173,30 @@ export function AuthScreen({ initial = "login" }: { initial?: Mode }) {
               type="password"
               autoComplete="new-password"
               placeholder="••••••••••"
+              value={pw2}
+              onChange={(e) => setPw2(e.target.value)}
             />
           </div>
 
           <div className="au-cta">
             <span className="c-forge" style={{ width: "100%" }}>
-              <Link
+              <button
+                type="submit"
                 className="c-btn c-btn--forge c-btn--lg"
                 id="auGo"
-                href={signup ? "/app/onboarding" : "/app"}
                 style={{ width: "100%" }}
+                disabled={busy}
               >
-                {signup ? "Crear mi registro" : "Entrar"}
-              </Link>
+                {busy ? "…" : signup ? "Crear mi registro" : "Entrar"}
+              </button>
             </span>
           </div>
 
           <div className="au-alt">
-            <button type="button" className="c-btn">
+            <button type="button" className="c-btn" onClick={() => oauth("google")}>
               Continuar con Google
             </button>
-            <button type="button" className="c-btn">
+            <button type="button" className="c-btn" onClick={() => oauth("github")}>
               Continuar con GitHub
             </button>
           </div>
@@ -123,14 +207,14 @@ export function AuthScreen({ initial = "login" }: { initial?: Mode }) {
               id="auSwap"
               onClick={(e) => {
                 e.preventDefault();
-                setMode(signup ? "login" : "signup");
+                swap();
               }}
             >
               {signup ? "Ya tengo cuenta" : "Crear cuenta"}
             </a>
             <a href="#">Olvidé mi contraseña</a>
           </div>
-        </div>
+        </form>
 
         <p className="au-fine" data-reveal style={{ "--d": "380ms" } as React.CSSProperties}>
           Tus datos son tuyos: exportas todo o borras todo desde Ajustes, sin pedir permiso. La
