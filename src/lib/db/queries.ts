@@ -160,6 +160,163 @@ const i18n = (s: string) => ({ es: s, en: s });
  * Todo en español; en = es (paridad se genera con traducción, aún no cableada).
  * variantId se ignora por ahora → renderiza el master completo.
  */
+/* ============================================================================
+   LECTURA — las 4 pantallas (Dashboard/Master/Variantes/Fuentes) leen de aquí.
+   Todo con la sesión del usuario (RLS por auth.uid()): una cuenta nueva devuelve
+   listas vacías, nunca la demo. La demo (Diego Gatica) SOLO existe en modo local
+   sin Supabase (src/lib/store/seed.ts), jamás en estas consultas.
+   ============================================================================ */
+
+/** Un item del master, tal como lo pinta MasterScreen (con su procedencia). */
+export interface MasterItem {
+  id: string;
+  kind: string;
+  parentId: string | null;
+  data: Record<string, unknown>;
+  origin: string;
+  evidenceSnippet: string | null;
+  evidenceVerified: boolean;
+  sortOrder: number;
+}
+
+/** profile_items del usuario, en orden de lectura (sort_order → created_at). */
+export async function getMasterItems(sb: SB, userId: string): Promise<MasterItem[]> {
+  const { data, error } = await sb
+    .from("profile_items")
+    .select("id,kind,parent_id,data,origin,evidence_snippet,evidence_verified,sort_order")
+    .eq("user_id", userId)
+    .order("sort_order", { ascending: true })
+    .order("created_at", { ascending: true });
+  if (error) throw new Error(error.message);
+  return (data ?? []).map((r) => ({
+    id: r.id as string,
+    kind: r.kind as string,
+    parentId: (r.parent_id as string | null) ?? null,
+    data: (r.data as Record<string, unknown>) ?? {},
+    origin: (r.origin as string) ?? "manual",
+    evidenceSnippet: (r.evidence_snippet as string | null) ?? null,
+    evidenceVerified: Boolean(r.evidence_verified),
+    sortOrder: (r.sort_order as number) ?? 0,
+  }));
+}
+
+/** Momento de última modificación del master (para "variante desactualizada"). */
+async function masterUpdatedAt(sb: SB, userId: string): Promise<string | null> {
+  const { data } = await sb
+    .from("master_profiles")
+    .select("updated_at")
+    .eq("user_id", userId)
+    .maybeSingle();
+  return (data?.updated_at as string | undefined) ?? null;
+}
+
+/** Una variante, tal como la lista VariantesScreen/Dashboard. */
+export interface VariantSummary {
+  id: string;
+  name: string;
+  targetTitle: string | null;
+  lang: string;
+  updatedAt: string;
+  masterSeenAt: string;
+  /** el master cambió después de la última vez que esta variante lo "vio" */
+  outdated: boolean;
+}
+
+/** cv_variants no archivadas del usuario, con la señal de desactualización. */
+export async function listVariants(sb: SB, userId: string): Promise<VariantSummary[]> {
+  const [{ data, error }, mUpdated] = await Promise.all([
+    sb
+      .from("cv_variants")
+      .select("id,name,target_title,lang,updated_at,master_seen_at")
+      .eq("user_id", userId)
+      .eq("archived", false)
+      .order("updated_at", { ascending: false }),
+    masterUpdatedAt(sb, userId),
+  ]);
+  if (error) throw new Error(error.message);
+  return (data ?? []).map((r) => {
+    const masterSeenAt = (r.master_seen_at as string) ?? (r.updated_at as string);
+    const outdated = mUpdated ? new Date(masterSeenAt).getTime() < new Date(mUpdated).getTime() : false;
+    return {
+      id: r.id as string,
+      name: (r.name as string) ?? "Variante",
+      targetTitle: (r.target_title as string | null) ?? null,
+      lang: (r.lang as string) ?? "es",
+      updatedAt: r.updated_at as string,
+      masterSeenAt,
+      outdated,
+    };
+  });
+}
+
+/** Una fuente de ingesta, tal como la lista FuentesScreen/Dashboard. */
+export interface SourceSummary {
+  id: string;
+  kind: string;
+  originalName: string | null;
+  sourceUrl: string | null;
+  status: string;
+  pageCount: number | null;
+  rawTextLength: number;
+  createdAt: string;
+}
+
+/** ingestion_sources del usuario (más recientes primero). */
+export async function listSources(sb: SB, userId: string): Promise<SourceSummary[]> {
+  const { data, error } = await sb
+    .from("ingestion_sources")
+    .select("id,kind,original_name,source_url,status,page_count,raw_text,created_at")
+    .eq("user_id", userId)
+    .order("created_at", { ascending: false });
+  if (error) throw new Error(error.message);
+  return (data ?? []).map((r) => ({
+    id: r.id as string,
+    kind: (r.kind as string) ?? "paste",
+    originalName: (r.original_name as string | null) ?? null,
+    sourceUrl: (r.source_url as string | null) ?? null,
+    status: (r.status as string) ?? "pending",
+    pageCount: (r.page_count as number | null) ?? null,
+    rawTextLength: typeof r.raw_text === "string" ? (r.raw_text as string).length : 0,
+    createdAt: r.created_at as string,
+  }));
+}
+
+/** Recuento simple de profile_items del usuario (para copys de estado vacío). */
+export async function countMasterItems(sb: SB, userId: string): Promise<number> {
+  const { count } = await sb
+    .from("profile_items")
+    .select("id", { count: "exact", head: true })
+    .eq("user_id", userId);
+  return count ?? 0;
+}
+
+/** Resumen del panel: los conteos reales que gobiernan denso vs. día-1 vacío. */
+export interface DashboardSummary {
+  masterItems: number;
+  variants: number;
+  sources: number;
+  outdatedVariants: number;
+  pendingStaging: number;
+}
+
+export async function dashboardSummary(sb: SB, userId: string): Promise<DashboardSummary> {
+  const [masterItems, variants, sourcesCount, pendingStaging] = await Promise.all([
+    countMasterItems(sb, userId),
+    sb.from("cv_variants").select("id", { count: "exact", head: true }).eq("user_id", userId).eq("archived", false),
+    sb.from("ingestion_sources").select("id", { count: "exact", head: true }).eq("user_id", userId),
+    sb.from("staged_items").select("id", { count: "exact", head: true }).eq("user_id", userId).eq("status", "pending"),
+    // outdated se calcula sobre la lista (necesita comparar contra el master).
+  ]);
+  const variantList = await listVariants(sb, userId);
+  return {
+    masterItems,
+    variants: variants.count ?? 0,
+    sources: sourcesCount.count ?? 0,
+    outdatedVariants: variantList.filter((v) => v.outdated).length,
+    pendingStaging: pendingStaging.count ?? 0,
+  };
+}
+
 export async function buildResumeData(sb: SB, userId: string): Promise<ResumeData> {
   const { data, error } = await sb
     .from("profile_items")
