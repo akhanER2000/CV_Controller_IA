@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Aurora } from "@/components/Aurora";
+import { useT } from "@/lib/i18n";
 import { useBoot } from "@/lib/corpus/runtime";
 import { createClient } from "@/lib/supabase/client";
 import { supabaseEnabled } from "@/lib/supabase/config";
@@ -21,6 +22,7 @@ import "./auth.css";
 type Mode = "login" | "signup";
 
 export function AuthScreen({ initial = "login" }: { initial?: Mode }) {
+  const t = useT();
   const router = useRouter();
   const [mode, setMode] = useState<Mode>(initial);
   const [email, setEmail] = useState("");
@@ -49,7 +51,7 @@ export function AuthScreen({ initial = "login" }: { initial?: Mode }) {
       return;
     }
     if (signup && pw !== pw2) {
-      setErr("Las contraseñas no coinciden.");
+      setErr(t("auth.err.pwMismatch"));
       return;
     }
     setBusy(true);
@@ -66,7 +68,7 @@ export function AuthScreen({ initial = "login" }: { initial?: Mode }) {
           router.push("/app/onboarding");
           router.refresh();
         } else {
-          setInfo("Cuenta creada. Revisa tu correo para confirmarla y luego entra. (Puedes desactivar la confirmación en Supabase → Authentication → Sign In.)");
+          setInfo(t("auth.info.accountCreated"));
         }
       } else {
         const { error } = await sb.auth.signInWithPassword({ email, password: pw });
@@ -77,13 +79,13 @@ export function AuthScreen({ initial = "login" }: { initial?: Mode }) {
     } catch (e) {
       const msg = (e instanceof Error ? e.message : "").toLowerCase();
       if (msg.includes("invalid") || msg.includes("credentials")) {
-        setErr("Ese correo y esa contraseña no calzan. No sabemos cuál de los dos falla — así funciona la seguridad.");
+        setErr(t("auth.err.credentials"));
       } else if (msg.includes("already") || msg.includes("registered")) {
-        setErr("Ese correo ya tiene cuenta. Entra desde “Ya tengo cuenta”.");
+        setErr(t("auth.err.alreadyRegistered"));
       } else if (msg.includes("confirm")) {
-        setErr("Tu correo aún no está confirmado. Revisa tu bandeja, o desactiva la confirmación en Supabase.");
+        setErr(t("auth.err.unconfirmed"));
       } else {
-        setErr(e instanceof Error ? e.message : "No se pudo completar. Reintenta.");
+        setErr(e instanceof Error ? e.message : t("auth.err.generic"));
       }
     } finally {
       setBusy(false);
@@ -107,7 +109,7 @@ export function AuthScreen({ initial = "login" }: { initial?: Mode }) {
           Corpus
         </div>
         <p className="au-claim" data-reveal style={{ "--d": "120ms" } as React.CSSProperties}>
-          Un registro canónico de tu carrera. Cada CV, una vista de él — no una copia.
+          {t("auth.claim")}
         </p>
 
         <form
@@ -116,12 +118,12 @@ export function AuthScreen({ initial = "login" }: { initial?: Mode }) {
           style={{ "--d": "260ms" } as React.CSSProperties}
           onSubmit={submit}
         >
-          <h2 id="auTitle">{signup ? "Crear cuenta" : "Entrar"}</h2>
+          <h2 id="auTitle">{signup ? t("auth.title.signup") : t("auth.title.login")}</h2>
 
           <div className={`au-err${err ? " show" : ""}`} id="auErr" role="alert">
             {err}{" "}
             <a href="#" style={{ whiteSpace: "nowrap" }}>
-              Recuperar acceso →
+              {t("auth.recoverAccess")}
             </a>
           </div>
 
@@ -133,14 +135,14 @@ export function AuthScreen({ initial = "login" }: { initial?: Mode }) {
 
           <div className="au-f">
             <label className="c-label" htmlFor="em">
-              Email
+              {t("auth.email.label")}
             </label>
             <input
               className="c-input"
               id="em"
               type="email"
               autoComplete="email"
-              placeholder="tu@correo.cl"
+              placeholder={t("auth.email.placeholder")}
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
@@ -149,7 +151,7 @@ export function AuthScreen({ initial = "login" }: { initial?: Mode }) {
 
           <div className="au-f">
             <label className="c-label" htmlFor="pw">
-              Contraseña
+              {t("auth.password.label")}
             </label>
             <input
               className="c-input"
@@ -165,7 +167,7 @@ export function AuthScreen({ initial = "login" }: { initial?: Mode }) {
 
           <div className="au-f" id="pw2wrap" hidden={!signup}>
             <label className="c-label" htmlFor="pw2">
-              Repite la contraseña
+              {t("auth.password2.label")}
             </label>
             <input
               className="c-input"
@@ -187,17 +189,17 @@ export function AuthScreen({ initial = "login" }: { initial?: Mode }) {
                 style={{ width: "100%" }}
                 disabled={busy}
               >
-                {busy ? "…" : signup ? "Crear mi registro" : "Entrar"}
+                {busy ? "…" : signup ? t("auth.cta.signup") : t("auth.cta.login")}
               </button>
             </span>
           </div>
 
           <div className="au-alt">
             <button type="button" className="c-btn" onClick={() => oauth("google")}>
-              Continuar con Google
+              {t("auth.oauth.google")}
             </button>
             <button type="button" className="c-btn" onClick={() => oauth("github")}>
-              Continuar con GitHub
+              {t("auth.oauth.github")}
             </button>
           </div>
 
@@ -210,15 +212,14 @@ export function AuthScreen({ initial = "login" }: { initial?: Mode }) {
                 swap();
               }}
             >
-              {signup ? "Ya tengo cuenta" : "Crear cuenta"}
+              {signup ? t("auth.swap.toLogin") : t("auth.swap.toSignup")}
             </a>
-            <a href="#">Olvidé mi contraseña</a>
+            <a href="#">{t("auth.forgot")}</a>
           </div>
         </form>
 
         <p className="au-fine" data-reveal style={{ "--d": "380ms" } as React.CSSProperties}>
-          Tus datos son tuyos: exportas todo o borras todo desde Ajustes, sin pedir permiso. La
-          descarga de tu CV nunca queda detrás de un pago.
+          {t("auth.fine")}
         </p>
       </main>
     </div>
