@@ -312,7 +312,7 @@ export function TailorScreen() {
           </nav>
           <div className="hd-right">
             <nav className="hd-nav" style={{ display: "flex" }}>
-              <Link href="/app/cuenta">Ajustes</Link>
+              <Link href="/app/ajustes">Ajustes</Link>
             </nav>
             <div className="hd-lang">
               <span data-on>ES</span>

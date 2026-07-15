@@ -609,7 +609,7 @@ export function EditorVarianteScreen({ variantId = "backend-fintech" }: { varian
             <Link href="/app/fuentes">Fuentes</Link>
           </nav>
           <div className="hd-right">
-            <Link href="/app/cuenta" className="hd-nav" style={{ display: "inline-flex" }}>
+            <Link href="/app/ajustes" className="hd-nav" style={{ display: "inline-flex" }}>
               <span
                 style={{
                   font: "500 var(--fs-ui)/1 var(--font-sans)",

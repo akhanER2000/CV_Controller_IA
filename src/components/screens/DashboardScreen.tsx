@@ -100,7 +100,7 @@ function VariantRow({ v }: { v: Variant }) {
   return (
     <div className="db-vrow" style={{ position: "relative" }}>
       <Link
-        href="/app/cv"
+        href="/app/variantes"
         aria-label={`${v.nm} — objetivo: ${v.obj}`}
         style={{ position: "absolute", inset: 0, zIndex: 0 }}
       />
@@ -190,7 +190,7 @@ export function DashboardScreen() {
             <Link href="/app/fuentes">Fuentes</Link>
           </nav>
           <div className="hd-right">
-            <Link href="/app/cuenta" className="hd-nav" style={{ display: "inline-flex" }}>
+            <Link href="/app/ajustes" className="hd-nav" style={{ display: "inline-flex" }}>
               <span
                 style={{
                   font: "500 var(--fs-ui)/1 var(--font-sans)",
@@ -250,10 +250,10 @@ export function DashboardScreen() {
             <div className="db-strip">
               <span className="t-overline">{dateStr}</span>
               <span className="acts">
-                <Link className="c-btn c-btn--quiet" href="/app/tailor">
+                <Link className="c-btn c-btn--quiet" href="/app/variantes">
                   Adaptar a un aviso
                 </Link>
-                <Link className="c-btn c-btn--patina" href="/app/cv">
+                <Link className="c-btn c-btn--patina" href="/app/variantes">
                   Nueva variante
                 </Link>
               </span>
