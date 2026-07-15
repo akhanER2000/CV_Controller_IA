@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { Aurora } from "@/components/Aurora";
+import { createClient } from "@/lib/supabase/client";
 import "./importar.css";
 
 /* ============================================================================
@@ -33,6 +34,9 @@ import "./importar.css";
 type Screen = "idle" | "ingest" | "done";
 type Kind = "github" | "linkedin" | "web";
 type RowState = "run" | "ok" | "err";
+/** Tipos de archivo que subimos y extraemos (PDF unpdf / DOCX mammoth / imagen transcrita). */
+type FileKind = "pdf" | "docx" | "image";
+type UploadStatus = "uploading" | "ok" | "error";
 
 interface Source {
   host: string;
@@ -44,9 +48,20 @@ interface Source {
 }
 
 interface FileItem {
+  /** id local (no de Storage): identifica la fila mientras sube. */
+  id: string;
   name: string;
   size: string;
   tag: string;
+  /** tipo detectado (null = tipo no soportado). */
+  kind: FileKind | null;
+  /** ruta en Storage ({user_id}/{uuid}/{filename}) una vez subido. */
+  path: string | null;
+  status: UploadStatus;
+  /** mensaje de error de subida (tipo no soportado, RLS, red…). */
+  error?: string;
+  /** aviso no bloqueante (p. ej. archivo grande). */
+  note?: string;
 }
 
 interface LogRow {
@@ -126,6 +141,25 @@ function fmtSize(b: number): string {
     : Math.max(1, Math.round(b / 1024)) + " KB";
 }
 
+/** Tipo de archivo que sabemos extraer. null = no soportado (se avisa, no se sube). */
+function kindFor(name: string, mime: string): FileKind | null {
+  const ext = (name.split(".").pop() ?? "").toLowerCase();
+  if (mime === "application/pdf" || ext === "pdf") return "pdf";
+  if (ext === "docx" || mime === "application/vnd.openxmlformats-officedocument.wordprocessingml.document") return "docx";
+  if (mime.startsWith("image/") || ["png", "jpg", "jpeg", "webp"].includes(ext)) return "image";
+  return null;
+}
+
+/** Clave de Storage segura: conserva la extensión, sanea el resto. */
+function safeName(name: string): string {
+  const dot = name.lastIndexOf(".");
+  const base = (dot > 0 ? name.slice(0, dot) : name).replace(/[^a-zA-Z0-9._-]+/g, "_").slice(0, 80) || "archivo";
+  const ext = dot > 0 ? name.slice(dot + 1).replace(/[^a-zA-Z0-9]+/g, "").toLowerCase() : "";
+  return ext ? `${base}.${ext}` : base;
+}
+
+const MAX_WARN_BYTES = 10 * 1024 * 1024; // >10 MB: avisamos (no bloqueamos).
+
 function countWords(txt: string): number {
   return (txt.trim().match(/\S+/g) ?? []).length;
 }
@@ -137,7 +171,12 @@ export function ImportarScreen() {
   const [screen, setScreen] = useState<Screen>("idle");
   const [rows, setRows] = useState<LogRow[]>([]);
   const [result, setResult] = useState<ImportResponse | null>(null);
+  const [warnings, setWarnings] = useState<string[]>([]);
   const [err, setErr] = useState<string | null>(null);
+
+  // Cliente de Supabase del navegador: la subida es DIRECTA a Storage (los
+  // archivos nunca pasan por el body de la ruta, límite 4,5 MB de Vercel).
+  const supabase = useMemo(() => createClient(), []);
 
   // ── ceremonia de entrada ──────────────────────────────────────────────────
   const ovRef = useRef<HTMLSpanElement>(null);
@@ -163,7 +202,10 @@ export function ImportarScreen() {
   const sources = useMemo(() => detectSources(text), [text]);
   const words = useMemo(() => countWords(text), [text]);
   const hasLi = sources.some((s) => s.kind === "linkedin");
-  const ready = text.trim().length >= 40 || files.length > 0;
+  const okFiles = files.filter((f) => f.status === "ok" && f.path && f.kind);
+  const uploading = files.some((f) => f.status === "uploading");
+  // Listo si hay texto suficiente o al menos un archivo subido; nunca mientras sube.
+  const ready = (text.trim().length >= 40 || okFiles.length > 0) && !uploading;
   const clearHidden = text.length === 0 && files.length === 0;
 
   const linkCount = sources.length;
@@ -234,23 +276,71 @@ export function ImportarScreen() {
     }
   }, [screen]);
 
-  // ── ficheros ──────────────────────────────────────────────────────────────
-  function addFiles(list: FileList | File[]) {
-    const added = Array.from(list).map((f) => ({
-      name: f.name,
-      size: fmtSize(f.size || 0),
-      tag: tagFor(f.name),
-    }));
-    if (added.length) setFiles((prev) => [...prev, ...added]);
+  // ── ficheros: subida DIRECTA a Storage con estado por archivo ───────────────
+  function patchFile(id: string, patch: Partial<FileItem>) {
+    setFiles((prev) => prev.map((f) => (f.id === id ? { ...f, ...patch } : f)));
   }
-  function removeFile(i: number) {
-    setFiles((prev) => prev.filter((_, idx) => idx !== i));
+
+  async function uploadOne(file: File, id: string) {
+    const kind = kindFor(file.name, file.type || "");
+    if (!kind) {
+      patchFile(id, { status: "error", error: "tipo no soportado (usa PDF, DOCX o imagen)" });
+      return;
+    }
+    const note = file.size > MAX_WARN_BYTES ? "archivo grande (>10 MB): puede tardar" : undefined;
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        patchFile(id, { status: "error", error: "sesión requerida para subir" });
+        return;
+      }
+      // Path {user_id}/{uuid}/{filename}: la RLS del bucket autoriza al dueño
+      // (primer segmento = auth.uid()).
+      const path = `${user.id}/${crypto.randomUUID()}/${safeName(file.name)}`;
+      const { error } = await supabase.storage
+        .from("sources")
+        .upload(path, file, { contentType: file.type || undefined, upsert: false });
+      if (error) {
+        patchFile(id, { status: "error", error: error.message });
+        return;
+      }
+      patchFile(id, { status: "ok", kind, path, note });
+    } catch (e) {
+      patchFile(id, { status: "error", error: e instanceof Error ? e.message : "no se pudo subir" });
+    }
+  }
+
+  function addFiles(list: FileList | File[]) {
+    for (const f of Array.from(list)) {
+      const id = crypto.randomUUID();
+      setFiles((prev) => [
+        ...prev,
+        {
+          id,
+          name: f.name,
+          size: fmtSize(f.size || 0),
+          tag: tagFor(f.name),
+          kind: null,
+          path: null,
+          status: "uploading",
+        },
+      ]);
+      void uploadOne(f, id);
+    }
+  }
+
+  function removeFile(id: string) {
+    // Best-effort: si ya estaba en Storage, lo quitamos (no bloquea la UI).
+    const target = files.find((f) => f.id === id);
+    if (target?.path) void supabase.storage.from("sources").remove([target.path]);
+    setFiles((prev) => prev.filter((f) => f.id !== id));
   }
 
   function useSample() {
     setText(SAMPLE);
   }
   function clearAll() {
+    for (const f of files) if (f.path) void supabase.storage.from("sources").remove([f.path]);
     setText("");
     setFiles([]);
     prevLi.current = false;
@@ -302,7 +392,7 @@ export function ImportarScreen() {
   }
 
   async function runIngest() {
-    if (running.current) return;
+    if (running.current || uploading) return;
     running.current = true;
     setErr(null);
 
@@ -311,13 +401,27 @@ export function ImportarScreen() {
     setRows([]);
     revealed.current.clear();
     setResult(null);
+    setWarnings([]);
     setScreen("ingest");
     window.CorpusAurora?.setState("active");
+
+    // Archivos ya subidos: van por referencia (path), nunca por el body.
+    const sendFiles = okFiles.map((f) => ({ path: f.path, name: f.name, kind: f.kind }));
 
     // Log HONESTO: qué se está leyendo, sin cifras inventadas por fuente. El
     // total real llega en la respuesta (no hay SSE por-fuente todavía).
     const src = detectSources(text);
-    const rowIds: number[] = [logRow("Texto pegado", "leyendo…", "run")];
+    const rowIds: number[] = [];
+    if (text.trim().length >= 20) rowIds.push(logRow("Texto pegado", "leyendo…", "run"));
+    for (const f of okFiles) {
+      const det =
+        f.kind === "image"
+          ? "transcribiendo literal…"
+          : f.kind === "pdf"
+            ? "leyendo el PDF…"
+            : "leyendo el DOCX…";
+      rowIds.push(logRow(f.name, det, "run"));
+    }
     for (const s of src) {
       if (s.kind === "github") rowIds.push(logRow(s.label, "consultando la API pública…", "run"));
       else if (s.kind === "web") rowIds.push(logRow(s.label, "leyendo el portfolio…", "run"));
@@ -329,9 +433,9 @@ export function ImportarScreen() {
       const res = await fetch("/api/import/context", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text }),
+        body: JSON.stringify({ text, files: sendFiles }),
       });
-      const data = (await res.json()) as ImportResponse & { error?: string };
+      const data = (await res.json()) as ImportResponse & { error?: string; warnings?: string[] };
       if (!res.ok) throw new Error(data.error || "No se pudo extraer.");
 
       for (const id of rowIds) setRow(id, { st: "ok" });
@@ -339,6 +443,7 @@ export function ImportarScreen() {
       itemCount.current = data.counts.total;
       setCount(data.counts.total, 600);
       setResult(data);
+      setWarnings(data.warnings ?? []);
 
       await wait(700);
       window.CorpusAurora?.setState("calm");
@@ -440,16 +545,31 @@ export function ImportarScreen() {
             </div>
 
             <div className={`imp-files${files.length ? " has" : ""}`} id="files">
-              {files.map((f, i) => (
-                <div className="imp-file" key={f.name + i}>
-                  <span className="nm">{f.name}</span>
-                  <span className="sz">{f.size}</span>
-                  <span className="tag">{f.tag}</span>
-                  <button type="button" className="rm" aria-label="Quitar" onClick={() => removeFile(i)}>
-                    ×
-                  </button>
-                </div>
-              ))}
+              {files.map((f) => {
+                const statusText =
+                  f.status === "uploading"
+                    ? "subiendo…"
+                    : f.status === "error"
+                      ? `error: ${f.error ?? "no se pudo subir"}`
+                      : f.note
+                        ? `${f.tag} · ${f.note}`
+                        : f.tag;
+                return (
+                  <div className="imp-file" key={f.id}>
+                    <span className="nm">{f.name}</span>
+                    <span className="sz">{f.size}</span>
+                    <span
+                      className="tag"
+                      style={f.status === "error" ? { color: "var(--danger)" } : undefined}
+                    >
+                      {statusText}
+                    </span>
+                    <button type="button" className="rm" aria-label="Quitar" onClick={() => removeFile(f.id)}>
+                      ×
+                    </button>
+                  </div>
+                );
+              })}
             </div>
 
             <div
@@ -653,6 +773,22 @@ export function ImportarScreen() {
               <span>quedan marcados — la revisión te los pondrá delante, no debajo.</span>
             </div>
           </div>
+
+          {/* Avisos honestos por archivo (PDF escaneado sin capa, imagen ilegible…):
+              nunca se inventa lo que no se pudo leer. */}
+          {warnings.length > 0 ? (
+            <div className="c-card" style={{ width: "100%", marginTop: 14, textAlign: "left", padding: "16px 20px" }}>
+              <span className="t-overline">Avisos de la ingesta</span>
+              <ul style={{ margin: "10px 0 0", paddingLeft: 18, color: "var(--text-muted)", fontSize: "var(--fs-ui)" }}>
+                {warnings.map((w, i) => (
+                  <li key={i} style={{ marginBottom: 4 }}>
+                    {w}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+
           <div className="fin-cta">
             <span className="c-forge">
               <Link className="c-btn c-btn--forge c-btn--hero" href="/app/staging">
