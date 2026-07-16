@@ -86,3 +86,33 @@ export async function transcribeImage(dataUrl: string): Promise<string> {
   });
   return text;
 }
+
+/**
+ * ★ Transcripción VERBATIM de un PDF ESCANEADO / de solo imagen (sin capa de
+ * texto). Se manda el PDF al modelo de visión como DOCUMENTO (Gemini rasteriza
+ * las páginas internamente — no hace falta canvas en el servidor) y se transcribe
+ * literal, página por página. Igual disciplina que transcribeImage: es la fuente
+ * sobre la que corre la verificación de evidencia (§4.4), así que NADA se inventa.
+ */
+export async function transcribePdf(bytes: Uint8Array): Promise<string> {
+  const { text } = await generateText({
+    model: google(),
+    messages: [
+      {
+        role: "user",
+        content: [
+          {
+            type: "text",
+            text:
+              "Este PDF es un ESCANEO (páginas como imagen, sin capa de texto). " +
+              "Transcribe LITERALMENTE todo el texto visible, página por página, en orden de lectura. " +
+              "No interpretes, no resumas, no reordenes ni completes lo que no se lee. " +
+              "Si una página es ilegible, omítela. Devuelve solo el texto transcrito.",
+          },
+          { type: "file", data: bytes, mediaType: "application/pdf" },
+        ],
+      },
+    ],
+  });
+  return text;
+}
