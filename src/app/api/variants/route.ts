@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { listVariants, countMasterItems, getMasterItems, type MasterItem } from "@/lib/db/queries";
 import { createVariant, updateVariant, addItem, setAiOverride } from "@/lib/db/variants";
 import { geminiApiKey } from "@/lib/extract/llm";
+import { getUserLlmKey } from "@/lib/account/byok";
 import {
   buildAiVariant,
   VariantPlanSchema,
@@ -48,11 +49,12 @@ function masterItemText(m: MasterItem): string {
   return `${m.kind}: ${parts.join(" · ")}`.trim();
 }
 
-/** El LLM real (Gemini) como función inyectable de buildAiVariant. */
-function geminiVariantLLM(): VariantLLM {
-  const apiKey = geminiApiKey();
-  if (!apiKey) throw new Error("Falta GEMINI_API_KEY");
-  const model = createGoogleGenerativeAI({ apiKey })(AI_MODEL);
+/** El LLM real (Gemini) como función inyectable de buildAiVariant. La clave es la
+ *  BYOK del usuario (ya descifrada) o, si no, la del servidor. */
+function geminiVariantLLM(apiKey?: string): VariantLLM {
+  const key = apiKey || geminiApiKey();
+  if (!key) throw new Error("Falta GEMINI_API_KEY");
+  const model = createGoogleGenerativeAI({ apiKey: key })(AI_MODEL);
   const SYS =
     "Eres un asistente que arma una VARIANTE de CV a partir de un MASTER canónico. " +
     "Te doy los items del master (cada uno con su id, tipo y texto) y un rol/descripción objetivo. " +
@@ -105,8 +107,10 @@ export async function POST(req: Request) {
     if (prompt.length < 2) {
       return NextResponse.json({ error: "Describe el rol o el CV que quieres (p.ej. 'Backend Engineer')." }, { status: 400 });
     }
-    if (!geminiApiKey()) {
-      return NextResponse.json({ error: "Falta configurar GEMINI_API_KEY en el servidor." }, { status: 503 });
+    // BYOK: la clave del usuario (descifrada, solo servidor) o la del servidor.
+    const byok = (await getUserLlmKey(sb, user.id)) ?? undefined;
+    if (!byok && !geminiApiKey()) {
+      return NextResponse.json({ error: "Falta configurar la clave de IA (BYOK o GEMINI_API_KEY del servidor)." }, { status: 503 });
     }
 
     const master = await getMasterItems(sb, user.id);
@@ -115,7 +119,7 @@ export async function POST(req: Request) {
     }
 
     const aiItems: AiMasterItem[] = master.map((m) => ({ id: m.id, kind: m.kind, text: masterItemText(m) }));
-    const plan = await buildAiVariant({ master: aiItems, prompt }, { llm: geminiVariantLLM() });
+    const plan = await buildAiVariant({ master: aiItems, prompt }, { llm: geminiVariantLLM(byok) });
 
     const variant = await createVariant(sb, user.id, body.name ?? plan.targetTitle);
 

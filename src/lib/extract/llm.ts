@@ -27,10 +27,15 @@ export function geminiApiKey(): string | undefined {
   return process.env.GEMINI_API_KEY || process.env.GOOGLE_GENERATIVE_AI_API_KEY;
 }
 
-function google() {
-  const apiKey = geminiApiKey();
-  if (!apiKey) throw new Error("Falta GEMINI_API_KEY");
-  return createGoogleGenerativeAI({ apiKey })(MODEL);
+/**
+ * El modelo Gemini con la clave EFECTIVA: la BYOK del usuario (ya descifrada, se
+ * pasa explícita) o, si no hay, la del servidor (GEMINI_API_KEY). La clave BYOK se
+ * descifra solo en el servidor (getUserLlmKey) y nunca se guarda en claro.
+ */
+function googleModel(apiKey?: string) {
+  const key = apiKey || geminiApiKey();
+  if (!key) throw new Error("Falta GEMINI_API_KEY");
+  return createGoogleGenerativeAI({ apiKey: key })(MODEL);
 }
 
 const BASE =
@@ -39,28 +44,35 @@ const BASE =
   "el fragmento LITERAL del texto de donde lo sacaste (copia exacta, sin parafrasear). " +
   "Fechas tal cual aparecen. Responde solo la estructura pedida.\n\nTEXTO:\n";
 
-/** El extractor real: 5 llamadas troceadas en paralelo (prompt §4.3). */
-export const geminiExtractor: Extractor = async (rawText) => {
-  const text = rawText.slice(0, 30000);
-  const model = google();
-  const p = (focus: string) => `${BASE}${text}\n\n(Extrae: ${focus})`;
+/**
+ * El extractor real: 5 llamadas troceadas en paralelo (prompt §4.3). La clave se
+ * inyecta (BYOK del usuario o, si no, la del servidor). `geminiExtractor` es el
+ * atajo con la clave del servidor (compat con el pipeline y sus tests).
+ */
+export function makeGeminiExtractor(apiKey?: string): Extractor {
+  return async (rawText) => {
+    const text = rawText.slice(0, 30000);
+    const model = googleModel(apiKey);
+    const p = (focus: string) => `${BASE}${text}\n\n(Extrae: ${focus})`;
 
-  const [basics, work, education, skills, projects] = await Promise.all([
-    generateObject({ model, schema: BasicsSchema, prompt: p("datos básicos, contacto y resumen"), temperature: 0.1 }),
-    generateObject({ model, schema: WorkSchema, prompt: p("experiencia laboral, con viñetas"), temperature: 0.1 }),
-    generateObject({ model, schema: EducationSchema, prompt: p("formación académica"), temperature: 0.1 }),
-    generateObject({ model, schema: SkillsSchema, prompt: p("aptitudes técnicas agrupadas"), temperature: 0.1 }),
-    generateObject({ model, schema: ProjectsSchema, prompt: p("proyectos personales/open source"), temperature: 0.1 }),
-  ]);
+    const [basics, work, education, skills, projects] = await Promise.all([
+      generateObject({ model, schema: BasicsSchema, prompt: p("datos básicos, contacto y resumen"), temperature: 0.1 }),
+      generateObject({ model, schema: WorkSchema, prompt: p("experiencia laboral, con viñetas"), temperature: 0.1 }),
+      generateObject({ model, schema: EducationSchema, prompt: p("formación académica"), temperature: 0.1 }),
+      generateObject({ model, schema: SkillsSchema, prompt: p("aptitudes técnicas agrupadas"), temperature: 0.1 }),
+      generateObject({ model, schema: ProjectsSchema, prompt: p("proyectos personales/open source"), temperature: 0.1 }),
+    ]);
 
-  return {
-    basics: basics.object,
-    work: work.object.items,
-    education: education.object.items,
-    skills: skills.object.items,
-    projects: projects.object.items,
+    return {
+      basics: basics.object,
+      work: work.object.items,
+      education: education.object.items,
+      skills: skills.object.items,
+      projects: projects.object.items,
+    };
   };
-};
+}
+export const geminiExtractor: Extractor = makeGeminiExtractor();
 
 /**
  * ★ Transcripción VERBATIM de una imagen / PDF escaneado (prompt §4.2). Dos
@@ -68,9 +80,9 @@ export const geminiExtractor: Extractor = async (rawText) => {
  * esa transcripción. Sin este raw_text, la verificación de evidencia (§4.4)
  * quedaría desactivada justo en las fuentes con mayor riesgo de alucinación.
  */
-export async function transcribeImage(dataUrl: string): Promise<string> {
+export async function transcribeImage(dataUrl: string, apiKey?: string): Promise<string> {
   const { text } = await generateText({
-    model: google(),
+    model: googleModel(apiKey),
     messages: [
       {
         role: "user",
@@ -94,9 +106,9 @@ export async function transcribeImage(dataUrl: string): Promise<string> {
  * literal, página por página. Igual disciplina que transcribeImage: es la fuente
  * sobre la que corre la verificación de evidencia (§4.4), así que NADA se inventa.
  */
-export async function transcribePdf(bytes: Uint8Array): Promise<string> {
+export async function transcribePdf(bytes: Uint8Array, apiKey?: string): Promise<string> {
   const { text } = await generateText({
-    model: google(),
+    model: googleModel(apiKey),
     messages: [
       {
         role: "user",

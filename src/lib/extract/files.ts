@@ -60,11 +60,18 @@ export interface ExtractDeps {
   transcribePdf: (bytes: Uint8Array) => Promise<string>;
   hasAiKey: () => boolean;
 }
-const realDeps = (): ExtractDeps => ({
-  transcribeImage,
-  transcribePdf,
-  hasAiKey: () => !!geminiApiKey(),
-});
+/**
+ * Deps reales con la clave EFECTIVA: la BYOK del usuario (ya descifrada) o, si no,
+ * la del servidor. `realDeps()` es el atajo con la del servidor.
+ */
+export function extractDepsFor(apiKey?: string): ExtractDeps {
+  return {
+    transcribeImage: (u) => transcribeImage(u, apiKey),
+    transcribePdf: (b) => transcribePdf(b, apiKey),
+    hasAiKey: () => !!(apiKey || geminiApiKey()),
+  };
+}
+const realDeps = (): ExtractDeps => extractDepsFor();
 
 const IMG_MIME: Record<string, string> = {
   png: "image/png",

@@ -9,6 +9,8 @@ export default defineConfig({
       // `server-only` (marcador de Next) no resuelve en el entorno node de vitest:
       // se aliasa a un stub vacío para poder testear módulos del servidor.
       "server-only": fileURLToPath(new URL("./tests/stubs/server-only.ts", import.meta.url)),
+      // El alias `@/` de la app → src, para importar módulos que lo usan.
+      "@": fileURLToPath(new URL("./src", import.meta.url)),
     },
   },
   test: {

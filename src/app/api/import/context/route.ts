@@ -1,11 +1,12 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { runImport } from "@/lib/extract/pipeline";
-import { geminiExtractor, geminiApiKey } from "@/lib/extract/llm";
+import { makeGeminiExtractor, geminiApiKey } from "@/lib/extract/llm";
 import { fetchGithubUser } from "@/lib/extract/github";
 import { fetchViaJina } from "@/lib/extract/web";
 import { ensureMaster, persistImport } from "@/lib/db/queries";
-import { extractFile, type FileKind } from "@/lib/extract/files";
+import { extractFile, extractDepsFor, type FileKind } from "@/lib/extract/files";
+import { getUserLlmKey } from "@/lib/account/byok";
 
 // Esperar el I/O del LLM no cuenta como Active CPU en Fluid Compute → timeout
 // generoso barato. Hobby permite 300 s (02 §1).
@@ -44,13 +45,16 @@ export async function POST(req: Request) {
   if (text.length < 20 && fileRefs.length === 0) {
     return NextResponse.json({ error: "Pega un poco más de texto (al menos un par de frases)." }, { status: 400 });
   }
-  if (!geminiApiKey()) {
-    return NextResponse.json({ error: "Falta configurar GEMINI_API_KEY en el servidor." }, { status: 503 });
-  }
 
   const sb = await createClient();
   const { data: { user } } = await sb.auth.getUser();
   if (!user) return NextResponse.json({ error: "Sesión requerida." }, { status: 401 });
+
+  // BYOK: la clave del usuario (descifrada, solo servidor) o la del servidor.
+  const byok = (await getUserLlmKey(sb, user.id)) ?? undefined;
+  if (!byok && !geminiApiKey()) {
+    return NextResponse.json({ error: "Falta configurar la clave de IA (BYOK o GEMINI_API_KEY del servidor)." }, { status: 503 });
+  }
 
   // ── 1 · Descargar de Storage + extraer texto por archivo ────────────────────
   const forPipeline: { label: string; text: string }[] = [];
@@ -87,7 +91,7 @@ export async function POST(req: Request) {
       const bytes = new Uint8Array(await blob.arrayBuffer());
       const mime = blob.type || undefined;
 
-      const ex = await extractFile({ kind, bytes, mime, name });
+      const ex = await extractFile({ kind, bytes, mime, name }, extractDepsFor(byok));
       if (ex.text.trim()) forPipeline.push({ label: name, text: ex.text });
       if (ex.warning) warnings.push(`«${name}»: ${ex.warning}`);
 
@@ -130,7 +134,7 @@ export async function POST(req: Request) {
   try {
     const result = await runImport(
       { pastedText: text, files: forPipeline },
-      { extract: geminiExtractor, fetchGithubUser, fetchWeb: fetchViaJina },
+      { extract: makeGeminiExtractor(byok), fetchGithubUser, fetchWeb: fetchViaJina },
     );
     await ensureMaster(sb, user.id);
     const { sourceId, staged } = await persistImport(sb, user.id, result);
