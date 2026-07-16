@@ -93,6 +93,28 @@ export const editor = {
     "editor.previewFoot":
       "El preview ES el PDF: mismo motor, mismos cortes de página. Si el preview miente, el producto miente.",
     "editor.xrayLegend": "texto extraído del PDF — esto es lo que indexa el reclutador",
+
+    // Presentación OPT-IN (foto / QR) — solo esta variante.
+    "editor.presOverline": "Presentación",
+    "editor.presHint": "Opcional · solo esta variante",
+    "editor.stPresSaved": "presentación guardada — solo esta variante",
+    "editor.stPresErr": "no se pudo guardar la presentación",
+    "editor.stPhotoBig": "la foto es muy pesada — prueba una imagen más pequeña",
+    "editor.photoLabel": "Foto",
+    "editor.photoOnAria": "Incluir foto en esta variante",
+    "editor.photoNote": "El CV estándar va sin foto. Úsala solo para una versión visual que envíes a una persona.",
+    "editor.photoAvatarNote": "No es el avatar de tu cuenta: sube aquí la imagen para este CV.",
+    "editor.photoUpload": "Subir foto",
+    "editor.photoChange": "Cambiar foto",
+    "editor.photoRemove": "Quitar",
+    "editor.photoAlt": "Foto del CV",
+    "editor.qrLabel": "Código QR",
+    "editor.qrOnAria": "Incluir código QR en esta variante",
+    "editor.qrNote": "La URL va SIEMPRE también como texto: el ATS no lee el QR, la lee de la línea de al lado.",
+    "editor.qrLinkLabel": "Enlace que codifica",
+    "editor.qrCustom": "Otra URL…",
+    "editor.qrCustomPlaceholder": "https://tu-portafolio.cl",
+    "editor.qrNoLinks": "Agrega un enlace en tu contacto para poder generar el QR.",
   } as Record<string, string>,
   en: {
     // Variant top bar.
@@ -186,5 +208,27 @@ export const editor = {
     "editor.previewFoot":
       "The preview IS the PDF: same engine, same page breaks. If the preview lies, the product lies.",
     "editor.xrayLegend": "text extracted from the PDF — this is what the recruiter's search indexes",
+
+    // Opt-in presentation (photo / QR) — this variant only.
+    "editor.presOverline": "Presentation",
+    "editor.presHint": "Optional · this variant only",
+    "editor.stPresSaved": "presentation saved — this variant only",
+    "editor.stPresErr": "couldn't save the presentation",
+    "editor.stPhotoBig": "the photo is too heavy — try a smaller image",
+    "editor.photoLabel": "Photo",
+    "editor.photoOnAria": "Include a photo in this variant",
+    "editor.photoNote": "The standard résumé has no photo. Use it only for a visual version you send to a person.",
+    "editor.photoAvatarNote": "This isn't your account avatar: upload the image for this résumé here.",
+    "editor.photoUpload": "Upload photo",
+    "editor.photoChange": "Change photo",
+    "editor.photoRemove": "Remove",
+    "editor.photoAlt": "Résumé photo",
+    "editor.qrLabel": "QR code",
+    "editor.qrOnAria": "Include a QR code in this variant",
+    "editor.qrNote": "The URL is ALWAYS shown as text too: the ATS can't read the QR, it reads it from the line beside it.",
+    "editor.qrLinkLabel": "Link it encodes",
+    "editor.qrCustom": "Other URL…",
+    "editor.qrCustomPlaceholder": "https://your-portfolio.com",
+    "editor.qrNoLinks": "Add a link to your contact to be able to generate the QR.",
   } as Record<string, string>,
 } as const;

@@ -173,10 +173,13 @@ export function ResumePDF({
         )}
 
         {/* QR AL PIE — opt-in. El glifo no lo lee el ATS; la URL de al lado, sí.
-            Va al final del todo para no alterar el orden de lectura del documento. */}
-        {qrImage && data.qr?.url ? (
+            Va al final del todo para no alterar el orden de lectura del documento.
+            La URL en TEXTO se dibuja SIEMPRE que haya qr.url: si el glifo no se pudo
+            generar (p. ej. URL muy larga), cae a solo-texto — el candado "la URL va
+            como texto" no depende de que el QR exista. */}
+        {data.qr?.url ? (
           <View style={s.qrRow} wrap={false}>
-            <Image src={qrImage} style={s.qrImg} />
+            {qrImage ? <Image src={qrImage} style={s.qrImg} /> : null}
             <View>
               <Text style={s.qrCap}>Escanea o visita:</Text>
               <Text style={s.qrUrl}>{data.qr.url}</Text>
@@ -193,7 +196,14 @@ export async function renderResumeToBuffer(data: ResumeData, opts: RenderOpts = 
   // la data-URL ya lista. Sin data.qr no se genera nada (OFF por defecto).
   let qrImage: string | undefined;
   if (data.qr?.url) {
-    qrImage = await QRCode.toDataURL(data.qr.url, { margin: 1, width: 240, errorCorrectionLevel: "M" });
+    try {
+      qrImage = await QRCode.toDataURL(data.qr.url, { margin: 1, width: 240, errorCorrectionLevel: "M" });
+    } catch {
+      // URL sobre la capacidad del QR (u otro fallo): no se genera el glifo, pero
+      // la URL igual va como TEXTO (ResumePDF la dibuja aunque falte qrImage). Así
+      // el documento nunca revienta por una URL demasiado larga.
+      qrImage = undefined;
+    }
   }
   return renderToBuffer(<ResumePDF data={data} opts={opts} qrImage={qrImage} />);
 }

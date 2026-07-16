@@ -13,6 +13,7 @@ import Link from "next/link";
 import { useBoot } from "@/lib/corpus/runtime";
 import { useT } from "@/lib/i18n";
 import { supabaseEnabled } from "@/lib/supabase/config";
+import { normalizeLinks, linkUrl, linkLabel } from "@/lib/cv/resume";
 import "./editor-variante.css";
 
 /* ============================================================================
@@ -83,6 +84,50 @@ const bySort = (a: VItem, b: VItem) => a.sort_order - b.sort_order;
 const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 const numWrap = (t: string): string => t.replace(/(\d[\d.,%~½]*)/g, '<span class="num">$1</span>');
 
+// Solo dejamos entrar data-URLs de imagen al preview (defensa del innerHTML): el
+// cuerpo COMPLETO debe ser base64 (ancla $), así ninguna comilla ni "<" puede
+// romper el src="…" e inyectar HTML. buildBlocks concatena esto a mano.
+const isPhotoDataUrl = (s: string): boolean => /^data:image\/(png|jpe?g|webp);base64,[a-z0-9+/]+=*$/i.test(s);
+
+// Reduce la imagen elegida a una data-URL liviana (máx 512 px, JPEG q.85): una foto
+// de CV no necesita más y así el override de basics no se infla. NUNCA es el avatar.
+async function fileToPhotoDataUrl(file: File): Promise<string> {
+  const dataUrl = await new Promise<string>((res, rej) => {
+    const r = new FileReader();
+    r.onload = () => res(String(r.result));
+    r.onerror = () => rej(new Error("read"));
+    r.readAsDataURL(file);
+  });
+  const img = await new Promise<HTMLImageElement>((res, rej) => {
+    const im = new Image();
+    im.onload = () => res(im);
+    im.onerror = () => rej(new Error("img"));
+    im.src = dataUrl;
+  });
+  const MAX = 512;
+  const scale = Math.min(1, MAX / Math.max(img.width || 1, img.height || 1));
+  const w = Math.max(1, Math.round((img.width || 1) * scale));
+  const h = Math.max(1, Math.round((img.height || 1) * scale));
+  const canvas = document.createElement("canvas");
+  canvas.width = w;
+  canvas.height = h;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return dataUrl;
+  ctx.drawImage(img, 0, 0, w, h);
+  return canvas.toDataURL("image/jpeg", 0.85);
+}
+
+// Enlace por defecto del QR: prefiere un portafolio/web (ni github ni linkedin).
+function pickDefaultQrLink(links: { url: string; label: string }[]): string {
+  if (!links.length) return "";
+  const host = (u: string) => u.replace(/^https?:\/\//i, "").replace(/^www\./i, "").toLowerCase();
+  const web = links.find((l) => {
+    const h = host(l.url);
+    return !h.startsWith("github.com") && !h.startsWith("linkedin.com");
+  });
+  return (web ?? links[0]!).url;
+}
+
 function normalizeIncoming(raw: unknown): VItem {
   const r = raw as Partial<VItem> & Record<string, unknown>;
   return {
@@ -106,6 +151,10 @@ interface Doc {
   work: { title: string; company: string; location: string; dates: string; bullets: string[] }[];
   projects: string[];
   education: { title: string; dates: string; org: string }[];
+  /** Foto opt-in (data-URL). El preview la dibuja arriba, como el PDF. */
+  photo?: string;
+  /** URL del QR opt-in. En el documento SIEMPRE va también como texto, al pie. */
+  qrUrl?: string;
 }
 
 // Carta 816×1056 @96dpi, márgenes 68/76 → 920px de caja útil.
@@ -118,8 +167,11 @@ function buildBlocks(doc: Doc): string[] {
   const contact =
     "Email: " + esc(doc.basics.email) + " · Tel: " + esc(doc.basics.phone) + " · " + esc(doc.basics.location);
   const links = doc.basics.links.filter(Boolean).map(esc).join(" · ");
+  // Foto opt-in: arriba del nombre, como en el PDF. Solo data-URLs de imagen.
+  const photoHtml = doc.photo && isPhotoDataUrl(doc.photo) ? '<img class="cvd-photo" alt="" src="' + doc.photo + '">' : "";
   B.push(
-    '<div class="cvd-name">' + esc(doc.basics.name) + "</div>" +
+    photoHtml +
+      '<div class="cvd-name">' + esc(doc.basics.name) + "</div>" +
       '<div class="cvd-label">' + esc(doc.targetTitle) + "</div>" +
       '<div class="cvd-contact">' + contact + (links ? "<br>" + links : "") + "</div>",
   );
@@ -154,6 +206,13 @@ function buildBlocks(doc: Doc): string[] {
         '<div class="cvd-erow"><span class="t">' + esc(d.title) + '</span><span class="d">' + esc(d.dates) +
           '</span></div><div class="cvd-org">' + esc(d.org) + "</div>",
       ),
+    );
+  }
+  // QR opt-in AL PIE: el glifo no lo lee el ATS; la URL de al lado SÍ (va como texto).
+  if (doc.qrUrl) {
+    B.push(
+      '<div class="cvd-qr"><span class="cvd-qrbox" aria-hidden="true">QR</span>' +
+        '<span class="cvd-qrcap">Escanea o visita:<br><span class="cvd-qrurl">' + esc(doc.qrUrl) + "</span></span></div>",
     );
   }
   return B;
@@ -194,6 +253,9 @@ function buildRaw(doc: Doc, legend: string): string {
     L.push("EDUCACIÓN");
     doc.education.forEach((d) => L.push(d.title + "   " + d.dates, d.org));
   }
+  // La URL del QR, como TEXTO al pie: es lo que el ATS lee del QR (el glifo, no).
+  // La foto NO aparece aquí: es una imagen, invisible para el parser — honesto.
+  if (doc.qrUrl) L.push("", doc.qrUrl);
   const body = L.join("\n").replace(/&/g, "&amp;").replace(/</g, "&lt;");
   return '<span class="cap">' + legend + "</span>" + body;
 }
@@ -308,6 +370,16 @@ export function EditorVarianteScreen({ variantId = "editor" }: { variantId?: str
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draggingId, setDraggingId] = useState<string | null>(null);
 
+  // Presentación opt-in (foto/QR). qrCustom = el usuario eligió "otra URL".
+  const [qrCustom, setQrCustom] = useState(false);
+  const [busyPhoto, setBusyPhoto] = useState(false);
+  const photoInputRef = useRef<HTMLInputElement>(null);
+  // Serializa los guardados de presentación: setVariantPresentation hace un
+  // read-modify-write de override_data; sin esto, dos ediciones seguidas (subir
+  // foto + activar QR) se pisarían campo a campo. La cadena garantiza que el 2º
+  // PATCH lea lo que el 1º ya escribió.
+  const presSaveChain = useRef<Promise<void>>(Promise.resolve());
+
   // Barra de estado (#edState): live region, con flash reentrante a 2600 ms.
   // "" = reposo → se pinta t("editor.stIdle") en vivo (reactivo al idioma).
   const [stMsg, setStMsg] = useState("");
@@ -395,6 +467,129 @@ export function EditorVarianteScreen({ variantId = "editor" }: { variantId?: str
     return master.find((m) => m.kind === "basics")?.data ?? {};
   }, [items, master]);
 
+  // ── Presentación opt-in (foto / QR) — override del basics de ESTA variante ──
+  const hasBasics = useMemo(() => master.some((m) => m.kind === "basics") || items.some((i) => i.kind === "basics"), [master, items]);
+  // Enlaces del contacto para el QR, SIN duplicados por url (normalizeLinks no
+  // deduplica): dos links iguales darían dos <option> con la misma key en React.
+  const linkOptions = useMemo(() => {
+    const seen = new Set<string>();
+    const out: { url: string; label: string }[] = [];
+    for (const l of normalizeLinks(basicsData.links)) {
+      const url = linkUrl(l);
+      if (!url || seen.has(url)) continue;
+      seen.add(url);
+      out.push({ url, label: linkLabel(l) });
+    }
+    return out;
+  }, [basicsData.links]);
+  const photoUrl = S(basicsData, "photo").trim();
+  const qrUrl = S((basicsData.qr as Record<string, unknown> | undefined) ?? {}, "url").trim();
+  const photoOn = !!photoUrl;
+  const qrOn = !!qrUrl;
+  const qrChecked = qrOn || qrCustom;
+  const qrCustomMode = qrCustom || (qrOn && !linkOptions.some((l) => l.url === qrUrl));
+
+  // Persiste foto/QR: optimista en items (para que el preview cambie ya) + PATCH.
+  const savePresentation = useCallback(
+    (patch: { photo?: string; qrUrl?: string }) => {
+      setItems((prev) => {
+        const basicsMaster = master.find((m) => m.kind === "basics");
+        const existing = prev.find((i) => i.kind === "basics");
+        const base = existing?.data ?? basicsMaster?.data ?? {};
+        const curOv = (existing?.override_data as Record<string, unknown> | null) ?? {};
+        const nextOv: Record<string, unknown> = { ...curOv };
+        if (patch.photo !== undefined) nextOv.photo = patch.photo;
+        if (patch.qrUrl !== undefined) nextOv.qr = { url: patch.qrUrl };
+        const nextData = { ...base, ...nextOv };
+        if (existing) return prev.map((i) => (i.id === existing.id ? { ...i, override_data: nextOv, data: nextData } : i));
+        if (!basicsMaster) return prev;
+        const tmp: VItem = {
+          id: "tmp-basics", item_id: basicsMaster.id, kind: "basics", visible: true,
+          sort_order: -1, override_data: nextOv, data: nextData, parent_id: null,
+        };
+        return [...prev, tmp];
+      });
+      if (!supabaseEnabled) {
+        flash(t("editor.stPresSaved"));
+        return;
+      }
+      // Encolar tras el guardado anterior: los PATCH se aplican EN ORDEN, así el
+      // read-modify-write del servidor nunca pierde un campo por una carrera.
+      presSaveChain.current = presSaveChain.current.then(async () => {
+        try {
+          const res = await fetch(`/api/variants/${variantId}`, {
+            method: "PATCH",
+            headers: JSON_HEADERS,
+            body: JSON.stringify({ presentation: patch }),
+          });
+          if (!res.ok) throw new Error();
+          flash(t("editor.stPresSaved"));
+        } catch {
+          flash(t("editor.stPresErr"));
+        }
+      });
+    },
+    [master, variantId, flash, t],
+  );
+
+  const onPhotoFile = useCallback(
+    async (file: File | null) => {
+      if (!file) return;
+      setBusyPhoto(true);
+      try {
+        const dataUrl = await fileToPhotoDataUrl(file);
+        if (dataUrl.length > 900_000) {
+          flash(t("editor.stPhotoBig"));
+          return;
+        }
+        savePresentation({ photo: dataUrl });
+      } catch {
+        flash(t("editor.stPresErr"));
+      } finally {
+        setBusyPhoto(false);
+        if (photoInputRef.current) photoInputRef.current.value = "";
+      }
+    },
+    [savePresentation, flash, t],
+  );
+
+  // Foto ON abre el selector (el guardado ocurre al elegir archivo); OFF la quita.
+  const togglePhoto = useCallback(
+    (on: boolean) => {
+      if (on) photoInputRef.current?.click();
+      else savePresentation({ photo: "" });
+    },
+    [savePresentation],
+  );
+
+  const toggleQr = useCallback(
+    (on: boolean) => {
+      if (on) {
+        const def = pickDefaultQrLink(linkOptions);
+        setQrCustom(!def); // sin enlaces → arranca en modo "otra URL"
+        savePresentation({ qrUrl: def });
+      } else {
+        setQrCustom(false);
+        savePresentation({ qrUrl: "" });
+      }
+    },
+    [linkOptions, savePresentation],
+  );
+
+  const onQrSelect = useCallback(
+    (val: string) => {
+      if (val === "__custom__") {
+        setQrCustom(true);
+        return;
+      }
+      setQrCustom(false);
+      savePresentation({ qrUrl: val });
+    },
+    [savePresentation],
+  );
+
+  const onQrCustomInput = useCallback((val: string) => savePresentation({ qrUrl: val.trim() }), [savePresentation]);
+
   // ── DOC model (solo visibles), para preview + rayos-X ──
   const doc = useMemo<Doc>(() => {
     const summaryV = items.find((i) => i.kind === "summary" && i.visible) ?? null;
@@ -424,6 +619,8 @@ export function EditorVarianteScreen({ variantId = "editor" }: { variantId?: str
       })),
       projects: projectV.map((p) => [S(p.data, "name"), S(p.data, "description")].filter(Boolean).join(" — ")),
       education: eduV.map((e) => ({ title: S(e.data, "degree"), dates: S(e.data, "dates"), org: S(e.data, "institution") })),
+      photo: S(basicsData, "photo").trim() || undefined,
+      qrUrl: S((basicsData.qr as Record<string, unknown> | undefined) ?? {}, "url").trim() || undefined,
     };
   }, [items, basicsData, targetTitle, bulletsForWork]);
 
@@ -949,11 +1146,14 @@ export function EditorVarianteScreen({ variantId = "editor" }: { variantId?: str
   const skillItems = items.filter((i) => i.kind === "skill").sort(bySort);
   const projectItems = items.filter((i) => i.kind === "project").sort(bySort);
   const eduItems = items.filter((i) => i.kind === "education").sort(bySort);
-  const overrideCount = items.filter((i) => i.override_data != null).length;
+  // basics es IDENTIDAD (portador de foto/QR), no una referencia que el usuario
+  // compuso: se excluye de los conteos y del "¿variante vacía?".
+  const contentItems = items.filter((i) => i.kind !== "basics");
+  const overrideCount = contentItems.filter((i) => i.override_data != null).length;
   const midN = t("editor.midN")
-    .replace("{n}", String(items.length))
+    .replace("{n}", String(contentItems.length))
     .replace("{m}", String(overrideCount));
-  const isEmpty = !loading && items.length === 0;
+  const isEmpty = !loading && contentItems.length === 0;
 
   const setTab = (v: View) => setView(v);
 
@@ -1139,6 +1339,107 @@ export function EditorVarianteScreen({ variantId = "editor" }: { variantId?: str
               {t("editor.objHintA")} <b>{t("editor.objHintBold")}</b> {t("editor.objHintB")}
             </p>
           </div>
+
+          {hasBasics && (
+            <div className="c-card var-pres" data-screen-label="editor-presentacion">
+              <div className="presh">
+                <span className="t-overline">{t("editor.presOverline")}</span>
+                <span className="n">{t("editor.presHint")}</span>
+              </div>
+
+              {/* Foto — opt-in, versión visual. NUNCA el avatar de la cuenta. */}
+              <div className="prow">
+                <label className="ptog">
+                  <input
+                    type="checkbox"
+                    checked={photoOn}
+                    aria-label={t("editor.photoOnAria")}
+                    onChange={(e) => togglePhoto(e.target.checked)}
+                  />
+                  {t("editor.photoLabel")}
+                </label>
+                <input
+                  ref={photoInputRef}
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp"
+                  hidden
+                  onChange={(e) => void onPhotoFile(e.target.files?.[0] ?? null)}
+                />
+                {photoOn && (
+                  <div className="pbody">
+                    <div className="photo-row">
+                      {isPhotoDataUrl(photoUrl) ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img className="photo-thumb" alt={t("editor.photoAlt")} src={photoUrl} />
+                      ) : null}
+                      <div className="photo-acts">
+                        <button
+                          type="button"
+                          className="c-btn c-btn--quiet"
+                          aria-busy={busyPhoto}
+                          onClick={() => photoInputRef.current?.click()}
+                        >
+                          {t("editor.photoChange")}
+                        </button>
+                        <button type="button" className="c-btn c-btn--quiet" onClick={() => togglePhoto(false)}>
+                          {t("editor.photoRemove")}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+                <p className="note">{t("editor.photoNote")}</p>
+                <p className="note">{t("editor.photoAvatarNote")}</p>
+              </div>
+
+              {/* QR — opt-in. La URL va SIEMPRE también como texto (candado ATS). */}
+              <div className="prow">
+                <label className="ptog">
+                  <input
+                    type="checkbox"
+                    checked={qrChecked}
+                    aria-label={t("editor.qrOnAria")}
+                    onChange={(e) => toggleQr(e.target.checked)}
+                  />
+                  {t("editor.qrLabel")}
+                </label>
+                {qrChecked && (
+                  <div className="pbody">
+                    <label className="f" htmlFor="qrLink">
+                      {t("editor.qrLinkLabel")}
+                    </label>
+                    {linkOptions.length > 0 && (
+                      <select
+                        id="qrLink"
+                        className="c-input"
+                        value={qrCustomMode ? "__custom__" : qrUrl}
+                        onChange={(e) => onQrSelect(e.target.value)}
+                      >
+                        {linkOptions.map((l) => (
+                          <option key={l.url} value={l.url}>
+                            {l.label ? `${l.label} — ${l.url}` : l.url}
+                          </option>
+                        ))}
+                        <option value="__custom__">{t("editor.qrCustom")}</option>
+                      </select>
+                    )}
+                    {(qrCustomMode || linkOptions.length === 0) && (
+                      <input
+                        className="c-input"
+                        type="url"
+                        inputMode="url"
+                        placeholder={t("editor.qrCustomPlaceholder")}
+                        defaultValue={qrUrl}
+                        onBlur={(e) => onQrCustomInput(e.target.value)}
+                      />
+                    )}
+                    {linkOptions.length === 0 && <p className="note">{t("editor.qrNoLinks")}</p>}
+                  </div>
+                )}
+                <p className="note warn">{t("editor.qrNote")}</p>
+              </div>
+            </div>
+          )}
 
           {!isEmpty && (
             <div id="mid">

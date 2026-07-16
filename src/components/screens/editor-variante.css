@@ -37,6 +37,24 @@
 .var-obj input{margin-top:10px;font:600 16px/1.2 var(--font-sans);height:42px;background:var(--surface-sunken)}
 .var-obj .hint{margin-top:8px;font:400 var(--fs-micro)/1.6 var(--font-mono);color:var(--text-subtle)}
 .var-obj .hint b{color:var(--text-muted);font-weight:500}
+/* ── Presentación opt-in (foto / QR) — misma caja que var-obj ── */
+.var-pres{margin:6px 18px 6px;padding:16px 18px}
+.var-pres .presh{display:flex;align-items:baseline;gap:10px}
+.var-pres .presh .t-overline{font-size:10px}
+.var-pres .presh .n{font:400 10px/1 var(--font-mono);color:var(--text-subtle)}
+.var-pres .prow{margin-top:14px}
+.var-pres .prow+.prow{margin-top:16px;padding-top:16px;border-top:1px solid var(--border)}
+/* fila de toggle: checkbox nativo (patrón de Fuentes) + etiqueta */
+.var-pres .ptog{display:flex;align-items:center;gap:9px;cursor:pointer;font:600 13px/1.2 var(--font-sans);color:var(--text)}
+.var-pres .ptog input{width:15px;height:15px;accent-color:var(--accent);cursor:pointer;flex:none}
+.var-pres .note{margin-top:7px;font:400 var(--fs-micro)/1.6 var(--font-mono);color:var(--text-subtle)}
+.var-pres .note.warn{color:var(--accent-text)}
+.var-pres .pbody{margin-top:10px;display:flex;flex-direction:column;gap:8px}
+.var-pres label.f{font:500 9.5px/1 var(--font-mono);letter-spacing:.1em;text-transform:uppercase;color:var(--text-subtle)}
+.var-pres select.c-input,.var-pres input.c-input{height:38px;background:var(--surface-sunken)}
+.var-pres .photo-row{display:flex;align-items:center;gap:12px}
+.var-pres .photo-thumb{width:56px;height:56px;border-radius:4px;object-fit:cover;border:1px solid var(--border);flex:none;background:var(--surface-sunken)}
+.var-pres .photo-acts{display:flex;gap:8px;flex-wrap:wrap}
 .var-g{margin:18px 18px 0}
 .var-g>.gh{display:flex;align-items:baseline;gap:10px;padding-bottom:8px}
 .var-g>.gh .t-overline{font-size:10px}
@@ -100,6 +118,13 @@
 .cvd-b{margin-top:5px;padding-left:16px;text-indent:-10px}
 .cvd-b .num{font-variant-numeric:tabular-nums}
 .cvd-mini{margin-top:4px}
+/* Foto opt-in (arriba del nombre) y QR al pie — espejan el ResumePDF. */
+.cvd-photo{display:block;width:84px;height:84px;border-radius:4px;object-fit:cover;margin-bottom:8px}
+.cvd-qr{display:flex;align-items:center;gap:12px;margin-top:22px}
+.cvd-qrbox{width:56px;height:56px;flex:none;display:flex;align-items:center;justify-content:center;
+  border:1px solid #D8DAD6;border-radius:3px;font:600 10px/1 var(--font-mono);color:#454B49;background:#fff}
+.cvd-qrcap{font:400 11px/1.4 var(--font-sans);color:#454B49}
+.cvd-qrurl{color:#14181A;font-size:12px}
 /* rayos-X */
 .pv-xray{position:relative}
 .pv-raw{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-md);

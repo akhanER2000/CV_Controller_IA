@@ -114,3 +114,66 @@ describe("CV round-trip ATS · QR opt-in (la URL en texto, orden intacto)", () =
     expect(extractedQr.indexOf(QR_URL)).toBeGreaterThan(extractedQr.indexOf(lastGolden));
   });
 });
+
+/**
+ * FOTO opt-in (versión "visual"). Con foto puesta se dibuja una imagen arriba,
+ * pero es INVISIBLE para el parser: no inyecta texto ni basura, y el contacto en
+ * texto sobrevive igual. Es la garantía de que enviar un CV con foto a un ATS no
+ * rompe la lectura del texto (aunque el estándar sea sin foto).
+ */
+describe("CV round-trip ATS · foto opt-in (imagen invisible al parser)", () => {
+  // PNG 1×1 transparente — data-URL mínima, como la que sube el usuario reducida.
+  const PHOTO =
+    "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
+  const withPhoto: ResumeData = { ...data, photo: PHOTO };
+  let extractedPhoto = "";
+
+  beforeAll(async () => {
+    const buf = await renderResumeToBuffer(withPhoto, { locale: "es", onePage: false });
+    const pdf = await getDocumentProxy(new Uint8Array(buf));
+    const { text } = await extractText(pdf, { mergePages: true });
+    extractedPhoto = norm(text);
+  });
+
+  it("1 · el contacto en texto sobrevive con la foto puesta", () => {
+    for (const needle of ["Diego Gatica Morales", "diego.gatica@ejemplo.cl", "+56 9 6123 4567"]) {
+      expect(extractedPhoto, `dato perdido con foto: "${needle}"`).toContain(needle);
+    }
+  });
+
+  it("2 · las líneas del golden siguen EN ORDEN — la foto no inyecta texto", () => {
+    let cursor = 0;
+    for (const line of golden.split("\n").map(norm).filter(Boolean)) {
+      const idx = extractedPhoto.indexOf(line, cursor);
+      expect(idx, `fuera de orden o ausente con foto: "${line}"`).toBeGreaterThanOrEqual(0);
+      cursor = idx + line.length;
+    }
+  });
+
+  it("3 · sin basura de embedding (la imagen no ensucia el texto)", () => {
+    expect(extractedPhoto).not.toMatch(/D i e g o|E x p e r i e n c i a/);
+  });
+});
+
+/**
+ * QR con URL SOBRE la capacidad del código (~2.3 KB): QRCode.toDataURL lanzaría, así
+ * que el render degrada a SOLO-TEXTO (sin glifo) en vez de reventar el PDF. El candado
+ * "la URL va como texto" se mantiene; el documento nunca falla por una URL larga.
+ */
+describe("CV round-trip ATS · QR con URL larga degrada a solo-texto (no revienta)", () => {
+  const LONG = "https://ejemplo.cl/" + "a".repeat(2600); // supera la capacidad del QR
+  const withLong: ResumeData = { ...data, qr: { url: LONG } };
+
+  it("1 · renderResumeToBuffer NO lanza y produce un PDF", async () => {
+    const buf = await renderResumeToBuffer(withLong, { locale: "es", onePage: false });
+    expect(buf.length).toBeGreaterThan(0);
+  });
+
+  it("2 · la URL sigue apareciendo como TEXTO aunque no haya glifo QR", async () => {
+    const buf = await renderResumeToBuffer(withLong, { locale: "es", onePage: false });
+    const pdf = await getDocumentProxy(new Uint8Array(buf));
+    const { text } = await extractText(pdf, { mergePages: true });
+    // El prefijo estable de la URL debe estar en el texto extraído.
+    expect(norm(text)).toContain("https://ejemplo.cl/aaaaaaaa");
+  });
+});

@@ -140,6 +140,98 @@ export async function updateVariant(
 }
 
 /**
+ * Presentación OPT-IN de una variante: FOTO y CÓDIGO QR. Se guardan como override
+ * del variant_item de `basics` (el render lee foto/QR de la data EFECTIVA de
+ * basics), así son POR VARIANTE: una "versión visual" para enviar a una persona no
+ * contamina las demás variantes ni el master.
+ *
+ * ⚠ Candados del producto:
+ *  - La URL del QR va SIEMPRE también como TEXTO en el documento (el ATS no lee el
+ *    QR). Eso lo garantiza el render (ResumePDF/toPlainText); aquí solo se guarda
+ *    la url elegida.
+ *  - La foto NUNCA es el avatar de la UI (user_settings.avatar_url): es una imagen
+ *    que el usuario sube aparte para ESTE CV. Llega ya reducida como data-URL.
+ *
+ * patch.photo / patch.qrUrl === undefined ⇒ ese campo no se toca. "" ⇒ se apaga
+ * EXPLÍCITAMENTE (fuerza OFF aunque el master tuviera algo). Crea el variant_item
+ * de basics si no existía (así una variante manual también puede presentar). Devuelve
+ * el estado efectivo resultante.
+ */
+export async function setVariantPresentation(
+  sb: SB,
+  userId: string,
+  variantId: string,
+  patch: { photo?: string; qrUrl?: string },
+): Promise<{ photo: string; qrUrl: string }> {
+  const owned = await ownedVariant(sb, userId, variantId);
+  if (!owned) throw new Error("Variante no encontrada.");
+
+  // El item basics del master: el variant_item lo referencia para heredar
+  // nombre/email/etc. Sin basics no hay identidad que presentar.
+  const master = await getMasterItems(sb, userId);
+  const basicsMaster = master.find((m) => m.kind === "basics");
+  if (!basicsMaster) {
+    throw new Error("Tu master aún no tiene bloque de contacto. Agrega tu identidad antes de la foto o el QR.");
+  }
+
+  // Candados de la foto (el cliente ya reduce y valida; esto es la defensa server):
+  // solo data-URLs de imagen con cuerpo base64 (nada de HTML/URLs externas), y con
+  // un tope de tamaño. "" pasa (es apagar la foto).
+  if (patch.photo) {
+    if (!/^data:image\/(png|jpe?g|webp);base64,[a-z0-9+/]+=*$/i.test(patch.photo)) {
+      throw new Error("La foto debe ser una imagen (PNG, JPG o WEBP).");
+    }
+    if (patch.photo.length > 900_000) {
+      throw new Error("La foto es demasiado pesada. Sube una imagen más pequeña.");
+    }
+  }
+  // Candado del QR (simétrico con la foto): una URL sobre la capacidad del código
+  // (~2.3 KB en modo M) haría fallar QRCode.toDataURL. El render ya degrada a
+  // solo-texto, pero aquí se rechaza de entrada — una URL de portafolio no llega
+  // ni de lejos a 1.5 KB. "" pasa (es apagar el QR).
+  if (patch.qrUrl && patch.qrUrl.length > 1500) {
+    throw new Error("La URL del QR es demasiado larga para caber en un código QR.");
+  }
+
+  // find-or-create del variant_item de basics (unique (variant_id, item_id)).
+  const { data: existing, error: selErr } = await sb
+    .from("variant_items")
+    .select("id,override_data")
+    .eq("variant_id", variantId)
+    .eq("user_id", userId)
+    .eq("item_id", basicsMaster.id)
+    .maybeSingle();
+  if (selErr) throw new Error(selErr.message);
+
+  let vitemId: string;
+  let current: Record<string, unknown>;
+  if (existing) {
+    vitemId = existing.id as string;
+    current = (existing.override_data as Record<string, unknown> | null) ?? {};
+  } else {
+    const row = await addItem(sb, userId, variantId, basicsMaster.id);
+    vitemId = row.id as string;
+    current = (row.override_data as Record<string, unknown> | null) ?? {};
+  }
+
+  const next: Record<string, unknown> = { ...current };
+  if (patch.photo !== undefined) next.photo = patch.photo; // "" = apagar la foto
+  if (patch.qrUrl !== undefined) next.qr = { url: patch.qrUrl }; // {url:""} = apagar el QR
+
+  const { error } = await sb
+    .from("variant_items")
+    .update({ override_data: next, override_origin: "manual", override_verified: false })
+    .eq("id", vitemId)
+    .eq("user_id", userId);
+  if (error) throw new Error(error.message);
+
+  return {
+    photo: String(next.photo ?? ""),
+    qrUrl: String((next.qr as Record<string, unknown> | undefined)?.url ?? ""),
+  };
+}
+
+/**
  * Arma el objeto del contrato GET /api/variants/[id]:
  *   { variant, items (con data EFECTIVA), master (biblioteca completa) }.
  * Devuelve null si la variante no existe / no es del usuario.
@@ -391,7 +483,12 @@ export async function buildVariantResumeData(
   }
 
   const by = (k: string) => eff.filter((e) => e.kind === k);
-  const basicsItem = by("basics")[0]?.data ?? {};
+  // Si la variante no tiene variant_item de basics (p. ej. una variante MANUAL,
+  // que arranca vacía y no lo trae de la biblioteca), hereda el basics del master:
+  // así el PDF nunca sale sin nombre/contacto. La foto/QR opt-in viven en el
+  // override de ESE variant_item cuando existe (setVariantPresentation).
+  const masterBasics = master.find((m) => m.kind === "basics")?.data ?? {};
+  const basicsItem = by("basics")[0]?.data ?? masterBasics;
   const summaryItem = by("summary")[0]?.data ?? {};
 
   const work = by("work").map((w) => ({
