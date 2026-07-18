@@ -1,0 +1,10 @@
+/* Toast de deshacer — flotante, abajo al centro, sobre cualquier pantalla. */
+.c-undo{position:fixed;left:50%;bottom:26px;transform:translateX(-50%);z-index:60;
+  display:flex;align-items:center;gap:14px;max-width:min(560px,calc(100vw - 32px));
+  padding:10px 12px 10px 16px;background:var(--surface);border:1px solid var(--border-strong);
+  border-radius:var(--radius-md);box-shadow:0 8px 30px rgba(0,0,0,.35);
+  font:400 12.5px/1.4 var(--font-sans);color:var(--text)}
+.c-undo__msg{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.c-undo__btn{flex:none;font:600 11px/1 var(--font-mono);letter-spacing:.08em;text-transform:uppercase;
+  color:var(--accent-text);padding:8px 10px;border:1px solid var(--border-patina);border-radius:6px;cursor:pointer}
+.c-undo__btn:hover{background:var(--surface-sunken)}
