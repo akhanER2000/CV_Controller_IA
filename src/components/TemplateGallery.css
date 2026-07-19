@@ -1,0 +1,128 @@
+/* ── TemplateGallery.css — la galería de plantillas ──────────────────────────
+   Vocabulario del sistema, sin inventar tokens: pátina para lo activo y para lo
+   recomendado, hairline para la rejilla (.c-hairgrid: gap 1px sobre el borde),
+   .c-skel para la espera, .c-panel para el vidrio ahumado del diálogo.
+   Sin @keyframes propios: el movimiento vive en motion.css. */
+
+.tg-veil{position:fixed;inset:0;z-index:var(--z-overlay);display:flex;padding:3vh 3vw;
+  background:color-mix(in srgb,var(--bg) 72%,transparent);backdrop-filter:blur(3px)}
+.tg-panel{position:relative;margin:auto;width:100%;max-width:1180px;max-height:94vh;
+  display:flex;flex-direction:column;overflow:hidden}
+
+/* ── Cabecera ── */
+.tg-head{display:flex;align-items:baseline;gap:12px;padding:16px 20px 12px;border-bottom:1px solid var(--border)}
+.tg-head .t-overline{font-size:10px}
+.tg-count{font:400 10px/1 var(--font-mono);color:var(--text-subtle)}
+.tg-close{margin-left:auto;height:32px;padding:0 14px;align-self:center}
+
+/* ── Filtros: gama (campo propio) + etiquetas (vocabulario cerrado) ── */
+.tg-filters{display:flex;flex-wrap:wrap;align-items:center;gap:6px;padding:12px 20px;
+  border-bottom:1px solid var(--border);background:var(--surface-sunken)}
+.tg-seg{display:flex;border:1px solid var(--border-strong);border-radius:6px;overflow:hidden;margin-right:6px}
+.tg-seg button{font:500 var(--fs-micro)/1 var(--font-mono);letter-spacing:.04em;padding:7px 10px;color:var(--text-muted)}
+.tg-seg button[aria-pressed="true"]{color:var(--text);background:var(--surface-elevated);
+  box-shadow:inset 0 0 0 1px var(--border-patina)}
+.tg-chip{font:500 var(--fs-micro)/1 var(--font-mono);letter-spacing:.02em;padding:6px 10px;border-radius:20px;
+  border:1px solid var(--border);color:var(--text-subtle);background:transparent;
+  transition:color .14s,border-color .14s}
+.tg-chip:hover{color:var(--text-muted);border-color:var(--border-strong)}
+.tg-chip[aria-pressed="true"]{color:var(--accent-text);border-color:var(--border-patina);background:var(--surface)}
+.tg-chip--rec[aria-pressed="false"]{color:var(--text-muted)}
+.tg-clear{margin-left:auto;font:500 var(--fs-micro)/1 var(--font-mono);color:var(--text-subtle)}
+.tg-clear:hover{color:var(--accent-text);text-decoration:underline}
+
+/* ── Paleta y tipografía: aquí dentro, para verlo en las 30 miniaturas ── */
+.tg-design{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;padding:10px 20px;
+  border-bottom:1px solid var(--border)}
+.tg-dlabel{font:500 9.5px/1 var(--font-mono);letter-spacing:.1em;text-transform:uppercase;color:var(--text-subtle)}
+.tg-swatches{display:flex;flex-wrap:wrap;gap:5px;margin-right:10px}
+.tg-sw{display:inline-flex;align-items:center;gap:6px;height:26px;padding:0 10px;border-radius:var(--radius-sm);
+  border:1px solid var(--border);background:var(--surface);
+  font:400 var(--fs-micro)/1 var(--font-mono);color:var(--text-muted)}
+.tg-sw:hover{border-color:var(--border-strong);color:var(--text)}
+.tg-sw[aria-pressed="true"]{color:var(--accent-text);border-color:var(--border-patina);background:var(--surface-elevated)}
+.tg-dot{width:9px;height:9px;border-radius:2px;flex:none;border:1px solid rgba(0,0,0,.25)}
+
+/* ── Comparación: hasta dos, grandes, lado a lado ── */
+.tg-compare{display:flex;align-items:flex-start;gap:16px;padding:14px 20px;
+  border-bottom:1px solid var(--border);background:var(--surface-sunken)}
+.tg-cmpitem{margin:0;display:flex;flex-direction:column;gap:6px;width:min(300px,42%)}
+.tg-cmpitem figcaption{display:flex;align-items:baseline;gap:10px;
+  font:400 var(--fs-micro)/1 var(--font-mono);color:var(--text-subtle)}
+.tg-cmpitem figcaption b{color:var(--text);font:600 12px/1 var(--font-sans)}
+.tg-cmpitem figcaption button{margin-left:auto;font:500 10px/1 var(--font-mono);color:var(--accent-text)}
+.tg-cmpitem figcaption button:hover{text-decoration:underline}
+.tg-cmphint{align-self:center;font:400 var(--fs-micro)/1.6 var(--font-mono);color:var(--text-subtle);max-width:220px}
+
+/* ── Rejilla con gaps hairline ── */
+.tg-body{flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;background:var(--border)}
+.tg-grid{grid-template-columns:repeat(auto-fill,minmax(216px,1fr));background:var(--border);
+  border-top:1px solid var(--border)}
+.tg-none{padding:48px 20px;text-align:center;font:400 12.5px/1.7 var(--font-sans);color:var(--text-muted);
+  background:var(--bg)}
+
+/* ── Tarjeta ──
+   La hoja vive FUERA del botón (el fallo de una miniatura trae su propio botón de
+   reintento y un botón dentro de otro botón es HTML inválido). Toda la tarjeta
+   sigue siendo clicable: el botón estira un ::after sobre ella, y los controles de
+   la meta se elevan por encima con z-index. */
+.tg-card{position:relative;display:flex;flex-direction:column;background:var(--bg);padding:12px 12px 12px}
+.tg-card.is-active{box-shadow:inset 0 0 0 1px var(--border-patina)}
+.tg-card:hover .tg-sheet{border-color:var(--border-strong)}
+.tg-pick{display:flex;flex-direction:column;align-items:stretch;gap:4px;padding:8px 0 6px;text-align:left;width:100%}
+.tg-pick::after{content:"";position:absolute;inset:0;z-index:1}
+.tg-shot{position:relative;display:block}
+/* A4: la caja reserva la proporción exacta de la hoja ANTES de que llegue el PNG,
+   así la rejilla no salta cuando cada miniatura aterriza. */
+.tg-sheet{display:block;width:100%;aspect-ratio:210/297;border:1px solid var(--border);
+  border-radius:var(--radius-xs);background:#FFFFFF;object-fit:contain;object-position:top center;
+  box-shadow:var(--shadow-1)}
+.tg-sheet--wait{background:var(--surface-elevated);display:grid;place-items:center}
+.tg-waitt{font:400 9.5px/1 var(--font-mono);color:var(--text-subtle)}
+.tg-sheet--fail{background:var(--surface);display:flex;flex-direction:column;gap:6px;
+  align-items:flex-start;justify-content:center;padding:14px;overflow:hidden}
+.tg-failt{font:500 9.5px/1.3 var(--font-mono);letter-spacing:.08em;text-transform:uppercase;color:var(--danger)}
+.tg-failw{font:400 10px/1.5 var(--font-mono);color:var(--text-muted);word-break:break-word;
+  overflow:hidden;max-height:6.5em}
+/* Por encima del ::after del botón de la tarjeta: si no, sería inalcanzable. */
+.tg-failr{position:relative;z-index:2;font:500 10px/1 var(--font-mono);color:var(--accent-text);text-decoration:underline}
+.tg-badge{position:absolute;top:6px;left:6px;padding:3px 7px;border-radius:3px;
+  background:var(--patina-500);color:var(--ink-on-patina);
+  font:500 9px/1 var(--font-mono);letter-spacing:.1em;text-transform:uppercase}
+.tg-name{display:flex;align-items:baseline;gap:8px;font:600 13px/1.3 var(--font-sans);color:var(--text)}
+.tg-gama{font:500 8.5px/1 var(--font-mono);letter-spacing:.1em;text-transform:uppercase;color:var(--text-subtle);
+  border:1px solid var(--border);border-radius:3px;padding:3px 5px;flex:none}
+.tg-gama.is-visual{color:var(--accent-text);border-color:var(--border-patina)}
+.tg-desc{font:400 11px/1.5 var(--font-sans);color:var(--text-muted)}
+
+/* ── Meta de la tarjeta: razón · aviso · etiquetas · comparar ── */
+.tg-meta{position:relative;display:flex;flex-direction:column;gap:6px;padding:0}
+.tg-why{font:400 10.5px/1.55 var(--font-mono);color:var(--accent-text)}
+.tg-warn{font:400 10px/1.55 var(--font-mono);color:var(--danger);
+  border-left:2px solid color-mix(in srgb,var(--danger) 55%,transparent);padding-left:8px}
+.tg-tags{display:flex;flex-wrap:wrap;gap:4px}
+.tg-tag{font:400 9px/1 var(--font-mono);letter-spacing:.06em;text-transform:uppercase;color:var(--text-subtle);
+  border:1px solid var(--border);border-radius:3px;padding:3px 5px}
+.tg-cmp{position:relative;z-index:2;align-self:flex-start;margin-top:2px;font:500 9.5px/1 var(--font-mono);
+  letter-spacing:.06em;text-transform:uppercase;color:var(--text-subtle);border:1px solid var(--border);
+  border-radius:4px;padding:5px 8px}
+.tg-cmp:hover{color:var(--text-muted);border-color:var(--border-strong)}
+.tg-cmp[aria-pressed="true"]{color:var(--accent-text);border-color:var(--border-patina)}
+
+.tg-foot{padding:10px 20px;border-top:1px solid var(--border);
+  font:400 10px/1.6 var(--font-mono);color:var(--text-subtle);background:var(--surface)}
+
+/* ── La miniatura suelta de la tarjeta «Diseño» del editor ── */
+.tg-mini{display:block;width:74px;flex:none}
+.tg-mini .tg-sheet{box-shadow:none}
+.tg-mini .tg-failt,.tg-mini .tg-failr{font-size:8px}
+.tg-mini .tg-failw{display:none}
+
+@media (max-width:720px){
+  .tg-veil{padding:0}
+  .tg-panel{max-width:none;max-height:100vh;border-radius:0;border:0}
+  .tg-grid{grid-template-columns:repeat(auto-fill,minmax(150px,1fr))}
+  .tg-compare{flex-wrap:wrap}
+  .tg-cmpitem{width:calc(50% - 8px)}
+  .tg-cmphint{display:none}
+}

@@ -61,6 +61,53 @@ export interface TemplateTypography {
   labelItalic?: boolean;
 }
 
+// ── EJES DE COMPOSICIÓN ───────────────────────────────────────────────────────
+/**
+ * Las secciones del documento, por su id. El ORDEN en que se listan es el orden de
+ * lectura: el del PDF y el del texto plano, que son el mismo (eso es el candado).
+ */
+export type SectionId = "summary" | "skills" | "work" | "projects" | "education";
+
+/** El orden de siempre. Sin declarar `sectionOrder`, el documento sale por aquí. */
+export const DEFAULT_SECTION_ORDER: readonly SectionId[] = [
+  "summary", "skills", "work", "projects", "education",
+] as const;
+
+/** Caja del nombre. Las versalitas de imprenta no existen en las .ttf del repo: lo
+ *  que se puede hacer honestamente es mayúsculas (a un cuerpo menor, si se quiere). */
+export type TextCase = "normal" | "upper";
+
+/** Alineación de un bloque. La gama ATS admite centrado: sigue siendo una columna. */
+export type BlockAlign = "left" | "center";
+
+/** Tratamiento del filete de sección cuando `headingRule` está puesto. */
+export type RuleStyle = "full" | "partial" | "double";
+export type RulePosition = "below" | "above";
+
+/** Cómo se reparte el contacto en líneas. */
+export type ContactStyle = "inline" | "split" | "stacked";
+
+/** Dónde caen las fechas de una entrada. */
+export type DateStyle = "right" | "inline" | "own-line";
+
+/** Marcador de viñeta. `none` = solo sangría (el texto empieza sin glifo). */
+export type BulletMarker = "dot" | "dash" | "emdash" | "none";
+
+/** Cómo se agrupan las habilidades en líneas. */
+export type SkillStyle = "grouped" | "inline" | "paired";
+
+/**
+ * El glifo de cada marcador. Vive AQUÍ y no en los dos renderizadores porque el
+ * documento y su texto plano tienen que escribir exactamente el mismo carácter: si
+ * el PDF pone "–" y el rayos-X pone "•", el round-trip deja de significar nada.
+ */
+export const BULLET_MARK: Record<BulletMarker, string> = {
+  dot: "• ", // U+2022 — el de siempre
+  dash: "- ", // guion normal: el que menos ensucia el parseo
+  emdash: "— ", // U+2014
+  none: "",
+};
+
 /**
  * Métrica del documento: de aquí sale la variedad real dentro de una columna.
  * Solo los seis primeros campos son obligatorios; el resto son afinaciones cuyo
@@ -120,6 +167,59 @@ export interface TemplateMetrics {
   /** Solo gama visual: ancho de la barra lateral y separación con el cuerpo. */
   sidebarWidth?: string;
   sidebarGap?: number;
+
+  // ── EJES DE COMPOSICIÓN (defecto = documento clásico) ──────────────────────
+  // Aquí es donde dieciséis combinaciones de fuente y color dejan de ser dieciséis
+  // formas de pintar el mismo CV y empiezan a ser documentos distintos. TODOS son
+  // opcionales y su valor por defecto reproduce la clásica, así que ninguno de
+  // estos campos cambia lo que ya existía.
+
+  /** Caja del nombre. Defecto "normal" (tal cual lo escribió el usuario). */
+  nameCase?: TextCase;
+  /** Alineación de la CABECERA (nombre, subtítulo y contacto). Defecto "left". */
+  nameAlign?: BlockAlign;
+  /** Tracking del nombre en pt. Defecto 0 — ver la nota de `letterSpacing` en
+   *  ResumePDF: pasado cierto punto el parser lee "D I E G O". */
+  nameTracking?: number;
+  /** Filete bajo el bloque de cabecera. Defecto false. */
+  nameRule?: boolean;
+
+  /** Tracking del encabezado de sección en pt. Defecto 0 (misma advertencia). */
+  headingTracking?: number;
+  /** Alineación del encabezado de sección. Defecto "left". */
+  headingAlign?: BlockAlign;
+  /** Lado del filete respecto del rótulo. Defecto "below". */
+  headingRulePosition?: RulePosition;
+  /** Tratamiento del filete (solo aplica si `headingRule`). Defecto "full". */
+  headingRuleStyle?: RuleStyle;
+  /** Ancho en pt del filete "partial". Defecto 34. */
+  headingRuleInset?: number;
+  /** Numerar las secciones ("01 · RESUMEN"). Defecto false. */
+  headingNumbered?: boolean;
+  /**
+   * ¿Se rotula la sección? Defecto true. En false la sección se anuncia SOLO con
+   * aire. Es un eje real de composición, pero un ATS clasifica por el rótulo:
+   * quitarlo no es un estilo, es perder la señal. Por eso el catálogo lo usa
+   * únicamente en la gama visual (lo fija un test).
+   */
+  headingLabel?: boolean;
+
+  /** Reparto del contacto en líneas. Defecto "inline". */
+  contactStyle?: ContactStyle;
+  /** Prefijos "Email:" y "Tel:". Defecto true. */
+  contactLabels?: boolean;
+
+  /** Dónde caen las fechas de cada entrada. Defecto "right" (flex, sin tablas). */
+  dateStyle?: DateStyle;
+
+  /** Marcador de viñeta. Defecto "dot" (• U+2022). */
+  bulletMarker?: BulletMarker;
+
+  /** Reparto de las habilidades en líneas. Defecto "grouped" (una por grupo). */
+  skillStyle?: SkillStyle;
+
+  /** Orden de las secciones. Defecto DEFAULT_SECTION_ORDER. */
+  sectionOrder?: readonly SectionId[];
 }
 
 export interface CvTemplate {
@@ -188,7 +288,9 @@ export function templatesByTags(tags: TemplateTag[]): CvTemplate[] {
  * test, un día dejarían de coincidir y el test estaría comprobando otro documento.
  * Los números son los del documento clásico: no declarar nada = el CV de siempre.
  */
-export function resolveMetrics(m: TemplateMetrics): Required<TemplateMetrics> {
+export type ResolvedMetrics = Required<TemplateMetrics>;
+
+export function resolveMetrics(m: TemplateMetrics): ResolvedMetrics {
   return {
     nameSize: m.nameSize,
     bodySize: m.bodySize,
@@ -220,7 +322,60 @@ export function resolveMetrics(m: TemplateMetrics): Required<TemplateMetrics> {
     accentHeadings: m.accentHeadings ?? true,
     sidebarWidth: m.sidebarWidth ?? "33%",
     sidebarGap: m.sidebarGap ?? 14,
+    // Ejes de composición: todos caen en el documento clásico.
+    nameCase: m.nameCase ?? "normal",
+    nameAlign: m.nameAlign ?? "left",
+    nameTracking: m.nameTracking ?? 0,
+    nameRule: m.nameRule ?? false,
+    headingTracking: m.headingTracking ?? 0,
+    headingAlign: m.headingAlign ?? "left",
+    headingRulePosition: m.headingRulePosition ?? "below",
+    headingRuleStyle: m.headingRuleStyle ?? "full",
+    headingRuleInset: m.headingRuleInset ?? 34,
+    headingNumbered: m.headingNumbered ?? false,
+    headingLabel: m.headingLabel ?? true,
+    contactStyle: m.contactStyle ?? "inline",
+    contactLabels: m.contactLabels ?? true,
+    dateStyle: m.dateStyle ?? "right",
+    bulletMarker: m.bulletMarker ?? "dot",
+    skillStyle: m.skillStyle ?? "grouped",
+    sectionOrder: m.sectionOrder ?? DEFAULT_SECTION_ORDER,
   };
+}
+
+// ── Traducción de los ejes a texto ────────────────────────────────────────────
+/**
+ * Estas tres funciones son la ÚNICA fuente de verdad de los ejes que cambian el
+ * TEXTO del documento. Las llaman los dos renderizadores —el PDF y el texto plano
+ * ("cómo lo lee el ATS")— precisamente para que no puedan discrepar: si el rótulo
+ * numerado, la caja del nombre o el marcador de viñeta se calcularan dos veces, un
+ * día dejarían de coincidir y el round-trip estaría comparando dos documentos
+ * distintos sin enterarse.
+ */
+
+/** El nombre tal y como se IMPRIME (la caja es un eje de la plantilla). */
+export function nameText(name: string, m: ResolvedMetrics): string {
+  return m.nameCase === "upper" ? name.toUpperCase() : name;
+}
+
+/**
+ * El rótulo de una sección tal y como se IMPRIME, con su numeral si lo lleva.
+ * `index` es la posición de la sección ENTRE LAS VISIBLES (por eso hay que pasarla:
+ * si una sección se queda vacía, la numeración se corre y las dos salidas tienen
+ * que correrse igual). Devuelve null si la plantilla no rotula.
+ *
+ * Ojo: la caja NO se aplica aquí. En el PDF la ponen las mayúsculas de CSS
+ * (textTransform) y en el texto plano un toUpperCase(); aplicarla en el string
+ * cambiaría el documento por defecto, y ese tiene que salir idéntico al de siempre.
+ */
+export function headingLabelText(raw: string, index: number, m: ResolvedMetrics): string | null {
+  if (!m.headingLabel) return null;
+  return m.headingNumbered ? `${String(index + 1).padStart(2, "0")} · ${raw}` : raw;
+}
+
+/** El marcador de viñeta que escriben los dos renderizadores. */
+export function bulletMark(m: ResolvedMetrics): string {
+  return BULLET_MARK[m.bulletMarker];
 }
 
 /** El peso del cuerpo del documento: fijo, y la referencia contra la que se mide

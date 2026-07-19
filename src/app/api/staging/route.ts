@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { getStaging } from "@/lib/db/queries";
+import { getStagingCounts } from "@/lib/db/staging-counts";
 import { normalizeDateRange } from "@/lib/extract/dates";
 
 export const runtime = "nodejs";
@@ -8,16 +9,24 @@ export const runtime = "nodejs";
 /**
  * Lee el staging pendiente del usuario autenticado. `?doubts=1` filtra solo los
  * items con una clasificación en duda (§C1): viñetas que quizá sean habilidades.
+ *
+ * Devuelve `{ items, counts: { accepted, rejected } }`:
+ *  · `items`  — la cola PENDIENTE (afectada por ?doubts=1).
+ *  · `counts` — cuántos staged_items del usuario están ya resueltos, por estado.
+ *    NO lo toca el filtro: es el histórico completo, no la vista. Existe porque
+ *    el progreso no puede vivir en estado de React — al remontar la pantalla los
+ *    contadores de sesión vuelven a 0 y la barra miente sobre trabajo que sí se
+ *    hizo. La barra se pinta con esto más el delta de la sesión en curso.
  */
 export async function GET(req: Request) {
   const sb = await createClient();
   const { data: { user } } = await sb.auth.getUser();
   if (!user) return NextResponse.json({ error: "Sesión requerida." }, { status: 401 });
   try {
-    const items = await getStaging(sb, user.id);
+    const [items, counts] = await Promise.all([getStaging(sb, user.id), getStagingCounts(sb, user.id)]);
     const doubtsOnly = new URL(req.url).searchParams.get("doubts") === "1";
     const out = doubtsOnly ? items.filter((it) => (it.data as Record<string, unknown>)?._classDoubt) : items;
-    return NextResponse.json({ items: out });
+    return NextResponse.json({ items: out, counts });
   } catch (e) {
     return NextResponse.json({ error: e instanceof Error ? e.message : "Error" }, { status: 500 });
   }

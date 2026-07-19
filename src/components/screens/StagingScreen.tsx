@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useT } from "@/lib/i18n";
 import { Breadcrumb } from "@/components/Breadcrumb";
+import { stagingProgress, ZERO_COUNTS, type StagingCounts } from "@/lib/db/staging-counts";
 import "./staging.css";
 
 /* ============================================================================
@@ -89,8 +90,16 @@ export function StagingScreen() {
   const [openDate, setOpenDate] = useState<Set<string>>(new Set());
   const [dateDraft, setDateDraft] = useState<Record<string, string>>({});
   const [filter, setFilter] = useState<"all" | Ver>("all");
-  const [acc, setAcc] = useState(0);
-  const [dis, setDis] = useState(0);
+
+  /* PROGRESO — la fuente de verdad es el servidor, no el remontaje.
+     `base` es la foto que devolvió el último GET (cuántos staged_items del
+     usuario están ya aceptados/rechazados en la base). `session` es lo hecho a
+     clic desde esa foto. Antes esto era solo `session`, así que salir de la
+     pantalla y volver reseteaba la barra a cero y parecía que el trabajo se
+     había perdido — no se perdía, se leía mal. load() refresca `base` y pone
+     `session` a cero: sumarlos nunca cuenta dos veces. */
+  const [base, setBase] = useState<StagingCounts>(ZERO_COUNTS);
+  const [session, setSession] = useState<StagingCounts>(ZERO_COUNTS);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -100,6 +109,8 @@ export function StagingScreen() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || t("staging.errRead"));
       setItems(data.items as Item[]);
+      setBase((data.counts as StagingCounts | undefined) ?? ZERO_COUNTS);
+      setSession(ZERO_COUNTS);
     } catch (e) {
       setErr(e instanceof Error ? e.message : t("staging.errGeneric"));
     } finally {
@@ -117,7 +128,7 @@ export function StagingScreen() {
   }, [items]);
 
   const pend = items.length;
-  const total = pend + acc + dis;
+  const progress = stagingProgress(base, session, pend);
   const showEmpty = !loading && pend === 0;
 
   const counts = useMemo(() => {
@@ -139,7 +150,11 @@ export function StagingScreen() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || t("staging.errAccept"));
       remove(id);
-      reject ? setDis((n) => n + 1) : setAcc((n) => n + (data.promoted ?? 1));
+      setSession((s) =>
+        reject
+          ? { ...s, rejected: s.rejected + (data.rejected ?? 1) }
+          : { ...s, accepted: s.accepted + (data.promoted ?? 1) },
+      );
     } catch (e) {
       setErr(e instanceof Error ? e.message : t("staging.errGeneric"));
     } finally {
@@ -161,7 +176,9 @@ export function StagingScreen() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || t("staging.errAccept"));
-      setAcc((n) => n + (data.promoted ?? 0));
+      // Bump optimista para que la barra no espere al GET; load() lo reconcilia
+      // contra el servidor (base fresca + sesión a cero), así que no se duplica.
+      setSession((s) => ({ ...s, accepted: s.accepted + (data.promoted ?? 0) }));
       await load();
     } catch (e) {
       setErr(e instanceof Error ? e.message : t("staging.errGeneric"));
@@ -395,14 +412,14 @@ export function StagingScreen() {
               <b>{pend}</b> {t("staging.pending")}
             </span>
             <span className="stg-bar" aria-hidden="true">
-              <span className="ok" style={{ width: total ? (acc / total) * 100 + "%" : "0%" }} />
-              <span className="out" style={{ width: total ? (dis / total) * 100 + "%" : "0%" }} />
+              <span className="ok" style={{ width: progress.acceptedPct + "%" }} />
+              <span className="out" style={{ width: progress.rejectedPct + "%" }} />
             </span>
             <span>
-              <b className="t-accent">{acc}</b> {t("staging.toMaster")}
+              <b className="t-accent">{progress.accepted}</b> {t("staging.toMaster")}
             </span>
             <span>
-              <b>{dis}</b> {t("staging.discarded")}
+              <b>{progress.rejected}</b> {t("staging.discarded")}
             </span>
           </div>
           <div className="stg-filter" role="group" aria-label={t("staging.filterAria")}>
@@ -518,7 +535,7 @@ export function StagingScreen() {
             <div className="mark">✓</div>
             <h2>{t("staging.emptyTitle")}</h2>
             <p>
-              <span className="t-num">{acc}</span> {t("staging.emptyBody")}
+              <span className="t-num">{progress.accepted}</span> {t("staging.emptyBody")}
             </p>
             <span className="c-forge">
               <Link className="c-btn c-btn--forge c-btn--lg" href="/app/master">

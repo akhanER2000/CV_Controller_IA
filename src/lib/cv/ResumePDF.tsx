@@ -1,11 +1,28 @@
 import { Document, Page, View, Text, Image, Link, Font, StyleSheet, renderToBuffer } from "@react-pdf/renderer";
-import { Fragment } from "react";
+import { Fragment, type ReactNode } from "react";
 import { fileURLToPath } from "node:url";
 import { existsSync } from "node:fs";
 import path from "node:path";
 import * as QRCode from "qrcode";
-import { selectContent, linkUrl, buildVCard, type ResumeData, type Locale } from "./resume";
-import { resolveMetrics, resolveTemplate, resolveTypography, type CvTemplate } from "./templates";
+import {
+  selectContent,
+  buildVCard,
+  contactLayout,
+  documentSections,
+  skillLines,
+  type ResumeData,
+  type Locale,
+} from "./resume";
+import {
+  bulletMark,
+  headingLabelText,
+  nameText,
+  resolveMetrics,
+  resolveTemplate,
+  resolveTypography,
+  type CvTemplate,
+  type SectionId,
+} from "./templates";
 
 /**
  * href navegable de una URL de texto: añade https:// si no trae esquema. Se aplica
@@ -117,6 +134,23 @@ function stylesFor(tpl: CvTemplate) {
   // que pintarlo AQUÍ; mientras tanto un `paper` de color sería mentira y hay un
   // test que lo impide (los contrastes se miden contra el papel que se imprime).
 
+  // Los ejes de composición se traducen a estilo AQUÍ, y siempre por AÑADIDO: si el
+  // eje está en su valor por defecto no se emite la propiedad, de modo que la hoja
+  // de la clásica sale con exactamente las mismas claves que antes de que estos ejes
+  // existieran. Un `textAlign: "left"` de más sería inocuo en pantalla y suficiente
+  // para mover los bytes del PDF por defecto, que es justo lo que no puede pasar.
+  const centrarCabecera = m.nameAlign === "center" ? ({ textAlign: "center" } as const) : null;
+  const centrarRotulo = m.headingAlign === "center" ? ({ textAlign: "center" } as const) : null;
+  // El filete completo se dibuja como borde del propio rótulo (así era y así sigue).
+  // "partial" y "double" necesitan un elemento aparte: se dibujan como <View>, que no
+  // aporta texto y por tanto no toca el orden de lectura.
+  const fileteEnBorde = m.headingRule && (m.headingRuleStyle === "full" || m.headingRuleStyle === "double");
+  const filete = fileteEnBorde
+    ? m.headingRulePosition === "above"
+      ? { paddingTop: ruleGap, borderTopWidth: m.headingRuleWidth, borderTopColor: p.hair }
+      : { paddingBottom: ruleGap, borderBottomWidth: m.headingRuleWidth, borderBottomColor: p.hair }
+    : null;
+
   return StyleSheet.create({
     page: {
       paddingVertical: m.pageMarginV,
@@ -131,15 +165,20 @@ function stylesFor(tpl: CvTemplate) {
       fontSize: m.nameSize,
       lineHeight: m.nameLeading,
       color: nameColor,
+      ...(m.nameCase === "upper" ? ({ textTransform: "uppercase" } as const) : null),
+      ...(m.nameTracking ? { letterSpacing: m.nameTracking } : null),
+      ...centrarCabecera,
     },
     label: ty.labelItalic
       ? {
           fontFamily: ty.display, fontStyle: "italic", fontWeight: 500,
-          fontSize: m.labelSize, lineHeight: 1.3, marginTop: 2,
+          fontSize: m.labelSize, lineHeight: 1.3, marginTop: 2, ...centrarCabecera,
         }
-      : { fontWeight: 600, fontSize: m.labelSize, lineHeight: 1.3, marginTop: 2 },
-    contact: { fontSize: m.contactSize, lineHeight: 1.5, color: p.muted, marginTop: 5 },
-    contact2: { fontSize: m.contactSize, lineHeight: 1.5, color: p.muted, marginTop: 1 },
+      : { fontWeight: 600, fontSize: m.labelSize, lineHeight: 1.3, marginTop: 2, ...centrarCabecera },
+    contact: { fontSize: m.contactSize, lineHeight: 1.5, color: p.muted, marginTop: 5, ...centrarCabecera },
+    contact2: { fontSize: m.contactSize, lineHeight: 1.5, color: p.muted, marginTop: 1, ...centrarCabecera },
+    /** Filete bajo TODA la cabecera (opt-in): separa identidad de contenido. */
+    headRule: { paddingBottom: 7, borderBottomWidth: m.headingRuleWidth, borderBottomColor: p.hair },
     // ⚠ SIN letterSpacing: el tracking de imprenta (.h del diseño usa .1em) hace
     // que pdf.js extraiga el encabezado como letras separadas ("R E S U M E N") —
     // el patrón anti-ATS que el documento prohíbe (ESPECIFICACION §8). En el
@@ -159,9 +198,23 @@ function stylesFor(tpl: CvTemplate) {
       color: headColor,
       marginTop: m.sectionGap,
       marginBottom: ruleGap,
-      ...(m.headingRule
-        ? { paddingBottom: ruleGap, borderBottomWidth: m.headingRuleWidth, borderBottomColor: p.hair }
-        : null),
+      ...filete,
+      ...(m.headingTracking ? { letterSpacing: m.headingTracking } : null),
+      ...centrarRotulo,
+    },
+    /** Filete PARCIAL: un trazo corto bajo el rótulo, no una raya de lado a lado. */
+    rulePartial: {
+      width: m.headingRuleInset,
+      height: m.headingRuleWidth,
+      backgroundColor: p.hair,
+      marginBottom: ruleGap,
+      ...(m.headingAlign === "center" ? ({ alignSelf: "center" } as const) : null),
+    },
+    /** Segundo trazo del filete DOBLE (el primero es el borde del rótulo). */
+    ruleDouble: {
+      height: m.headingRuleWidth,
+      backgroundColor: p.hair,
+      marginTop: Math.max(1.2 - ruleGap, -ruleGap),
     },
     sum: { fontSize: body, lineHeight: m.bodyLeading, marginTop: m.summaryGap },
     skline: { fontSize: body, lineHeight: m.skillLeading, marginTop: m.skillGap },
@@ -173,10 +226,25 @@ function stylesFor(tpl: CvTemplate) {
       fontFamily: ty.figuresFace, fontWeight: 400, fontSize: m.dateSize,
       lineHeight: 1.3, color: p.muted, paddingLeft: m.dateGap,
     },
+    /** Fechas cuando NO van a la derecha: el cargo abre su propio bloque. */
+    tSolo: { fontWeight: 700, fontSize: m.entryTitleSize, lineHeight: 1.3, marginTop: m.entryGap },
+    tEduSolo: { fontWeight: 700, fontSize: m.eduTitleSize, lineHeight: 1.3, marginTop: m.entryGap },
+    /** Fechas EN LÍNEA, dentro del propio cargo (Text anidado: mismo párrafo). */
+    dInline: { fontFamily: ty.figuresFace, fontWeight: 400, fontSize: m.dateSize, color: p.muted },
+    /** Fechas en LÍNEA PROPIA, bajo el cargo. */
+    dOwn: {
+      fontFamily: ty.figuresFace, fontWeight: 400, fontSize: m.dateSize,
+      lineHeight: 1.35, color: p.muted, marginTop: 1,
+    },
     org: { fontSize: m.dateSize, lineHeight: 1.35, color: p.muted, marginTop: 1 },
     b: {
       fontSize: body, lineHeight: m.bodyLeading, marginTop: m.bulletGap,
       paddingLeft: m.bulletIndent, textIndent: -m.bulletHang,
+    },
+    /** Viñeta SIN marcador: la sangría francesa sobra (no hay glifo que colgar). */
+    bPlain: {
+      fontSize: body, lineHeight: m.bodyLeading, marginTop: m.bulletGap,
+      paddingLeft: m.bulletIndent,
     },
     // Foto — OPT-IN (versión "visual"). Nunca en el render por defecto (golden).
     photo: { width: 84, height: 84, borderRadius: 4, marginBottom: 8, objectFit: "cover" },
@@ -252,6 +320,15 @@ export function ResumePDF({
     typographyId: opts.typographyId ?? data.typographyId,
   });
   const s = sheetFor(tpl);
+  const m = resolveMetrics(tpl.metrics);
+
+  // Los ejes que cambian el TEXTO se resuelven con las MISMAS funciones que usa
+  // toPlainText (templates.ts/resume.ts). Es deliberado: el round-trip compara el
+  // PDF contra ese texto plano, así que si aquí se recalculara "a mano" el rótulo
+  // numerado o el marcador de viñeta, el test compararía dos documentos distintos.
+  const secciones = documentSections(data, onePage, m);
+  const vineta = bulletMark(m);
+  const contacto = contactLayout(b, loc, m);
 
   // Los bloques se declaran una vez y las dos composiciones (una columna / barra
   // lateral) los ORDENAN distinto. El contenido y su texto son idénticos: lo único
@@ -266,47 +343,139 @@ export function ResumePDF({
   /* Cabecera — contacto EN EL CUERPO (no header/footer), con prefijos de texto */
   const nameBlock = (
     <>
-      <Text style={s.name}>{b.name}</Text>
+      <Text style={s.name}>{nameText(b.name, m)}</Text>
       <Text style={s.label}>{tt(b.label)}</Text>
     </>
   );
 
   const contactBlock = (
     <>
-      <Text style={s.contact}>
-        Email: {b.email} · Tel: {b.phone} · {tt(b.location)}
-      </Text>
+      {/* Un hijo por TROZO (los separadores ya vienen dentro): @react-pdf emite un
+          operador de texto por hijo, así que este reparto es parte del PDF. */}
+      {contacto.info.map((linea, i) => (
+        <Text key={i} style={i === 0 ? s.contact : s.contact2}>
+          {linea.map((trozo, k) => (
+            <Fragment key={k}>{trozo}</Fragment>
+          ))}
+        </Text>
+      ))}
       {/* Cada URL es TEXTO seleccionable Y, ademÁs, un hipervínculo real (<Link>).
           El texto visible no cambia (la URL tal cual) — el href sí lleva https://. */}
-      <Text style={s.contact2}>
-        {b.links.map((l, i) => {
-          const url = linkUrl(l);
-          return (
-            <Fragment key={i}>
-              {i > 0 ? " · " : ""}
+      {contacto.links.map((linea, i) => (
+        <Text key={`l${i}`} style={s.contact2}>
+          {linea.map((url, j) => (
+            <Fragment key={j}>
+              {j > 0 ? " · " : ""}
               <Link src={hrefOf(url)} style={s.linkContact}>
                 {url}
               </Link>
             </Fragment>
-          );
-        })}
-      </Text>
+          ))}
+        </Text>
+      ))}
     </>
   );
 
+  // El nombre y el contacto son UN bloque: el filete de cabecera (opt-in) los separa
+  // del contenido. Sin él no hay envoltorio ninguno — el documento clásico intacto.
+  const headerBlock = m.nameRule ? (
+    <View style={s.headRule}>
+      {nameBlock}
+      {contactBlock}
+    </View>
+  ) : (
+    <>
+      {nameBlock}
+      {contactBlock}
+    </>
+  );
+
+  /**
+   * El rótulo de una sección. La numeración sale de headingLabelText (la misma que
+   * usa el texto plano) y la CAJA la sigue poniendo textTransform en la hoja: pasar
+   * el rótulo ya en mayúsculas cambiaría el string del documento por defecto.
+   * Devuelve también el filete cuando no es un borde del propio rótulo.
+   */
+  const heading = (id: SectionId) => {
+    const rotulo = headingLabelText(tt(data.headings[id]), secciones.indexOf(id), m);
+    if (rotulo === null) return null;
+    return (
+      <>
+        <Text style={s.h}>{rotulo}</Text>
+        {m.headingRule && m.headingRuleStyle === "partial" ? <View style={s.rulePartial} /> : null}
+        {m.headingRule && m.headingRuleStyle === "double" ? <View style={s.ruleDouble} /> : null}
+      </>
+    );
+  };
+
+  /** Una viñeta, con el marcador que pida la plantilla (o sin ninguno). */
+  const bullet = (texto: string, key: number) => (
+    <Text key={key} style={vineta ? s.b : s.bPlain}>
+      {vineta}
+      {texto}
+    </Text>
+  );
+
+  /**
+   * Una entrada (empleo o formación) con sus fechas donde toque. Las tres variantes
+   * emiten el MISMO texto y en el mismo orden que entryLines() del texto plano —
+   * cambia dónde cae, no qué dice.
+   */
+  const entrada = (
+    titulo: ReactNode,
+    fechas: string,
+    pie: string,
+    edu: boolean,
+    key: number,
+    hijos?: ReactNode,
+  ) => {
+    const cuerpo =
+      m.dateStyle === "right" ? (
+        <View style={s.erow}>
+          <Text style={edu ? s.tEdu : s.t}>{titulo}</Text>
+          <Text style={s.d}>{fechas}</Text>
+        </View>
+      ) : m.dateStyle === "inline" ? (
+        <Text style={edu ? s.tEduSolo : s.tSolo}>
+          {titulo}
+          <Text style={s.dInline}> · {fechas}</Text>
+        </Text>
+      ) : (
+        <>
+          <Text style={edu ? s.tEduSolo : s.tSolo}>{titulo}</Text>
+          <Text style={s.dOwn}>{fechas}</Text>
+        </>
+      );
+    // wrap={false}: la entrada ENTERA (cargo, fechas, ubicación y viñetas) no se
+    // parte entre páginas. Un empleo cuyo encabezado queda huérfano al pie de la
+    // página 1 no solo se ve mal: descoloca al parser que empareja cargo y fechas.
+    return (
+      <View key={key} wrap={false}>
+        {cuerpo}
+        <Text style={s.org}>{pie}</Text>
+        {hijos}
+      </View>
+    );
+  };
+
   const summaryBlock = (
     <>
-      <Text style={s.h}>{tt(data.headings.summary)}</Text>
+      {heading("summary")}
       <Text style={s.sum}>{tt(b.summary)}</Text>
     </>
   );
 
   const skillsBlock = (
     <>
-      <Text style={s.h}>{tt(data.headings.skills)}</Text>
-      {data.skills.map((sk, i) => (
+      {heading("skills")}
+      {skillLines(data.skills, m).map((linea, i) => (
         <Text key={i} style={s.skline}>
-          <Text style={s.skLabel}>{tt(sk.group)}:</Text> {tt(sk.items)}
+          {linea.map((sk, j) => (
+            <Fragment key={j}>
+              {j > 0 ? " · " : null}
+              <Text style={s.skLabel}>{tt(sk.group)}:</Text> {tt(sk.items)}
+            </Fragment>
+          ))}
         </Text>
       ))}
     </>
@@ -314,52 +483,46 @@ export function ResumePDF({
 
   const workBlock = work.length > 0 && (
     <>
-      <Text style={s.h}>{tt(data.headings.work)}</Text>
-      {work.map((w, i) => (
-        <View key={i} wrap={false}>
-          <View style={s.erow}>
-            <Text style={s.t}>
-              {tt(w.title)} — {w.company}
-            </Text>
-            <Text style={s.d}>{tt(w.dates)}</Text>
-          </View>
-          <Text style={s.org}>{tt(w.location)}</Text>
-          {w.bullets.map((bl, j) => (
-            <Text key={j} style={s.b}>
-              • {tt(bl)}
-            </Text>
-          ))}
-        </View>
-      ))}
+      {heading("work")}
+      {work.map((w, i) =>
+        entrada(
+          <>
+            {tt(w.title)} — {w.company}
+          </>,
+          tt(w.dates),
+          tt(w.location),
+          false,
+          i,
+          w.bullets.map((bl, j) => bullet(tt(bl), j)),
+        ),
+      )}
     </>
   );
 
-  // Proyectos — cada proyecto es una viñeta, sin erow/org
+  // Proyectos — cada proyecto es una viñeta, sin entrada ni fechas
   const projectsBlock = projects.length > 0 && (
     <>
-      <Text style={s.h}>{tt(data.headings.projects)}</Text>
-      {projects.map((p, i) => (
-        <Text key={i} style={s.b}>
-          • {tt(p)}
-        </Text>
-      ))}
+      {heading("projects")}
+      {projects.map((p, i) => bullet(tt(p), i))}
     </>
   );
 
   const educationBlock = education.length > 0 && (
     <>
-      <Text style={s.h}>{tt(data.headings.education)}</Text>
-      {education.map((e, i) => (
-        <View key={i} wrap={false}>
-          <View style={s.erow}>
-            <Text style={s.tEdu}>{tt(e.title)}</Text>
-            <Text style={s.d}>{tt(e.dates)}</Text>
-          </View>
-          <Text style={s.org}>{e.org}</Text>
-        </View>
-      ))}
+      {heading("education")}
+      {education.map((e, i) => entrada(tt(e.title), tt(e.dates), e.org, true, i))}
     </>
   );
+
+  /** Los bloques por id, para que el ORDEN lo decida la plantilla y no el JSX. */
+  const bloques: Record<SectionId, ReactNode> = {
+    summary: summaryBlock,
+    skills: skillsBlock,
+    work: workBlock,
+    projects: projectsBlock,
+    education: educationBlock,
+  };
+  const cuerpoOrdenado = secciones.map((id) => <Fragment key={id}>{bloques[id]}</Fragment>);
 
   /* QR AL PIE — opt-in, dos modos. El glifo no lo lee el ATS.
      - 'url'  : la URL va SIEMPRE como TEXTO al lado (y como hipervínculo). Si
@@ -416,16 +579,13 @@ export function ResumePDF({
             </View>
           </View>
         ) : (
-          /* GAMA ATS — UNA columna, en el orden exacto del texto plano. */
+          /* GAMA ATS — UNA columna, en el orden exacto del texto plano. El orden de
+             las secciones lo dicta la plantilla (`sectionOrder`), y toPlainText lo
+             calcula con la MISMA función: por eso siguen siendo el mismo orden. */
           <>
             {photoBlock}
-            {nameBlock}
-            {contactBlock}
-            {summaryBlock}
-            {skillsBlock}
-            {workBlock}
-            {projectsBlock}
-            {educationBlock}
+            {headerBlock}
+            {cuerpoOrdenado}
             {qrBlock}
           </>
         )}

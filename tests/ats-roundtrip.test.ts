@@ -3,9 +3,9 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 import { extractText, getDocumentProxy } from "unpdf";
-import { toPlainText, type ResumeData } from "../src/lib/cv/resume";
+import { CX, toPlainText, type ResumeData } from "../src/lib/cv/resume";
 import { renderResumeToBuffer } from "../src/lib/cv/ResumePDF";
-import { listTemplates } from "../src/lib/cv/templates";
+import { listTemplates, nameText, resolveMetrics } from "../src/lib/cv/templates";
 
 /**
  * EL TEST QUE NADIE HACE (documento-cv.md §6). Renderiza el PDF desde el golden
@@ -301,9 +301,29 @@ describe("CV round-trip ATS · QR modo vcard (contacto en el cuerpo, orden intac
 const ATS_TEMPLATES = listTemplates().filter((t) => t.gama === "ats");
 const VISUAL_TEMPLATES = listTemplates().filter((t) => t.gama === "visual");
 
+/**
+ * Los DATOS que el documento tiene que conservar, sea cual sea la plantilla. Se
+ * derivan del propio fixture en vez de escribirse a mano: así, el día que alguien
+ * añada un empleo al golden, el candado lo cubre solo. Son cadenas que NINGÚN eje
+ * transforma (ni caja, ni marcador, ni orden), y por eso valen para las treinta.
+ */
+const DATOS_INTOCABLES = [
+  data.basics.email,
+  data.basics.phone,
+  ...data.basics.links.map((l) => (typeof l === "string" ? l : l.url)),
+  ...data.work.map((w) => w.company),
+  ...data.work.map((w) => w.dates.es),
+  ...data.work.flatMap((w) => w.bullets.map((b) => b.es)),
+  ...data.projects.map((p) => p.es),
+  ...data.education.map((e) => e.org),
+  ...data.education.map((e) => e.dates.es),
+  ...data.skills.map((s) => s.items.es),
+  data.basics.summary.es,
+];
+
 describe("CV round-trip ATS · PARAMETRIZADO por plantilla del catálogo", () => {
-  // Un render por plantilla, reutilizado por sus tres comprobaciones (renderizar un
-  // PDF de dos páginas cinco veces por aserción sería absurdo).
+  // Un render por plantilla, reutilizado por sus comprobaciones (renderizar un PDF
+  // de dos páginas cinco veces por aserción sería absurdo).
   const salida = new Map<string, string>();
 
   beforeAll(async () => {
@@ -315,10 +335,10 @@ describe("CV round-trip ATS · PARAMETRIZADO por plantilla del catálogo", () =>
       const { text } = await extractText(pdf, { mergePages: true });
       salida.set(tpl.id, norm(text));
     }
-  }, 180000);
+  }, 300000);
 
-  it("0 · el catálogo trae al menos CUATRO plantillas de gama ATS", () => {
-    expect(ATS_TEMPLATES.length).toBeGreaterThanOrEqual(4);
+  it("0 · el catálogo trae una gama ATS de VERDAD (treinta o más), con la clásica dentro", () => {
+    expect(ATS_TEMPLATES.length).toBeGreaterThanOrEqual(30);
     expect(ATS_TEMPLATES.map((t) => t.id)).toContain("ats-clasica");
   });
 
@@ -345,16 +365,31 @@ describe("CV round-trip ATS · PARAMETRIZADO por plantilla del catálogo", () =>
   }, 120000);
 
   for (const tpl of ATS_TEMPLATES) {
+    /**
+     * El rayos-X DE ESTA PLANTILLA. Con treinta plantillas el golden ya no puede ser
+     * la vara para todas: hay plantillas que reordenan las secciones, numeran los
+     * rótulos o cambian el marcador de viñeta, y exigirles el orden del golden sería
+     * exigirles que no hagan lo que las hace distintas.
+     *
+     * Lo que NO se relaja es el candado: se les exige que el PDF coincida con SU
+     * PROPIO texto plano, que es el que la app le enseña al usuario en "cómo lo lee
+     * el ATS". Si el documento y su rayos-X divergieran, el producto estaría mintiendo
+     * en la única pantalla donde promete no hacerlo. La clásica, además, sigue atada
+     * al golden byte a byte (bloque de retrocompatibilidad, más abajo).
+     */
+    const rayosX = toPlainText({ ...data, templateId: tpl.id }, { locale: "es", onePage: false });
+
     describe(`${tpl.id} · ${tpl.name}`, () => {
       it("a · nombre, contacto, cargos y fechas sobreviven al parseo", () => {
         const out = salida.get(tpl.id)!;
+        const m = resolveMetrics(tpl.metrics);
         for (const needle of [
-          "Diego Gatica Morales", // nombre
+          nameText(data.basics.name, m), // el nombre, en la caja que use la plantilla
           "diego.gatica@ejemplo.cl", // email
           "+56 9 6123 4567", // teléfono
           "github.com/dgatica", // enlace
-          "Backend Developer — Altiplano Pagos SpA", // cargo (con la raya larga)
-          "Backend Developer, equipo Checkout — Rayén Retail S.A.", // el cargo más largo
+          "Altiplano Pagos SpA", // empresa
+          "Backend Developer, equipo Checkout", // el cargo más largo
           "mar 2022 – hoy", // fechas (con guion corto)
           "ene 2020 – feb 2022",
           "2014 – 2019", // fechas de formación
@@ -365,17 +400,27 @@ describe("CV round-trip ATS · PARAMETRIZADO por plantilla del catálogo", () =>
         }
       });
 
-      it("b · TODAS las líneas del golden, en ORDEN DE LECTURA", () => {
+      it("b · TODAS las líneas de su texto plano, en ORDEN DE LECTURA", () => {
         const out = salida.get(tpl.id)!;
         let cursor = 0;
-        for (const line of golden.split("\n").map(norm).filter(Boolean)) {
+        for (const line of rayosX.split("\n").map(norm).filter(Boolean)) {
           const idx = out.indexOf(line, cursor);
           expect(idx, `${tpl.id} · fuera de orden o ausente: "${line}"`).toBeGreaterThanOrEqual(0);
           cursor = idx + line.length;
         }
       });
 
-      it("c · sin basura de embedding (letras espaciadas / mojibake)", () => {
+      it("c · NINGÚN dato del master se pierde por el camino", () => {
+        // El orden puede cambiar; el contenido no. Un eje de composición que se coma
+        // una viñeta, una empresa o un enlace no es un estilo: es una pérdida de datos.
+        const out = salida.get(tpl.id)!;
+        for (const dato of DATOS_INTOCABLES) {
+          expect(out, `${tpl.id} · el documento pierde: "${dato}"`).toContain(norm(dato));
+          expect(rayosX, `${tpl.id} · el rayos-X pierde: "${dato}"`).toContain(dato);
+        }
+      });
+
+      it("d · sin basura de embedding (letras espaciadas / mojibake)", () => {
         const out = salida.get(tpl.id)!;
         expect(out).not.toMatch(/D i e g o|E x p e r i e n c i a/);
         expect(out).not.toContain("[object Object]");
@@ -410,15 +455,26 @@ describe("CV gama visual · exenta del round-trip, obligada al aviso", () => {
     // fallo real: sin `flexBasis: 0` la columna de contenido se encogía y las URLs
     // (palabras que no se pueden partir) se cortaban a media palabra.
     const palabras = [...new Set(golden.split(/\s+/).filter((w) => w.length >= 4))];
+    // Los RÓTULOS de sección son lo único que una plantilla puede quitar a propósito
+    // (headingLabel: false), y solo en esta gama. No es texto del usuario: es la
+    // etiqueta del bloque. Quitarla es exactamente lo que su aviso explica, así que
+    // no se le exige a esa plantilla — pero a las demás sí, y los DATOS a todas.
+    const rotulos = new Set(Object.values(data.headings).map((h) => h.es.toUpperCase()));
     for (const tpl of VISUAL_TEMPLATES) {
+      const rotula = resolveMetrics(tpl.metrics).headingLabel;
       const buf = await renderResumeToBuffer({ ...data, templateId: tpl.id }, { locale: "es", onePage: false });
       const pdf = await getDocumentProxy(new Uint8Array(buf));
       const { text } = await extractText(pdf, { mergePages: true });
       const out = norm(text);
-      const perdidas = palabras.filter((w) => !out.includes(w));
+      const exigidas = rotula ? palabras : palabras.filter((w) => !rotulos.has(w));
+      const perdidas = exigidas.filter((w) => !out.includes(w));
       expect(perdidas, `${tpl.id} · palabras recortadas: ${perdidas.slice(0, 8).join(", ")}`).toEqual([]);
+      // Los datos del master no se pierden NUNCA, ni en esta gama.
+      for (const dato of DATOS_INTOCABLES) {
+        expect(out, `${tpl.id} · el documento pierde: "${dato}"`).toContain(norm(dato));
+      }
     }
-  }, 60000);
+  }, 120000);
 
   it("4 · renderiza un PDF válido y el contacto sigue estando como texto", async () => {
     for (const tpl of VISUAL_TEMPLATES) {
@@ -457,11 +513,47 @@ describe("CV plantillas · sin templateId = plantilla por defecto (bytes idénti
     expect(raro.length).toBe(sin.length);
   }, 60000);
 
-  it("3 · el texto plano (rayos-X) NO depende de la plantilla", () => {
+  it("3 · el texto plano por defecto (y el de 'ats-clasica') ES el golden", () => {
     const base = toPlainText(data, { locale: "es", onePage: false });
-    for (const tpl of listTemplates()) {
-      expect(toPlainText({ ...data, templateId: tpl.id }, { locale: "es", onePage: false })).toBe(base);
-    }
     expect(base).toBe(golden);
+    expect(toPlainText({ ...data, templateId: "ats-clasica" }, { locale: "es", onePage: false })).toBe(golden);
+    // Y un id que no existe tampoco mueve el rayos-X: cae en la de por defecto.
+    expect(toPlainText({ ...data, templateId: "no-existe" }, { locale: "es", onePage: false })).toBe(golden);
+  });
+
+  it("4 · el rayos-X SIGUE a la plantilla: mismas líneas, en el orden de cada una", () => {
+    // Antes este test decía que el texto plano no dependía de la plantilla, y era
+    // verdad porque ninguna plantilla movía el texto. Al llegar los ejes de orden de
+    // sección, caja y marcador, esa promesa se volvió falsa Y peligrosa: si el PDF
+    // pone la formación arriba y el rayos-X la sigue poniendo abajo, la pantalla
+    // "cómo lo lee el ATS" enseña un documento que no existe. Lo que se conserva —y
+    // es lo que había que conservar— es que NO SE PIERDE NI SE INVENTA CONTENIDO.
+    // Una línea "desnuda": sin numeral de sección, sin marcador de viñeta y en caja
+    // alta. Es decir, la línea SIN lo que los ejes tienen permiso para cambiar — lo
+    // que queda es contenido puro, y eso sí tiene que salir del master.
+    const etiquetas = new RegExp(`${CX.email.toUpperCase()}|${CX.tel.toUpperCase()}`, "g");
+    const desnudar = (l: string) =>
+      l
+        .replace(/^\d{2} · /, "") // numeral de sección
+        .replace(/^[•—-]\s+/, "") // marcador de viñeta
+        .replace(/ · /g, " ") // separador de segmentos (contacto, fechas en línea)
+        .toUpperCase() // caja del rótulo y del nombre
+        .replace(etiquetas, ""); // prefijos "Email:" / "Tel:"
+    const enLineas = (s: string) => s.split("\n").map(norm).filter(Boolean);
+    const baseDesnuda = enLineas(golden).map(desnudar);
+
+    for (const tpl of listTemplates()) {
+      const suyo = toPlainText({ ...data, templateId: tpl.id }, { locale: "es", onePage: false });
+      for (const dato of DATOS_INTOCABLES) {
+        expect(suyo, `${tpl.id} · el rayos-X pierde: "${dato}"`).toContain(dato);
+      }
+      // Ninguna plantilla INVENTA contenido: cada línea suya, ya desnuda, tiene que
+      // ser una línea del golden o un trozo/unión de ellas (el contacto se reparte,
+      // las habilidades se juntan, las fechas se separan del cargo).
+      for (const l of enLineas(suyo).map(desnudar)) {
+        const explicada = baseDesnuda.some((g) => g.includes(l) || l.includes(g));
+        expect(explicada, `${tpl.id} · línea que no sale de los datos: "${l}"`).toBe(true);
+      }
+    }
   });
 });

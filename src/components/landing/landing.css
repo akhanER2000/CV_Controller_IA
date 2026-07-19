@@ -1,0 +1,436 @@
+/* ============================================================================
+   LANDING · la puerta pública. CSS propio, sobre el kit del sistema.
+
+   Regla de esta hoja: NO redefine ningún token ni ninguna clase c-*. Solo añade
+   la composición de una página que el paquete de diseño no tenía (el sistema
+   nace de una app, no de una landing). Todo color, easing, duración, radio y
+   espaciado sale de las variables de globals.css: si el sistema cambia, esto
+   cambia con él.
+
+   Ritmo: la app trabaja a 48–64px; una página de lectura/ceremonia trabaja a
+   --sp-10 (160px). Aquí se usa el ritmo de ceremonia, recortado en móvil.
+   ============================================================================ */
+
+.ls {
+  /* Ritmo vertical de sección y ancho de la columna de lectura. */
+  --ls-sec: var(--sp-9);
+  --ls-read: 62ch;
+}
+
+/* Salto al contenido: visible solo con teclado. */
+.ls-skip {
+  position: absolute;
+  left: -9999px;
+  top: 0;
+  z-index: var(--z-overlay);
+  padding: 10px 16px;
+  background: var(--surface-elevated);
+  border: 1px solid var(--border-patina);
+  border-radius: var(--radius-sm);
+  font: 500 var(--fs-ui)/1 var(--font-sans);
+}
+.ls-skip:focus-visible { left: 12px; top: 12px; }
+
+/* Cabecera: el conmutador de idioma del sistema, pero con botones reales.
+   Mismas reglas visuales que .hd-lang span (base.css), en versión pulsable. */
+.hd-lang button {
+  padding: 6px 8px;
+  font: inherit;
+  color: var(--text-subtle);
+  transition: color var(--dur-fast) var(--ease-standard);
+}
+.hd-lang button:hover { color: var(--text-muted); }
+.hd-lang button[data-on] { color: var(--text); background: var(--surface-elevated); }
+.ls-hd-login {
+  font: 500 var(--fs-ui)/1 var(--font-sans);
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+.ls-hd-login:hover { color: var(--text); text-decoration: none; }
+
+/* ── Secciones ─────────────────────────────────────────────────────────────── */
+.ls-sec { padding: var(--ls-sec) 0; }
+.ls-sec--star { padding-bottom: calc(var(--ls-sec) + var(--sp-6)); }
+
+.ls-head { max-width: var(--ls-read); }
+.ls-head--wide { max-width: 74ch; }
+.ls-head .t-overline { display: block; margin-bottom: var(--sp-4); }
+.ls-head h2 { margin-bottom: var(--sp-4); }
+.ls-h2--big { font-size: var(--fs-display); line-height: 1.1; }
+
+/* Nota al pie de bloque: la voz de la letra pequeña honesta (mono, discreta). */
+.ls-note {
+  margin-top: var(--sp-6);
+  max-width: 78ch;
+  font: 400 var(--fs-micro)/1.85 var(--font-mono);
+  color: var(--text-subtle);
+}
+.ls-note--tight { margin-top: var(--sp-4); }
+.ls-hint {
+  margin-top: var(--sp-5);
+  font: 400 var(--fs-data)/1.6 var(--font-mono);
+  color: var(--text-subtle);
+}
+
+/* ── 1 · HERO (ventana: el fondo vivo se ve) ───────────────────────────────── */
+.ls-hero { padding: calc(var(--sp-9) + var(--sp-5)) 0 var(--sp-9); }
+.ls-hero h1 {
+  margin-top: var(--sp-4);
+  max-width: 22ch;
+  font-size: var(--fs-hero);
+}
+.ls-hero__lead { margin-top: var(--sp-5); max-width: 56ch; }
+.ls-hero__cta {
+  margin-top: var(--sp-7);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-4);
+}
+.ls-hero__fine {
+  margin-top: var(--sp-5);
+  font: 400 var(--fs-micro)/1.8 var(--font-mono);
+  color: var(--text-subtle);
+}
+
+/* ── 2 · DEMO DE INGESTA ───────────────────────────────────────────────────── */
+.ls-demo {
+  margin-top: var(--sp-7);
+  display: grid;
+  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+  gap: var(--sp-6);
+  align-items: start;
+}
+.ls-demo__cap {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-4);
+  margin-bottom: var(--sp-3);
+  min-height: var(--control-h);
+}
+/* La superficie de "texto pegado": el campo del sistema, en modo lectura. */
+.ls-paste {
+  margin: 0;
+  min-height: 0;
+  max-height: 340px;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font: 400 var(--fs-data)/1.75 var(--font-mono);
+  color: var(--text-muted);
+  cursor: default;
+}
+
+/* El registro de la extracción */
+.ls-log { list-style: none; margin: 0 0 var(--sp-4); padding: 0; min-height: 66px; }
+.ls-log__li {
+  display: flex;
+  gap: var(--sp-2);
+  align-items: baseline;
+  font: 400 var(--fs-data)/1.9 var(--font-mono);
+  color: var(--text-subtle);
+}
+.ls-log__mark { color: var(--accent-text); width: 1.2em; flex: none; }
+
+.ls-items { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--sp-2); }
+.ls-item { padding: 12px 14px; }
+.ls-item.is-partial { border-left: 2px solid var(--border-strong); }
+.ls-item__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  margin-bottom: 6px;
+}
+.ls-item__txt { font-size: var(--fs-ui); line-height: 1.55; }
+.ls-item__chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.ls-item__note {
+  margin-top: 4px;
+  font: 400 var(--fs-micro)/1.6 var(--font-sans);
+  color: var(--text-muted);
+}
+.ls-item__src {
+  margin-top: 7px;
+  font: 400 var(--fs-micro)/1.4 var(--font-mono);
+  color: var(--text-subtle);
+}
+.ls-demo__pending {
+  margin-top: var(--sp-4);
+  font-size: var(--fs-ui);
+  color: var(--text-muted);
+  border-left: 2px solid var(--border-patina);
+  padding-left: var(--sp-3);
+}
+
+/* ── 3 · ★ EL SPLIT ───────────────────────────────────────────────────────── */
+.ls-split {
+  margin-top: var(--sp-7);
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--sp-5);
+  align-items: stretch;
+}
+.ls-face { display: flex; flex-direction: column; padding: 16px 16px 18px; min-width: 0; }
+.ls-face__cap {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-4);
+  padding-bottom: 12px;
+  margin-bottom: 14px;
+  border-bottom: 1px solid var(--border);
+}
+.ls-face__cap .t-overline { line-height: 1.5; }
+
+.ls-paper-wrap, .ls-raw-wrap { flex: 1; min-height: 0; display: flex; }
+
+/* ── LA HOJA ────────────────────────────────────────────────────────────────
+   Anatomía y medidas de la plantilla 'ats-clasica' (src/lib/cv/catalog.ts):
+   nombre 22pt Playfair 600 en pátina · cuerpo 10pt/1.45 · encabezados 10.5pt
+   peso 700 EN MAYÚSCULAS y SIN tracking (el tracking hace que el parser extraiga
+   "R E S U M E N": prohibido en el documento) · fechas a la derecha por flex,
+   nunca por tabla · viñeta "• " · una sola columna, sin foto y sin iconos.
+   1pt = 1px (--pt), así que la hoja mide los 612px de una carta. */
+.ls-paper {
+  --pt: 1px;
+  /* Variables PROPIAS del documento (no tocan ni sombrean los tokens del
+     sistema): son los valores de la paleta 'patina' de catalog.ts, medidos
+     contra papel #FFFFFF. */
+  --doc-ink: #14181A;
+  --doc-muted: #454B49;
+  --doc-hair: #D8DAD6;
+  --doc-accent: #1F6E5A;
+  width: 100%;
+  max-width: calc(612 * var(--pt));
+  margin-inline: auto;
+  padding: calc(38 * var(--pt)) calc(44 * var(--pt));
+  background: #FFFFFF;
+  color: var(--doc-ink);
+  border-radius: var(--radius-sm);
+  box-shadow: 0 2px 24px rgba(0, 0, 0, .5);
+  font-family: var(--font-sans);
+  font-size: calc(10 * var(--pt));
+  line-height: 1.45;
+  overflow: hidden;
+}
+[data-theme="light"] .ls-paper { box-shadow: 0 2px 18px rgba(20, 24, 26, .14); }
+
+.ls-p-sec { transition: opacity var(--dur-base) var(--ease-standard); }
+.ls-p-name {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: calc(22 * var(--pt));
+  line-height: 1.15;
+  color: var(--doc-accent);
+}
+.ls-p-label { font-size: calc(11 * var(--pt)); line-height: 1.35; }
+.ls-p-contact {
+  margin-top: calc(5 * var(--pt));
+  font-size: calc(9.5 * var(--pt));
+  line-height: 1.5;
+  color: var(--doc-muted);
+  word-break: break-word;
+}
+.ls-p-contact + .ls-p-contact { margin-top: calc(1 * var(--pt)); }
+.ls-p-h {
+  margin-top: calc(13 * var(--pt));
+  padding-bottom: calc(3 * var(--pt));
+  margin-bottom: calc(3 * var(--pt));
+  border-bottom: 1px solid var(--doc-hair);
+  font-weight: 700;
+  font-size: calc(10.5 * var(--pt));
+  line-height: 1.1;
+  color: var(--doc-accent);
+  /* SIN letter-spacing: es una decisión del documento, no un olvido. */
+}
+.ls-p-body { margin-top: calc(3 * var(--pt)); }
+.ls-p-sk { margin-top: calc(1.5 * var(--pt)); line-height: 1.5; }
+.ls-p-sk b { font-weight: 600; }
+.ls-p-entry { margin-top: 0; }
+.ls-p-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: calc(12 * var(--pt));
+  margin-top: calc(8 * var(--pt));
+}
+.ls-p-t { font-weight: 700; font-size: calc(11 * var(--pt)); line-height: 1.3; }
+.ls-p-d {
+  font-size: calc(9.5 * var(--pt));
+  line-height: 1.3;
+  color: var(--doc-muted);
+  white-space: nowrap;
+  flex: none;
+}
+.ls-p-org { margin-top: calc(1 * var(--pt)); font-size: calc(9.5 * var(--pt)); line-height: 1.35; color: var(--doc-muted); }
+.ls-p-b {
+  margin-top: calc(3 * var(--pt));
+  padding-left: calc(11 * var(--pt));
+  text-indent: calc(-7.5 * var(--pt));
+}
+
+/* ── El texto que el parser extrae ── */
+.ls-raw {
+  flex: 1;
+  margin: 0;
+  padding: 18px 18px 20px;
+  background: var(--surface-sunken);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font: 400 11.5px/1.75 var(--font-mono);
+  color: var(--text-muted);
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow: auto;
+  max-height: 640px;
+}
+.ls-raw-blk {
+  display: inline;
+  border-radius: 2px;
+  transition: opacity var(--dur-base) var(--ease-standard),
+              background-color var(--dur-base) var(--ease-standard),
+              color var(--dur-base) var(--ease-standard);
+}
+
+/* La correspondencia: la misma información, en sus dos caras. */
+.is-dim { opacity: .38; }
+.ls-raw-blk.is-hl { color: var(--text); background: color-mix(in srgb, var(--patina-500) 16%, transparent); }
+.ls-p-sec.is-hl { box-shadow: 0 0 0 calc(3 * var(--pt)) color-mix(in srgb, var(--doc-accent) 14%, transparent); border-radius: 2px; }
+
+/* ── Las tres cifras ───────────────────────────────────────────────────────── */
+.ls-ev {
+  margin-top: var(--sp-7);
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--sp-4);
+}
+.ls-ev__c { padding: var(--sp-5); display: flex; flex-direction: column; gap: var(--sp-3); }
+.ls-ev__fig {
+  font: 500 var(--fs-h2)/1 var(--font-mono);
+  letter-spacing: -.02em;
+}
+.ls-ev__claim { font-size: var(--fs-lead); line-height: 1.5; }
+.ls-ev__src, .ls-ev__caveat {
+  margin-top: auto;
+  font: 400 var(--fs-micro)/1.7 var(--font-mono);
+  color: var(--text-muted);
+}
+.ls-ev__caveat { margin-top: 0; color: var(--text-subtle); }
+.ls-ev__src .t-overline, .ls-ev__caveat .t-overline { display: block; margin-bottom: 5px; }
+
+/* ── Anti-alucinación ──────────────────────────────────────────────────────── */
+.ls-anti {
+  margin-top: var(--sp-7);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: var(--sp-6);
+  align-items: start;
+}
+.ls-anti__cards { display: grid; gap: var(--sp-3); }
+.ls-anti__c { padding: var(--sp-5); }
+.ls-anti__c h3 { margin-bottom: 6px; }
+.ls-prov { display: grid; gap: var(--sp-3); }
+.ls-prov__i { padding: 14px 16px; }
+.ls-prov__txt { font-size: var(--fs-ui); line-height: 1.55; }
+.ls-prov__meta {
+  margin-top: 9px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-3);
+}
+.ls-prov__src { font: 400 var(--fs-micro)/1.4 var(--font-mono); color: var(--text-subtle); }
+.ls-prov__frag {
+  margin-top: 9px;
+  padding-left: var(--sp-3);
+  border-left: 1px solid var(--border-strong);
+  font: 400 var(--fs-micro)/1.7 var(--font-mono);
+  color: var(--text-muted);
+}
+
+/* ── Plantillas ────────────────────────────────────────────────────────────── */
+.ls-tpl__count { margin-top: var(--sp-3); }
+.ls-tpl {
+  margin: var(--sp-7) 0 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.ls-tpl__i { height: auto; padding: 6px 10px; }
+.ls-tpl__i .t-subtle { font-size: 10px; letter-spacing: .1em; text-transform: uppercase; }
+.ls-tpl__notes { display: grid; gap: 0; }
+
+/* ── Precio ────────────────────────────────────────────────────────────────── */
+.ls-price {
+  margin: var(--sp-7) 0 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: var(--sp-4);
+  max-width: 74ch;
+}
+.ls-price__i {
+  display: grid;
+  grid-template-columns: 14px 1fr;
+  align-items: start;
+  gap: var(--sp-3);
+  font-size: var(--fs-lead);
+  line-height: 1.6;
+  color: var(--text-muted);
+}
+.ls-price__i .c-pulse-dot { margin-top: .55em; }
+
+/* ── Cierre y pie ──────────────────────────────────────────────────────────── */
+.ls-end { padding: var(--sp-9) 0; }
+.ls-end__in { max-width: 60ch; }
+.ls-end .ls-hero__cta { margin-top: var(--sp-6); }
+.ls-footer { padding: 0 0 var(--sp-7); }
+.ls-footer__in {
+  padding-top: var(--sp-6);
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: var(--sp-5);
+}
+.ls-footer__claim { margin-top: var(--sp-3); max-width: 46ch; font-size: var(--fs-ui); }
+.ls-footer__nav { display: flex; gap: var(--sp-5); font-size: var(--fs-ui); align-items: flex-start; }
+
+/* ── Adaptación ────────────────────────────────────────────────────────────── */
+@media (max-width: 1080px) {
+  .ls-split { grid-template-columns: minmax(0, 1fr); }
+  .ls-demo { grid-template-columns: minmax(0, 1fr); }
+  .ls-anti { grid-template-columns: minmax(0, 1fr); }
+  .ls-raw { max-height: 420px; }
+}
+@media (max-width: 860px) {
+  .ls { --ls-sec: var(--sp-8); }
+  .ls-hero { padding: var(--sp-8) 0; }
+  .ls-hero h1 { font-size: var(--fs-display); max-width: none; }
+  .ls-h2--big { font-size: var(--fs-h2); }
+  .ls-ev { grid-template-columns: minmax(0, 1fr); }
+  .ls-paper { --pt: .84px; }
+  .ls-raw { font-size: 10.5px; }
+}
+@media (max-width: 560px) {
+  .ls-paper { --pt: .66px; }
+  .ls-hero__cta .c-btn { width: 100%; }
+  .ls-hero__cta .c-forge { width: 100%; }
+}
+
+/* ── Movimiento propio de la landing ───────────────────────────────────────
+   Solo transform/opacity, y todo bajo no-preference: sin movimiento, el estado
+   base de arriba ya es el final. */
+@media (prefers-reduced-motion: no-preference) {
+  .ls-item {
+    opacity: 0;
+    transform: translateY(8px);
+    transition: opacity var(--dur-slow) var(--ease-signature),
+                transform var(--dur-slow) var(--ease-signature);
+    transition-delay: var(--d, 0ms);
+  }
+  .ls-item.is-in { opacity: 1; transform: none; }
+  .ls-log__li { animation: cEnter var(--dur-slow) var(--ease-signature); }
+}

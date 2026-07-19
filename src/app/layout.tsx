@@ -10,10 +10,32 @@ import "./globals.css";
  * como las nombra tokens.css — así que no hay wiring de next/font aquí.
  */
 
+const TITLE = "Corpus — El sistema de registro de tu carrera";
+const DESCRIPTION =
+  "Un master profile canónico del que se derivan tus variantes de CV. La IA nunca inventa; cada dato tiene procedencia; el PDF lo lee el ATS exactamente como lo ves.";
+
+/*
+ * Los iconos (icon.tsx, apple-icon.tsx) y las tarjetas sociales
+ * (opengraph-image.tsx, twitter-image.tsx) los descubre Next POR CONVENCIÓN DE
+ * ARCHIVO en src/app/: no se declaran aquí, y declararlos a mano los duplicaría.
+ * Lo que sí hace falta declarar es el texto de la tarjeta: sin un bloque
+ * `openGraph`, Next no emite og:title ni og:description, así que WhatsApp y
+ * LinkedIn pintarían la imagen sin titular. `metadataBase` es la base para
+ * resolver la URL absoluta de esa imagen (la misma variable que documenta
+ * DEPLOY.md).
+ */
 export const metadata: Metadata = {
-  title: "Corpus — El sistema de registro de tu carrera",
-  description:
-    "Un master profile canónico del que se derivan tus variantes de CV. La IA nunca inventa; cada dato tiene procedencia; el PDF lo lee el ATS exactamente como lo ves.",
+  metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000"),
+  title: TITLE,
+  description: DESCRIPTION,
+  openGraph: {
+    title: TITLE,
+    description: DESCRIPTION,
+    siteName: "Corpus",
+    locale: "es_ES",
+    type: "website",
+  },
+  twitter: { card: "summary_large_image", title: TITLE, description: DESCRIPTION },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

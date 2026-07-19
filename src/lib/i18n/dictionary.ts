@@ -11,6 +11,7 @@
 
 import { menuCuenta } from "./dict/menu-cuenta";
 import { common } from "./dict/common";
+import { landing } from "./dict/landing";
 import { auth } from "./dict/auth";
 import { onboarding } from "./dict/onboarding";
 import { importar } from "./dict/importar";
@@ -31,7 +32,7 @@ interface Namespace {
 }
 
 const parts: Namespace[] = [
-  menuCuenta, common, auth, onboarding, importar, staging, dashboard,
+  menuCuenta, common, landing, auth, onboarding, importar, staging, dashboard,
   master, variantes, editor, tailor, salud, fuentes, ajustes,
 ];
 

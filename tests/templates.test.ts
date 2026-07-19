@@ -1,5 +1,9 @@
 import { describe, it, expect } from "vitest";
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import path from "node:path";
 import { contrastRatio, meetsAA, parseHex, ratioText } from "../src/lib/cv/contrast";
+import { toPlainText, type ResumeData } from "../src/lib/cv/resume";
 import {
   BODY_WEIGHT,
   DEFAULT_TEMPLATE_ID,
@@ -11,7 +15,10 @@ import {
   resolveMetrics,
   resolveTemplate,
   resolveTypography,
+  tagsOf,
   templateCount,
+  templatesByTags,
+  TEMPLATE_TAGS,
 } from "../src/lib/cv/templates";
 
 /**
@@ -32,6 +39,14 @@ const TODAS = listTemplates();
 const ATS = TODAS.filter((t) => t.gama === "ats");
 const VISUAL = TODAS.filter((t) => t.gama === "visual");
 
+/** El mismo fixture del round-trip: aquí se usa sin renderizar PDF (solo el rayos-X). */
+const datos = JSON.parse(
+  readFileSync(
+    path.join(path.dirname(fileURLToPath(import.meta.url)), "../src/lib/cv/fixtures/datos-ejemplo.json"),
+    "utf8",
+  ),
+) as ResumeData;
+
 /** Cuánto color tiene un hex (0 = gris perfecto). Distancia entre canales. */
 function croma(hex: string): number {
   const { r, g, b } = parseHex(hex);
@@ -40,20 +55,20 @@ function croma(hex: string): number {
 
 describe("catálogo de plantillas · qué hay dentro", () => {
   it("1 · está cargado y la de por defecto existe, es ATS y es de una columna", () => {
-    expect(templateCount()).toBeGreaterThanOrEqual(5);
+    expect(templateCount()).toBeGreaterThanOrEqual(33);
     const def = getTemplate();
     expect(def.id).toBe(DEFAULT_TEMPLATE_ID);
     expect(def.gama).toBe("ats");
     expect(def.layout).toEqual({ columns: 1, photo: false, sidebar: false });
   });
 
-  it("2 · las cuatro de gama ATS con carácter propio, más la visual", () => {
+  it("2 · treinta de gama ATS con carácter propio, más tres o más visuales", () => {
     const ids = TODAS.map((t) => t.id);
     for (const id of ["ats-clasica", "ats-editorial", "ats-instrumento", "ats-compacta"]) {
       expect(ids, `falta la plantilla ${id}`).toContain(id);
     }
-    expect(ATS.length).toBeGreaterThanOrEqual(4);
-    expect(VISUAL.length).toBeGreaterThanOrEqual(1);
+    expect(ATS.length).toBeGreaterThanOrEqual(30);
+    expect(VISUAL.length).toBeGreaterThanOrEqual(3);
   });
 
   it("3 · ids únicos, nombre y descripción de verdad en todas", () => {
@@ -86,20 +101,118 @@ describe("catálogo de plantillas · qué hay dentro", () => {
     for (const t of ATS) expect(t.warning).toBeUndefined();
   });
 
-  it("7 · las plantillas ATS no son clones: cada una difiere en ≥3 rasgos de diseño", () => {
+  /**
+   * EL TEST QUE JUSTIFICA EL NÚMERO. Treinta plantillas solo valen algo si son
+   * treinta documentos; si fueran el mismo CV pintado de otro color, el catálogo
+   * sería peor que no tener catálogo (parálisis de elección a cambio de nada).
+   *
+   * La huella incluye los EJES DE COMPOSICIÓN, no solo fuente y color: dos plantillas
+   * con la misma pareja tipográfica y la misma paleta siguen siendo distintas si una
+   * numera las secciones, mete las fechas en línea propia y pone la formación
+   * primero. Y al revés: cambiar solo el acento NO cuenta como una plantilla nueva,
+   * porque el acento ya es un selector aparte (resolveTemplate lo intercambia).
+   */
+  it("7 · las plantillas ATS no son clones: cada una difiere en ≥4 rasgos de diseño", () => {
     const huella = (t: (typeof ATS)[number]) => {
       const m = resolveMetrics(t.metrics);
       return [
-        t.typography.id, t.palette.id, m.nameSize, m.bodySize, m.bodyLeading,
-        m.sectionGap, m.headingRule, m.headingSize, m.entryGap, m.pageMarginV,
+        t.typography.id, t.palette.id,
+        // ritmo y proporción
+        m.nameSize, m.bodySize, m.bodyLeading, m.sectionGap, m.entryGap, m.pageMarginV, m.pageMarginH,
+        // tratamiento del rótulo
+        m.upperHeadings, m.headingSize, m.headingNumbered,
+        `${m.headingRule}/${m.headingRuleStyle}/${m.headingRulePosition}`,
+        // composición
+        m.nameCase, m.nameAlign, m.nameRule, m.contactStyle, m.contactLabels,
+        m.dateStyle, m.bulletMarker, m.skillStyle, m.sectionOrder.join(">"),
+        // uso del acento
+        `${m.accentName}/${m.accentHeadings}`,
       ];
     };
     for (let i = 0; i < ATS.length; i++) {
       for (let j = i + 1; j < ATS.length; j++) {
         const [a, b] = [huella(ATS[i]!), huella(ATS[j]!)];
         const distintos = a.filter((v, k) => v !== b[k]).length;
-        expect(distintos, `${ATS[i]!.id} y ${ATS[j]!.id} se parecen demasiado`).toBeGreaterThanOrEqual(3);
+        expect(distintos, `${ATS[i]!.id} y ${ATS[j]!.id} se parecen demasiado`).toBeGreaterThanOrEqual(4);
       }
+    }
+  });
+
+  it("7b · la variedad no sale solo de la paleta: hay tantos DOCUMENTOS como plantillas", () => {
+    // El riesgo real de un catálogo grande: N paletas × M tipografías presentadas
+    // como N×M plantillas. Aquí se exige que, IGNORANDO paleta y tipografía, sigan
+    // quedando muchas composiciones distintas — o sea, que el catálogo no sea una
+    // tabla de multiplicar disfrazada.
+    const composicion = (t: (typeof ATS)[number]) => {
+      const m = resolveMetrics(t.metrics);
+      return JSON.stringify([
+        m.bodySize, m.bodyLeading, m.sectionGap, m.entryGap, m.pageMarginV, m.pageMarginH,
+        m.upperHeadings, m.headingNumbered, m.headingRule, m.headingRuleStyle, m.headingRulePosition,
+        m.nameCase, m.nameAlign, m.nameRule, m.contactStyle, m.contactLabels,
+        m.dateStyle, m.bulletMarker, m.skillStyle, m.sectionOrder.join(">"),
+        m.accentName, m.accentHeadings,
+      ]);
+    };
+    const distintas = new Set(ATS.map(composicion));
+    expect(distintas.size, "hay composiciones repetidas: son la misma plantilla con otro color").toBe(ATS.length);
+  });
+
+  it("7c · cada eje de composición se USA de verdad (un eje que nadie usa no existe)", () => {
+    // Añadir campos al contrato es gratis; que el catálogo los ejercite, no. Si un eje
+    // no aparece en ninguna plantilla, es código muerto con aire de funcionalidad.
+    const ms = TODAS.map((t) => resolveMetrics(t.metrics));
+    const usados = <T,>(f: (m: (typeof ms)[number]) => T) => new Set(ms.map(f));
+    expect(usados((m) => m.sectionOrder.join(">")).size, "todas las plantillas leen en el mismo orden").toBeGreaterThanOrEqual(4);
+    expect(usados((m) => m.bulletMarker), "solo se usa un marcador de viñeta").toEqual(
+      new Set(["dot", "dash", "emdash", "none"]),
+    );
+    expect(usados((m) => m.contactStyle), "el contacto se reparte de una sola manera").toEqual(
+      new Set(["inline", "split", "stacked"]),
+    );
+    expect(usados((m) => m.dateStyle), "las fechas caen siempre en el mismo sitio").toEqual(
+      new Set(["right", "inline", "own-line"]),
+    );
+    expect(usados((m) => m.skillStyle), "las habilidades se agrupan de una sola manera").toEqual(
+      new Set(["grouped", "inline", "paired"]),
+    );
+    expect(usados((m) => m.headingRuleStyle), "el filete es siempre el mismo").toEqual(
+      new Set(["full", "partial", "double"]),
+    );
+    for (const [eje, f] of [
+      ["nameCase", (m: (typeof ms)[number]) => m.nameCase === "upper"],
+      ["nameAlign", (m: (typeof ms)[number]) => m.nameAlign === "center"],
+      ["nameRule", (m: (typeof ms)[number]) => m.nameRule],
+      ["nameTracking", (m: (typeof ms)[number]) => m.nameTracking > 0],
+      ["headingTracking", (m: (typeof ms)[number]) => m.headingTracking > 0],
+      ["headingNumbered", (m: (typeof ms)[number]) => m.headingNumbered],
+      ["headingRulePosition:above", (m: (typeof ms)[number]) => m.headingRulePosition === "above"],
+      ["headingLabel:false", (m: (typeof ms)[number]) => !m.headingLabel],
+      ["contactLabels:false", (m: (typeof ms)[number]) => !m.contactLabels],
+      ["upperHeadings:false", (m: (typeof ms)[number]) => !m.upperHeadings],
+      ["sin acento", (m: (typeof ms)[number]) => !m.accentName && !m.accentHeadings],
+    ] as const) {
+      expect(ms.some(f), `el eje "${eje}" no lo usa ninguna plantilla`).toBe(true);
+    }
+  });
+
+  it("7d · todas llevan `tags` del vocabulario cerrado: tono, densidad y afinidad", () => {
+    // El selector filtra por estas etiquetas. Una plantilla sin etiquetar no aparece
+    // en ningún filtro: existe en el catálogo y no existe para el usuario.
+    const TONO = ["clasica", "editorial", "tecnica", "minimal", "moderna"];
+    const DENSIDAD = ["1pagina", "2paginas"];
+    const AFINIDAD = ["ingenieria", "datos-ia", "academia", "general", "primer-empleo"];
+    for (const t of TODAS) {
+      const tags = tagsOf(t);
+      expect(tags.length, `${t.id} sin etiquetas: el selector no la encontrará nunca`).toBeGreaterThan(0);
+      for (const tag of tags) expect(TEMPLATE_TAGS, `${t.id}: etiqueta fuera del vocabulario "${tag}"`).toContain(tag);
+      expect(tags.filter((x) => TONO.includes(x)).length, `${t.id}: debe declarar UN tono`).toBe(1);
+      expect(tags.filter((x) => DENSIDAD.includes(x)).length, `${t.id}: debe declarar UNA densidad`).toBe(1);
+      expect(tags.filter((x) => AFINIDAD.includes(x)).length, `${t.id}: debe declarar UNA afinidad`).toBe(1);
+    }
+    // Y ninguna etiqueta del vocabulario se queda sin plantillas: un filtro que
+    // siempre devuelve vacío es peor que no ofrecer el filtro.
+    for (const tag of TEMPLATE_TAGS) {
+      expect(templatesByTags([tag]).length, `la etiqueta "${tag}" no tiene ni una plantilla`).toBeGreaterThan(0);
     }
   });
 
@@ -180,7 +293,10 @@ describe("catálogo de plantillas · parejas tipográficas", () => {
   const FAMILIAS = ["Geist", "Geist Mono", "Playfair Display"];
   const parejas = listTypographies();
 
-  it("1 · son tres o cuatro parejas ya emparejadas, no un selector de 200 fuentes", () => {
+  it("1 · son un puñado de parejas ya emparejadas, no un selector de 200 fuentes", () => {
+    // El tope existe a propósito: con TRES familias en el repo, más de media docena
+    // de "parejas" serían la misma combinación con otro nombre. La variedad del
+    // catálogo sale de los ejes de composición, no de inventar parejas.
     expect(parejas.length).toBeGreaterThanOrEqual(3);
     expect(parejas.length).toBeLessThanOrEqual(6);
     expect(new Set(parejas.map((t) => t.id)).size).toBe(parejas.length);
@@ -194,14 +310,31 @@ describe("catálogo de plantillas · parejas tipográficas", () => {
     }
   });
 
-  it("3 · pesos que existen: Playfair solo tiene 500 y 600; Geist llega a 700", () => {
+  /** Los pesos que existen de verdad en src/lib/fonts/, familia por familia. */
+  const PESOS: Record<string, number[]> = {
+    Geist: [400, 500, 600, 700],
+    "Geist Mono": [400, 500],
+    "Playfair Display": [500, 600],
+  };
+
+  it("3 · pesos que existen: Playfair 500/600, Geist Mono 400/500, Geist hasta 700", () => {
     for (const t of parejas) {
-      const { displayWeight } = resolveTypography(t);
-      if (t.display === "Playfair Display") {
-        expect([500, 600], `pareja ${t.id}: Playfair no tiene el peso ${displayWeight}`).toContain(displayWeight);
-      } else {
-        expect([400, 500, 600, 700], `pareja ${t.id}: peso ${displayWeight} inexistente`).toContain(displayWeight);
-      }
+      const { displayWeight, display } = resolveTypography(t);
+      expect(PESOS[display], `pareja ${t.id}: ${display} no tiene el peso ${displayWeight}`).toContain(displayWeight);
+    }
+  });
+
+  it("3b · ninguna PLANTILLA pide un peso de encabezado que su familia no tenga", () => {
+    // @react-pdf no falla si el peso no existe: elige el más cercano en silencio. El
+    // documento sale entonces con una tipografía que nadie diseñó, y no hay manera de
+    // enterarse mirando el PDF. Este test es la única alarma posible.
+    for (const t of listTemplates()) {
+      const { headingFace } = resolveTypography(t.typography);
+      const { headingWeight } = resolveMetrics(t.metrics);
+      expect(
+        PESOS[headingFace],
+        `${t.id}: rotula en ${headingFace} con peso ${headingWeight}, que no existe en el repo`,
+      ).toContain(headingWeight);
     }
   });
 
@@ -267,11 +400,35 @@ describe("catálogo de plantillas · impreso en BLANCO Y NEGRO (jerarquía sin c
     });
   }
 
-  it("z · la gama ATS rotula SIEMPRE en mayúsculas (el rayos-X también las imprime)", () => {
-    // toPlainText escribe los encabezados en MAYÚSCULAS. Una plantilla que los
-    // rotulara en caja mixta haría que el documento y su "cómo lo lee el ATS"
-    // dejaran de coincidir, y el round-trip parametrizado se caería con razón.
-    for (const t of ATS) expect(resolveMetrics(t.metrics).upperHeadings, `${t.id}`).toBe(true);
+  /**
+   * EL CANDADO DE LAS MAYÚSCULAS, resuelto en vez de esquivado.
+   *
+   * Antes esto decía: "la gama ATS rotula SIEMPRE en mayúsculas". Era verdad por una
+   * razón que no tenía nada que ver con el diseño — toPlainText escribía los rótulos
+   * en mayúsculas SIEMPRE, así que una plantilla en caja mixta habría hecho que el
+   * documento y su "cómo lo lee el ATS" dejaran de coincidir. La caja de los rótulos
+   * estaba clavada por una limitación del rayos-X, no por una decisión tipográfica.
+   *
+   * Ahora toPlainText aplica la MISMA caja que el documento (upperHeadings), así que
+   * la caja mixta es un eje legítimo. Lo que se comprueba aquí ya no es "todas en
+   * mayúsculas" sino lo único que de verdad importaba: que documento y rayos-X
+   * coincidan SIEMPRE, sea cual sea la caja. Es un candado más fuerte, no más flojo
+   * — y el golden sigue byte a byte donde estaba, porque la clásica no se ha movido.
+   */
+  it("z · documento y rayos-X coinciden en la CAJA del rótulo, plantilla a plantilla", () => {
+    for (const t of TODAS) {
+      const m = resolveMetrics(t.metrics);
+      if (!m.headingLabel) continue; // esta no rotula: no hay caja que comparar
+      const xray = toPlainText({ ...datos, templateId: t.id }, { locale: "es", onePage: false });
+      const enPlano = t.metrics.upperHeadings ? "EXPERIENCIA" : "Experiencia";
+      expect(xray, `${t.id}: el rayos-X no rotula en la caja del documento`).toContain(enPlano);
+    }
+  });
+
+  it("z2 · la clásica sigue en mayúsculas, y la caja mixta existe en el catálogo", () => {
+    // Las dos mitades del candado: lo de siempre no se ha movido Y el eje es real.
+    expect(resolveMetrics(getTemplate("ats-clasica").metrics).upperHeadings).toBe(true);
+    expect(TODAS.some((t) => !resolveMetrics(t.metrics).upperHeadings)).toBe(true);
   });
 });
 

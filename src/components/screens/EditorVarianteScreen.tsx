@@ -18,6 +18,8 @@ import {
 // El catálogo se auto-registra al importarse y no toca APIs de servidor: el selector
 // del editor lee las MISMAS plantillas que usa el render, no una copia.
 import { listTemplates, listPalettes, listTypographies, getTemplate } from "@/lib/cv/templates";
+import { recommendTemplates, type MasterSummary } from "@/lib/cv/recommend";
+import { TemplateGallery, TemplateThumb, docHashFromSig } from "@/components/TemplateGallery";
 import "./editor-variante.css";
 
 // Listas estables (el catálogo no cambia en runtime): fuera del componente.
@@ -404,6 +406,9 @@ export function EditorVarianteScreen({ variantId = "editor" }: { variantId?: str
 
   // Presentación opt-in (foto/QR). qrCustom = el usuario eligió "otra URL".
   const [qrCustom, setQrCustom] = useState(false);
+  // Galería de plantillas (el selector con miniaturas reales). Cerrarla no pierde
+  // nada: cada elección se persiste en el momento, como cualquier otro ajuste.
+  const [galleryOpen, setGalleryOpen] = useState(false);
   const [busyPhoto, setBusyPhoto] = useState(false);
   const photoInputRef = useRef<HTMLInputElement>(null);
   // Eliminar variante: confirmación INLINE (no window.confirm) porque tras archivar se
@@ -903,6 +908,45 @@ export function EditorVarianteScreen({ variantId = "editor" }: { variantId?: str
       clearTimeout(timer);
     };
   }, [docSig, loading, pvRetry, flash]);
+
+  // ── El master, CONTADO — la entrada de la recomendación ────────────────────
+  /**
+   * Números que el usuario puede ir a verificar él mismo en su biblioteca; ni uno
+   * estimado. `pages` es el numPages REAL del PDF que está viendo (0 mientras no
+   * se sepa, y entonces la regla del volumen no dispara).
+   *
+   * `skillsWithEvidence` NO se manda: la API de la variante no devuelve la marca
+   * de evidencia del master, y afirmar "con evidencia" sin tenerla sería
+   * exactamente el tipo de número inventado que este producto no se permite. Se
+   * cuenta lo que sí se sabe (las habilidades listadas) y la razón lo dice así.
+   */
+  const masterSummary = useMemo<MasterSummary>(() => {
+    const of = (kind: string) => master.filter((m) => m.kind === kind);
+    const skills = of("skill");
+    const skillItems = skills.reduce(
+      (n, s) => n + S(s.data, "items").split(",").map((x) => x.trim()).filter(Boolean).length,
+      0,
+    );
+    return {
+      roles: of("work").length,
+      bullets: of("bullet").length,
+      skillGroups: skills.length,
+      skillItems,
+      projects: of("project").length,
+      education: of("education").length,
+      hasSummary: of("summary").length > 0,
+      pages: pageCount,
+    };
+  }, [master, pageCount]);
+
+  const recommendations = useMemo(
+    () => recommendTemplates(masterSummary, { limit: 8, templates: TEMPLATES }),
+    [masterSummary],
+  );
+
+  // El hash del documento para las miniaturas: el MISMO que usa la galería, para
+  // que la miniatura de la tarjeta y la de la rejilla compartan caché.
+  const thumbDocHash = useMemo(() => docHashFromSig(docSig), [docSig]);
 
   // ── Persistencia (contra el contrato; en modo local es no-op) ──
   const patchItem = useCallback(
@@ -1682,8 +1726,12 @@ export function EditorVarianteScreen({ variantId = "editor" }: { variantId?: str
           </div>
 
           {/* ── Diseño del documento: plantilla · paleta · tipografía ──
-              La gama ATS va primero porque es la que se sube a un portal. La gama
-              visual lleva su aviso: el usuario elige informado, no a ciegas. */}
+              YA NO SON TRES DESPLEGABLES. Con treinta plantillas un <select> es
+              inservible: aquí va la plantilla activa CON SU MINIATURA (la página 1
+              del PDF real, con tus datos) y un botón que abre la galería. La paleta
+              y la pareja tipográfica son chips —la paleta muestra su acento—, no
+              listas donde el nombre no dice nada.
+              La gama visual sigue llevando su aviso a la vista: se elige informado. */}
           <div className="c-card var-design" data-screen-label="editor-diseno">
             <div className="presh">
               <span className="t-overline">{t("editor.designOverline")}</span>
@@ -1691,21 +1739,29 @@ export function EditorVarianteScreen({ variantId = "editor" }: { variantId?: str
             </div>
 
             <div className="cfield">
-              <label className="f" htmlFor="tplSel">
-                {t("editor.designTemplate")}
-              </label>
-              <select
-                id="tplSel"
-                className="c-input"
-                value={designTemplateId}
-                onChange={(e) => savePresentation({ templateId: e.target.value })}
-              >
-                {TEMPLATES.map((tpl) => (
-                  <option key={tpl.id} value={tpl.id}>
-                    {tpl.name} — {tpl.description}
-                  </option>
-                ))}
-              </select>
+              <label className="f">{t("editor.designTemplate")}</label>
+              <div className="tplrow">
+                <TemplateThumb
+                  data={resumeData}
+                  docHash={thumbDocHash}
+                  templateId={designTemplateId}
+                  paletteId={designPaletteId}
+                  typographyId={designTypographyId}
+                  alt={t("editor.gal_thumbAlt").replace("{name}", activeTemplate.name)}
+                />
+                <div className="tplinfo">
+                  <span className="tplname">{activeTemplate.name}</span>
+                  <span className="tpldesc">{activeTemplate.description}</span>
+                  <button
+                    type="button"
+                    className="c-btn c-btn--quiet tplopen"
+                    aria-haspopup="dialog"
+                    onClick={() => setGalleryOpen(true)}
+                  >
+                    {t("editor.designBrowse").replace("{n}", String(TEMPLATES.length))}
+                  </button>
+                </div>
+              </div>
               {activeTemplate.warning ? (
                 <p className="note warn">⚠ {activeTemplate.warning}</p>
               ) : (
@@ -1714,41 +1770,54 @@ export function EditorVarianteScreen({ variantId = "editor" }: { variantId?: str
             </div>
 
             <div className="cfield">
-              <label className="f" htmlFor="palSel">
-                {t("editor.designPalette")}
-              </label>
-              <select
-                id="palSel"
-                className="c-input"
-                value={designPaletteId}
-                onChange={(e) => savePresentation({ paletteId: e.target.value || null })}
-              >
-                <option value="">{t("editor.designFromTemplate")}</option>
+              <label className="f">{t("editor.designPalette")}</label>
+              <div className="dchips">
+                <button
+                  type="button"
+                  className="dchip"
+                  aria-pressed={designPaletteId === ""}
+                  onClick={() => savePresentation({ paletteId: null })}
+                >
+                  {t("editor.designFromTemplate")}
+                </button>
                 {PALETTES.map((p) => (
-                  <option key={p.id} value={p.id}>
+                  <button
+                    key={p.id}
+                    type="button"
+                    className="dchip"
+                    aria-pressed={designPaletteId === p.id}
+                    onClick={() => savePresentation({ paletteId: p.id })}
+                  >
+                    <span className="ddot" style={{ background: p.accent }} aria-hidden="true" />
                     {p.name}
-                  </option>
+                  </button>
                 ))}
-              </select>
+              </div>
             </div>
 
             <div className="cfield">
-              <label className="f" htmlFor="typSel">
-                {t("editor.designTypography")}
-              </label>
-              <select
-                id="typSel"
-                className="c-input"
-                value={designTypographyId}
-                onChange={(e) => savePresentation({ typographyId: e.target.value || null })}
-              >
-                <option value="">{t("editor.designFromTemplate")}</option>
+              <label className="f">{t("editor.designTypography")}</label>
+              <div className="dchips">
+                <button
+                  type="button"
+                  className="dchip"
+                  aria-pressed={designTypographyId === ""}
+                  onClick={() => savePresentation({ typographyId: null })}
+                >
+                  {t("editor.designFromTemplate")}
+                </button>
                 {TYPOGRAPHIES.map((ty) => (
-                  <option key={ty.id} value={ty.id}>
+                  <button
+                    key={ty.id}
+                    type="button"
+                    className="dchip"
+                    aria-pressed={designTypographyId === ty.id}
+                    onClick={() => savePresentation({ typographyId: ty.id })}
+                  >
                     {ty.name}
-                  </option>
+                  </button>
                 ))}
-              </select>
+              </div>
               <p className="note">{t("editor.designNote")}</p>
             </div>
           </div>
@@ -2056,6 +2125,26 @@ export function EditorVarianteScreen({ variantId = "editor" }: { variantId?: str
           <div className="pv-foot">{t("editor.previewFoot")}</div>
         </section>
       </div>
+
+      {/* La galería. Las miniaturas son la página 1 del PDF REAL renderizado con
+          ESTE mismo `resumeData` — el que ya viaja al preview grande y a la
+          descarga. Cerrarla no pierde nada: cada elección se guardó al hacerla. */}
+      <TemplateGallery
+        open={galleryOpen}
+        onClose={() => setGalleryOpen(false)}
+        templates={TEMPLATES}
+        activeTemplateId={designTemplateId}
+        paletteId={designPaletteId}
+        typographyId={designTypographyId}
+        palettes={PALETTES}
+        typographies={TYPOGRAPHIES}
+        data={resumeData}
+        docSig={docSig}
+        recommendations={recommendations}
+        onPickTemplate={(id) => savePresentation({ templateId: id })}
+        onPickPalette={(id) => savePresentation({ paletteId: id || null })}
+        onPickTypography={(id) => savePresentation({ typographyId: id || null })}
+      />
     </div>
   );
 }

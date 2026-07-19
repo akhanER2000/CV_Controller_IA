@@ -74,6 +74,52 @@ describe("contraste WCAG · ratio", () => {
   });
 });
 
+/**
+ * LOS ACENTOS DEL CATÁLOGO, con su ratio clavado al decimal.
+ *
+ * catalog.ts documenta estos números en un comentario, y un comentario con números
+ * es una mentira esperando a que alguien retoque un hex. Aquí se fijan contra la
+ * fórmula: si alguien aclara un acento, este test cae y le dice el valor nuevo.
+ *
+ * (Que TODAS las paletas registradas pasen AA se comprueba en templates.test.ts,
+ * recorriendo el registro. Esto de aquí es el ancla numérica de cada una.)
+ */
+describe("contraste WCAG · los acentos del catálogo, medidos", () => {
+  const ACENTOS: [string, string, number][] = [
+    ["patina", "#1F6E5A", 6.11],
+    ["cobre", "#8C4A1E", 6.75],
+    ["acero", "#2A5570", 7.98],
+    ["tinta", "#1F2528", 15.52],
+    ["granate", "#7A1F35", 10.12],
+    ["ciruela", "#563377", 9.83],
+    ["oliva", "#4C5320", 8.19],
+    ["marino", "#1B3A6B", 11.27],
+    ["pizarra", "#3A4750", 9.56],
+  ];
+
+  it("1 · cada acento da EXACTAMENTE el ratio que el catálogo dice que da", () => {
+    for (const [id, hex, esperado] of ACENTOS) {
+      const r = contrastRatio(hex, "#FFFFFF");
+      expect(r, `paleta ${id}: ${hex} mide ${ratioText(r)}, no ${esperado}:1`).toBeCloseTo(esperado, 2);
+    }
+  });
+
+  it("2 · todos pasan AA de texto normal, y con holgura (el más justo va a 6:1)", () => {
+    for (const [id, hex] of ACENTOS) {
+      const r = contrastRatio(hex, "#FFFFFF");
+      expect(meetsAA(r), `paleta ${id} en ${ratioText(r)}`).toBe(true);
+      // Un CV se fotocopia, se imprime en láser barata y se lee en pantallas malas:
+      // el mínimo legal (4,5) es suelo, no objetivo.
+      expect(r, `paleta ${id}: ${ratioText(r)} es pasar por los pelos`).toBeGreaterThan(6);
+    }
+  });
+
+  it("3 · las tintas neutras del sistema llegan a AAA sobre el papel", () => {
+    expect(contrastRatio("#14181A", "#FFFFFF")).toBeCloseTo(17.87, 2); // grafito (cuerpo)
+    expect(meetsAAA(contrastRatio("#454B49", "#FFFFFF"))).toBe(true); // apagado (fechas)
+  });
+});
+
 describe("contraste WCAG · umbrales y parseo", () => {
   it("1 · los umbrales AA son 4,5 (normal) y 3 (grande), y el límite pasa", () => {
     expect(AA_NORMAL).toBe(4.5);

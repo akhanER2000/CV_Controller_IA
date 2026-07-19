@@ -8,6 +8,16 @@
  * modelo = orden de lectura del documento = content stream de un PDF de 1 columna.
  */
 
+import {
+  bulletMark,
+  headingLabelText,
+  nameText,
+  resolveMetrics,
+  resolveTemplate,
+  type ResolvedMetrics,
+  type SectionId,
+} from "./templates";
+
 // ── Shape de datos-ejemplo.json ──────────────────────────────────────────────
 export type Locale = "es" | "en";
 export type I18n = { es: string; en: string };
@@ -95,8 +105,12 @@ export interface ResumeData {
    * siempre. `paletteId`/`typographyId` cambian solo la paleta o la pareja
    * tipográfica sobre la plantilla elegida; ids desconocidos se ignoran.
    *
-   * NO afecta a toPlainText: el texto plano (cómo lo lee el ATS) es el mismo con
-   * cualquier plantilla — por eso el golden sigue siendo byte-a-byte el mismo.
+   * SÍ afecta a toPlainText, y tiene que afectarle: hay plantillas que cambian el
+   * ORDEN de las secciones, el marcador de viñeta, el reparto del contacto o la
+   * caja del nombre. El texto plano es "cómo lo lee el ATS" de ESTE documento, así
+   * que si el PDF reordena y el rayos-X no, el rayos-X estaría mintiendo. Lo que no
+   * cambia es el documento por defecto: sin `templateId` (o con "ats-clasica") el
+   * texto plano sigue siendo byte-a-byte el golden.
    */
   templateId?: string;
   paletteId?: string;
@@ -269,64 +283,202 @@ export function selectContent(data: ResumeData, onePage: boolean) {
   return { work, projects, education };
 }
 
+// ── Composición: lo que comparten el PDF y el texto plano ────────────────────
+/**
+ * Las tres funciones siguientes deciden QUÉ LÍNEAS tiene el documento y en qué
+ * orden, a partir de los ejes de la plantilla. Las usan LOS DOS renderizadores.
+ * No es factorización por elegancia: es el único modo de que "cómo lo lee el ATS"
+ * describa el PDF que el usuario acaba de descargar y no a un primo suyo.
+ */
+
+/** La métrica efectiva de un documento (respeta templateId/paletteId/typographyId). */
+export function metricsOf(data: ResumeData): ResolvedMetrics {
+  return resolveMetrics(
+    resolveTemplate({
+      templateId: data.templateId,
+      paletteId: data.paletteId,
+      typographyId: data.typographyId,
+    }).metrics,
+  );
+}
+
+/**
+ * Las secciones VISIBLES, en el orden que pide la plantilla. Una sección entra si
+ * conserva contenido tras el filtro p1 — con la excepción histórica de resumen y
+ * habilidades, que se rotulan siempre (así era antes de las plantillas y así se
+ * queda: cambiarlo movería el golden).
+ */
+export function documentSections(data: ResumeData, onePage: boolean, m: ResolvedMetrics): SectionId[] {
+  const { work, projects, education } = selectContent(data, onePage);
+  const hay: Record<SectionId, boolean> = {
+    summary: true,
+    skills: true,
+    work: work.length > 0,
+    projects: projects.length > 0,
+    education: education.length > 0,
+  };
+  return m.sectionOrder.filter((id) => hay[id]);
+}
+
+/**
+ * El contacto repartido en líneas. Cada línea es la SECUENCIA DE TROZOS que caen en
+ * el párrafo, ya con sus separadores dentro: el texto plano los concatena y el PDF
+ * los emite como hijos del <Text>.
+ *
+ * Que sean trozos y no una cadena ya montada no es capricho: @react-pdf escribe un
+ * operador de texto por cada hijo, así que el reparto en trozos ES parte del PDF
+ * resultante. Devolviéndolos desde aquí, el documento por defecto conserva
+ * exactamente los mismos trozos que tenía escritos a mano en el JSX — y sale byte a
+ * byte igual que antes de que existieran estos ejes.
+ *
+ * `links` va aparte porque en el PDF cada URL es además un hipervínculo.
+ */
+export interface ContactLayout {
+  info: string[][];
+  links: string[][];
+}
+
+export function contactLayout(
+  b: ResumeData["basics"],
+  loc: Locale,
+  m: ResolvedMetrics,
+): ContactLayout {
+  const eti = m.contactLabels;
+  const donde = t(b.location, loc);
+  const urls = (b.links ?? []).map(linkUrl);
+  switch (m.contactStyle) {
+    case "stacked":
+      return {
+        info: [eti ? [CX.email, b.email] : [b.email], eti ? [CX.tel, b.phone] : [b.phone], [donde]],
+        links: urls.map((u) => [u]),
+      };
+    case "split":
+      return {
+        info: [
+          eti ? [CX.email, b.email, `${CX.mid}${CX.tel}`, b.phone] : [b.email, CX.mid, b.phone],
+          [donde],
+        ],
+        links: [urls],
+      };
+    default:
+      return {
+        info: [
+          eti
+            ? [CX.email, b.email, `${CX.mid}${CX.tel}`, b.phone, CX.mid, donde]
+            : [b.email, CX.mid, b.phone, CX.mid, donde],
+        ],
+        links: [urls],
+      };
+  }
+}
+
+/** Las habilidades repartidas en líneas: una por grupo, todas en una, o a dos. */
+export function skillLines(skills: ResumeSkill[], m: ResolvedMetrics): ResumeSkill[][] {
+  if (!skills.length) return [];
+  switch (m.skillStyle) {
+    case "inline":
+      return [skills];
+    case "paired": {
+      const corte = Math.ceil(skills.length / 2);
+      const lineas = [skills.slice(0, corte), skills.slice(corte)];
+      return lineas.filter((l) => l.length > 0);
+    }
+    default:
+      return skills.map((s) => [s]);
+  }
+}
+
+/** Las líneas de una entrada de experiencia/formación según el eje de fechas. */
+export function entryLines(titulo: string, fechas: string, pie: string, m: ResolvedMetrics): string[] {
+  switch (m.dateStyle) {
+    case "inline":
+      return [`${titulo}${CX.mid}${fechas}`, pie];
+    case "own-line":
+      return [titulo, fechas, pie];
+    default:
+      return [`${titulo}${CX.space}${fechas}`, pie];
+  }
+}
+
 export interface PlainTextOpts {
   locale?: Locale;
   onePage?: boolean;
 }
 
 /**
- * El texto en orden de lectura. Debe igualar cv-texto-plano.txt (locale es,
- * onePage false). Línea en blanco antes de cada encabezado de sección; la
- * sección se dibuja solo si conserva ≥1 hijo visible.
+ * El texto en orden de lectura. Con la plantilla por defecto debe igualar
+ * cv-texto-plano.txt (locale es, onePage false) BYTE A BYTE. Línea en blanco antes
+ * de cada encabezado de sección; la sección se dibuja solo si conserva ≥1 hijo
+ * visible.
+ *
+ * Con otra plantilla, el texto sigue los ejes de esa plantilla (orden de secciones,
+ * caja del nombre, marcador de viñeta, reparto del contacto, numeración de
+ * rótulos…) porque es el rayos-X de ESE documento, no de uno genérico.
  */
 export function toPlainText(data: ResumeData, opts: PlainTextOpts = {}): string {
   const loc: Locale = opts.locale ?? "es";
   const onePage = opts.onePage ?? false;
   const { work, projects, education } = selectContent(data, onePage);
   const b = data.basics;
-  // Los encabezados de sección se imprimen en MAYÚSCULAS (el .h del diseño es
-  // text-transform:uppercase). El ATS extrae mayúsculas, así que el texto plano
-  // "cómo lo lee el ATS" también (documento-cv.md §2/§6).
-  const H = (v: I18n) => t(v, loc).toUpperCase();
+  const m = metricsOf(data);
+  const secciones = documentSections(data, onePage, m);
+  const vineta = bulletMark(m);
 
-  const lines: string[] = [
-    b.name,
-    t(b.label, loc),
-    `${CX.email}${b.email}${CX.mid}${CX.tel}${b.phone}${CX.mid}${t(b.location, loc)}`,
-    b.links.map(linkUrl).join(CX.mid),
-  ];
+  // Los encabezados de sección se imprimen en MAYÚSCULAS cuando la plantilla lo
+  // pide (el .h del diseño es text-transform:uppercase). El ATS extrae lo que ve,
+  // así que el texto plano "cómo lo lee el ATS" aplica la MISMA caja que el PDF —
+  // ahí está la coherencia entre documento y rayos-X (documento-cv.md §2/§6).
+  const H = (id: SectionId): string | null => {
+    const rotulo = headingLabelText(t(data.headings[id], loc), secciones.indexOf(id), m);
+    if (rotulo === null) return null;
+    return m.upperHeadings ? rotulo.toUpperCase() : rotulo;
+  };
 
-  // Resumen
-  lines.push("", H(data.headings.summary), t(b.summary, loc));
+  const contacto = contactLayout(b, loc, m);
+  const lines: string[] = [nameText(b.name, m), t(b.label, loc)];
+  // Los trozos de `info` ya traen sus separadores dentro; los enlaces no (en el PDF
+  // cada URL es un <Link> aparte, así que el separador va entre ellos).
+  for (const l of contacto.info) lines.push(l.join(""));
+  for (const l of contacto.links) lines.push(l.join(CX.mid));
 
-  // Habilidades
-  lines.push("", H(data.headings.skills));
-  for (const s of data.skills) lines.push(`${t(s.group, loc)}${CX.skillSep}${t(s.items, loc)}`);
+  /** Abre una sección: línea en blanco + rótulo (si la plantilla rotula). */
+  const abrir = (id: SectionId) => {
+    const h = H(id);
+    if (h === null) lines.push("");
+    else lines.push("", h);
+  };
 
-  // Experiencia
-  if (work.length) {
-    lines.push("", H(data.headings.work));
-    for (const w of work) {
-      lines.push(`${t(w.title, loc)}${CX.titleCompany}${w.company}${CX.space}${t(w.dates, loc)}`);
-      lines.push(t(w.location, loc));
-      for (const bl of w.bullets) lines.push(`${CX.bullet}${t(bl, loc)}`);
-    }
-  }
+  const bloque: Record<SectionId, () => void> = {
+    summary: () => {
+      abrir("summary");
+      lines.push(t(b.summary, loc));
+    },
+    skills: () => {
+      abrir("skills");
+      for (const linea of skillLines(data.skills, m)) {
+        lines.push(linea.map((s) => `${t(s.group, loc)}${CX.skillSep}${t(s.items, loc)}`).join(CX.mid));
+      }
+    },
+    work: () => {
+      abrir("work");
+      for (const w of work) {
+        const titulo = `${t(w.title, loc)}${CX.titleCompany}${w.company}`;
+        lines.push(...entryLines(titulo, t(w.dates, loc), t(w.location, loc), m));
+        for (const bl of w.bullets) lines.push(`${vineta}${t(bl, loc)}`);
+      }
+    },
+    // Proyectos — cada proyecto es una viñeta, sin entrada ni fechas.
+    projects: () => {
+      abrir("projects");
+      for (const p of projects) lines.push(`${vineta}${t(p, loc)}`);
+    },
+    education: () => {
+      abrir("education");
+      for (const e of education) lines.push(...entryLines(t(e.title, loc), t(e.dates, loc), e.org, m));
+    },
+  };
 
-  // Proyectos (cada proyecto es una viñeta; sin encabezado si queda vacío)
-  if (projects.length) {
-    lines.push("", H(data.headings.projects));
-    for (const p of projects) lines.push(`${CX.bullet}${t(p, loc)}`);
-  }
-
-  // Educación
-  if (education.length) {
-    lines.push("", H(data.headings.education));
-    for (const e of education) {
-      lines.push(`${t(e.title, loc)}${CX.space}${t(e.dates, loc)}`);
-      lines.push(e.org);
-    }
-  }
+  for (const id of secciones) bloque[id]!();
 
   // QR (opt-in): en modo 'url' la URL va SIEMPRE también como texto, al pie (orden
   // de lectura). En modo 'vcard' NO se emite nada extra: el contacto ya está como
