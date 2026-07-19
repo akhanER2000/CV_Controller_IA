@@ -31,4 +31,22 @@
 .aj-confirm{display:none;gap:8px;align-items:center;flex-wrap:wrap}
 .aj-confirm.show{display:flex}
 .aj-confirm input{max-width:200px;height:34px;font-size:var(--fs-data)}
+/* Bloque 1 (borrar todos mis datos): descarga arriba, confirmación debajo */
+.aj-wipe.show{flex-direction:column;align-items:flex-start;gap:12px}
+.aj-wipe-dl{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.aj-wipe-confirm{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+/* Estado de conexiones — el color NUNCA es la única señal: dot + etiqueta + motivo.
+   Paleta existente: pátina=en línea, gris(text)=a medias, danger=caído. Sin ámbar
+   inventado (el cobre es solo atmósfera, prohibido en la UI). */
+.aj-conn-v{flex-direction:column;align-items:flex-start;gap:4px}
+.aj-conn-badge{display:inline-flex;align-items:center;gap:6px;
+  font:600 var(--fs-micro)/1 var(--font-mono);letter-spacing:.04em}
+.aj-dot{width:8px;height:8px;border-radius:50%;flex:none}
+.aj-conn-badge.is-ok{color:var(--accent-text)}
+.aj-conn-badge.is-ok .aj-dot{background:var(--patina-500)}
+.aj-conn-badge.is-warn{color:var(--text-muted)}
+.aj-conn-badge.is-warn .aj-dot{background:var(--text-subtle)}
+.aj-conn-badge.is-fail{color:var(--danger)}
+.aj-conn-badge.is-fail .aj-dot{background:var(--danger)}
+.aj-conn-detail{font:400 var(--fs-data)/1.5 var(--font-sans);color:var(--text-muted)}
 @media (max-width:768px){.aj-row{flex-direction:column;align-items:flex-start}.aj-row .k{min-width:0}}

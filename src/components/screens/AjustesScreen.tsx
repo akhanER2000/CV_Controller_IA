@@ -27,7 +27,28 @@ import "./ajustes.css";
 type ThemeSel = "dark" | "light" | "auto";
 type Provider = "Incluida" | "Anthropic" | "Gemini";
 
+type ConnStatus = "ok" | "warn" | "fail";
+interface ConnService {
+  id: string;
+  ok: boolean;
+  status: ConnStatus;
+  detail: string;
+  meta?: Record<string, unknown>;
+}
+interface ConnResult {
+  checkedAt: string;
+  services: ConnService[];
+}
+interface WipeCounts {
+  items: number;
+  variants: number;
+  sources: number;
+  staged: number;
+  files: number;
+}
+
 const THEME_KEY = "corpus-theme";
+const WIPE_WORD = "BORRAR MIS DATOS";
 
 async function saveSettings(patch: Record<string, unknown>): Promise<{ ok?: boolean; keyParked?: boolean } | null> {
   if (!supabaseEnabled) return null;
@@ -37,6 +58,23 @@ async function saveSettings(patch: Record<string, unknown>): Promise<{ ok?: bool
     body: JSON.stringify(patch),
   });
   return r.ok ? ((await r.json()) as { ok?: boolean; keyParked?: boolean }) : null;
+}
+
+/** Línea técnica compacta por servicio (meta). Solo datos, sin i18n: modelo,
+ *  fuente de clave, latencia, cupo… Devuelve null si no hay nada que mostrar. */
+function connMeta(s: ConnService): string | null {
+  const m = s.meta;
+  if (!m) return null;
+  if (s.id === "gemini") {
+    const parts = [String(m.model ?? ""), `clave: ${String(m.keySource ?? "?")}`];
+    if (m.parked) parts.push("BYOK aparcada");
+    if (typeof m.latencyMs === "number") parts.push(`${m.latencyMs} ms`);
+    return parts.filter(Boolean).join(" · ");
+  }
+  if (s.id === "github" && (m.remaining != null || m.limit != null)) {
+    return `${m.remaining ?? "?"}/${m.limit ?? "?"} req · sin OAuth`;
+  }
+  return null;
 }
 
 export function AjustesScreen() {
@@ -59,6 +97,19 @@ export function AjustesScreen() {
   const [delMsg, setDelMsg] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
   const delReady = delWord.trim() === "BORRAR";
+
+  // E1 · bloque 1 — «Borrar todos mis datos» (conserva la cuenta)
+  const [wipeOpen, setWipeOpen] = useState(false);
+  const [wipeWord, setWipeWord] = useState("");
+  const [wiping, setWiping] = useState(false);
+  const [wipeErr, setWipeErr] = useState<string | null>(null);
+  const [wipeDone, setWipeDone] = useState<WipeCounts | null>(null);
+  const wipeReady = wipeWord.trim() === WIPE_WORD;
+
+  // E2 · estado de conexiones
+  const [conn, setConn] = useState<ConnResult | null>(null);
+  const [connLoading, setConnLoading] = useState(false);
+  const [connErr, setConnErr] = useState<string | null>(null);
 
   const byokRef = useRef<HTMLInputElement>(null);
   const delWordRef = useRef<HTMLInputElement>(null);
@@ -143,26 +194,46 @@ export function AjustesScreen() {
     });
   }
 
-  async function exportAll() {
+  // E1 · borra el CONTENIDO (no la cuenta). La confirmación se verifica también en
+  // el servidor; aquí solo se habilita el botón cuando coincide EXACTO.
+  async function confirmWipe() {
+    setWiping(true);
+    setWipeErr(null);
     try {
-      const [m, v] = await Promise.all([
-        fetch("/api/master").then((r) => r.json()),
-        fetch("/api/variants").then((r) => r.json()),
-      ]);
-      const blob = new Blob([JSON.stringify({ master: m.items ?? [], variants: v.variants ?? [] }, null, 2)], {
-        type: "application/json",
+      const res = await fetch("/api/account/data", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ confirm: WIPE_WORD }),
       });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = "corpus-registro.json";
-      a.click();
-      URL.revokeObjectURL(url);
-      note(t("ajustes.flash.exported"));
-    } catch {
-      note(t("ajustes.flash.exportError"));
+      const d = (await res.json().catch(() => null)) as { deleted?: WipeCounts; error?: string } | null;
+      if (!res.ok || !d?.deleted) throw new Error(d?.error ?? t("ajustes.wipe.error"));
+      setWipeDone(d.deleted);
+      setWipeOpen(false);
+      setWipeWord("");
+      // Deja el resto de la app en día-1 (paneles y contadores se recalculan).
+      window.dispatchEvent(new Event("corpus:profile-updated"));
+    } catch (e) {
+      setWipeErr(e instanceof Error ? e.message : t("ajustes.wipe.error"));
+    } finally {
+      setWiping(false);
     }
   }
+
+  // E2 · comprueba el estado real de las conexiones (una llamada, sin autorefresh).
+  const loadConn = useCallback(() => {
+    if (!supabaseEnabled) return;
+    setConnLoading(true);
+    setConnErr(null);
+    fetch("/api/health/status")
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
+      .then((d: ConnResult) => setConn(d))
+      .catch((e) => setConnErr(e instanceof Error ? e.message : "error"))
+      .finally(() => setConnLoading(false));
+  }, []);
+
+  useEffect(() => {
+    loadConn();
+  }, [loadConn]);
 
   useEffect(() => {
     if (provider !== "Incluida") byokRef.current?.focus();
@@ -405,7 +476,70 @@ export function AjustesScreen() {
             </div>
           </section>
 
-          {/* ── Tus datos ── */}
+          {/* ── Estado de conexiones (E2) ── */}
+          <section className="aj-g" data-screen-label="ajustes-conexiones">
+            <div className="aj-gh">
+              <span className="t-overline">{t("ajustes.conn.overline")}</span>
+              <span style={{ font: "400 var(--fs-micro)/1 var(--font-mono)", color: "var(--text-subtle)" }}>
+                {t("ajustes.conn.hint")}
+              </span>
+              <button
+                className="c-btn c-btn--quiet"
+                style={{ marginLeft: "auto" }}
+                onClick={loadConn}
+                disabled={connLoading}
+              >
+                {connLoading ? t("ajustes.conn.checking") : t("ajustes.conn.recheck")}
+              </button>
+            </div>
+            <hr className="c-divider" />
+            {connErr ? (
+              <div className="aj-note show" role="status">
+                {t("ajustes.conn.error")} — {connErr}
+              </div>
+            ) : null}
+            <div className="aj-rows">
+              {conn?.services?.length
+                ? conn.services.map((s) => {
+                    const statusLabel =
+                      s.status === "ok"
+                        ? t("ajustes.conn.ok")
+                        : s.status === "warn"
+                          ? t("ajustes.conn.warn")
+                          : t("ajustes.conn.fail");
+                    const meta = connMeta(s);
+                    return (
+                      <div className="aj-row aj-conn-row" key={s.id}>
+                        <span className="k">
+                          <b>{t(`ajustes.conn.svc.${s.id}`)}</b>
+                          {meta ? <span>{meta}</span> : null}
+                        </span>
+                        <span className="v aj-conn-v">
+                          <span className={`aj-conn-badge is-${s.status}`}>
+                            <span className="aj-dot" aria-hidden="true" />
+                            {statusLabel}
+                          </span>
+                          <span className="aj-conn-detail">{s.detail}</span>
+                        </span>
+                      </div>
+                    );
+                  })
+                : !connErr
+                  ? (
+                    <div className="aj-row">
+                      <span
+                        className="v"
+                        style={{ color: "var(--text-subtle)", font: "400 var(--fs-data)/1.5 var(--font-mono)" }}
+                      >
+                        {t("ajustes.conn.checking")}
+                      </span>
+                    </div>
+                  )
+                  : null}
+            </div>
+          </section>
+
+          {/* ── Tus datos (E1) — dos bloques separados ── */}
           <section className="aj-g aj-danger" data-screen-label="ajustes-datos">
             <div className="aj-gh">
               <span className="t-overline">{t("ajustes.data.overline")}</span>
@@ -415,20 +549,90 @@ export function AjustesScreen() {
             </div>
             <hr className="c-divider" />
             <div className="aj-rows">
+              {/* Bloque 1 — Borrar todos mis datos (conserva la cuenta) */}
               <div className="aj-row">
                 <span className="k">
-                  <b>{t("ajustes.export.label")}</b>
-                  <span>{t("ajustes.export.hint")}</span>
+                  <b>{t("ajustes.wipe.label")}</b>
+                  <span>{t("ajustes.wipe.hint")}</span>
                 </span>
                 <span className="v">
-                  <button className="c-btn" onClick={exportAll}>
-                    {t("ajustes.export.button")}
+                  <button
+                    className="c-btn"
+                    style={{
+                      borderColor: "color-mix(in srgb,var(--danger) 45%,transparent)",
+                      color: "var(--danger)",
+                      display: wipeOpen ? "none" : undefined,
+                    }}
+                    onClick={() => {
+                      setWipeOpen(true);
+                      setWipeErr(null);
+                      setWipeDone(null);
+                    }}
+                  >
+                    {t("ajustes.wipe.button")}
                   </button>
-                  <span style={{ font: "400 var(--fs-micro)/1 var(--font-mono)", color: "var(--text-subtle)" }}>
-                    {t("ajustes.export.detail")}
+                  <span className={`aj-confirm aj-wipe${wipeOpen ? " show" : ""}`}>
+                    <span className="aj-wipe-dl">
+                      <span style={{ font: "400 var(--fs-data)/1.5 var(--font-sans)", color: "var(--text-muted)" }}>
+                        {t("ajustes.wipe.downloadLead")}
+                      </span>
+                      <a className="c-btn" href="/api/account/data" download>
+                        {t("ajustes.wipe.download")}
+                      </a>
+                    </span>
+                    <span className="aj-wipe-confirm">
+                      <span style={{ font: "400 var(--fs-data)/1.5 var(--font-sans)", color: "var(--text-muted)" }}>
+                        {t("ajustes.wipe.confirmPre")}
+                        <b style={{ fontFamily: "var(--font-mono)" }}>{WIPE_WORD}</b>
+                        {t("ajustes.wipe.confirmPost")}
+                      </span>
+                      <input
+                        className="c-input"
+                        autoComplete="off"
+                        aria-label={t("ajustes.wipe.aria")}
+                        value={wipeWord}
+                        onChange={(e) => setWipeWord(e.target.value)}
+                        style={{ maxWidth: "260px" }}
+                      />
+                      <button
+                        className="c-btn"
+                        disabled={!wipeReady || wiping}
+                        style={{ background: "var(--danger)", borderColor: "transparent", color: "#FFF" }}
+                        onClick={confirmWipe}
+                      >
+                        {wiping ? t("ajustes.wipe.deleting") : t("ajustes.wipe.confirmButton")}
+                      </button>
+                      <button
+                        className="c-btn c-btn--quiet"
+                        onClick={() => {
+                          setWipeOpen(false);
+                          setWipeWord("");
+                          setWipeErr(null);
+                        }}
+                      >
+                        {t("common.cancel")}
+                      </button>
+                    </span>
                   </span>
+                  {wipeErr ? (
+                    <span role="status" style={{ font: "400 var(--fs-data)/1.5 var(--font-sans)", color: "var(--danger)" }}>
+                      {wipeErr}
+                    </span>
+                  ) : null}
+                  {wipeDone ? (
+                    <span role="status" style={{ font: "400 var(--fs-data)/1.6 var(--font-sans)", color: "var(--text-muted)" }}>
+                      {t("ajustes.wipe.doneLead")}{" "}
+                      <span style={{ fontFamily: "var(--font-mono)", color: "var(--accent-text)" }}>
+                        {wipeDone.items} {t("ajustes.wipe.uItems")} · {wipeDone.variants} {t("ajustes.wipe.uVariants")} ·{" "}
+                        {wipeDone.sources} {t("ajustes.wipe.uSources")} · {wipeDone.staged} {t("ajustes.wipe.uStaged")} ·{" "}
+                        {wipeDone.files} {t("ajustes.wipe.uFiles")}
+                      </span>
+                    </span>
+                  ) : null}
                 </span>
               </div>
+
+              {/* Bloque 2 — Borrar mi cuenta (separado, con su propio peso) */}
               <div className="aj-row">
                 <span className="k">
                   <b>{t("ajustes.delete.label")}</b>
