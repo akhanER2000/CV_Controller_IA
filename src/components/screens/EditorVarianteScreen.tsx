@@ -790,7 +790,11 @@ export function EditorVarianteScreen({ variantId = "editor" }: { variantId?: str
         email: S(basicsData, "email"),
         phone: S(basicsData, "phone"),
         location: S(basicsData, "location"),
-        links: Array.isArray(basicsData.links) ? (basicsData.links as unknown[]).map((x) => String(x)) : [],
+        // Los enlaces pueden venir como string suelto o como {label,url} (contacto
+        // por variante). String(x) sobre el objeto daba "[object Object]" en el
+        // preview y en el rayos-X: al DOCUMENTO va la URL (es lo único que lee el
+        // ATS); la etiqueta es solo para la UI del editor.
+        links: normalizeLinks(basicsData.links).map(linkUrl),
         label,
       },
       targetTitle: label,

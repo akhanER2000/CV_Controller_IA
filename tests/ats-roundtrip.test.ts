@@ -85,6 +85,41 @@ describe("CV round-trip ATS · golden (Diego Gatica, 2 páginas, es)", () => {
  * round-trip no lo nota. Este bloque fija ese candado: los enlaces del golden se
  * extraen EN ORDEN aunque ahora sean hipervínculos.
  */
+/**
+ * REGRESIÓN «[object Object]». Con enlaces ETIQUETADOS ({label,url}) el documento
+ * debe imprimir la URL LITERAL (es lo único que lee el ATS); la etiqueta es solo
+ * para la UI del editor. Este test falla si alguien vuelve a coercer el objeto con
+ * String()/join() en cualquiera de los dos renderizadores.
+ */
+describe("CV round-trip ATS · enlaces con etiqueta imprimen la URL, no [object Object]", () => {
+  const labeled: ResumeData = {
+    ...data,
+    basics: {
+      ...data.basics,
+      links: [
+        { label: "LinkedIn", url: "linkedin.com/in/akhan" },
+        { label: "Portafolio", url: "akhan.cl" },
+      ],
+    },
+  };
+
+  it("1 · el PDF re-parseado contiene las URLs literales y NINGÚN [object Object]", async () => {
+    const buf = await renderResumeToBuffer(labeled, { locale: "es", onePage: false });
+    const pdf = await getDocumentProxy(new Uint8Array(buf));
+    const { text } = await extractText(pdf, { mergePages: true });
+    const out = norm(text);
+    expect(out).toContain("linkedin.com/in/akhan");
+    expect(out).toContain("akhan.cl");
+    expect(out).not.toContain("[object Object]");
+  });
+
+  it("2 · el texto plano (rayos-X) usa la URL, no la etiqueta ni el objeto", () => {
+    const plain = toPlainText(labeled, { locale: "es", onePage: false });
+    expect(plain).toContain("linkedin.com/in/akhan · akhan.cl");
+    expect(plain).not.toContain("[object Object]");
+  });
+});
+
 describe("CV round-trip ATS · enlaces como hipervínculo (el texto no cambia)", () => {
   let extractedLinks = "";
 
