@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
+import { Aurora } from "@/components/Aurora";
+import { DropZone } from "@/components/DropZone";
 import { useBoot } from "@/lib/corpus/runtime";
 import { supabaseEnabled } from "@/lib/supabase/config";
 import { createClient } from "@/lib/supabase/client";
@@ -12,8 +14,15 @@ import "./fuentes.css";
 
 /* ============================================================================
    Fuentes — porte de corpus-design/04-pantallas/fuentes.html
-   (ver docs/spec/pantallas/fuentes.md). Es un MURO: NO monta la aurora. El único
-   movimiento de montaje es el hr.c-divider que dibuja CorpusMotion.boot().
+   (ver docs/spec/pantallas/fuentes.md).
+
+   ★ VENTANA (antes muro). Aquí no se LEE trabajo denso: se DECIDE qué material
+   entra y por qué vía — arrastrar un PDF, pegar texto, conectar GitHub. Es una
+   sala de puertas, y las puertas respiran: monta <Aurora state="calm"/>, el
+   <main> es .c-window y cada tarjeta es .c-panel (vidrio ahumado) para que el
+   humo se intuya detrás sin comerse una letra. El texto suelto que no vive
+   dentro de una tarjeta lleva su velo (.c-scrim--soft).
+   El único movimiento de montaje sigue siendo el hr.c-divider de CorpusMotion.boot().
 
    ★ CABLEADO A DATOS REALES (agente B). En modo Supabase cada tarjeta ES la acción
    IN SITU (sin salir de Fuentes): PDF/DOCX, imágenes, texto, URL y GitHub suben /
@@ -135,8 +144,9 @@ export function FuentesScreen() {
   const [rowPhase, setRowPhase] = useState<Record<string, RowState2>>({});
   const [confirmRemove, setConfirmRemove] = useState<string | null>(null);
 
-  const pdfInRef = useRef<HTMLInputElement>(null);
-  const imgInRef = useRef<HTMLInputElement>(null);
+  // PDF/DOCX e imágenes ya no tienen input propio: su selector lo lleva dentro
+  // el <DropZone> compartido. LinkedIn conserva los suyos porque sus tres vías
+  // siguen abriendo cada una su selector concreto.
   const liPdfInRef = useRef<HTMLInputElement>(null);
   const liImgInRef = useRef<HTMLInputElement>(null);
 
@@ -373,7 +383,7 @@ export function FuentesScreen() {
   // La tarjeta educativa de LinkedIn del MODO LOCAL (genérica, sin datos, con las
   // vías como enlaces al volcado — el modo Supabase usa la versión ejecutable).
   const linkedInCardLocal = (
-    <article className="c-card fu-card fu-li" data-screen-label="fuentes-linkedin">
+    <article className="c-panel fu-card fu-li" data-screen-label="fuentes-linkedin">
       <div className="fu-h">
         <span className="nm">linkedin</span>
         <span className="tag">{t("fuentes.li.tag")}</span>
@@ -403,63 +413,57 @@ export function FuentesScreen() {
     // Tarjetas de acción (añadir una fuente). Cada una ES la acción, in situ.
     const addCards = (
       <>
-        <div className="fu-sub">
+        <div className="fu-sub c-scrim c-scrim--soft">
           <span className="t-overline">{t("fuentes.add.heading")}</span>
         </div>
 
-        {/* PDF / DOCX */}
-        <article className="c-card fu-card" data-screen-label="fuentes-add-archivos">
+        {/* PDF / DOCX — el gesto de arrastre del volcado, mismo componente */}
+        <article className="c-panel fu-card" data-screen-label="fuentes-add-archivos">
           <div className="fu-h">
             <span className="nm">{t("fuentes.card.files.name")}</span>
             <span className="tag">{t("fuentes.card.files.tag")}</span>
-            <span className="acts">
-              <button type="button" className="c-btn" disabled={busy("filesCard")} onClick={() => pdfInRef.current?.click()}>
-                {t("fuentes.card.files.button")}
-              </button>
-            </span>
           </div>
           <div className="fu-body">{t("fuentes.card.files.body")}</div>
-          {phaseLine("filesCard")}
-          <input
-            ref={pdfInRef}
-            type="file"
+          <DropZone
+            className="fu-drop"
             accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-            hidden
-            onChange={(e) => {
-              if (e.target.files) void runFileUpload("filesCard", Array.from(e.target.files));
-              e.target.value = "";
-            }}
+            disabled={busy("filesCard")}
+            onFiles={(fs) => void runFileUpload("filesCard", fs)}
+            label={
+              <>
+                <b>{t("fuentes.drop.files.bold")}</b>
+                {t("fuentes.drop.files.rest")}
+              </>
+            }
           />
+          {phaseLine("filesCard")}
         </article>
 
         {/* Capturas / imágenes */}
-        <article className="c-card fu-card" data-screen-label="fuentes-add-imagenes">
+        <article className="c-panel fu-card" data-screen-label="fuentes-add-imagenes">
           <div className="fu-h">
             <span className="nm">{t("fuentes.card.images.name")}</span>
             <span className="tag">{t("fuentes.card.images.tag")}</span>
-            <span className="acts">
-              <button type="button" className="c-btn" disabled={busy("imagesCard")} onClick={() => imgInRef.current?.click()}>
-                {t("fuentes.card.images.button")}
-              </button>
-            </span>
           </div>
           <div className="fu-body">{t("fuentes.card.images.body")}</div>
-          {phaseLine("imagesCard")}
-          <input
-            ref={imgInRef}
-            type="file"
+          <DropZone
+            className="fu-drop"
             accept="image/png,image/jpeg,image/webp,.png,.jpg,.jpeg,.webp"
             multiple
-            hidden
-            onChange={(e) => {
-              if (e.target.files) void runFileUpload("imagesCard", Array.from(e.target.files));
-              e.target.value = "";
-            }}
+            disabled={busy("imagesCard")}
+            onFiles={(fs) => void runFileUpload("imagesCard", fs)}
+            label={
+              <>
+                <b>{t("fuentes.drop.images.bold")}</b>
+                {t("fuentes.drop.images.rest")}
+              </>
+            }
           />
+          {phaseLine("imagesCard")}
         </article>
 
         {/* Texto pegado */}
-        <article className="c-card fu-card" data-screen-label="fuentes-add-texto">
+        <article className="c-panel fu-card" data-screen-label="fuentes-add-texto">
           <div className="fu-h">
             <span className="nm">{t("fuentes.card.paste.name")}</span>
             <span className="tag">{t("fuentes.card.paste.tag")}</span>
@@ -502,7 +506,7 @@ export function FuentesScreen() {
         </article>
 
         {/* Enlace (URL) */}
-        <article className="c-card fu-card" data-screen-label="fuentes-add-url">
+        <article className="c-panel fu-card" data-screen-label="fuentes-add-url">
           <div className="fu-h">
             <span className="nm">{t("fuentes.card.url.name")}</span>
             <span className="tag">{t("fuentes.card.url.tag")}</span>
@@ -534,7 +538,7 @@ export function FuentesScreen() {
         </article>
 
         {/* GitHub — dato duro, sin IA (API pública, sin OAuth) */}
-        <article className="c-card fu-card" data-screen-label="fuentes-github">
+        <article className="c-panel fu-card" data-screen-label="fuentes-github">
           <div className="fu-h">
             <span className="nm">GitHub</span>
             <span className="tag star">{t("fuentes.tag.noAiApi")}</span>
@@ -566,7 +570,7 @@ export function FuentesScreen() {
         </article>
 
         {/* LinkedIn — las TRES vías se ejecutan aquí (nada de mandar al volcado) */}
-        <article className="c-card fu-card fu-li" data-screen-label="fuentes-linkedin">
+        <article className="c-panel fu-card fu-li" data-screen-label="fuentes-linkedin">
           <div className="fu-h">
             <span className="nm">linkedin</span>
             <span className="tag">{t("fuentes.li.tag")}</span>
@@ -619,6 +623,22 @@ export function FuentesScreen() {
               </div>
             </div>
           ) : null}
+          {/* Vías 2 y 3 (PDF oficial · capturas) también por arrastre: mismo gesto
+              que el volcado. Los botones de arriba siguen abriendo su selector
+              concreto; esto añade el atajo, no lo sustituye. */}
+          <DropZone
+            className="fu-drop"
+            accept=".pdf,application/pdf,image/png,image/jpeg,image/webp,.png,.jpg,.jpeg,.webp"
+            multiple
+            disabled={busy("liCard")}
+            onFiles={(fs) => void runFileUpload("liCard", fs)}
+            label={
+              <>
+                <b>{t("fuentes.drop.li.bold")}</b>
+                {t("fuentes.drop.li.rest")}
+              </>
+            }
+          />
           {phaseLine("liCard")}
           <input
             ref={liPdfInRef}
@@ -647,10 +667,11 @@ export function FuentesScreen() {
 
     return (
       <div className="c-page">
+        <Aurora state="calm" />
         {header}
-        <main className="fu-main c-wall" data-screen-label="fuentes" ref={bootRef}>
+        <main className="fu-main c-window" data-screen-label="fuentes" ref={bootRef}>
           <div className="c-container">
-            <div className="fu-lead">
+            <div className="fu-lead c-scrim c-scrim--soft">
               <p>
                 {t("fuentes.lead.prefix")}
                 <b style={{ color: "var(--text)", fontWeight: 500 }}>{t("fuentes.lead.bold")}</b>
@@ -669,7 +690,11 @@ export function FuentesScreen() {
             ) : null}
 
             {sourcesEmpty ? (
-              <div style={{ textAlign: "center", padding: "48px 0 40px" }} data-screen-label="fuentes-vacio">
+              <div
+                className="c-scrim c-scrim--soft"
+                style={{ textAlign: "center", padding: "48px 0 40px" }}
+                data-screen-label="fuentes-vacio"
+              >
                 <span className="t-overline">{t("fuentes.empty.overline")}</span>
                 <h2 style={{ marginTop: "14px" }}>{t("fuentes.empty.title")}</h2>
                 <p style={{ color: "var(--text-muted)", maxWidth: "52ch", margin: "10px auto 0" }}>{t("fuentes.empty.body")}</p>
@@ -688,7 +713,7 @@ export function FuentesScreen() {
                 const canResync = s.kind !== "paste" && s.kind !== "manual";
                 const rp = rowPhase[s.id];
                 return (
-                  <article className="c-card fu-card" key={s.id} data-screen-label="fuentes-item">
+                  <article className="c-panel fu-card" key={s.id} data-screen-label="fuentes-item">
                     <div className="fu-h">
                       <span className="nm">{name}</span>
                       <span className="tag">{kindLabel(s.kind)}</span>
@@ -772,11 +797,12 @@ export function FuentesScreen() {
   // ═══════════════════════ MODO LOCAL (maqueta interactiva) ═══════════════════
   return (
     <div className="c-page">
+      <Aurora state="calm" />
       {header}
 
-      <main className="fu-main c-wall" data-screen-label="fuentes" ref={bootRef}>
+      <main className="fu-main c-window" data-screen-label="fuentes" ref={bootRef}>
         <div className="c-container">
-          <div className="fu-lead">
+          <div className="fu-lead c-scrim c-scrim--soft">
             <p>
               {t("fuentes.lead.prefix")}
               <b style={{ color: "var(--text)", fontWeight: 500 }}>{t("fuentes.lead.bold")}</b>
@@ -789,7 +815,7 @@ export function FuentesScreen() {
           <hr className="c-divider" />
 
           {/* GitHub: la fuente estrella */}
-          <article className="c-card fu-card" data-screen-label="fuentes-github">
+          <article className="c-panel fu-card" data-screen-label="fuentes-github">
             <div className="fu-h">
               <span className="nm">github.com/dgatica</span>
               <span className="tag star">{t("fuentes.tag.noAiApi")}</span>
@@ -892,7 +918,7 @@ export function FuentesScreen() {
           </article>
 
           {/* Portfolio */}
-          <article className="c-card fu-card" data-screen-label="fuentes-portfolio">
+          <article className="c-panel fu-card" data-screen-label="fuentes-portfolio">
             <div className="fu-h">
               <span className="nm">dgatica.cl</span>
               <span className="tag">{t("fuentes.tag.portfolio")}</span>
@@ -946,7 +972,7 @@ export function FuentesScreen() {
           </article>
 
           {/* Archivos */}
-          <article className="c-card fu-card" data-screen-label="fuentes-archivos">
+          <article className="c-panel fu-card" data-screen-label="fuentes-archivos">
             <div className="fu-h">
               <span className="nm">{t("fuentes.files.name")}</span>
               <span className="tag">{t("fuentes.files.tag")}</span>

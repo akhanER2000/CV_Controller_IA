@@ -227,6 +227,76 @@ describe("CV round-trip ATS · foto opt-in (imagen invisible al parser)", () => 
 });
 
 /**
+ * LA FOTO EN LA MAQUETA — el candado del eje nuevo.
+ *
+ * El test de arriba prueba que una foto puesta a mano sobre la plantilla por defecto
+ * no ensucia el texto. Este prueba lo que de verdad daba miedo: las plantillas que
+ * RESERVAN hueco para la foto ponen la imagen dentro de una fila flex, a la derecha
+ * del nombre y el contacto. Si el parser leyera esa fila como dos columnas, el
+ * bloque de contacto se fragmentaría — que es exactamente el fallo que hace inútil a
+ * media gama visual. Aquí se renderiza CON la foto puesta y se le exige a cada una
+ * su propio texto plano completo, en orden de lectura.
+ */
+describe("CV round-trip ATS · plantillas con hueco de foto (la imagen no parte el contacto)", () => {
+  const PHOTO_PNG =
+    "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
+  const CON_HUECO = listTemplates().filter((t) => t.gama === "ats" && t.layout.photo);
+
+  it("0 · hay plantillas ATS con hueco de foto (si no, este candado no candea nada)", () => {
+    expect(CON_HUECO.length).toBeGreaterThanOrEqual(4);
+  });
+
+  it("1 · con la foto puesta, cada una sigue leyéndose EN ORDEN y sin perder contacto", async () => {
+    for (const tpl of CON_HUECO) {
+      const conFoto: ResumeData = { ...data, templateId: tpl.id, photo: PHOTO_PNG };
+      const buf = await renderResumeToBuffer(conFoto, { locale: "es", onePage: false });
+      const pdf = await getDocumentProxy(new Uint8Array(buf));
+      const { text } = await extractText(pdf, { mergePages: true });
+      const out = norm(text);
+      // El contacto entero, sin fragmentar: si la fila se leyera como dos columnas,
+      // el email o el teléfono se colarían entre medias de otra cosa. El nombre se
+      // pide en la caja que use la plantilla (hay cabeceras en caja alta).
+      const nombre = nameText(data.basics.name, resolveMetrics(tpl.metrics));
+      for (const needle of [nombre, "diego.gatica@ejemplo.cl", "+56 9 6123 4567"]) {
+        expect(out, `${tpl.id} · dato de contacto perdido con foto: "${needle}"`).toContain(needle);
+      }
+      const rayosX = toPlainText(conFoto, { locale: "es", onePage: false });
+      let cursor = 0;
+      for (const line of rayosX.split("\n").map(norm).filter(Boolean)) {
+        const idx = out.indexOf(line, cursor);
+        expect(idx, `${tpl.id} · con foto, fuera de orden o ausente: "${line}"`).toBeGreaterThanOrEqual(0);
+        cursor = idx + line.length;
+      }
+    }
+  }, 120000);
+
+  it("2 · la foto NO cambia el texto: el mismo documento con y sin ella dice lo mismo", async () => {
+    // El rayos-X no puede mencionar la foto, y el PDF con foto no puede inyectar ni
+    // un carácter. Si la imagen aportara texto, el usuario vería en "cómo lo lee el
+    // ATS" un documento distinto del que descarga.
+    for (const tpl of CON_HUECO) {
+      const sin = toPlainText({ ...data, templateId: tpl.id }, { locale: "es", onePage: false });
+      const con = toPlainText({ ...data, templateId: tpl.id, photo: PHOTO_PNG }, { locale: "es", onePage: false });
+      expect(con, `${tpl.id}: la foto se cuela en el texto plano`).toBe(sin);
+    }
+  });
+
+  it("3 · la versión de una página SIGUE cabiendo en una página con la foto puesta", async () => {
+    // Una foto de 3,5 × 4,5 cm son ~118 pt de alto: es lo que más empuja de todo el
+    // documento. Una plantilla de una página que se desborda al poner la foto no es
+    // una plantilla con foto, es una promesa rota.
+    for (const tpl of CON_HUECO) {
+      const buf = await renderResumeToBuffer(
+        { ...data, templateId: tpl.id, photo: PHOTO_PNG },
+        { locale: "es", onePage: true },
+      );
+      const pdf = await getDocumentProxy(new Uint8Array(buf));
+      expect(pdf.numPages, `${tpl.id}: con foto, "una página" sale en ${pdf.numPages}`).toBe(1);
+    }
+  }, 120000);
+});
+
+/**
  * QR con URL SOBRE la capacidad del código (~2.3 KB): QRCode.toDataURL lanzaría, así
  * que el render degrada a SOLO-TEXTO (sin glifo) en vez de reventar el PDF. El candado
  * "la URL va como texto" se mantiene; el documento nunca falla por una URL larga.
@@ -342,17 +412,35 @@ describe("CV round-trip ATS · PARAMETRIZADO por plantilla del catálogo", () =>
     expect(ATS_TEMPLATES.map((t) => t.id)).toContain("ats-clasica");
   });
 
-  it("0b · 'Compacta' cumple su nombre: el contenido de DOS páginas le cabe en UNA", async () => {
-    // El nombre de una plantilla es una promesa. Esta la cumple con el mismo golden
-    // que la clásica reparte en dos páginas — sin recortar una sola palabra (eso lo
-    // comprueba el test 'b' de esta misma tanda, que exige el golden entero).
+  /**
+   * 'Compacta' cumple su nombre — y el nombre cambió de significado, a propósito.
+   *
+   * Antes esto exigía que el contenido de DOS páginas le cupiera en UNA, y lo
+   * cumplía: 9 pt de cuerpo, interlineado 1,28 y márgenes de 13 mm. Ese documento
+   * está fuera del núcleo de legibilidad que ahora rige toda la gama ATS (cuerpo
+   * 10-11 pt, interlineado 1,15-1,3, márgenes ≥ 20 mm, medida ≤ 90 caracteres), y la
+   * aritmética no da: con el cuerpo en 10 pt y 20 mm de margen vertical, el golden
+   * necesita ~690 pt de alto y la caja de texto mide 678. No cabe, y apretarlo más
+   * significaría salirse del núcleo — es decir, volver a publicar un documento que
+   * se lee peor y llamarlo estilo.
+   *
+   * Así que la promesa se reformula en algo igual de comprobable y que sí es cierto:
+   * Compacta es la que MENOS papel gasta de todo el catálogo. No hay ninguna que
+   * quepa en menos páginas que ella, con el mismo contenido. Eso, más el test 8 de
+   * tests/templates.test.ts (es estrictamente la más densa en alto de línea y en aire
+   * de sección), es la promesa entera del nombre.
+   */
+  it("0b · 'Compacta' cumple su nombre: ninguna plantilla gasta menos páginas que ella", async () => {
     const paginas = async (id: string) => {
       const buf = await renderResumeToBuffer({ ...data, templateId: id }, { locale: "es", onePage: false });
       return (await getDocumentProxy(new Uint8Array(buf))).numPages;
     };
-    expect(await paginas("ats-compacta")).toBe(1);
-    expect(await paginas("ats-clasica")).toBe(2);
-  }, 60000);
+    const suyas = await paginas("ats-compacta");
+    for (const tpl of ATS_TEMPLATES) {
+      if (tpl.id === "ats-compacta") continue;
+      expect(suyas, `${tpl.id} gasta menos papel que Compacta`).toBeLessThanOrEqual(await paginas(tpl.id));
+    }
+  }, 300000);
 
   it("0c · la versión de una página CABE en una página, en todas las plantillas ATS", async () => {
     // Con el filtro p1 puesto, "1 página" tiene que ser verdad. Una plantilla con
@@ -425,6 +513,17 @@ describe("CV round-trip ATS · PARAMETRIZADO por plantilla del catálogo", () =>
         expect(out).not.toMatch(/D i e g o|E x p e r i e n c i a/);
         expect(out).not.toContain("[object Object]");
         expect(out.length).toBeGreaterThan(500);
+      });
+
+      it("e · sin QR por defecto y sin emojis (el núcleo, comprobado en el PDF)", () => {
+        // El QR es opt-in del DOCUMENTO (data.qr), nunca de la plantilla: ninguna
+        // puede encenderlo. El fixture no lo trae, así que su leyenda no puede
+        // aparecer — si alguna plantilla lo colara, saldría aquí.
+        const out = salida.get(tpl.id)!;
+        expect(out, `${tpl.id}: aparece un QR que nadie pidió`).not.toContain("Escanea");
+        expect(out, `${tpl.id}: emoji en el documento`).not.toMatch(
+          /[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}\u{FE0F}]/u,
+        );
       });
     });
   }

@@ -22,18 +22,22 @@ import {
   recommendTemplates,
   reasonById,
   bodyLinePt,
+  isMonoFaced,
   type MasterSummary,
 } from "../src/lib/cv/recommend";
 import { listTemplates, type CvTemplate, type TemplateTag } from "../src/lib/cv/templates";
 
 // ── Pool sintético ───────────────────────────────────────────────────────────
-/** Una plantilla mínima: solo lo que la recomendación mira (gama, tags, métricas). */
+/** Una plantilla mínima: solo lo que la recomendación mira (gama, tags, métricas,
+ *  y la FAMILIA del cuerpo — la mono no puede ser el default técnico). */
 function tpl(
   id: string,
   gama: "ats" | "visual",
   tags: TemplateTag[],
   metrics: { bodySize: number; bodyLeading: number; sectionGap: number },
+  face: "sans" | "mono" = "sans",
 ): CvTemplate {
+  const family = face === "mono" ? "Geist Mono" : "Geist";
   return {
     id,
     name: id,
@@ -42,7 +46,7 @@ function tpl(
     ...(gama === "visual" ? { warning: "dos columnas: el parser puede leerla al revés" } : {}),
     layout: { columns: gama === "visual" ? 2 : 1, photo: gama === "visual", sidebar: gama === "visual" },
     palette: { id: "p", name: "P", accent: "#1F6E5A", ink: "#14181A", muted: "#454B49", hair: "#D8DAD6" },
-    typography: { id: "t", name: "T", display: "Geist", body: "Geist" },
+    typography: { id: face, name: face, display: family, body: family },
     metrics: {
       nameSize: 22,
       bodySize: metrics.bodySize,
@@ -194,6 +198,71 @@ describe("recommendTemplates · pool sintético", () => {
   });
 });
 
+// ── La monoespaciada no es el default técnico ────────────────────────────────
+/* Un CV de ingeniero en mono «parece» de ingeniero, pero quien lo lee primero no
+   es un ingeniero: en la encuesta a hiring managers la mono puntúa al fondo. No
+   se prohíbe (sigue en el catálogo y sigue elegible); lo que no puede es
+   presentarse como LA plantilla para un perfil técnico. */
+const POOL_MONO: CvTemplate[] = [
+  tpl("a-terminal", "ats", ["tecnica", "ingenieria"], DENSA, "mono"),
+  tpl("a-instrumento", "ats", ["tecnica", "datos-ia"], MEDIA, "sans"),
+  tpl("a-clasica", "ats", ["clasica", "general"], MEDIA, "sans"),
+];
+
+describe("recommendTemplates · la mono no es la plantilla de ingeniería", () => {
+  it("con muchas habilidades propone la técnica NO monoespaciada", () => {
+    const recs = recommendTemplates(summary({ skillsWithEvidence: 20 }), {
+      templates: POOL_MONO,
+      limit: 6,
+    });
+    expect(only(recs)[0]).toBe("a-instrumento");
+    expect(recs[0]!.reason.code).toBe("skillsEvidence");
+  });
+
+  it("la mono nunca lleva una razón técnica: si aparece, es por la razón honesta", () => {
+    for (const s of [{ skillsWithEvidence: 30 }, { skillItems: 25 }]) {
+      const recs = recommendTemplates(s, { templates: POOL_MONO, limit: 9 });
+      const why = reasonById(recs).get("a-terminal");
+      expect(why?.code).toBe("ats");
+    }
+  });
+
+  it("sigue estando disponible: se ofrece, solo que la última", () => {
+    const recs = recommendTemplates({}, { templates: POOL_MONO, limit: 9 });
+    expect(only(recs)).toContain("a-terminal");
+    expect(only(recs)[only(recs).length - 1]).toBe("a-terminal");
+  });
+
+  it("si TODA la gama técnica es mono, la regla no dispara y nadie se queda sin lista", () => {
+    const soloMono = [
+      tpl("a-terminal", "ats", ["tecnica", "ingenieria"], DENSA, "mono"),
+      tpl("a-clasica", "ats", ["clasica"], MEDIA, "sans"),
+    ];
+    const recs = recommendTemplates(summary({ skillsWithEvidence: 30 }), {
+      templates: soloMono,
+      limit: 6,
+    });
+    expect(recs.length).toBe(2);
+    for (const r of recs) expect(r.reason.code).toBe("ats");
+  });
+});
+
+describe("isMonoFaced · mira la familia, no el id del catálogo", () => {
+  it("detecta la mono en el cuerpo y en el nombre, y no confunde una sans", () => {
+    expect(isMonoFaced(tpl("x", "ats", [], MEDIA, "mono"))).toBe(true);
+    expect(isMonoFaced(tpl("y", "ats", [], MEDIA, "sans"))).toBe(false);
+  });
+
+  it("las CIFRAS en mono no hacen mono el documento: eso es un detalle, no un look", () => {
+    const cronica = tpl("z", "ats", ["editorial"], MEDIA, "sans");
+    const conCifras: CvTemplate = {
+      ...cronica,
+      typography: { ...cronica.typography, mono: "Geist Mono", monoFigures: true },
+    };
+    expect(isMonoFaced(conCifras)).toBe(false);
+  });
+});
+
 describe("bodyLinePt · mide el documento, no una etiqueta", () => {
   it("es tamaño × interlineado, en puntos", () => {
     expect(bodyLinePt(POOL[3]!)).toBeCloseTo(9 * 1.28, 5);
@@ -233,6 +302,19 @@ describe("recommendTemplates · contra el catálogo real", () => {
     const atsCount = catalogo.filter((t) => t.gama === "ats").length;
     const recs = recommendTemplates({ pages: 3, roles: 5 }, { limit: 100 });
     expect(recs.length).toBeLessThanOrEqual(atsCount);
+  });
+
+  it("ninguna monoespaciada llega recomendada por una razón técnica", () => {
+    // Invariante independiente de los ids: vale con 5 plantillas y con 35, y
+    // sobrevive a que el catálogo se reescriba entero.
+    const tecnicas = new Set(["skillsEvidence", "skills"]);
+    for (const c of casos) {
+      for (const r of recommendTemplates(c, { limit: 12 })) {
+        if (!tecnicas.has(r.reason.code)) continue;
+        const t = catalogo.find((x) => x.id === r.templateId)!;
+        expect(isMonoFaced(t), `mono recomendada como técnica: ${t.id}`).toBe(false);
+      }
+    }
   });
 
   it("es determinista: el mismo resumen da exactamente la misma lista", () => {

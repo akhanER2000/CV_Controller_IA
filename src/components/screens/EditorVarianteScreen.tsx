@@ -1871,6 +1871,10 @@ export function EditorVarianteScreen({ variantId = "editor" }: { variantId?: str
                   </div>
                 )}
                 <p className="note">{t("editor.photoNote")}</p>
+                {/* Lo que se sabe y lo que dice la ley chilena, separado y sin
+                    adornos: el empleador no puede EXIGIRLA, tú sí puedes ponerla. */}
+                <p className="note">{t("editor.photoEvidence")}</p>
+                <p className="note">{t("editor.photoLegalCl")}</p>
                 <p className="note">{t("editor.photoAvatarNote")}</p>
               </div>
 
@@ -1938,6 +1942,9 @@ export function EditorVarianteScreen({ variantId = "editor" }: { variantId?: str
                   </div>
                 )}
                 <p className="note warn">{t("editor.qrNote")}</p>
+                {/* Y cuándo NO sirve. El QR no se vende como ventaja: se dice en
+                    qué caso ayuda —el papel en la mano— y en cuál estorba. */}
+                <p className="note">{t("editor.qrHonest")}</p>
               </div>
             </div>
           )}

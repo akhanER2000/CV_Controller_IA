@@ -102,7 +102,7 @@ export function OnboardingScreen() {
         <div className="ob-doors">
           <button
             type="button"
-            className="c-card c-lift ob-door"
+            className="c-panel c-lift ob-door"
             id="doorA"
             data-reveal
             style={{ "--d": "600ms" } as React.CSSProperties}
@@ -128,7 +128,7 @@ export function OnboardingScreen() {
           </button>
 
           <Link
-            className="c-card c-lift ob-door"
+            className="c-panel c-lift ob-door"
             href="/app/importar"
             data-reveal
             style={{ "--d": "680ms" } as React.CSSProperties}

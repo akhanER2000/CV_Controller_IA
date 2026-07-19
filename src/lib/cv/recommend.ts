@@ -13,6 +13,11 @@
  *   · No recomienda la gama 'visual'. Una plantilla que lleva `warning` se elige
  *     a sabiendas, no se sugiere: recomendar algo que rompe el parseo del ATS
  *     sería vender el problema como si fuera la solución.
+ *   · No propone una monoespaciada como plantilla técnica. Sigue en el catálogo y
+ *     sigue elegible —ver `noMono` para el porqué—, pero no se presenta como la
+ *     plantilla de ingeniería.
+ *   · No promete entrevistas. Ningún diseño de CV tiene un estudio detrás que lo
+ *     respalde, así que ninguna razón dice ni insinúa eso.
  *
  * PURO Y SIN ESTADO: entra un resumen del master (números), sale una lista de
  * ids con su razón. No toca el DOM, no pide nada por red y no depende de ids
@@ -144,6 +149,38 @@ function withAnyTag(pool: CvTemplate[], tags: TemplateTag[]): CvTemplate[] {
   });
 }
 
+// ── Monoespaciadas: se ofrecen, pero no se recomiendan para ingeniería ───────
+/**
+ * ¿El documento está compuesto en monoespaciada? Se mira la FAMILIA del cuerpo y
+ * la del nombre — no `monoFigures`, que solo pone las fechas en mono y es un
+ * detalle tipográfico, no un look. Se detecta por el nombre de la familia y no
+ * por un id del catálogo, que es exactamente lo que hace que esto sobreviva a que
+ * el catálogo se reescriba entero.
+ */
+export function isMonoFaced(t: CvTemplate): boolean {
+  const mono = /mono|courier|consolas|menlo/i;
+  return mono.test(t.typography.body) || mono.test(t.typography.display);
+}
+
+/**
+ * POR QUÉ LA MONOESPACIADA NO ES EL DEFAULT TÉCNICO. Es tentador: un CV de
+ * ingeniero en mono «parece» de ingeniero. Pero quien lo lee primero no es un
+ * ingeniero, es alguien de selección, y en la encuesta a hiring managers la
+ * composición monoespaciada puntúa al fondo. Eso es "muy probable", no certeza —
+ * por eso la mono NO se prohíbe ni se esconde: sigue en el catálogo, sigue
+ * elegible, y sigue apareciendo en la lista por la razón honesta ("gama ATS: una
+ * columna, sin foto ni iconos"). Lo único que no hace es presentarse como LA
+ * plantilla para tu perfil técnico, que es una afirmación que no podemos sostener.
+ */
+function noMono(pool: CvTemplate[]): CvTemplate[] {
+  return pool.filter((t) => !isMonoFaced(t));
+}
+
+/** El pool con las monoespaciadas AL FINAL (para el relleno honesto). */
+function monoLast(pool: CvTemplate[]): CvTemplate[] {
+  return [...pool.filter((t) => !isMonoFaced(t)), ...pool.filter(isMonoFaced)];
+}
+
 export interface RecommendOptions {
   /** Cuántas devolver. Un puñado: por defecto 6. */
   limit?: number;
@@ -185,13 +222,15 @@ export function recommendTemplates(
   //     que te sirve no es un estilo: es una métrica que quepa.
   if (s.pages >= 2) push(densest(pool, 2), { code: "pages", n: s.pages });
 
-  // 2 · MUCHAS HABILIDADES → gama técnica (mono en las cifras, denso, habilidades
-  //     que se leen como datos). 8 con evidencia, o 18 listadas, es el punto en el
-  //     que la sección de habilidades deja de ser una línea y pasa a ser un bloque.
+  // 2 · MUCHAS HABILIDADES → gama técnica (densa, con las habilidades legibles
+  //     como datos), pero NUNCA la monoespaciada: ver `noMono`. 8 con evidencia,
+  //     o 18 listadas, es el punto en el que la sección de habilidades deja de ser
+  //     una línea y pasa a ser un bloque.
   const evidenced = s.skillsWithEvidence ?? 0;
   const technical: TemplateTag[] = ["tecnica", "datos-ia", "ingenieria"];
-  if (evidenced >= 8) push(withAnyTag(pool, technical), { code: "skillsEvidence", n: evidenced });
-  else if (s.skillItems >= 18) push(withAnyTag(pool, technical), { code: "skills", n: s.skillItems });
+  const tech = noMono(withAnyTag(pool, technical));
+  if (evidenced >= 8) push(tech, { code: "skillsEvidence", n: evidenced });
+  else if (s.skillItems >= 18) push(tech, { code: "skills", n: s.skillItems });
 
   // 3 · MÁS PROYECTOS QUE EXPERIENCIA FORMAL. Con ≤2 roles y ≥3 proyectos, lo que
   //     te define está en los proyectos: que el documento no los entierre al final.
@@ -214,9 +253,11 @@ export function recommendTemplates(
   }
 
   // 6 · RELLENO HONESTO. Si las reglas no llenan el puñado, se completa con la gama
-  //     ATS en el orden del catálogo. Esta razón NO afirma nada sobre el usuario:
-  //     afirma una propiedad comprobable de la plantilla (una columna, sin foto).
-  push(pool, { code: "ats", n: 0 });
+  //     ATS en el orden del catálogo —con las monoespaciadas al final—. Esta razón
+  //     NO afirma nada sobre el usuario: afirma una propiedad comprobable de la
+  //     plantilla (una columna, sin foto). Que la mono entre por aquí y no por la
+  //     regla técnica es justamente la diferencia entre ofrecerla y recomendarla.
+  push(monoLast(pool), { code: "ats", n: 0 });
 
   return out;
 }

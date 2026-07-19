@@ -4,20 +4,38 @@
    .c-skel para la espera, .c-panel para el vidrio ahumado del diálogo.
    Sin @keyframes propios: el movimiento vive en motion.css. */
 
+/* ── ATMÓSFERA ──
+   Hojear no es trabajar. El editor es un MURO opaco (ahí se escribe); la galería
+   y el visor son pantallas de mirar, y ahí el humo dice justamente eso.
+
+   La aurora la cuelga el runtime del <body> con z-index 0, o sea DEBAJO de la
+   página (z-index 1). Mientras el diálogo está abierto sube por delante de esa
+   página —pero por debajo del velo (--z-overlay: 100)—, que es la única forma de
+   que el velo tenga algo detrás en vez de un muro opaco. Al cerrar, el selector
+   deja de casar y todo vuelve solo a su sitio: sin JavaScript y sin estado. */
+body:has(.tg-veil) .c-aurora{z-index:60}
+
 .tg-veil{position:fixed;inset:0;z-index:var(--z-overlay);display:flex;padding:3vh 3vw;
-  background:color-mix(in srgb,var(--bg) 72%,transparent);backdrop-filter:blur(3px)}
+  background:color-mix(in srgb,var(--bg) 58%,transparent);
+  backdrop-filter:blur(3px);-webkit-backdrop-filter:blur(3px)}
 .tg-panel{position:relative;margin:auto;width:100%;max-width:1180px;max-height:94vh;
   display:flex;flex-direction:column;overflow:hidden}
 
-/* ── Cabecera ── */
-.tg-head{display:flex;align-items:baseline;gap:12px;padding:16px 20px 12px;border-bottom:1px solid var(--border)}
+/* ── Cabecera ──
+   El vidrio del sistema (.c-panel) solo se ve donde el contenido lo deja: la
+   cabecera, los filtros y el pie son translúcidos y dejan intuir el humo; la
+   REJILLA de tarjetas se queda opaca más abajo. Es la regla de la gramática de
+   capas: donde hay trabajo que leer (treinta hojas y su letra), hay muro. */
+.tg-head{display:flex;align-items:baseline;gap:12px;padding:16px 20px 12px;border-bottom:1px solid var(--border);
+  background:color-mix(in srgb,var(--surface) 40%,transparent)}
 .tg-head .t-overline{font-size:10px}
 .tg-count{font:400 10px/1 var(--font-mono);color:var(--text-subtle)}
 .tg-close{margin-left:auto;height:32px;padding:0 14px;align-self:center}
 
 /* ── Filtros: gama (campo propio) + etiquetas (vocabulario cerrado) ── */
 .tg-filters{display:flex;flex-wrap:wrap;align-items:center;gap:6px;padding:12px 20px;
-  border-bottom:1px solid var(--border);background:var(--surface-sunken)}
+  border-bottom:1px solid var(--border);
+  background:color-mix(in srgb,var(--surface-sunken) 55%,transparent)}
 .tg-seg{display:flex;border:1px solid var(--border-strong);border-radius:6px;overflow:hidden;margin-right:6px}
 .tg-seg button{font:500 var(--fs-micro)/1 var(--font-mono);letter-spacing:.04em;padding:7px 10px;color:var(--text-muted)}
 .tg-seg button[aria-pressed="true"]{color:var(--text);background:var(--surface-elevated);
@@ -33,7 +51,8 @@
 
 /* ── Paleta y tipografía: aquí dentro, para verlo en las 30 miniaturas ── */
 .tg-design{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;padding:10px 20px;
-  border-bottom:1px solid var(--border)}
+  border-bottom:1px solid var(--border);
+  background:color-mix(in srgb,var(--surface) 28%,transparent)}
 .tg-dlabel{font:500 9.5px/1 var(--font-mono);letter-spacing:.1em;text-transform:uppercase;color:var(--text-subtle)}
 .tg-swatches{display:flex;flex-wrap:wrap;gap:5px;margin-right:10px}
 .tg-sw{display:inline-flex;align-items:center;gap:6px;height:26px;padding:0 10px;border-radius:var(--radius-sm);
@@ -89,6 +108,21 @@
 .tg-badge{position:absolute;top:6px;left:6px;padding:3px 7px;border-radius:3px;
   background:var(--patina-500);color:var(--ink-on-patina);
   font:500 9px/1 var(--font-mono);letter-spacing:.1em;text-transform:uppercase}
+/* ── AMPLIAR ──
+   z-index 2: por encima del ::after que hace clicable toda la tarjeta. Si no,
+   sería un botón que no se puede pulsar (elegiría la plantilla en su lugar).
+   Siempre visible en foco y en táctil; en escritorio se atenúa hasta que el
+   puntero entra en la tarjeta, para no ensuciar treinta hojas a la vez. */
+.tg-zoom{position:absolute;top:6px;right:6px;z-index:2;width:28px;height:28px;
+  display:grid;place-items:center;border-radius:var(--radius-sm);
+  border:1px solid var(--border);background:color-mix(in srgb,var(--surface) 88%,transparent);
+  backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);color:var(--text-muted);opacity:.55}
+.tg-card:hover .tg-zoom,.tg-zoom:focus-visible{opacity:1}
+.tg-zoom:hover{color:var(--accent-text);border-color:var(--border-patina)}
+@media (hover:none){.tg-zoom{opacity:1}}
+@media (prefers-reduced-motion: no-preference){
+  .tg-zoom{transition:opacity .14s,color .14s,border-color .14s}
+}
 .tg-name{display:flex;align-items:baseline;gap:8px;font:600 13px/1.3 var(--font-sans);color:var(--text)}
 .tg-gama{font:500 8.5px/1 var(--font-mono);letter-spacing:.1em;text-transform:uppercase;color:var(--text-subtle);
   border:1px solid var(--border);border-radius:3px;padding:3px 5px;flex:none}
@@ -110,7 +144,8 @@
 .tg-cmp[aria-pressed="true"]{color:var(--accent-text);border-color:var(--border-patina)}
 
 .tg-foot{padding:10px 20px;border-top:1px solid var(--border);
-  font:400 10px/1.6 var(--font-mono);color:var(--text-subtle);background:var(--surface)}
+  font:400 10px/1.6 var(--font-mono);color:var(--text-subtle);
+  background:color-mix(in srgb,var(--surface) 45%,transparent)}
 
 /* ── La miniatura suelta de la tarjeta «Diseño» del editor ── */
 .tg-mini{display:block;width:74px;flex:none}

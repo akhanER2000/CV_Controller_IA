@@ -1,0 +1,47 @@
+/* ── DropZone.css — el gesto de arrastre, uno solo para todo el producto ──
+   Extraído de .imp-drop (importar.html): borde punteado + superficie
+   translúcida + reacción al hover. Prefijo propio `dz-`/`.dz`; no toca ni
+   redefine ninguna clase del sistema (globals.css es intocable).
+
+   Sin @keyframes ni transform: las transiciones son de color y borde (C1,
+   140ms), exactamente las que ya tenía .imp-drop. Por eso no hay nada aquí
+   dentro de prefers-reduced-motion: no se pierde ningún movimiento porque no
+   se introduce ninguno. */
+
+.dz {
+  display: block;
+  width: 100%;
+  padding: 16px;
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius-sm);
+  /* La superficie translúcida del gesto: deja intuir lo que hay detrás
+     (humo en una ventana, el vidrio de la tarjeta en un muro). */
+  background: color-mix(in srgb, var(--surface) 42%, transparent);
+  text-align: center;
+  font: 400 var(--fs-data) / 1.6 var(--font-mono);
+  color: var(--text-subtle);
+  cursor: pointer;
+  transition: border-color 0.14s, color 0.14s, background-color 0.14s;
+}
+
+.dz b {
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.dz:hover:not(:disabled) {
+  border-color: var(--border-patina);
+  color: var(--text-muted);
+}
+
+/* Arrastrando encima: el mismo acuse que da .imp-box.is-drag en el volcado. */
+.dz.is-drag {
+  border-color: var(--border-patina);
+  color: var(--text-muted);
+  background: color-mix(in srgb, var(--patina-300) 9%, transparent);
+}
+
+.dz:disabled {
+  opacity: 0.5;
+  cursor: default;
+}

@@ -113,7 +113,13 @@ export const editor = {
     "editor.stPhotoBig": "la foto es muy pesada — prueba una imagen más pequeña",
     "editor.photoLabel": "Foto",
     "editor.photoOnAria": "Incluir foto en esta variante",
-    "editor.photoNote": "El CV estándar va sin foto. Úsala solo para una versión visual que envíes a una persona.",
+    // FOTO — lo que se puede afirmar, y nada más. Ni «es ilegal» (no lo es para
+    // ti) ni «te resta un X%» (ese número no existe).
+    "editor.photoNote": "El CV estándar va sin foto. Úsala solo para una versión visual que le llegue a una persona, nunca para un portal.",
+    "editor.photoEvidence":
+      "La evidencia disponible apunta en una dirección: las candidatas mujeres sin foto obtienen bastantes más respuestas, y en roles técnicos la foto no ayuda.",
+    "editor.photoLegalCl":
+      "En Chile, el artículo 2 del Código del Trabajo le prohíbe al EMPLEADOR exigir un CV con foto, edad o «buena presencia» —multa de hasta 60 UTM—, pero no te prohíbe a ti incluirla: la decisión sigue siendo tuya. La llamada «Ley Victoria» sigue siendo un proyecto, no es ley. Aun así, Chile es el mercado más estricto de la región en esto.",
     "editor.photoAvatarNote": "No es el avatar de tu cuenta: sube aquí la imagen para este CV.",
     "editor.photoUpload": "Subir foto",
     "editor.photoChange": "Cambiar foto",
@@ -121,7 +127,12 @@ export const editor = {
     "editor.photoAlt": "Foto del CV",
     "editor.qrLabel": "Código QR",
     "editor.qrOnAria": "Incluir código QR en esta variante",
+    // QR — sin las dos cifras que circulan por ahí («31% escaneó un QR», «48% más
+    // propensos»): rastrean a un generador de contenido con IA, sin metodología ni
+    // informe original. No se citan. Lo que queda es lo comprobable.
     "editor.qrNote": "La URL va SIEMPRE también como texto: el ATS no lee el QR, la lee de la línea de al lado.",
+    "editor.qrHonest":
+      "Sé realista con el QR: es útil solo si entregas el CV impreso en mano o en una feria laboral. Si lo envías por correo o lo subes a un portal, el enlace hace lo mismo mejor — quien te lee en el teléfono no puede escanearlo sin un segundo aparato, impreso puede salir borroso, y un hipervínculo funciona igual en móvil y en escritorio sin ocupar sitio.",
     "editor.qrLinkLabel": "Enlace que codifica",
     "editor.qrCustom": "Otra URL…",
     "editor.qrCustomPlaceholder": "https://tu-portafolio.cl",
@@ -185,8 +196,32 @@ export const editor = {
     "editor.gal_building": "generando…",
     "editor.gal_thumbFailed": "no se pudo generar",
     "editor.gal_retry": "reintentar",
+    "editor.gal_zoom": "ampliar",
+    "editor.gal_zoomAria": "Ver {name} a tamaño de lectura",
     "editor.gal_foot":
       "Cada miniatura es la página 1 del PDF real, con tus datos. Mismo motor que el preview y que la descarga.",
+
+    // Visor: la hoja a tamaño de lectura, con las dos páginas y sin salir de la galería.
+    "editor.tv_title": "Plantilla {name}, a tamaño de lectura",
+    "editor.tv_close": "Cerrar",
+    "editor.tv_pos": "{n} de {m}",
+    "editor.tv_prev": "Plantilla anterior",
+    "editor.tv_next": "Plantilla siguiente",
+    "editor.tv_pagesRegion": "Páginas de tu CV",
+    "editor.tv_pageAlt": "Página {n} de tu CV con la plantilla {name}",
+    "editor.tv_page": "pág {a} / {b}",
+    "editor.tv_pagePrev": "Página anterior",
+    "editor.tv_pageNext": "Página siguiente",
+    "editor.tv_zoomIn": "Acercar",
+    "editor.tv_zoomOut": "Alejar",
+    "editor.tv_zoomReset": "Volver al tamaño original",
+    "editor.tv_building": "Generando el PDF…",
+    "editor.tv_failed": "No se pudo generar el PDF",
+    "editor.tv_retry": "Reintentar",
+    "editor.tv_noPages": "sin páginas",
+    "editor.tv_use": "Usar esta plantilla",
+    "editor.tv_inUse": "Ya la estás usando",
+    "editor.tv_keys": "Esc cierra · ← → cambian de plantilla · + − acercan",
 
     // Etiquetas del catálogo (vocabulario CERRADO de templates.ts: no se inventan).
     "editor.gal_tag_clasica": "Clásica",
@@ -332,7 +367,13 @@ export const editor = {
     "editor.stPhotoBig": "the photo is too heavy — try a smaller image",
     "editor.photoLabel": "Photo",
     "editor.photoOnAria": "Include a photo in this variant",
-    "editor.photoNote": "The standard résumé has no photo. Use it only for a visual version you send to a person.",
+    // PHOTO — only what can be asserted, nothing more. Not "it's illegal" (it
+    // isn't, for you) and not "it costs you X%" (that figure doesn't exist).
+    "editor.photoNote": "The standard résumé has no photo. Use it only for a visual version that reaches a person, never for a portal.",
+    "editor.photoEvidence":
+      "The available evidence points one way: women candidates without a photo get considerably more callbacks, and in technical roles a photo doesn't help.",
+    "editor.photoLegalCl":
+      "In Chile, article 2 of the Labour Code forbids the EMPLOYER from requiring a résumé with a photo, age or 'good presence' — a fine of up to 60 UTM — but it doesn't forbid you from including one: the call is still yours. The so-called 'Ley Victoria' is still a bill, not law. Even so, Chile is the strictest market in the region on this.",
     "editor.photoAvatarNote": "This isn't your account avatar: upload the image for this résumé here.",
     "editor.photoUpload": "Upload photo",
     "editor.photoChange": "Change photo",
@@ -340,7 +381,12 @@ export const editor = {
     "editor.photoAlt": "Résumé photo",
     "editor.qrLabel": "QR code",
     "editor.qrOnAria": "Include a QR code in this variant",
+    // QR — without the two figures that circulate ("31% scanned a QR", "48% more
+    // likely"): they trace back to an AI content generator, with no methodology
+    // and no original report. They aren't cited. What's left is what's checkable.
     "editor.qrNote": "The URL is ALWAYS shown as text too: the ATS can't read the QR, it reads it from the line beside it.",
+    "editor.qrHonest":
+      "Be realistic about the QR: it's only useful if you hand the résumé over printed, in person or at a job fair. If you email it or upload it to a portal, the link does the same job better — someone reading you on their phone can't scan it without a second device, printed it can come out blurry, and a hyperlink works the same on mobile and desktop without taking up space.",
     "editor.qrLinkLabel": "Link it encodes",
     "editor.qrCustom": "Other URL…",
     "editor.qrCustomPlaceholder": "https://your-portfolio.com",
@@ -404,8 +450,32 @@ export const editor = {
     "editor.gal_building": "generating…",
     "editor.gal_thumbFailed": "couldn't generate",
     "editor.gal_retry": "try again",
+    "editor.gal_zoom": "enlarge",
+    "editor.gal_zoomAria": "See {name} at reading size",
     "editor.gal_foot":
       "Every thumbnail is page 1 of the real PDF, with your data. Same engine as the preview and the download.",
+
+    // Viewer: the sheet at reading size, both pages, without leaving the gallery.
+    "editor.tv_title": "Template {name}, at reading size",
+    "editor.tv_close": "Close",
+    "editor.tv_pos": "{n} of {m}",
+    "editor.tv_prev": "Previous template",
+    "editor.tv_next": "Next template",
+    "editor.tv_pagesRegion": "Pages of your résumé",
+    "editor.tv_pageAlt": "Page {n} of your résumé with the {name} template",
+    "editor.tv_page": "page {a} / {b}",
+    "editor.tv_pagePrev": "Previous page",
+    "editor.tv_pageNext": "Next page",
+    "editor.tv_zoomIn": "Zoom in",
+    "editor.tv_zoomOut": "Zoom out",
+    "editor.tv_zoomReset": "Back to original size",
+    "editor.tv_building": "Generating the PDF…",
+    "editor.tv_failed": "The PDF couldn't be generated",
+    "editor.tv_retry": "Try again",
+    "editor.tv_noPages": "no pages",
+    "editor.tv_use": "Use this template",
+    "editor.tv_inUse": "Already in use",
+    "editor.tv_keys": "Esc closes · ← → switch template · + − zoom",
 
     // Catalog tags (the CLOSED vocabulary from templates.ts: none are invented).
     "editor.gal_tag_clasica": "Classic",

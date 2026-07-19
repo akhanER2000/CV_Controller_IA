@@ -321,13 +321,13 @@ export function DashboardScreen() {
           </h1>
           <p className="sub">{t("dashboard.empty.sub")}</p>
           <div className="db-doors">
-            <Link className="c-card c-lift db-door" href="/app/importar">
+            <Link className="c-panel c-lift db-door" href="/app/importar">
               <span className="t-overline">{t("dashboard.empty.doorA.overline")}</span>
               <h3>{t("dashboard.empty.doorA.title")}</h3>
               <p>{t("dashboard.empty.doorA.body")}</p>
               <span className="go">{t("dashboard.empty.doorA.cta")}</span>
             </Link>
-            <Link className="c-card c-lift db-door" href="/app/onboarding">
+            <Link className="c-panel c-lift db-door" href="/app/onboarding">
               <span className="t-overline">{t("dashboard.empty.doorB.overline")}</span>
               <h3>{t("dashboard.empty.doorB.title")}</h3>
               <p>{t("dashboard.empty.doorB.body")}</p>

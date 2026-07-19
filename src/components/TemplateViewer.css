@@ -1,0 +1,89 @@
+/* ── TemplateViewer.css — la hoja a tamaño de lectura ────────────────────────
+   Vocabulario del sistema, sin tokens inventados: .c-panel para el vidrio
+   ahumado, .c-skel para la espera, .c-btn para los controles.
+   Sin @keyframes propios: el movimiento vive en motion.css.
+
+   ATMÓSFERA SÍ, PERO NO DEBAJO DEL TEXTO. El velo deja intuir la aurora y el
+   diálogo es vidrio; la HOJA, en cambio, es papel opaco sobre un fondo hundido:
+   ahí es donde hay que leer, y ahí no se mueve nada. */
+
+.tv-veil{position:fixed;inset:0;z-index:2;display:flex;padding:2vh 2vw;
+  background:color-mix(in srgb,var(--bg) 58%,transparent);
+  backdrop-filter:blur(2px);-webkit-backdrop-filter:blur(2px)}
+.tv-panel{position:relative;margin:auto;width:100%;max-width:1080px;max-height:96vh;
+  display:flex;flex-direction:column;overflow:hidden}
+
+/* ── Cabecera: quién es esta plantilla ── */
+.tv-head{display:flex;align-items:baseline;gap:12px;padding:14px 18px 12px;
+  border-bottom:1px solid var(--border);
+  background:color-mix(in srgb,var(--surface) 45%,transparent)}
+.tv-name{display:flex;align-items:baseline;gap:8px;flex:none;
+  font:600 15px/1.3 var(--font-sans);color:var(--text)}
+.tv-gama{font:500 8.5px/1 var(--font-mono);letter-spacing:.1em;text-transform:uppercase;
+  color:var(--text-subtle);border:1px solid var(--border);border-radius:3px;padding:3px 5px;flex:none}
+.tv-gama.is-visual{color:var(--accent-text);border-color:var(--border-patina)}
+.tv-desc{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  font:400 11.5px/1.5 var(--font-sans);color:var(--text-muted)}
+.tv-pos{flex:none;font:400 10px/1 var(--font-mono);color:var(--text-subtle)}
+.tv-close{flex:none;height:30px;padding:0 12px;align-self:center}
+
+.tv-warn{padding:9px 18px;border-bottom:1px solid var(--border);
+  font:400 10.5px/1.55 var(--font-mono);color:var(--danger);
+  background:color-mix(in srgb,var(--danger) 7%,transparent)}
+
+/* ── Las hojas ──
+   El fondo hundido es OPACO a propósito: papel sobre mesa, no papel sobre humo.
+   `place-items:center` mantiene la hoja centrada también cuando el zoom la hace
+   más ancha que el hueco (entonces aparece el scroll horizontal). */
+.tv-pages{position:relative;flex:1;min-height:0;overflow:auto;overscroll-behavior:contain;
+  background:var(--surface-sunken);
+  display:flex;flex-direction:column;gap:14px;padding:16px;
+  align-items:center;
+  /* `safe`: con el zoom al máximo la hoja es más ancha que el hueco, y un
+     centrado normal empujaría su borde izquierdo fuera del alcance del scroll.
+     Los navegadores que no entienden la palabra ignoran esta línea y se quedan
+     con la de arriba. */
+  align-items:safe center}
+.tv-pages:focus-visible{outline:2px solid var(--border-patina);outline-offset:-2px}
+/* El ancho manda y la proporción A4 hace el resto: la caja tiene su altura ANTES
+   de que llegue el PNG, así el scroll no da un salto al aterrizar. `auto` delante
+   de la razón: en cuanto se conoce el tamaño real de la página, manda ese — una
+   hoja que no fuera A4 se vería con su forma, no aplastada contra la nuestra. */
+.tv-sheet{flex:none;width:calc(var(--tv-zoom,1) * min(100%,var(--tv-base,860px)));
+  aspect-ratio:auto 210/297;height:auto;display:block;background:#FFFFFF;object-fit:contain;
+  border:1px solid var(--border);box-shadow:var(--shadow-2)}
+.tv-sheet--wait{background:var(--surface-elevated)}
+.tv-wait{display:flex;flex-direction:column;align-items:center;gap:10px;width:100%}
+.tv-waitt{font:400 10px/1 var(--font-mono);color:var(--text-subtle)}
+
+.tv-fail{display:flex;flex-direction:column;align-items:flex-start;gap:8px;margin:auto;
+  max-width:420px;padding:18px;border:1px solid var(--border);border-radius:var(--radius-md);
+  background:var(--surface)}
+.tv-failt{font:500 10px/1.3 var(--font-mono);letter-spacing:.08em;text-transform:uppercase;color:var(--danger)}
+.tv-failw{font:400 11px/1.6 var(--font-mono);color:var(--text-muted);word-break:break-word}
+.tv-none{margin:auto;font:400 11px/1 var(--font-mono);color:var(--text-subtle)}
+
+/* ── Barra de control ── */
+.tv-bar{display:flex;flex-wrap:wrap;align-items:center;gap:8px 14px;padding:10px 18px;
+  border-top:1px solid var(--border);
+  background:color-mix(in srgb,var(--surface) 45%,transparent)}
+.tv-grp{display:flex;align-items:center;gap:2px;border:1px solid var(--border);
+  border-radius:var(--radius-sm);padding:2px}
+.tv-nav{width:26px;height:26px;display:grid;place-items:center;border-radius:4px;
+  font:500 13px/1 var(--font-mono);color:var(--text-muted)}
+.tv-nav:hover:not(:disabled){color:var(--accent-text);background:var(--surface-elevated)}
+.tv-nav:disabled{color:var(--text-subtle);opacity:.45;cursor:default}
+.tv-pager,.tv-zoomv{min-width:56px;text-align:center;
+  font:400 10px/1 var(--font-mono);color:var(--text-subtle)}
+.tv-zoomv:hover{color:var(--accent-text)}
+.tv-keys{flex:1;min-width:0;font:400 9.5px/1.5 var(--font-mono);color:var(--text-subtle)}
+.tv-use{flex:none;height:34px;padding:0 16px}
+
+@media (max-width:720px){
+  .tv-veil{padding:0}
+  .tv-panel{max-width:none;max-height:100vh;border-radius:0;border:0}
+  .tv-desc{display:none}
+  .tv-keys{display:none}
+  .tv-pages{padding:10px}
+  .tv-use{width:100%;order:9}
+}

@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { Aurora } from "@/components/Aurora";
+import { DropZone } from "@/components/DropZone";
 import { Breadcrumb, readOrigin, withOrigin } from "@/components/Breadcrumb";
 import { createClient } from "@/lib/supabase/client";
 import { useT } from "@/lib/i18n";
@@ -202,7 +203,6 @@ export function ImportarScreen() {
   const splitDone = useRef(false);
 
   const taRef = useRef<HTMLTextAreaElement>(null);
-  const fileInRef = useRef<HTMLInputElement>(null);
   const liPanelRef = useRef<HTMLDivElement>(null);
   const prevLi = useRef(false);
 
@@ -545,8 +545,12 @@ export function ImportarScreen() {
             }}
             onDrop={(e) => {
               e.preventDefault();
-              if (e.dataTransfer) addFiles(e.dataTransfer.files);
               setIsDrag(false);
+              // La caja entera acepta sueltes, pero dentro vive el <DropZone>
+              // compartido, que ya añade lo que le cae encima. Sin esta guarda
+              // el evento burbujea y el mismo archivo entraría DOS VECES.
+              if ((e.target as HTMLElement).closest?.(".dz")) return;
+              if (e.dataTransfer) addFiles(e.dataTransfer.files);
             }}
           >
             <textarea
@@ -601,34 +605,20 @@ export function ImportarScreen() {
               })}
             </div>
 
-            <div
-              className="imp-drop"
+            {/* El gesto canónico, ya compartido con Fuentes (components/DropZone). */}
+            <DropZone
               id="drop"
-              role="button"
-              tabIndex={0}
-              onClick={() => fileInRef.current?.click()}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" || e.key === " ") {
-                  e.preventDefault();
-                  fileInRef.current?.click();
-                }
-              }}
-            >
-              <b>{t("importar.drop.bold")}</b>
-              {t("importar.drop.rest")}
-              <br />
-              {t("importar.drop.line2")}
-            </div>
-            <input
-              type="file"
-              id="fileIn"
-              ref={fileInRef}
+              className="imp-drop"
               multiple
-              hidden
-              onChange={(e) => {
-                if (e.target.files) addFiles(e.target.files);
-                e.target.value = "";
-              }}
+              onFiles={addFiles}
+              label={
+                <>
+                  <b>{t("importar.drop.bold")}</b>
+                  {t("importar.drop.rest")}
+                  <br />
+                  {t("importar.drop.line2")}
+                </>
+              }
             />
 
             <div className="imp-meta">

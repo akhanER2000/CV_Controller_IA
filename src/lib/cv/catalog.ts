@@ -6,19 +6,65 @@
  *
  * DOS GAMAS, y las dos dicen la verdad:
  *
- *  · Gama ATS (por defecto) — UNA columna, sin foto, sin barras de nivel, sin
- *    iconos. Es la lista literal de causas de fallo de parseo que documentan los
- *    propios ATS. La variedad NO sale del layout: sale de la tipografía, del ritmo
- *    vertical, del peso, del filete y del acento. Que sea de una columna no la
- *    condena a ser fea — ahí está el oficio.
+ *  · Gama ATS (por defecto) — UNA columna, sin barras de nivel, sin iconos junto a
+ *    los rótulos. Es la lista literal de causas de fallo de parseo que documentan
+ *    los propios ATS. La variedad NO sale del layout: sale del ESQUELETO, de la
+ *    tipografía, del ritmo vertical, del peso, del filete y del acento.
  *
- *  · Gama Visual (opt-in) — dos columnas, barra lateral, foto. Se ve mejor y
- *    parsea peor. Lleva `warning` OBLIGATORIO, porque el usuario elige informado.
+ *  · Gama Visual (opt-in) — dos columnas, barra lateral, foto como eje. Se ve mejor
+ *    y parsea peor. Lleva `warning` OBLIGATORIO: el usuario elige informado.
+ *
+ * ── EL NÚCLEO NO NEGOCIABLE DE LA GAMA ATS ───────────────────────────────────
+ * Se cumple en el 100 % de la gama y lo verifica un test (tests/templates.test.ts,
+ * bloque «núcleo de legibilidad»), no la buena voluntad de quien añade plantillas:
+ *
+ *   · una columna · contacto en el CUERPO · rótulos estándar, nunca renombrados
+ *   · MEDIDA ≤ 90 caracteres por línea (objetivo 65-85), MEDIDA de verdad: la
+ *     mide tests/medida-linea.test.ts reconstruyendo las líneas del PDF
+ *   · márgenes ≥ 20 mm · cuerpo 10-11 pt · interlineado 1,15-1,3
+ *   · 12-16 pt de aire entre secciones · máximo DOS familias tipográficas
+ *   · UN acento, y solo en rótulos y filetes — el documento funciona en gris
+ *   · sin barras de nivel · sin emojis · sin QR por defecto
+ *
+ * ── POR QUÉ CAMBIÓ LA MEDIDA (el defecto invisible) ──────────────────────────
+ * Medidos los caracteres por línea REALES de las treinta plantillas anteriores
+ * (agrupando los items de texto del PDF por coordenada Y), la mediana salía en
+ * 57-68 —que engaña, porque promedia las líneas finales de párrafo— pero el p90
+ * estaba en 94-99 y el máximo entre 111 y 126. Entre un cuarto y un tercio de las
+ * líneas de cuerpo pasaban de 80, el techo accesible, contra un óptimo de
+ * legibilidad de 45-75. No se veía a ojo y afectaba a las treinta por igual,
+ * porque todas compartían los mismos márgenes.
+ *
+ * Se corrige por dos caminos, y cada plantilla toma el que le sienta:
+ *   · COLUMNA COLGANTE (`skeleton: "hanging"`) — fechas y organización a la
+ *     izquierda, contenido en el ~72 % restante. Deja el p90 en 68-77 caracteres,
+ *     el centro del óptimo, y es el camino más barato en papel.
+ *   · MÁRGENES ANCHOS — sin columna, subiendo el margen horizontal hasta donde la
+ *     medida cae sola. Deja el p90 en 81-86. Ojo a la aritmética, que es
+ *     contraintuitiva: la medida se cuenta en CARACTERES, así que cuanto MENOR es
+ *     el cuerpo MÁS margen hace falta (en 425 pt caben más letras de 10 pt que de
+ *     11). Por eso el margen plano va de 35 mm en el ritmo compacto a 29 mm en el
+ *     aireado, y no al revés, que es lo que parecería.
+ *
+ * La constante que sale de medir, por si alguien tiene que recalcularlo: en este
+ * texto en español, Geist llena la línea a razón de ~0,445 em por carácter. El
+ * máximo de caracteres de una línea es W / (0,445 × cuerpo) y el p90 anda un 7 %
+ * por debajo. No se usa para decidir nada — se decide midiendo — pero orienta.
+ *
+ * ── LO QUE SE QUITÓ, Y POR QUÉ ───────────────────────────────────────────────
+ *   · MONOESPACIADA en la gama técnica — fuera, ni de titular ni en las cifras.
+ *     Sigue existiendo como pareja del catálogo (`terminal`), que es donde debe
+ *     estar una opción minoritaria: al alcance de quien la quiera a propósito.
+ *   · NUMERACIÓN de secciones («01 · RESUMEN») — no hay evidencia a favor y añade
+ *     ruido al parser. Queda en dos plantillas, nunca como eje protagonista.
+ *   · ICONOS junto a los rótulos de sección — no los había y no los va a haber:
+ *     confunden al parser sobre dónde empieza la sección. Glifos, si acaso, solo
+ *     en el bloque de contacto y siempre con la etiqueta en texto al lado.
  *
  * Lo que NO hacemos: clonar píxel a píxel las plantillas comerciales de siempre.
  * Sus patrones de layout son genéricos y se pueden usar; su "aprobado por ATS" es
  * marketing (ningún proveedor de ATS certifica plantillas de terceros) y su
- * composición típica —dos columnas, foto, barras, iconos— es justo lo que rompe el
+ * composición típica —dos columnas, barras, iconos— es justo lo que rompe el
  * parseo. Copiamos el oficio, no el producto ajeno.
  *
  * MATERIAL DISPONIBLE (src/lib/fonts/, no se añaden .ttf nuevos):
@@ -30,7 +76,8 @@ import type { CvTemplate, SectionId, TemplateMetrics, TemplatePalette, TemplateT
 // ── PALETAS ───────────────────────────────────────────────────────────────────
 /**
  * Base del sistema: Grafito (tinta) · Pátina (acento) · Porcelana (papel). Las
- * variantes cambian SOLO el acento — un documento tiene un acento y nada más.
+ * variantes cambian SOLO el acento — un documento tiene un acento y nada más, y en
+ * la gama ATS ese acento vive únicamente en los rótulos y los filetes.
  *
  * Ninguna entra aquí "porque se ve bien": el ratio acento↔papel está calculado con
  * contrast.ts y tests/templates.test.ts lo recorre entero. Los valores medidos
@@ -41,16 +88,10 @@ import type { CvTemplate, SectionId, TemplateMetrics, TemplatePalette, TemplateT
  *   pizarra #3A4750 →  9.56:1 · granate #7A1F35 → 10.12:1
  *   marino  #1B3A6B → 11.27:1
  * Y las tintas: grafito #14181A → 17.87:1 · apagado #454B49 → 8.91:1.
- *
- * Las cinco últimas son de esta tanda. Ninguna es un tono "de moda": son las
- * familias cromáticas que faltaban para que treinta plantillas no acabaran repitiendo
- * verde, naranja y azul. Todas superan AA con holgura (la más justa, oliva, va a
- * 8,19 — casi el doble del mínimo) porque un acento de CV se imprime, se fotocopia y
- * se mira en pantallas malas.
  */
 const GRAFITO = "#14181A"; // tinta principal
 const APAGADO = "#454B49"; // texto secundario (fechas, ubicación)
-const FILETE = "#D8DAD6"; // filete de sección
+const FILETE = "#D8DAD6"; // filete de sección (y fondo de la banda de rótulo)
 const PORCELANA = "#FFFFFF"; // papel del documento (el PDF no pinta fondo: es blanco)
 
 /** Una paleta del sistema: solo cambia el acento; el resto de tintas son las neutras. */
@@ -98,9 +139,20 @@ export const PALETTES: TemplatePalette[] = [
 
 // ── PAREJAS TIPOGRÁFICAS ──────────────────────────────────────────────────────
 /**
- * Cuatro parejas YA emparejadas, no un selector de 200 fuentes. Con tres familias
- * el juego está en QUÉ PAPEL cumple cada una: quién pone el nombre, quién los
+ * Seis parejas YA emparejadas, no un selector de 200 fuentes. Con tres familias el
+ * juego está en QUÉ PAPEL cumple cada una: quién pone el nombre, quién los
  * encabezados, quién las cifras.
+ *
+ * ⚠ NINGUNA PAREJA DE LA GAMA ATS LLEVA MONOESPACIADA. Ni de titular ni en las
+ * cifras ni, por supuesto, en el cuerpo. El motivo no es una certeza —la encuesta
+ * que sitúa las monoespaciadas al fondo del ranking la pagó un marketplace de
+ * tipografías y mide preferencia declarada, no conducta— pero el coste de
+ * equivocarse es asimétrico: si acierta, la mono penaliza; si falla, no haber
+ * usado mono no cuesta nada. Por eso `terminal` sigue en el catálogo (quien la
+ * quiera la elige) y ninguna plantilla técnica la trae puesta.
+ *
+ * Y ninguna pareja de la gama ATS usa más de DOS familias: `cronica` cambió sus
+ * cifras mono por la cursiva del subtítulo justo por eso.
  */
 export const TYPOGRAPHIES: TemplateTypography[] = [
   {
@@ -121,14 +173,15 @@ export const TYPOGRAPHIES: TemplateTypography[] = [
     labelItalic: true, // el subtítulo en cursiva serif — la firma de la gama
   },
   {
+    // Grotesca en todo, en DOS pesos: el nombre y los rótulos en 600, el cuerpo en
+    // 400. Era la pareja de las cifras mono; ahora la tensión la hace el peso, que
+    // es lo que aguanta una fotocopia y no despista a un parser.
     id: "instrumento",
-    name: "Geist + Geist Mono",
+    name: "Geist en dos pesos",
     display: "Geist",
     body: "Geist",
-    mono: "Geist Mono",
-    displayWeight: 700,
-    headingFamily: "body",
-    monoFigures: true, // fechas y cifras en mono: tabulan y se leen como datos
+    displayWeight: 600,
+    headingFamily: "display",
   },
   {
     id: "compacta",
@@ -139,25 +192,23 @@ export const TYPOGRAPHIES: TemplateTypography[] = [
     headingFamily: "body",
   },
   {
-    // La serif pone el nombre y la cursiva el subtítulo, pero las CIFRAS van en mono:
-    // un documento con voz de redacción y datos que tabulan. Ni la clásica (serif sin
-    // mono) ni instrumento (mono sin serif) hacen esto.
+    // La serif pone el nombre y la cursiva el subtítulo; los rótulos vuelven a la
+    // grotesca. Voz de redacción, dos familias, cero mono.
     id: "cronica",
-    name: "Playfair + Geist + cifras mono",
+    name: "Playfair con subtítulo en cursiva",
     display: "Playfair Display",
     body: "Geist",
-    mono: "Geist Mono",
     displayWeight: 600,
     headingFamily: "body",
-    monoFigures: true,
     labelItalic: true,
   },
   {
-    // La monoespaciada TITULA y rotula. Es la única pareja donde el nombre no está en
-    // una proporcional, y se nota a un metro de distancia.
+    // LA OPCIÓN MONO, y es minoritaria a propósito: ninguna plantilla de la gama
+    // ATS la trae puesta. Está aquí para quien la elija a sabiendas desde el
+    // selector de parejas, y la usa una plantilla de gama visual.
     // ⚠ Geist Mono solo existe en 400 y 500: quien use esta pareja no puede pedir
-    // encabezados en 600/700 (lo fija un test — un peso que no existe se sustituye en
-    // silencio y el documento sale distinto del que se diseñó).
+    // encabezados en 600/700 (lo fija un test — un peso que no existe se sustituye
+    // en silencio y el documento sale distinto del que se diseñó).
     id: "terminal",
     name: "Geist Mono de titular",
     display: "Geist Mono",
@@ -169,184 +220,156 @@ export const TYPOGRAPHIES: TemplateTypography[] = [
   },
 ];
 
-// ── MÉTRICAS ──────────────────────────────────────────────────────────────────
+// ── MÉTRICA BASE ──────────────────────────────────────────────────────────────
 /**
- * MÉTRICA CLÁSICA — el estado del arte de hoy, número a número. Es el ancla de la
- * retrocompatibilidad: sin `templateId` el documento sale por aquí y debe ser
- * IDÉNTICO al de antes del sistema de plantillas (el golden es la prueba).
+ * LA BASE — los seis números obligatorios del contrato, ya dentro del núcleo:
+ * cuerpo 10,5 pt, interlineado 1,25, 14 pt entre secciones. Todo lo demás lo pone
+ * resolveMetrics() con sus valores por defecto, que también son los del núcleo
+ * (márgenes 20/22 mm, acento fuera del nombre). Consecuencia buscada: una plantilla
+ * que solo declare la base nace ya conforme, en vez de nacer fuera y tener que
+ * acordarse de arreglarlo.
  */
-const CLASICA: TemplateMetrics = {
-  nameSize: 22,
-  bodySize: 10,
-  bodyLeading: 1.45,
-  sectionGap: 13,
+const BASE: TemplateMetrics = {
+  nameSize: 21,
+  bodySize: 10.5,
+  bodyLeading: 1.25,
+  sectionGap: 14,
   upperHeadings: true,
   headingRule: true,
-  pageMarginV: "18mm",
-  pageMarginH: "20mm",
-  nameLeading: 1.15,
-  labelSize: 11,
-  contactSize: 9.5,
-  headingSize: 10.5,
-  headingWeight: 700,
-  headingRuleWidth: 1,
-  headingRuleGap: 3,
-  entryTitleSize: 11,
-  eduTitleSize: 10.5,
-  dateSize: 9.5,
-  dateGap: 12,
-  entryGap: 8,
-  summaryGap: 3,
-  bulletGap: 3,
-  bulletIndent: 11,
-  bulletHang: 7.5,
-  skillGap: 1.5,
-  skillLeading: 1.5,
-  accentName: true,
-  accentHeadings: true,
 };
 
-/** EDITORIAL — mucho aire, titular serif grande, encabezados serif. Aire de paper. */
-const EDITORIAL: TemplateMetrics = {
-  ...CLASICA,
-  nameSize: 26,
-  nameLeading: 1.1,
-  labelSize: 11.5,
-  bodyLeading: 1.6,
-  sectionGap: 18, // el aire de la gama: la sección se anuncia con silencio
-  headingSize: 11,
-  headingWeight: 600, // Playfair 600 (no hay 700 serif, y no hace falta)
-  headingRuleGap: 4,
-  entryGap: 11,
-  summaryGap: 4,
-  bulletGap: 4,
-  skillGap: 2.5,
-  skillLeading: 1.55,
-  // El aire va DENTRO del texto (interlineado y silencios), no en los márgenes:
-  // subir el margen vertical a 22mm se veía igual de bien y hacía que la versión de
-  // una página se desbordara a dos — un CV "de una página" que sale en dos es un
-  // fallo, no un estilo. Y el margen horizontal se queda en 20mm para que ningún
-  // cargo largo se parta en dos líneas.
-  pageMarginV: "20mm",
-  pageMarginH: "20mm",
-};
-
-/** INSTRUMENTO — grotesca en todo, denso, técnico, cifras en mono, sin filete. */
-const INSTRUMENTO: TemplateMetrics = {
-  ...CLASICA,
-  nameSize: 19,
-  labelSize: 10.5,
-  contactSize: 9,
-  bodySize: 9.6,
-  bodyLeading: 1.4,
-  sectionGap: 12,
-  headingSize: 9.5,
-  headingWeight: 700,
-  headingRule: false, // la jerarquía la sostienen MAYÚSCULAS + peso 700, no una línea
-  entryTitleSize: 10.5,
-  eduTitleSize: 10,
-  dateSize: 9,
-  entryGap: 7,
-  bulletGap: 2.5,
-  bulletIndent: 10.5,
-  bulletHang: 7,
-  skillGap: 1.5,
-  skillLeading: 1.45,
-  accentName: false, // el nombre en tinta: aquí el acento es para los encabezados
-  pageMarginV: "17mm",
-  pageMarginH: "18mm",
-};
-
-/** COMPACTA — dos páginas de contenido en una, sin ahogarse. Métrica apretada. */
-const COMPACTA: TemplateMetrics = {
-  ...CLASICA,
-  nameSize: 16,
-  nameLeading: 1.1,
-  labelSize: 10,
-  contactSize: 8.5,
-  bodySize: 9,
-  bodyLeading: 1.28,
-  sectionGap: 8,
-  headingSize: 9.5,
-  headingWeight: 700,
-  headingRuleGap: 2,
-  entryTitleSize: 9.8,
-  eduTitleSize: 9.5,
-  dateSize: 8.5,
-  dateGap: 10,
-  entryGap: 4.5,
-  summaryGap: 2,
-  bulletGap: 1.5,
-  bulletIndent: 10,
-  bulletHang: 7,
-  skillGap: 1,
-  skillLeading: 1.3,
-  pageMarginV: "13mm",
-  pageMarginH: "15mm",
-};
-
-/** LATERAL — gama visual. Métrica de la clásica, composición de dos columnas. */
-const LATERAL: TemplateMetrics = {
-  ...CLASICA,
-  nameSize: 21,
-  sectionGap: 12,
-  headingSize: 10,
-  sidebarWidth: "33%",
-  sidebarGap: 14,
-};
+/**
+ * CLÁSICA — la base y UNA sola decisión más: el margen horizontal que le baja la
+ * medida de 96 caracteres a 83. Es la plantilla que menos decisiones toma de todo el
+ * catálogo, y un test la fija exactamente así: "los defaults del contrato, con el
+ * margen que su cuerpo necesita".
+ *
+ * ⚠ POR QUÉ LA CLÁSICA NO CUELGA LA COLUMNA, siendo el esqueleto que mejor arregla
+ * la medida. Porque es la plantilla POR DEFECTO, y el documento por defecto está
+ * atado byte a byte al golden (src/lib/cv/fixtures/cv-texto-plano.txt): ese fichero
+ * dice «Backend Developer — Altiplano Pagos SpA mar 2022 – hoy», con las fechas
+ * pegadas al cargo. La columna colgante emite fechas, organización y cargo en tres
+ * líneas y en otro orden —tiene que hacerlo, porque es el orden en que el parser las
+ * lee— así que adoptarla en la clásica habría obligado a regenerar el golden, y el
+ * golden es justo la prueba de que meter un sistema de plantillas no le cambió el CV
+ * a nadie. La medida se le arregla por el otro camino, que para eso hay dos.
+ */
+const CLASICA: TemplateMetrics = { ...BASE, pageMarginH: "32mm" };
 
 // ── RITMOS ────────────────────────────────────────────────────────────────────
 /**
- * Cinco RITMOS VERTICALES: el mismo contenido respirando de cinco maneras. Es el eje
- * que más cambia la sensación de un CV de una columna —más que la fuente y muchísimo
- * más que el color— y el que decide si el documento cabe en una página.
+ * Cinco RITMOS VERTICALES dentro del núcleo (cuerpo 10-11, interlineado 1,15-1,3,
+ * aire 12-16). Es el eje que más cambia la sensación de un CV de una columna —más
+ * que la fuente y muchísimo más que el color— y el que decide cuánto cabe.
  *
- * Los extremos están RESERVADOS y no por gusto: "Compacta" (9 × 1,28, aire 8) y
- * "Editorial" (aire 18) son plantillas cuyo nombre es una promesa, y hay un test que
- * exige que sigan siendo la más densa y la más aireada del catálogo. Por eso el ritmo
- * `compacto` de aquí es un punto menos apretado que Compacta y `aireado` un punto
- * menos suelto que Editorial: ninguna plantilla nueva puede desbancarlas por accidente.
+ * Cada ritmo trae SU margen horizontal para el esqueleto plano, y ese número no es
+ * decorativo: es el que deja la medida en ~84 caracteres. La aritmética sorprende
+ * —el cuerpo pequeño necesita MÁS margen, porque en 470 pt caben más letras de
+ * 10 pt que de 11— y por eso el margen baja de 31 mm a 24 mm según el ritmo sube.
+ * Los esqueletos colgantes pisan ese margen: allí la medida la fija la columna.
+ *
+ * Los extremos están RESERVADOS: "Compacta" (10 × 1,15, aire 12) y "Editorial"
+ * (aire 16) son plantillas cuyo nombre es una promesa, y hay un test que exige que
+ * sigan siendo la más densa y la más aireada. Ninguna otra puede empatar con ellas.
  */
 const RITMO = {
   compacto: {
-    nameSize: 17, labelSize: 10, contactSize: 8.8, bodySize: 9.2, bodyLeading: 1.32,
-    sectionGap: 9.5, headingSize: 9.6, entryTitleSize: 10, eduTitleSize: 9.6,
-    dateSize: 8.8, dateGap: 10, entryGap: 5.5, summaryGap: 2, bulletGap: 2,
-    bulletIndent: 10, bulletHang: 7, skillGap: 1, skillLeading: 1.35,
-    pageMarginV: "14mm", pageMarginH: "16mm",
+    nameSize: 16, labelSize: 10, contactSize: 8.8, bodySize: 10, bodyLeading: 1.15,
+    sectionGap: 12, headingSize: 10, headingRuleGap: 2, entryTitleSize: 10.4,
+    eduTitleSize: 10, dateSize: 9, dateGap: 10, entryGap: 5, summaryGap: 2,
+    bulletGap: 1.5, bulletIndent: 10, bulletHang: 7, skillGap: 1, skillLeading: 1.3,
+    pageMarginV: "20mm", pageMarginH: "35mm",
   },
   denso: {
-    nameSize: 19, labelSize: 10.5, contactSize: 9, bodySize: 9.6, bodyLeading: 1.4,
-    sectionGap: 12, headingSize: 9.8, entryTitleSize: 10.5, eduTitleSize: 10,
-    dateSize: 9, dateGap: 11, entryGap: 7, bulletGap: 2.5, bulletIndent: 10.5,
-    bulletHang: 7, skillGap: 1.4, skillLeading: 1.45,
-    pageMarginV: "17mm", pageMarginH: "18mm",
+    nameSize: 18, labelSize: 10.5, contactSize: 9, bodySize: 10.2, bodyLeading: 1.2,
+    sectionGap: 13, headingSize: 10.2, entryTitleSize: 10.8, eduTitleSize: 10.4,
+    dateSize: 9.2, dateGap: 11, entryGap: 6.5, summaryGap: 2.5, bulletGap: 2.5,
+    bulletIndent: 10.5, bulletHang: 7, skillGap: 1.2, skillLeading: 1.4,
+    pageMarginV: "20mm", pageMarginH: "34mm",
   },
-  normal: {},
+  normal: { pageMarginH: "32mm" },
   amplio: {
-    nameSize: 23, bodyLeading: 1.55, sectionGap: 16, headingSize: 10.8,
-    entryGap: 10, summaryGap: 4, bulletGap: 3.5, skillGap: 2, skillLeading: 1.5,
-    pageMarginV: "19mm", pageMarginH: "20mm",
+    nameSize: 23, labelSize: 11.2, bodySize: 10.8, bodyLeading: 1.28, sectionGap: 15,
+    headingSize: 10.8, entryGap: 9.5, summaryGap: 4, bulletGap: 3.5, skillGap: 2,
+    skillLeading: 1.5, pageMarginV: "21mm", pageMarginH: "30mm",
   },
   aireado: {
-    nameSize: 25, labelSize: 11.5, bodyLeading: 1.6, sectionGap: 17, headingSize: 11,
-    entryGap: 11, summaryGap: 4, bulletGap: 4, skillGap: 2.5, skillLeading: 1.55,
-    pageMarginV: "20mm", pageMarginH: "20mm",
+    nameSize: 25, labelSize: 11.5, bodySize: 11, bodyLeading: 1.3, sectionGap: 15.5,
+    headingSize: 11, entryGap: 11, summaryGap: 4, bulletGap: 4, skillGap: 2.5,
+    skillLeading: 1.55, pageMarginV: "21mm", pageMarginH: "29mm",
   },
 } satisfies Record<string, Partial<TemplateMetrics>>;
 
-/** Una métrica = un ritmo + las decisiones de composición propias de la plantilla. */
-const M = (ritmo: keyof typeof RITMO, extra: Partial<TemplateMetrics> = {}): TemplateMetrics => ({
-  ...CLASICA,
+// ── ESQUELETOS ────────────────────────────────────────────────────────────────
+/**
+ * DIECIOCHO ESQUELETOS, no cincuenta diseños sueltos. Un esqueleto es una decisión
+ * de ARMAZÓN —dónde cae la identidad, dónde caen las fechas, cómo se anuncia la
+ * sección, cuánto mide la línea— y las cincuenta plantillas son ese armazón
+ * combinado con un ritmo, una paleta, una pareja y un orden de secciones.
+ *
+ * Los colgantes se distinguen entre sí por el ancho de la columna, que es lo mismo
+ * que decir: por la medida de línea que dejan (24 % → ~67 car., 28 % → ~64,
+ * 32 % → ~62). No es un adorno: es el número que se estaba corrigiendo.
+ */
+const ESQ = {
+  /** Plano de toda la vida: filete completo bajo el rótulo, fechas a la derecha. */
+  plana: {},
+  /** Columna colgante estándar. El esqueleto de la plantilla por defecto. */
+  colgante: { skeleton: "hanging", hangingWidth: "28%", pageMarginH: "22mm" },
+  /** Colgante ancha: casi un tercio de columna; la línea más corta del catálogo. */
+  colganteAncha: { skeleton: "hanging", hangingWidth: "32%", pageMarginH: "21mm" },
+  /** Colgante fina: la columna insinúa la rejilla y el contenido gana aire. */
+  colganteFina: { skeleton: "hanging", hangingWidth: "24%", pageMarginH: "23mm" },
+  /** Rótulo sobre bloque tintado (fondo, no tabla) y sin filete: el rótulo ES el filete. */
+  banda: { headingBand: true, headingRule: false },
+  /** Cabecera de libro: nombre y contacto centrados bajo un filete. */
+  portada: { nameAlign: "center", nameRule: true, headingRuleStyle: "partial", contactStyle: "split" },
+  /** Nombre en caja alta con tracking bajo un filete: empieza fuerte. */
+  titular: { nameCase: "upper", nameTracking: 1.1, nameRule: true },
+  /** Informe: secciones numeradas, sin filete, fechas en línea propia. */
+  expediente: { headingNumbered: true, headingRule: false, dateStyle: "own-line" },
+  /** Las fechas en su propia línea bajo el cargo y un filete corto por rótulo. */
+  lineaPropia: { dateStyle: "own-line", headingRuleStyle: "partial" },
+  /** Las fechas pegadas al cargo, dentro del mismo párrafo, y cero filetes. */
+  enLinea: { dateStyle: "inline", headingRule: false },
+  /** Ni filetes ni marcadores: las secciones se anuncian solo con aire y márgenes. */
+  silencio: { headingRule: false, bulletMarker: "none", pageMarginH: "33mm" },
+  /** Currículum americano: cabecera centrada, contacto apilado, filete doble. */
+  bandera: { nameAlign: "center", contactStyle: "stacked", headingRuleStyle: "double" },
+  /** Cornisa: el filete ENCIMA del rótulo, como el titulillo de una página impresa. */
+  cornisa: { headingRulePosition: "above" },
+  /** Márgenes de libro de bolsillo: la medida más corta que se puede tener sin columna. */
+  margen: { pageMarginH: "36mm", skillStyle: "paired" },
+  /** Contacto alineado a la derecha frente al nombre. Mismo flujo, no dos columnas. */
+  credencial: { contactAlign: "right", contactStyle: "split" },
+  /** Hueco de foto en la esquina superior derecha, junto al nombre y el contacto. */
+  retrato: { photoSlot: "header-right", contactStyle: "stacked" },
+  /** Hueco de foto sobre columna colgante: la rejilla sostiene la imagen. */
+  retratoColgante: { skeleton: "hanging", hangingWidth: "26%", pageMarginH: "22mm", photoSlot: "header-right" },
+  /** Sin ornamento ninguno: ni filete, ni marcador de viñeta, ni etiquetas. */
+  taller: { headingRule: false, contactLabels: false, skillStyle: "inline" },
+} satisfies Record<string, Partial<TemplateMetrics>>;
+
+/** Una métrica = base + ritmo + esqueleto + las decisiones propias de la plantilla. */
+const M = (
+  ritmo: keyof typeof RITMO,
+  esqueleto: keyof typeof ESQ,
+  extra: Partial<TemplateMetrics> = {},
+): TemplateMetrics => ({
+  ...BASE,
   ...RITMO[ritmo],
+  ...ESQ[esqueleto],
   ...extra,
 });
 
 // ── ÓRDENES DE SECCIÓN ────────────────────────────────────────────────────────
 /**
  * Qué se lee primero. No es decoración: un ATS y un humano puntúan lo que aparece
- * arriba, así que el orden es la decisión más estratégica del documento. Cinco
- * respuestas a "¿qué te vende a ti?".
+ * arriba, así que el orden es la decisión más estratégica del documento. Y es un
+ * eje INDEPENDIENTE del esqueleto: cambiar «educación ↔ experiencia» no obliga a
+ * rehacer la maqueta, que es justo lo que piden las guías chilenas —ponen la
+ * formación delante incluso para perfiles con trayectoria— y lo que hace la
+ * plantilla oficial de Harvard para egresados.
  */
 const ORDEN = {
   /** El de siempre: te vende lo que sabes hacer. */
@@ -355,9 +378,15 @@ const ORDEN = {
   experiencia: ["summary", "work", "projects", "skills", "education"],
   /** Te vende lo que has construido: portafolio por delante del cargo. */
   proyectos: ["summary", "projects", "work", "skills", "education"],
-  /** Te vende el título: academia y primer empleo. */
+  /** Te vende el título: academia, egresados y primer empleo. */
   formacion: ["summary", "education", "skills", "work", "projects"],
-  /** Cambio de carrera: lo que has hecho POR TU CUENTA antes que el empleo previo. */
+  /** Formación delante, experiencia detrás y habilidades al final: la costumbre chilena. */
+  chile: ["summary", "education", "work", "skills", "projects"],
+  /**
+   * Cambio de carrera: el resumen hace de PUENTE y detrás van las habilidades y lo
+   * que has construido por tu cuenta, antes del empleo previo. Nunca un funcional
+   * puro (sin fechas ni empleador): los reclutadores lo leen como ocultamiento.
+   */
   transicion: ["summary", "skills", "projects", "work", "education"],
 } satisfies Record<string, readonly SectionId[]>;
 
@@ -365,12 +394,16 @@ const ORDEN = {
 const P = (id: string): TemplatePalette => PALETTES.find((p) => p.id === id)!;
 const T = (id: string): TemplateTypography => TYPOGRAPHIES.find((t) => t.id === id)!;
 
-/** Atajo: toda la gama ATS comparte layout (una columna, sin foto, sin lateral). */
-const UNA_COLUMNA = { columns: 1, photo: false, sidebar: false } as const;
-
 /**
- * Una plantilla de gama ATS. El `layout` no se pide porque en esta gama no hay
- * decisión que tomar: si tuviera dos columnas, no sería de esta gama.
+ * Una plantilla de gama ATS. El `layout` no se pide entero porque en esta gama solo
+ * hay una decisión: si la maqueta reserva hueco de foto. Ni dos columnas ni barra
+ * lateral — eso es, literalmente, la otra gama.
+ *
+ * ★ PARES GEMELOS. Toda plantilla con hueco de foto (`-foto`) existe TAMBIÉN sin
+ * él, y la versión sin foto no deja el hueco vacío: compensa. Donde la de foto pone
+ * la imagen a la derecha y apila el contacto bajo el nombre, la gemela reparte el
+ * contacto a lo ancho, lo alinea al otro lado y cierra la cabecera con un filete.
+ * Un test comprueba que el par existe en las dos direcciones.
  */
 const ats = (
   id: string,
@@ -381,9 +414,15 @@ const ats = (
   metrics: TemplateMetrics,
   tags: CvTemplate["tags"],
 ): CvTemplate => ({
-  id, name, gama: "ats", description,
-  layout: UNA_COLUMNA,
-  palette: P(palette), typography: T(typography), metrics, tags,
+  id,
+  name,
+  gama: "ats",
+  description,
+  layout: { columns: 1, photo: metrics.photoSlot === "header-right", sidebar: false },
+  palette: P(palette),
+  typography: T(typography),
+  metrics,
+  tags,
 });
 
 export const TEMPLATES: CvTemplate[] = [
@@ -391,33 +430,30 @@ export const TEMPLATES: CvTemplate[] = [
   // El documento de toda la vida y sus variaciones de filete, numeración y ritmo.
   ats(
     "ats-clasica", "Clásica",
-    "La conservadora: banca, sector público y perfiles senior. Es la de por defecto.",
+    "La conservadora: banca, sector público y perfiles senior. Es la de por defecto, y la única decisión que toma es un margen ancho para que la línea no pase de los 85 caracteres.",
     "patina", "clasica", CLASICA,
     ["clasica", "2paginas", "general"],
   ),
   ats(
     "ats-toga", "Toga",
-    "Filete doble bajo cada sección y contacto en dos líneas. Formal sin ser rancia: derecho, banca, consultoría.",
+    "Filete doble bajo cada sección y contacto en dos líneas, con márgenes anchos. Formal sin ser rancia: derecho, banca, consultoría.",
     "marino", "clasica",
-    M("amplio", { headingRuleStyle: "double", contactStyle: "split", headingTracking: 0.5 }),
+    M("amplio", "plana", { headingRuleStyle: "double", contactStyle: "split", headingTracking: 0.5 }),
     ["clasica", "2paginas", "general"],
   ),
   ats(
     "ats-expediente", "Expediente",
     "Secciones numeradas y sin filete, fechas en línea propia. Lee como un informe: ordenado y sin adornos.",
     "pizarra", "compacta",
-    M("normal", {
-      headingNumbered: true, headingRule: false, dateStyle: "own-line", bulletMarker: "dash",
-    }),
+    M("normal", "expediente", { bulletMarker: "dash" }),
     ["clasica", "2paginas", "general"],
   ),
   ats(
     "ats-memorando", "Memorando",
-    "Filete ENCIMA del rótulo, contacto sin etiquetas y cero color: blanco y negro puro, para fotocopiar.",
+    "Filete ENCIMA del rótulo, fechas en línea propia, contacto sin etiquetas y cero color: blanco y negro puro, para fotocopiar.",
     "tinta", "compacta",
-    M("denso", {
-      headingRulePosition: "above", contactLabels: false, skillStyle: "inline",
-      accentName: false, accentHeadings: false,
+    M("denso", "cornisa", {
+      dateStyle: "own-line", contactLabels: false, skillStyle: "inline", accentHeadings: false,
     }),
     ["minimal", "1pagina", "general"],
   ),
@@ -425,40 +461,40 @@ export const TEMPLATES: CvTemplate[] = [
     "ats-registro", "Registro",
     "Fechas pegadas al cargo, viñeta de guion y habilidades a dos líneas. Densa y sin una sola línea decorativa.",
     "granate", "instrumento",
-    M("denso", {
-      dateStyle: "inline", bulletMarker: "dash", headingRule: false, skillStyle: "paired",
-    }),
+    M("denso", "enLinea", { bulletMarker: "dash", skillStyle: "paired" }),
     ["tecnica", "1pagina", "ingenieria"],
+  ),
+  ats(
+    "ats-veterana", "Veterana",
+    "Experiencia primero y columna colgante ancha: mucha trayectoria comprimida sin que la línea se alargue.",
+    "marino", "compacta",
+    M("denso", "colganteAncha", {
+      sectionOrder: ORDEN.experiencia, skillStyle: "inline", contactStyle: "split", bulletMarker: "dash",
+    }),
+    ["clasica", "1pagina", "general"],
   ),
 
   // ── EDITORIALES ────────────────────────────────────────────────────────────
   // Serif, aire y cursiva. El CV que se lee como una página de revista.
   ats(
     "ats-editorial", "Editorial",
-    "Serif en el nombre y en los encabezados, mucho aire. Para perfiles de producto, diseño y academia.",
-    "cobre", "editorial", EDITORIAL,
+    "Serif en el nombre y en los encabezados, el máximo de aire que permite el núcleo. Para perfiles de producto, diseño y academia.",
+    "cobre", "editorial",
+    M("aireado", "plana", { sectionGap: 16, headingWeight: 600 }),
     ["editorial", "2paginas", "general"],
   ),
   ats(
     "ats-cronica", "Crónica",
-    "Serif de titular, subtítulo en cursiva y cifras en monoespaciada. Filete corto: se insinúa, no subraya.",
+    "Serif de titular, subtítulo en cursiva y fechas colgadas a la izquierda. Filete corto: se insinúa, no subraya.",
     "granate", "cronica",
-    // Las fechas en línea propia cuestan una línea por entrada, y el contacto en dos
-    // líneas otra más: con el aire del ritmo `amplio` a pelo, la versión "de una
-    // página" salía en dos. Una plantilla que promete una página y entrega dos no es
-    // un estilo, es una promesa rota — así que aquí el aire se recorta hasta donde
-    // la promesa se cumple, y no al revés.
-    M("amplio", {
-      headingRuleStyle: "partial", dateStyle: "own-line", contactStyle: "split",
-      sectionGap: 13.5, entryGap: 8, bulletGap: 3, pageMarginV: "17mm",
-    }),
+    M("amplio", "colgante", { headingRuleStyle: "partial", contactStyle: "split" }),
     ["editorial", "2paginas", "general"],
   ),
   ats(
     "ats-ensayo", "Ensayo",
     "Encabezados en caja mixta y sin filete, viñeta de raya. El CV más silencioso del catálogo.",
     "ciruela", "editorial",
-    M("aireado", {
+    M("aireado", "plana", {
       upperHeadings: false, headingRule: false, headingWeight: 600,
       bulletMarker: "emdash", skillStyle: "inline",
     }),
@@ -468,48 +504,47 @@ export const TEMPLATES: CvTemplate[] = [
     "ats-portada", "Portada",
     "Nombre y contacto centrados bajo un filete, cuerpo alineado a la izquierda. Cabecera de libro.",
     "cobre", "editorial",
-    M("amplio", {
-      nameAlign: "center", nameRule: true, headingRuleStyle: "partial",
-      contactStyle: "split", headingWeight: 600,
-    }),
+    M("amplio", "portada", { headingWeight: 600 }),
     ["editorial", "2paginas", "general"],
   ),
   ats(
     "ats-columna", "Columna",
-    "Proyectos por delante del empleo, fechas en línea y raya de guion largo. Para quien se vende por lo que construye.",
+    "Proyectos por delante del empleo sobre la columna colgante más ancha del catálogo. Para quien se vende por lo que construye.",
     "oliva", "cronica",
-    M("amplio", {
-      sectionOrder: ORDEN.proyectos, dateStyle: "inline", bulletMarker: "emdash",
-      headingRuleStyle: "partial",
-    }),
+    M("amplio", "colganteAncha", { sectionOrder: ORDEN.proyectos, bulletMarker: "emdash" }),
     ["editorial", "2paginas", "datos-ia"],
+  ),
+  ats(
+    "ats-postulacion", "Postulación",
+    "Formación delante, columna colgante y aire de dossier. Para becas, magísteres y candidaturas que se leen enteras.",
+    "ciruela", "editorial",
+    M("amplio", "colganteFina", { sectionOrder: ORDEN.formacion, headingWeight: 600, headingRuleStyle: "partial" }),
+    ["editorial", "2paginas", "academia"],
   ),
 
   // ── TÉCNICAS ───────────────────────────────────────────────────────────────
-  // Grotesca y monoespaciada. Densidad alta y cifras que tabulan.
+  // Grotesca en dos pesos, densidad alta y CERO ornamento. Sin monoespaciada: la
+  // gama técnica se reconoce por la estructura, no por la fuente de una terminal.
   ats(
     "ats-instrumento", "Instrumento",
-    "Grotesca en todo, densa y técnica, con las fechas en monoespaciada. Para ingeniería y datos.",
-    "acero", "instrumento", INSTRUMENTO,
+    "Grotesca en dos pesos, densa y técnica, con las habilidades agrupadas arriba. Para ingeniería y datos.",
+    "acero", "instrumento",
+    M("denso", "plana", { headingRule: false, headingWeight: 600 }),
     ["tecnica", "1pagina", "ingenieria"],
   ),
   ats(
-    "ats-terminal", "Terminal",
-    "El nombre y los rótulos en monoespaciada, contacto sin etiquetas. Se reconoce a un metro de distancia.",
-    "tinta", "terminal",
-    M("denso", {
-      headingWeight: 500, bulletMarker: "dash", dateStyle: "inline",
-      contactLabels: false, skillStyle: "paired",
-    }),
+    "ats-terminal", "Bitácora",
+    "Fechas colgadas a la izquierda, contacto sin etiquetas y habilidades a dos líneas. Se lee como un registro de trabajo.",
+    "tinta", "compacta",
+    M("denso", "colganteFina", { bulletMarker: "dash", contactLabels: false, skillStyle: "paired" }),
     ["tecnica", "1pagina", "ingenieria"],
   ),
   ats(
-    "ats-consola", "Consola",
-    "Secciones numeradas, sin filete y sin marcador de viñeta: solo sangría. Máxima densidad legible.",
-    "acero", "terminal",
-    M("compacto", {
-      headingWeight: 500, headingNumbered: true, headingRule: false,
-      skillStyle: "inline", bulletMarker: "none",
+    "ats-consola", "Tablero",
+    "Sin filete y sin marcador de viñeta: solo sangría, sobre columna colgante ancha. Máxima densidad legible.",
+    "acero", "instrumento",
+    M("denso", "colganteAncha", {
+      headingRule: false, headingWeight: 600, skillStyle: "inline", bulletMarker: "none",
     }),
     ["tecnica", "1pagina", "ingenieria"],
   ),
@@ -517,162 +552,308 @@ export const TEMPLATES: CvTemplate[] = [
     "ats-esquema", "Esquema",
     "Experiencia por delante de habilidades, filete encima del rótulo y fechas en su propia línea.",
     "pizarra", "instrumento",
-    M("normal", {
-      headingRulePosition: "above", dateStyle: "own-line", sectionOrder: ORDEN.experiencia,
-    }),
+    M("normal", "cornisa", { dateStyle: "own-line", sectionOrder: ORDEN.experiencia, headingWeight: 600 }),
     ["tecnica", "2paginas", "ingenieria"],
   ),
   ats(
     "ats-telemetria", "Telemetría",
     "Filete doble, habilidades en una sola línea corrida y viñeta de guion. Para perfiles de datos.",
     "marino", "instrumento",
-    M("denso", { headingRuleStyle: "double", skillStyle: "inline", bulletMarker: "dash" }),
+    M("denso", "plana", { headingRuleStyle: "double", skillStyle: "inline", bulletMarker: "dash", headingWeight: 600 }),
     ["tecnica", "1pagina", "datos-ia"],
+  ),
+  ats(
+    "ats-taller", "Taller",
+    "Cero ornamento: ni filete, ni etiquetas de contacto, ni adornos. Habilidades arriba y en línea corrida, todo en grotesca.",
+    "pizarra", "compacta",
+    M("normal", "taller", { sectionOrder: ORDEN.habilidades, bulletMarker: "dash" }),
+    ["tecnica", "1pagina", "ingenieria"],
+  ),
+  ats(
+    "ats-banco", "Banco de pruebas",
+    "Rótulo sobre bloque tintado y columna colgante: la estructura se ve de un vistazo sin una sola línea de más.",
+    "acero", "compacta",
+    M("denso", "colgante", { headingBand: true, headingRule: false, bulletMarker: "dash" }),
+    ["tecnica", "2paginas", "datos-ia"],
   ),
 
   // ── MÍNIMAS ────────────────────────────────────────────────────────────────
   // Quitar hasta que solo quede el contenido. Cada una quita una cosa distinta.
   ats(
     "ats-compacta", "Compacta",
-    "Mete dos páginas de contenido en una sin ahogarse. Sin color: solo tinta, peso y filete.",
-    "tinta", "compacta", COMPACTA,
+    "La métrica más apretada que permite el núcleo de legibilidad: cuerpo de 10 pt, interlineado de 1,15 y márgenes anchos para que la línea siga siendo corta.",
+    "tinta", "compacta", M("compacto", "plana"),
     ["minimal", "1pagina", "general"],
   ),
   ats(
     "ats-minima", "Mínima",
     "Sin color, sin filetes, sin marcadores y sin etiquetas de contacto. Solo jerarquía tipográfica.",
     "tinta", "compacta",
-    M("normal", {
-      accentName: false, accentHeadings: false, headingRule: false, bulletMarker: "none",
+    M("denso", "plana", {
+      accentHeadings: false, headingRule: false, bulletMarker: "none",
       contactStyle: "split", contactLabels: false, skillStyle: "inline",
     }),
     ["minimal", "1pagina", "general"],
   ),
   ats(
     "ats-hoja", "Hoja",
-    "Nombre en tinta y acento solo en los rótulos, con filete corto. El color aparece una vez por sección.",
+    "Columna colgante fina y filete corto por sección. El color aparece una vez por sección y nada más.",
     "oliva", "clasica",
-    M("amplio", { accentName: false, headingRuleStyle: "partial", bulletMarker: "dash" }),
+    M("amplio", "colganteFina", { headingRuleStyle: "partial", bulletMarker: "dash" }),
     ["minimal", "2paginas", "general"],
   ),
   ats(
     "ats-margen", "Margen",
-    "Márgenes anchos, columna de texto estrecha y fechas en línea propia. Se lee sin cansarse.",
+    "Márgenes de libro de bolsillo, columna de texto corta y fechas en línea propia. Se lee sin cansarse.",
     "oliva", "compacta",
-    M("normal", { pageMarginH: "26mm", dateStyle: "own-line", skillStyle: "paired" }),
+    M("normal", "margen", { dateStyle: "own-line" }),
     ["minimal", "2paginas", "general"],
   ),
   ats(
     "ats-silencio", "Silencio",
     "Ni filetes ni viñetas, contacto apilado línea a línea. Las secciones se anuncian solo con aire.",
     "pizarra", "clasica",
-    M("amplio", { headingRule: false, bulletMarker: "none", contactStyle: "stacked" }),
+    M("normal", "silencio", { contactStyle: "stacked" }),
     ["minimal", "2paginas", "general"],
   ),
-
   // ── MODERNAS ───────────────────────────────────────────────────────────────
-  // Composición contemporánea: cabeceras centradas, numeración, nombre en caja alta.
+  // Composición contemporánea: cabeceras centradas, banda tintada, caja alta.
   ats(
     "ats-titular", "Titular",
     "Nombre en mayúsculas con tracking bajo un filete, fechas pegadas al cargo. Empieza fuerte.",
     "granate", "compacta",
-    M("normal", {
-      nameSize: 19, nameCase: "upper", nameTracking: 1.1, nameRule: true,
-      dateStyle: "inline", bulletMarker: "dash",
-    }),
+    M("normal", "titular", { dateStyle: "inline", bulletMarker: "dash" }),
     ["moderna", "1pagina", "general"],
   ),
   ats(
     "ats-bandera", "Bandera",
     "Cabecera centrada con el contacto apilado y filete doble en las secciones. La de currículum americano.",
     "cobre", "clasica",
-    M("normal", {
-      nameAlign: "center", nameRule: true, contactStyle: "stacked", headingRuleStyle: "double",
-    }),
+    M("normal", "bandera", { nameRule: true }),
     ["moderna", "2paginas", "general"],
   ),
   ats(
     "ats-pauta", "Pauta",
     "Secciones numeradas con filete corto y habilidades a dos líneas. Estructura visible sin ruido.",
     "ciruela", "compacta",
-    M("normal", { headingNumbered: true, headingRuleStyle: "partial", skillStyle: "paired" }),
+    M("denso", "plana", { headingNumbered: true, headingRuleStyle: "partial", skillStyle: "paired" }),
     ["moderna", "1pagina", "general"],
   ),
   ats(
-    "ats-indice", "Índice",
-    "Numeradas, con el filete encima del rótulo y la experiencia primero. Se navega como un índice.",
+    "ats-indice", "Cornisa",
+    "Filete encima del rótulo, como el titulillo de una página impresa, y la experiencia primero.",
     "acero", "clasica",
-    M("amplio", {
-      headingNumbered: true, headingRulePosition: "above", sectionOrder: ORDEN.experiencia,
-      bulletMarker: "emdash",
-    }),
+    M("amplio", "cornisa", { sectionOrder: ORDEN.experiencia, bulletMarker: "emdash" }),
     ["moderna", "2paginas", "general"],
   ),
   ats(
     "ats-perfil", "Perfil",
     "Contacto apilado, fechas en línea propia y filete corto. Aire de ficha de perfil, en una columna.",
     "patina", "cronica",
-    // Contacto apilado (tres líneas en vez de una) + fechas en línea propia: los dos
-    // ejes que más alto añaden, juntos. El ritmo se aprieta para que quepa de verdad.
-    M("normal", {
-      contactStyle: "stacked", dateStyle: "own-line", headingRuleStyle: "partial",
-      sectionGap: 11, entryGap: 6.5, pageMarginV: "16mm",
+    M("denso", "lineaPropia", { contactStyle: "stacked" }),
+    ["moderna", "2paginas", "general"],
+  ),
+  ats(
+    "ats-banda", "Banda",
+    "El rótulo de sección va sobre un bloque tintado en gris: la sección se anuncia con un fondo, no con una raya.",
+    "ciruela", "compacta",
+    M("normal", "banda", { bulletMarker: "dash", contactStyle: "split" }),
+    ["moderna", "2paginas", "general"],
+  ),
+  ats(
+    "ats-banda-foto", "Banda con foto",
+    "La misma banda tintada, con la foto en la esquina superior derecha y el contacto apilado bajo el nombre.",
+    "ciruela", "compacta",
+    M("normal", "banda", {
+      photoSlot: "header-right", contactStyle: "stacked", photoShape: "rounded", photoSize: 86,
+      nameRule: true, skillStyle: "paired",
     }),
     ["moderna", "2paginas", "general"],
+  ),
+
+  // ── CON FOTO Y SIN FOTO (pares gemelos) ────────────────────────────────────
+  // Cada par comparte esqueleto y ritmo; lo que cambia es qué hace la cabecera con
+  // el hueco. La versión sin foto NO deja un vacío: reparte el contacto a lo ancho,
+  // lo alinea al otro lado o cierra la cabecera con un filete.
+  ats(
+    "ats-credencial", "Credencial",
+    "Nombre a la izquierda y contacto alineado a la derecha, en el mismo flujo. La cabecera se cierra sola, sin foto ni hueco.",
+    "acero", "compacta",
+    M("normal", "credencial", { nameRule: true, bulletMarker: "dash" }),
+    ["moderna", "1pagina", "general"],
+  ),
+  ats(
+    "ats-credencial-foto", "Credencial con foto",
+    "La gemela con foto: la imagen ocupa la esquina superior derecha y el contacto vuelve bajo el nombre, apilado.",
+    "acero", "compacta",
+    M("normal", "retrato", { photoShape: "square", photoBorder: true, bulletMarker: "dash", photoSize: 82 }),
+    ["moderna", "1pagina", "general"],
+  ),
+  ats(
+    "ats-retrato", "Retrato",
+    "Columna colgante y contacto repartido a lo ancho de la cabecera, que es lo que ocupa el sitio de la foto.",
+    "patina", "clasica",
+    M("denso", "colgante", { contactStyle: "split", contactAlign: "right", nameRule: true }),
+    ["clasica", "2paginas", "general"],
+  ),
+  ats(
+    "ats-retrato-foto", "Retrato con foto",
+    "La gemela con foto sobre la columna colgante: la rejilla sostiene la imagen y el contacto se apila bajo el nombre.",
+    "patina", "clasica",
+    M("denso", "retratoColgante", { contactStyle: "stacked", photoShape: "rounded", photoSize: 84 }),
+    ["clasica", "2paginas", "general"],
+  ),
+  ats(
+    "ats-dossier", "Dossier",
+    "Aire de dossier sobre columna colgante fina, con el contacto centrado bajo el nombre. La cabecera está equilibrada sin necesitar imagen.",
+    "cobre", "cronica",
+    M("normal", "colganteFina", { contactAlign: "center", contactStyle: "split", headingRuleStyle: "partial" }),
+    ["editorial", "2paginas", "general"],
+  ),
+  ats(
+    "ats-dossier-foto", "Dossier con foto",
+    "La gemela con foto: retrato de 3,5 × 4,5 cm con filete fino a la derecha del nombre, sobre la misma columna colgante.",
+    "cobre", "cronica",
+    M("normal", "retratoColgante", {
+      hangingWidth: "24%", photoBorder: true, photoSize: 78, headingRuleStyle: "partial", contactStyle: "stacked",
+    }),
+    ["editorial", "2paginas", "general"],
+  ),
+  ats(
+    "ats-consultora", "Consultora",
+    "Columna colgante ancha, contacto en dos líneas alineado a la derecha y viñeta de guion. Para propuestas y perfiles de consultoría.",
+    "marino", "instrumento",
+    M("normal", "colganteAncha", {
+      contactStyle: "split", contactAlign: "right", bulletMarker: "dash", headingWeight: 600,
+    }),
+    ["clasica", "2paginas", "general"],
+  ),
+  ats(
+    "ats-consultora-foto", "Consultora con foto",
+    "La gemela con foto: la imagen cierra la cabecera por la derecha y el contacto pasa a apilarse bajo el nombre.",
+    "marino", "instrumento",
+    M("normal", "retratoColgante", {
+      hangingWidth: "30%", contactStyle: "stacked", photoSize: 84, bulletMarker: "dash", headingWeight: 600,
+    }),
+    ["clasica", "2paginas", "general"],
+  ),
+  ats(
+    "ats-cabecera", "Cabecera",
+    "Nombre en caja alta con tracking y contacto a la derecha, sin filete de cabecera. La línea de contacto hace de contrapeso.",
+    "granate", "instrumento",
+    M("denso", "titular", {
+      nameRule: false, contactAlign: "right", contactStyle: "split", headingWeight: 600, bulletMarker: "dash",
+    }),
+    ["moderna", "1pagina", "general"],
+  ),
+  ats(
+    "ats-cabecera-foto", "Cabecera con foto",
+    "La gemela con foto: el nombre en caja alta a la izquierda y el retrato a la derecha, con el contacto apilado debajo.",
+    "granate", "instrumento",
+    M("denso", "retrato", {
+      nameCase: "upper", nameTracking: 1.1, photoSize: 84, photoShape: "square", headingWeight: 600,
+    }),
+    ["moderna", "1pagina", "general"],
+  ),
+  ats(
+    "ats-ficha", "Ficha",
+    "Denso, con el contacto en dos líneas centrado y filete corto. Cabecera compacta y equilibrada, sin imagen.",
+    "oliva", "compacta",
+    M("denso", "plana", {
+      contactStyle: "split", contactAlign: "center", headingRuleStyle: "partial", skillStyle: "paired",
+    }),
+    ["minimal", "1pagina", "general"],
+  ),
+  ats(
+    "ats-ficha-foto", "Ficha con foto",
+    "La gemela con foto: retrato pequeño de esquina y contacto apilado, en la misma métrica densa de una página.",
+    "oliva", "compacta",
+    M("denso", "retrato", { photoSize: 80, headingRuleStyle: "partial", skillStyle: "paired", bulletMarker: "dash" }),
+    ["minimal", "1pagina", "general"],
   ),
 
   // ── POR AFINIDAD ───────────────────────────────────────────────────────────
   // Lo que cambia no es el adorno: es QUÉ SE LEE PRIMERO.
   ats(
     "ats-academica", "Académica",
-    "Formación por delante de todo y fechas en su propia línea. Para tesis, docencia e investigación.",
+    "Formación por delante de todo, columna colgante fina y fechas a la izquierda. Para tesis, docencia e investigación.",
     "marino", "cronica",
-    M("amplio", { sectionOrder: ORDEN.formacion, dateStyle: "own-line" }),
+    M("amplio", "colgante", { sectionOrder: ORDEN.formacion, headingRuleStyle: "partial", bulletMarker: "emdash" }),
     ["editorial", "2paginas", "academia"],
   ),
   ats(
     "ats-primer-empleo", "Primer empleo",
     "El título primero y la experiencia al final, con filete corto. Cuando lo más fuerte que tienes es la carrera.",
     "oliva", "clasica",
-    M("normal", {
-      sectionOrder: ORDEN.formacion, contactStyle: "split", bulletMarker: "dash",
-      headingRuleStyle: "partial",
+    M("normal", "plana", {
+      sectionOrder: ORDEN.formacion, contactStyle: "split", bulletMarker: "dash", headingRuleStyle: "partial",
     }),
     ["clasica", "1pagina", "primer-empleo"],
+  ),
+  ats(
+    "ats-egresado", "Egresado",
+    "Educación antes que experiencia, como la plantilla oficial de Harvard para recién titulados, sobre columna colgante y en una página.",
+    "patina", "compacta",
+    M("denso", "colgante", { sectionOrder: ORDEN.formacion, contactStyle: "split", skillStyle: "inline" }),
+    ["clasica", "1pagina", "primer-empleo"],
+  ),
+  ats(
+    "ats-chile", "Chilena",
+    "Formación delante y experiencia detrás, que es como lo piden las guías locales incluso con trayectoria. El orden se cambia sin tocar la maqueta.",
+    "cobre", "clasica",
+    M("normal", "colgante", { sectionOrder: ORDEN.chile, bulletMarker: "dash", contactStyle: "split" }),
+    ["clasica", "2paginas", "general"],
   ),
   ats(
     "ats-portafolio", "Portafolio",
     "Proyectos arriba del todo y habilidades en línea corrida. Para quien enseña obra, no cargos.",
     "ciruela", "editorial",
-    M("amplio", {
+    M("amplio", "plana", {
       sectionOrder: ORDEN.proyectos, bulletMarker: "dash", contactStyle: "split",
       skillStyle: "inline", headingWeight: 600,
     }),
     ["editorial", "2paginas", "datos-ia"],
   ),
   ats(
-    "ats-veterana", "Veterana",
-    "Experiencia primero y todo comprimido: mucha trayectoria sin irse a tres páginas.",
-    "marino", "compacta",
-    M("compacto", {
-      sectionOrder: ORDEN.experiencia, skillStyle: "inline", dateStyle: "inline",
-      contactStyle: "split", bulletMarker: "dash",
-    }),
-    ["clasica", "1pagina", "general"],
-  ),
-  ats(
     "ats-transicion", "Transición",
-    "Habilidades y proyectos antes del empleo anterior. Para cambiar de sector sin que el cargo viejo mande.",
+    "Resumen-puente arriba, y detrás las habilidades y los proyectos propios antes del empleo anterior. Para cambiar de sector sin que el cargo viejo mande.",
     "granate", "clasica",
-    M("normal", {
-      sectionOrder: ORDEN.transicion, headingRuleStyle: "partial", contactStyle: "split",
-      skillStyle: "paired",
+    M("normal", "lineaPropia", {
+      sectionOrder: ORDEN.transicion, contactStyle: "split", skillStyle: "paired",
     }),
     ["moderna", "2paginas", "primer-empleo"],
   ),
+  ats(
+    "ats-puente", "Puente",
+    "La otra transición: mismo orden con resumen-puente, pero sobre columna colgante y con las secciones sin filete. Nunca un CV funcional puro.",
+    "cobre", "compacta",
+    M("normal", "colganteFina", {
+      sectionOrder: ORDEN.transicion, headingRule: false, bulletMarker: "emdash", contactStyle: "stacked",
+    }),
+    ["moderna", "2paginas", "primer-empleo"],
+  ),
+  ats(
+    "ats-trayectoria", "Trayectoria",
+    "Senior de dos páginas: experiencia primero, columna colgante y ritmo amplio para que quince años no se lean apretados.",
+    "pizarra", "clasica",
+    M("amplio", "colgante", { sectionOrder: ORDEN.experiencia, bulletMarker: "dash", contactStyle: "split" }),
+    ["clasica", "2paginas", "general"],
+  ),
+  ats(
+    "ats-laboratorio", "Laboratorio",
+    "Proyectos delante del empleo, columna colgante fina y habilidades a dos líneas. Para investigación aplicada y datos.",
+    "oliva", "instrumento",
+    M("denso", "colgante", {
+      sectionOrder: ORDEN.proyectos, hangingWidth: "26%", skillStyle: "paired",
+      headingRule: false, headingWeight: 600,
+    }),
+    ["tecnica", "2paginas", "datos-ia"],
+  ),
 
   // ── GAMA VISUAL ────────────────────────────────────────────────────────────
-  // Se ven mejor y parsean peor. Cada una dice POR QUÉ en su `warning`.
+  // Se ven mejor y parsean peor. Cada una dice POR QUÉ en su `warning`. Aquí sí
+  // caben la barra lateral, la foto circular y la monoespaciada: es la gama donde
+  // el usuario ya ha leído el aviso.
   {
     id: "visual-lateral",
     name: "Lateral (con foto)",
@@ -683,7 +864,7 @@ export const TEMPLATES: CvTemplate[] = [
     layout: { columns: 2, photo: true, sidebar: true },
     palette: P("patina"),
     typography: T("clasica"),
-    metrics: LATERAL,
+    metrics: M("normal", "plana", { nameSize: 21, pageMarginH: "18mm", sidebarWidth: "33%", sidebarGap: 14, accentName: true }),
     tags: ["clasica", "2paginas", "general"],
   },
   {
@@ -696,23 +877,29 @@ export const TEMPLATES: CvTemplate[] = [
     layout: { columns: 2, photo: true, sidebar: true },
     palette: P("ciruela"),
     typography: T("editorial"),
-    metrics: M("amplio", { sidebarWidth: "30%", sidebarGap: 16, headingWeight: 600, headingRuleStyle: "partial" }),
+    metrics: M("amplio", "plana", {
+      pageMarginH: "18mm", sidebarWidth: "30%", sidebarGap: 16, headingWeight: 600, headingRuleStyle: "partial", accentName: true,
+    }),
     tags: ["editorial", "2paginas", "academia"],
   },
   {
     id: "visual-ficha",
     name: "Ficha (con foto)",
     gama: "visual",
-    description: "Todo en una página: lateral compacta con contacto y habilidades, cuerpo denso con la experiencia.",
+    description: "Todo en una página: lateral compacta con contacto y habilidades, cuerpo denso con la experiencia y cifras en monoespaciada.",
     warning:
-      "No apta para portales con ATS: la barra lateral hace que el parser lea las habilidades y el contacto intercalados con la experiencia, y la densidad alta agrava los errores de columna.",
+      "No apta para portales con ATS: la barra lateral hace que el parser lea las habilidades y el contacto intercalados con la experiencia, la densidad alta agrava los errores de columna y la monoespaciada es justo la familia que peor puntúan los reclutadores.",
     layout: { columns: 2, photo: true, sidebar: true },
     palette: P("granate"),
-    typography: T("compacta"),
+    typography: T("terminal"),
     // Habilidades AGRUPADAS y no en línea corrida: en una lateral del 34 % una línea
     // que junta los cuatro grupos se parte donde puede, y el parser llega a recortar
     // palabras. La barra lateral ya penaliza bastante el parseo sin ayudarla.
-    metrics: M("denso", { sidebarWidth: "34%", sidebarGap: 12, dateStyle: "inline" }),
+    // headingWeight 500: Geist Mono no existe en 600/700 y un peso que no existe se
+    // sustituye en silencio (lo fija un test).
+    metrics: M("denso", "plana", {
+      pageMarginH: "17mm", sidebarWidth: "34%", sidebarGap: 12, dateStyle: "inline", headingWeight: 500, accentName: true,
+    }),
     tags: ["moderna", "1pagina", "general"],
   },
   {
@@ -725,7 +912,7 @@ export const TEMPLATES: CvTemplate[] = [
     layout: { columns: 1, photo: false, sidebar: false },
     palette: P("oliva"),
     typography: T("clasica"),
-    metrics: M("aireado", { headingLabel: false, bulletMarker: "none", contactStyle: "split" }),
+    metrics: M("aireado", "plana", { headingLabel: false, bulletMarker: "none", contactStyle: "split" }),
     tags: ["minimal", "2paginas", "general"],
   },
 ];

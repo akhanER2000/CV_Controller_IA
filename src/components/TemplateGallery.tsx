@@ -35,7 +35,9 @@
    ============================================================================ */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useT } from "@/lib/i18n";
+import { useAurora } from "@/lib/corpus/runtime";
 import type { ResumeData } from "@/lib/cv/resume";
 import {
   TEMPLATE_TAGS,
@@ -45,6 +47,7 @@ import {
   type TemplateTag,
 } from "@/lib/cv/templates";
 import { reasonById, type Recommendation, type RecommendReason } from "@/lib/cv/recommend";
+import { TemplateViewer } from "./TemplateViewer";
 import "./TemplateGallery.css";
 
 // ── Motor de la miniatura ────────────────────────────────────────────────────
@@ -54,28 +57,45 @@ import "./TemplateGallery.css";
 const THUMB_W = 420;
 /** Tope de densidad: por encima de 1.5 el PNG pesa el doble y no se nota. */
 const DPR_MAX = 1.5;
+/** Ancho de rasterizado del VISOR, en px CSS. La hoja se muestra a ~860px y el
+ *  zoom llega a ×2: con 1100px (por el DPR, hasta ×2) la letra aguanta el
+ *  acercamiento sin volver a pedir nada al servidor. */
+const VIEW_W = 1100;
+const VIEW_DPR_MAX = 2;
 /** Cuántos PDF se piden a la vez. El cuello de botella es el render del servidor. */
 const MAX_PARALLEL = 3;
 /** Cuántas miniaturas se guardan (LRU). ~40 páginas rasterizadas es memoria sana. */
 const CACHE_MAX = 40;
+/** Cuántos documentos completos se guardan. Son PNG grandes: seis, no cuarenta. */
+const PAGES_MAX = 6;
 
 /** clave → data-URL de la página 1. Vive fuera de React: sobrevive a cerrar la galería. */
 const CACHE = new Map<string, string>();
+/** clave → TODAS las páginas, a tamaño de lectura (el visor). Caché aparte: la
+ *  miniatura y el documento entero no pesan ni se desalojan igual. */
+const PAGES = new Map<string, string[]>();
 /** clave → motivo del fallo. Un fallo cacheado evita el bucle de reintentos; el
  *  botón "reintentar" lo borra. Los abortos NUNCA entran aquí. */
 const FAILED = new Map<string, string>();
 /** clave → petición en vuelo. Dos tarjetas con la misma clave comparten UNA petición. */
 const INFLIGHT = new Map<string, Promise<string>>();
+const PAGES_INFLIGHT = new Map<string, Promise<string[]>>();
 
-function remember(key: string, url: string): void {
-  CACHE.delete(key);
-  CACHE.set(key, url);
-  while (CACHE.size > CACHE_MAX) {
-    const oldest = CACHE.keys().next();
-    if (oldest.done) break;
-    CACHE.delete(oldest.value);
-  }
+/** LRU genérico: recordar mueve la clave al final y desaloja por el principio. */
+function remembering<T>(store: Map<string, T>, max: number) {
+  return (key: string, value: T): void => {
+    store.delete(key);
+    store.set(key, value);
+    while (store.size > max) {
+      const oldest = store.keys().next();
+      if (oldest.done) break;
+      store.delete(oldest.value);
+    }
+  };
 }
+
+const remember = remembering(CACHE, CACHE_MAX);
+const rememberPages = remembering(PAGES, PAGES_MAX);
 
 // Cola de concurrencia. Sin librería: es una lista de "te toca".
 let running = 0;
@@ -195,8 +215,67 @@ export function docHashFromSig(docSig: string): string {
 }
 
 /**
+ * Los BYTES del PDF de ESTE documento. Mismo endpoint, mismo motor y mismo
+ * contrato que el preview grande y que la descarga: aquí no hay un segundo
+ * renderizador ni una "aproximación".
+ */
+async function fetchPdf(body: unknown, signal: AbortSignal): Promise<Uint8Array> {
+  if (signal.aborted) throw new DOMException("cancelado", "AbortError");
+  const res = await fetch("/api/cv", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    // Los BYTES del PDF (as por defecto): ni la miniatura ni el visor necesitan
+    // el rayos-X, y así el servidor no re-parsea 30 documentos.
+    body: JSON.stringify(body),
+    signal,
+  });
+  if (!res.ok) throw new Error(await readApiError(res));
+  return new Uint8Array(await res.arrayBuffer());
+}
+
+/**
+ * Rasteriza páginas de un PDF a data-URL PNG, en orden. `count` = 0 → todas.
+ * Una sola función para la miniatura y para el visor: si la hoja del visor y la
+ * de la rejilla salieran de dos rasterizadores distintos, un día dejarían de ser
+ * la misma hoja.
+ */
+async function rasterize(
+  bytes: Uint8Array,
+  cssWidth: number,
+  dprMax: number,
+  count: number,
+): Promise<string[]> {
+  const lib = await loadPdfjs();
+  const doc = await lib.getDocument({ data: bytes }).promise;
+  try {
+    const total = count > 0 ? Math.min(count, doc.numPages) : doc.numPages;
+    const dpr = Math.min(dprMax, globalThis.devicePixelRatio || 1);
+    const out: string[] = [];
+    for (let n = 1; n <= total; n += 1) {
+      const page = await doc.getPage(n);
+      const unit = page.getViewport({ scale: 1 });
+      const viewport = page.getViewport({ scale: (cssWidth * dpr) / unit.width });
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.max(1, Math.round(viewport.width));
+      canvas.height = Math.max(1, Math.round(viewport.height));
+      // pdf.js pinta el fondo blanco del papel por sí mismo (background por
+      // defecto #ffffff): el canvas queda idéntico a la hoja.
+      await page.render({ canvas, viewport }).promise;
+      out.push(canvas.toDataURL("image/png"));
+      // Soltar el bitmap: a 2200px una página son ~27MB en memoria de vídeo, y
+      // el data-URL ya está fuera. Sin esto, hojear diez plantillas se nota.
+      canvas.width = 0;
+      canvas.height = 0;
+    }
+    return out;
+  } finally {
+    void doc.destroy();
+  }
+}
+
+/**
  * Pide el PDF de ESTA plantilla con ESTOS datos y devuelve la página 1 como
- * data-URL. Mismo endpoint, mismo motor, mismo contrato que el preview grande.
+ * data-URL.
  */
 async function renderThumb(
   key: string,
@@ -211,37 +290,11 @@ async function renderThumb(
   const job = (async () => {
     await acquire();
     try {
-      if (signal.aborted) throw new DOMException("cancelado", "AbortError");
-      const res = await fetch("/api/cv", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        // Los BYTES del PDF (as por defecto): la miniatura no necesita el rayos-X
-        // ni el conteo de páginas, y así el servidor no re-parsea 30 documentos.
-        body: JSON.stringify(body),
-        signal,
-      });
-      if (!res.ok) throw new Error(await readApiError(res));
-      const bytes = new Uint8Array(await res.arrayBuffer());
-
-      const lib = await loadPdfjs();
-      const doc = await lib.getDocument({ data: bytes }).promise;
-      try {
-        const page = await doc.getPage(1);
-        const dpr = Math.min(DPR_MAX, globalThis.devicePixelRatio || 1);
-        const unit = page.getViewport({ scale: 1 });
-        const viewport = page.getViewport({ scale: (THUMB_W * dpr) / unit.width });
-        const canvas = document.createElement("canvas");
-        canvas.width = Math.max(1, Math.round(viewport.width));
-        canvas.height = Math.max(1, Math.round(viewport.height));
-        // pdf.js pinta el fondo blanco del papel por sí mismo (background por
-        // defecto #ffffff): el canvas queda idéntico a la hoja.
-        await page.render({ canvas, viewport }).promise;
-        const url = canvas.toDataURL("image/png");
-        remember(key, url);
-        return url;
-      } finally {
-        void doc.destroy();
-      }
+      const bytes = await fetchPdf(body, signal);
+      const [url] = await rasterize(bytes, THUMB_W, DPR_MAX, 1);
+      if (!url) throw new Error("el PDF salió sin páginas");
+      remember(key, url);
+      return url;
     } finally {
       release();
       INFLIGHT.delete(key);
@@ -249,6 +302,38 @@ async function renderThumb(
   })();
 
   INFLIGHT.set(key, job);
+  return job;
+}
+
+/**
+ * TODAS las páginas del documento, a tamaño de lectura. Es lo que consume el
+ * visor: el MISMO pipeline de la miniatura (misma cola, misma dedupe, mismo
+ * endpoint), solo que sin cortar en la página 1 y a más resolución.
+ */
+async function renderDocPages(
+  key: string,
+  body: unknown,
+  signal: AbortSignal,
+): Promise<string[]> {
+  const hit = PAGES.get(key);
+  if (hit) return hit;
+  const flying = PAGES_INFLIGHT.get(key);
+  if (flying) return flying;
+
+  const job = (async () => {
+    await acquire();
+    try {
+      const bytes = await fetchPdf(body, signal);
+      const urls = await rasterize(bytes, VIEW_W, VIEW_DPR_MAX, 0);
+      if (urls.length) rememberPages(key, urls);
+      return urls;
+    } finally {
+      release();
+      PAGES_INFLIGHT.delete(key);
+    }
+  })();
+
+  PAGES_INFLIGHT.set(key, job);
   return job;
 }
 
@@ -463,6 +548,30 @@ export function TemplateThumb({
   );
 }
 
+// ── Atmósfera ────────────────────────────────────────────────────────────────
+
+/**
+ * La aurora, SOLO mientras se hojea. El editor es un MURO y no la monta: ahí se
+ * trabaja. La galería y el visor son otra cosa —se pasan páginas, se mira— y ahí
+ * la atmósfera es información: dice «esto no es la mesa de trabajo».
+ *
+ * Al cerrar se DUERME el shader (`pause`), no se desmonta: el runtime vanilla no
+ * sabe desmontar, y dejar un WebGL corriendo detrás de un muro opaco sería pagar
+ * una animación que nadie ve. Con prefers-reduced-motion el runtime ya cae al
+ * fallback estático y pause/resume no hacen nada: misma atmósfera, cero movimiento.
+ *
+ * (El componente se monta y desmonta con el diálogo, por eso los hooks pueden
+ * vivir dentro sin condicionales.)
+ */
+function Atmosphere() {
+  useAurora("calm");
+  useEffect(() => {
+    window.CorpusAurora?.resume("corpus-hojeo");
+    return () => window.CorpusAurora?.pause("corpus-hojeo");
+  }, []);
+  return null;
+}
+
 // ── La galería ───────────────────────────────────────────────────────────────
 
 export interface TemplateGalleryProps {
@@ -510,6 +619,9 @@ export function TemplateGallery({
   const [gama, setGama] = useState<GamaFilter>("all");
   const [onlyRecommended, setOnlyRecommended] = useState(false);
   const [compare, setCompare] = useState<string[]>([]);
+  /** Qué plantilla está AMPLIADA (null = ninguna). Se guarda el id y no el índice:
+   *  el índice caduca en cuanto cambia un filtro; el id no. */
+  const [zoomed, setZoomed] = useState<string | null>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
 
   // ── Generación: una por (apertura × documento). Al cerrar o al cambiar los
@@ -528,25 +640,39 @@ export function TemplateGallery({
   const docHash = useMemo(() => docHashFromSig(docSig), [docSig]);
 
   // Cerrar con Escape y llevar el foco al botón de cerrar al abrir.
+  // Con el visor abierto, el Escape es SUYO: si no, una tecla cerraría las dos
+  // cosas de golpe y se perdería la galería entera por querer salir de una hoja.
+  // (El visor además escucha en captura y detiene la propagación; esta guarda es
+  // la que hace que eso no dependa del orden en que se registraron los oyentes.)
+  const zoomOpen = zoomed !== null;
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
+      if (zoomOpen) return;
       if (e.key === "Escape") {
         e.stopPropagation();
         onClose();
       }
     };
     document.addEventListener("keydown", onKey);
-    const id = requestAnimationFrame(() => closeRef.current?.focus());
-    return () => {
-      document.removeEventListener("keydown", onKey);
-      cancelAnimationFrame(id);
-    };
-  }, [open, onClose]);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [open, onClose, zoomOpen]);
 
-  // Al cerrar, la comparación se limpia: es un estado de sesión, no una preferencia.
+  // El foco entra al abrir, y SOLO al abrir: si esto dependiera del visor, abrir
+  // una hoja ampliada le robaría el foco a su propio diálogo.
   useEffect(() => {
-    if (!open) setCompare([]);
+    if (!open) return;
+    const id = requestAnimationFrame(() => closeRef.current?.focus());
+    return () => cancelAnimationFrame(id);
+  }, [open]);
+
+  // Al cerrar, la comparación y la ampliación se limpian: son estado de sesión,
+  // no preferencias.
+  useEffect(() => {
+    if (!open) {
+      setCompare([]);
+      setZoomed(null);
+    }
   }, [open]);
 
   const whyById = useMemo(() => reasonById(recommendations), [recommendations]);
@@ -595,6 +721,31 @@ export function TemplateGallery({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, generation, recommendations, paletteId, typographyId, docHash]);
 
+  // El documento cambia de IDENTIDAD en cada render del editor pero no de
+  // contenido (docHash es su firma estable). Con un ref, `renderPages` solo se
+  // rehace cuando de verdad cambia algo, y el visor no recarga la hoja por un
+  // render de más.
+  const dataRef = useRef(data);
+  dataRef.current = data;
+
+  /**
+   * El puente galería → visor. El visor NO sabe qué es /api/cv ni qué es pdf.js:
+   * pide "las páginas de esta plantilla" y aquí se le dan, con el mismo pipeline
+   * (misma cola, misma dedupe, misma clave) que la miniatura. Un solo motor.
+   */
+  const renderPages = useCallback(
+    (templateId: string): Promise<string[]> => {
+      const signal = generation?.signal;
+      if (!signal) return Promise.reject(new DOMException("cancelado", "AbortError"));
+      return renderDocPages(
+        thumbKey(templateId, paletteId, typographyId, docHash),
+        bodyFor(dataRef.current, templateId, paletteId, typographyId),
+        signal,
+      );
+    },
+    [generation, paletteId, typographyId, docHash],
+  );
+
   const toggleTag = useCallback((tag: TemplateTag) => {
     setTags((prev) => (prev.includes(tag) ? prev.filter((x) => x !== tag) : [...prev, tag]));
   }, []);
@@ -622,14 +773,25 @@ export function TemplateGallery({
     .map((id) => templates.find((tpl) => tpl.id === id))
     .filter((tpl): tpl is CvTemplate => !!tpl);
 
-  return (
+  // El visor hojea LA MISMA lista que se está viendo (filtros y orden incluidos):
+  // las flechas recorren lo que hay en pantalla, no un catálogo paralelo. Si la
+  // ampliada ya no está en la lista, el visor simplemente no se monta.
+  const zoomAt = zoomed ? visible.findIndex((tpl) => tpl.id === zoomed) : -1;
+
+  const ui = (
     <div className="tg-veil" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
+      <Atmosphere />
       <div
         className="tg-panel c-panel"
         role="dialog"
         aria-modal="true"
         aria-label={t("editor.gal_title")}
         data-screen-label="galeria-plantillas"
+        // Con el visor delante, la galería queda INERTE: fuera del recorrido del
+        // tabulador y fuera del árbol de accesibilidad. Es lo que evita que un
+        // lector de pantalla siga leyendo treinta tarjetas por detrás de la hoja
+        // que se está mirando.
+        inert={zoomOpen}
       >
         <header className="tg-head">
           <span className="t-overline">{t("editor.gal_title")}</span>
@@ -790,6 +952,7 @@ export function TemplateGallery({
                       typographyId={typographyId}
                       signal={generation?.signal ?? null}
                       onPick={onPickTemplate}
+                      onZoom={setZoomed}
                     />
                     <div className="tg-meta">
                       {why && <p className="tg-why">★ {sayReason(why)}</p>}
@@ -827,8 +990,34 @@ export function TemplateGallery({
 
         <footer className="tg-foot">{t("editor.gal_foot")}</footer>
       </div>
+
+      {/* El visor: la misma hoja, a tamaño de lectura. Va DENTRO del velo de la
+          galería (que ya es una capa de superposición), así se apila encima sin
+          pelearse por el z-index con nada del resto de la aplicación. */}
+      {zoomAt >= 0 && (
+        <TemplateViewer
+          templates={visible}
+          index={zoomAt}
+          onIndex={(i) => setZoomed(visible[i]?.id ?? null)}
+          onClose={() => setZoomed(null)}
+          onUse={(id) => {
+            onPickTemplate(id);
+            // Se aplica y se vuelve a la rejilla: la galería sigue abierta por si
+            // la decisión no era la definitiva.
+            setZoomed(null);
+          }}
+          activeTemplateId={activeTemplateId}
+          renderPages={renderPages}
+        />
+      )}
     </div>
   );
+
+  // Al BODY. La galería vivía dentro de la pantalla del editor, que es un muro
+  // opaco con su propio contexto de apilamiento: desde ahí, la aurora (que el
+  // runtime cuelga del body) no podía verse nunca por detrás del velo. Sacado al
+  // body, el orden es el que dice el sistema: aurora · página · velo.
+  return typeof document === "undefined" ? ui : createPortal(ui, document.body);
 }
 
 /**
@@ -849,6 +1038,7 @@ function TplCard({
   typographyId,
   signal,
   onPick,
+  onZoom,
 }: {
   tpl: CvTemplate;
   active: boolean;
@@ -858,6 +1048,7 @@ function TplCard({
   typographyId: string;
   signal: AbortSignal | null;
   onPick: (id: string) => void;
+  onZoom: (id: string) => void;
 }) {
   const t = useT();
   const [ref, seen] = useSeen<HTMLDivElement>();
@@ -877,6 +1068,26 @@ function TplCard({
           }}
         />
         {active && <span className="tg-badge">{t("editor.gal_active")}</span>}
+        {/* AMPLIAR. Antes esto era Ctrl+rueda sobre un PNG de 420px: se veía más
+            grande y peor. Va por encima del ::after que hace clicable la tarjeta
+            (z-index), porque su trabajo NO es elegir la plantilla: es leerla. */}
+        <button
+          type="button"
+          className="tg-zoom"
+          aria-haspopup="dialog"
+          aria-label={t("editor.gal_zoomAria").replace("{name}", tpl.name)}
+          title={t("editor.gal_zoom")}
+          onClick={(e) => {
+            e.stopPropagation();
+            onZoom(tpl.id);
+          }}
+        >
+          <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true" focusable="false">
+            <circle cx="7" cy="7" r="4.3" fill="none" stroke="currentColor" strokeWidth="1.4" />
+            <path d="M10.4 10.4 13.9 13.9" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+            <path d="M5.1 7h3.8M7 5.1v3.8" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" />
+          </svg>
+        </button>
       </div>
       <button type="button" className="tg-pick" aria-pressed={active} onClick={() => onPick(tpl.id)}>
         <span className="tg-name">

@@ -85,11 +85,57 @@ describe("catálogo de plantillas · qué hay dentro", () => {
     expect(primeraVisual).toBeGreaterThan(ultimaAts);
   });
 
-  it("5 · gama ATS: UNA columna, sin barra lateral y sin hueco de foto — sin excepciones", () => {
+  it("5 · gama ATS: UNA columna y sin barra lateral — sin excepciones", () => {
     for (const t of ATS) {
       expect(t.layout.columns, `${t.id}: la gama ATS es de una columna`).toBe(1);
       expect(t.layout.sidebar, `${t.id}: la gama ATS no lleva barra lateral`).toBe(false);
-      expect(t.layout.photo, `${t.id}: la gama ATS no reserva hueco de foto`).toBe(false);
+    }
+  });
+
+  /**
+   * LA FOTO, con dos candados en vez de una prohibición.
+   *
+   * Antes esto decía "la gama ATS no reserva hueco de foto", y era una regla de
+   * brocha gorda: lo que rompe el parseo no es una imagen, es una imagen que
+   * convierte la cabecera en dos columnas y fragmenta el contacto. Una foto en la
+   * esquina superior derecha, emitida DESPUÉS del texto que la acompaña, no toca el
+   * orden de lectura — y eso no se argumenta, se comprueba: el round-trip
+   * parametrizado renderiza cada plantilla ATS y exige su texto plano en orden, y
+   * hay un bloque que lo repite con la foto puesta de verdad.
+   *
+   * Lo que sí se exige aquí es lo que no puede comprobar un PDF: que la foto sea una
+   * ELECCIÓN y no una imposición. Cada plantilla con hueco tiene su gemela sin él, y
+   * la gemela no deja un vacío donde iba la imagen: recompone la cabecera.
+   */
+  it("5b · toda plantilla ATS con hueco de foto tiene su GEMELA sin foto, y al revés", () => {
+    const ids = new Set(ATS.map((t) => t.id));
+    const conFoto = ATS.filter((t) => t.layout.photo);
+    expect(conFoto.length, "no hay ni una plantilla con hueco de foto").toBeGreaterThanOrEqual(4);
+    for (const t of conFoto) {
+      expect(t.id, `${t.id}: una plantilla con foto se nombra con el sufijo -foto`).toMatch(/-foto$/);
+      const gemela = t.id.replace(/-foto$/, "");
+      expect(ids, `${t.id} no tiene gemela sin foto (falta ${gemela})`).toContain(gemela);
+      const g = getTemplate(gemela);
+      expect(g.layout.photo, `${gemela} debería ser la versión SIN foto`).toBe(false);
+      // La gemela COMPENSA el hueco: no puede limitarse a borrar la imagen y dejar
+      // media cabecera vacía. Tiene que recomponerla — repartiendo el contacto a lo
+      // ancho, alineándolo al otro lado o cerrando la cabecera con un filete.
+      const [a, b] = [resolveMetrics(t.metrics), resolveMetrics(g.metrics)];
+      const compensa =
+        a.contactStyle !== b.contactStyle || a.contactAlign !== b.contactAlign || a.nameRule !== b.nameRule;
+      expect(compensa, `${gemela}: quita la foto y no recompone la cabecera (hueco evidente)`).toBe(true);
+    }
+    for (const t of ATS) {
+      if (t.id.endsWith("-foto")) expect(t.layout.photo, `${t.id} se llama -foto y no reserva hueco`).toBe(true);
+    }
+  });
+
+  it("5c · la foto CIRCULAR no es un eje de la gama ATS (ni la foto manda la maqueta)", () => {
+    for (const t of ATS) {
+      const m = resolveMetrics(t.metrics);
+      expect(m.photoShape, `${t.id}: la foto circular se queda en la gama visual`).not.toBe("circle");
+      // Y solo hay una posición posible: junto al nombre, arriba a la derecha.
+      expect(["none", "header-right"]).toContain(m.photoSlot);
     }
   });
 
@@ -123,8 +169,10 @@ describe("catálogo de plantillas · qué hay dentro", () => {
         m.upperHeadings, m.headingSize, m.headingNumbered,
         `${m.headingRule}/${m.headingRuleStyle}/${m.headingRulePosition}`,
         // composición
-        m.nameCase, m.nameAlign, m.nameRule, m.contactStyle, m.contactLabels,
+        m.nameCase, m.nameAlign, m.nameRule, m.contactStyle, m.contactLabels, m.contactAlign,
         m.dateStyle, m.bulletMarker, m.skillStyle, m.sectionOrder.join(">"),
+        // esqueleto y hueco de foto
+        `${m.skeleton}/${m.hangingWidth}`, m.photoSlot, m.headingBand,
         // uso del acento
         `${m.accentName}/${m.accentHeadings}`,
       ];
@@ -148,8 +196,9 @@ describe("catálogo de plantillas · qué hay dentro", () => {
       return JSON.stringify([
         m.bodySize, m.bodyLeading, m.sectionGap, m.entryGap, m.pageMarginV, m.pageMarginH,
         m.upperHeadings, m.headingNumbered, m.headingRule, m.headingRuleStyle, m.headingRulePosition,
-        m.nameCase, m.nameAlign, m.nameRule, m.contactStyle, m.contactLabels,
+        m.headingBand, m.nameCase, m.nameAlign, m.nameRule, m.contactStyle, m.contactLabels, m.contactAlign,
         m.dateStyle, m.bulletMarker, m.skillStyle, m.sectionOrder.join(">"),
+        m.skeleton, m.hangingWidth, m.photoSlot,
         m.accentName, m.accentHeadings,
       ]);
     };
@@ -170,8 +219,13 @@ describe("catálogo de plantillas · qué hay dentro", () => {
       new Set(["inline", "split", "stacked"]),
     );
     expect(usados((m) => m.dateStyle), "las fechas caen siempre en el mismo sitio").toEqual(
-      new Set(["right", "inline", "own-line"]),
+      new Set(["right", "inline", "own-line", "hanging"]),
     );
+    expect(usados((m) => m.skeleton), "solo se usa un esqueleto").toEqual(new Set(["flat", "hanging"]));
+    expect(usados((m) => m.contactAlign).size, "el contacto se alinea siempre igual").toBeGreaterThanOrEqual(3);
+    // La columna colgante no puede existir en un solo ancho: el ancho ES la medida.
+    const anchos = new Set(ms.filter((m) => m.skeleton === "hanging").map((m) => m.hangingWidth));
+    expect(anchos.size, "todas las columnas colgantes miden lo mismo").toBeGreaterThanOrEqual(3);
     expect(usados((m) => m.skillStyle), "las habilidades se agrupan de una sola manera").toEqual(
       new Set(["grouped", "inline", "paired"]),
     );
@@ -190,6 +244,12 @@ describe("catálogo de plantillas · qué hay dentro", () => {
       ["contactLabels:false", (m: (typeof ms)[number]) => !m.contactLabels],
       ["upperHeadings:false", (m: (typeof ms)[number]) => !m.upperHeadings],
       ["sin acento", (m: (typeof ms)[number]) => !m.accentName && !m.accentHeadings],
+      ["headingBand", (m: (typeof ms)[number]) => m.headingBand],
+      ["photoSlot", (m: (typeof ms)[number]) => m.photoSlot !== "none"],
+      ["photoBorder", (m: (typeof ms)[number]) => m.photoBorder],
+      ["photoShape:rounded", (m: (typeof ms)[number]) => m.photoShape === "rounded"],
+      ["contactAlign:right", (m: (typeof ms)[number]) => m.contactAlign === "right"],
+      ["contactAlign:center", (m: (typeof ms)[number]) => m.contactAlign === "center"],
     ] as const) {
       expect(ms.some(f), `el eje "${eje}" no lo usa ninguna plantilla`).toBe(true);
     }
@@ -229,6 +289,111 @@ describe("catálogo de plantillas · qué hay dentro", () => {
     }
     for (const id of ATS.filter((t) => t.id !== "ats-editorial").map((t) => t.id)) {
       expect(gap("ats-editorial"), `Editorial no tiene más aire que ${id}`).toBeGreaterThan(gap(id));
+    }
+  });
+});
+
+/**
+ * EL NÚCLEO NO NEGOCIABLE DE LA GAMA ATS.
+ *
+ * Todo lo demás de este archivo comprueba que el catálogo tiene VARIEDAD. Este
+ * bloque comprueba lo contrario: que por debajo de la variedad hay un suelo que
+ * ninguna plantilla puede perforar, por bonita que quede. Es la diferencia entre un
+ * sistema de diseño y una colección de gustos.
+ *
+ * Los números no son opinión: 45-75 caracteres es el óptimo de lectura y 80 el
+ * techo accesible (la medida real la mide tests/medida-linea.test.ts sobre el PDF);
+ * 10-11 pt de cuerpo, 1,15-1,3 de interlineado y 20 mm de margen son la práctica
+ * tipográfica de un documento impreso que además se lee en pantalla.
+ */
+describe("catálogo de plantillas · el NÚCLEO no negociable de la gama ATS", () => {
+  for (const t of ATS) {
+    const m = resolveMetrics(t.metrics);
+    const ty = resolveTypography(t.typography);
+
+    describe(`${t.id} · ${t.name}`, () => {
+      it("a · una columna, contacto en el cuerpo, sin barra lateral", () => {
+        expect(t.layout.columns).toBe(1);
+        expect(t.layout.sidebar).toBe(false);
+        // Rótulos ESTÁNDAR: el texto del rótulo sale de los datos del usuario
+        // (data.headings), nunca de la plantilla. Una plantilla que pudiera
+        // renombrar "Experiencia" a "Trayectoria" rompería la segmentación del
+        // parser, así que el contrato simplemente no le da esa capacidad: lo único
+        // que puede hacer con el rótulo es numerarlo o quitarlo.
+        expect(m.headingLabel, `${t.id}: la gama ATS SIEMPRE rotula sus secciones`).toBe(true);
+      });
+
+      it("b · cuerpo 10-11 pt, interlineado 1,15-1,3 y 12-16 pt entre secciones", () => {
+        expect(m.bodySize, `cuerpo de ${m.bodySize} pt`).toBeGreaterThanOrEqual(10);
+        expect(m.bodySize, `cuerpo de ${m.bodySize} pt`).toBeLessThanOrEqual(11);
+        expect(m.bodyLeading, `interlineado ${m.bodyLeading}`).toBeGreaterThanOrEqual(1.15);
+        expect(m.bodyLeading, `interlineado ${m.bodyLeading}`).toBeLessThanOrEqual(1.3);
+        expect(m.sectionGap, `${m.sectionGap} pt entre secciones`).toBeGreaterThanOrEqual(12);
+        expect(m.sectionGap, `${m.sectionGap} pt entre secciones`).toBeLessThanOrEqual(16);
+      });
+
+      it("c · márgenes de 20 mm o más, en las dos direcciones", () => {
+        for (const [lado, v] of [["vertical", m.pageMarginV], ["horizontal", m.pageMarginH]] as const) {
+          expect(v, `${t.id}: margen ${lado} sin unidad mm`).toMatch(/^\d+(\.\d+)?mm$/);
+          expect(parseFloat(v), `${t.id}: margen ${lado} de ${v}`).toBeGreaterThanOrEqual(20);
+        }
+      });
+
+      it("d · máximo DOS familias tipográficas", () => {
+        const familias = new Set([ty.display, ty.body, ty.mono].filter(Boolean));
+        expect(familias.size, `${t.id} usa ${[...familias].join(" + ")}`).toBeLessThanOrEqual(2);
+      });
+
+      it("e · sin monoespaciada: ni de titular, ni en el cuerpo, ni en las cifras", () => {
+        // El fundamento es probable, no seguro (la encuesta que hunde a las mono en
+        // el ranking la pagó un marketplace de tipografías y mide preferencia
+        // declarada, no conducta). Pero el coste es asimétrico: si acierta, la mono
+        // penaliza; si falla, no usarla no cuesta nada. Sigue en el catálogo como
+        // pareja elegible — lo que no hace es venir puesta.
+        for (const fam of [ty.display, ty.body, ty.headingFace, ty.figuresFace]) {
+          expect(fam, `${t.id}: monoespaciada por defecto en la gama ATS`).not.toMatch(/Mono/);
+        }
+      });
+
+      it("f · un solo acento, y solo en los rótulos y los filetes", () => {
+        expect(m.accentName, `${t.id}: el nombre no va en el acento`).toBe(false);
+      });
+    });
+  }
+
+  it("z · la NUMERACIÓN de secciones es minoritaria (no hay evidencia que la sostenga)", () => {
+    // Cero evidencia a favor y ruido añadido al parser. Se queda como opción de un
+    // par de plantillas; el día que sea el eje protagonista del catálogo, falla.
+    const numeradas = ATS.filter((t) => resolveMetrics(t.metrics).headingNumbered);
+    expect(numeradas.length, "nadie numera: el eje sobra del contrato").toBeGreaterThanOrEqual(1);
+    expect(numeradas.length / ATS.length, "la numeración se ha vuelto el eje protagonista").toBeLessThanOrEqual(0.15);
+  });
+
+  it("z2 · la MONOESPACIADA sigue existiendo como opción del catálogo, sin venir puesta", () => {
+    // "Minoritaria" no es "borrada": quien la quiera la elige desde el selector de
+    // parejas (resolveTemplate la intercambia sobre cualquier plantilla).
+    const mono = listTypographies().filter((ty) => [ty.display, ty.body, ty.mono].some((f) => f?.includes("Mono")));
+    expect(mono.length, "la mono desapareció del catálogo: eso es censura, no criterio").toBeGreaterThanOrEqual(1);
+    expect(mono.length / listTypographies().length, "la mono ya no es minoritaria").toBeLessThanOrEqual(0.35);
+  });
+
+  it("z3 · sin emojis en ningún texto que llegue al documento o al selector", () => {
+    const emoji = /[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}\u{FE0F}]/u;
+    for (const t of TODAS) {
+      expect(emoji.test(t.name), `${t.id}: emoji en el nombre`).toBe(false);
+      expect(emoji.test(t.description), `${t.id}: emoji en la descripción`).toBe(false);
+      expect(emoji.test(t.warning ?? ""), `${t.id}: emoji en el aviso`).toBe(false);
+    }
+  });
+
+  it("z4 · el rótulo sobre BANDA tintada sigue pasando AA sobre su propio fondo", () => {
+    // Una banda de color detrás del rótulo es el modo más fácil de perder contraste
+    // sin enterarse: el ratio deja de medirse contra el papel y pasa a medirse contra
+    // la banda. Por eso el render pone el rótulo con banda en TINTA, no en el acento.
+    for (const t of TODAS) {
+      if (!resolveMetrics(t.metrics).headingBand) continue;
+      const r = contrastRatio(t.palette.ink, t.palette.hair);
+      expect(meetsAA(r), `${t.id}: rótulo sobre banda en ${ratioText(r)}`).toBe(true);
     }
   });
 });
@@ -467,22 +632,57 @@ describe("catálogo de plantillas · resolución (nadie se queda sin CV)", () =>
     expect(resolveTemplate({}).id).toBe(DEFAULT_TEMPLATE_ID);
   });
 
-  it("6 · resolveMetrics rellena los defaults del documento clásico", () => {
-    // Una plantilla que solo declare lo obligatorio sale como el CV de siempre.
+  it("6 · resolveMetrics rellena los defaults, y son los del NÚCLEO de legibilidad", () => {
+    // Los valores por defecto no son "lo que había": son el mínimo del núcleo, para
+    // que una plantilla que solo declare lo obligatorio nazca ya conforme en vez de
+    // nacer fuera y tener que acordarse de arreglarlo.
     const m = resolveMetrics({
-      nameSize: 22, bodySize: 10, bodyLeading: 1.45, sectionGap: 13,
+      nameSize: 21, bodySize: 10.5, bodyLeading: 1.25, sectionGap: 14,
       upperHeadings: true, headingRule: true,
     });
-    expect(m.pageMarginV).toBe("18mm");
-    expect(m.pageMarginH).toBe("20mm");
+    expect(m.pageMarginV).toBe("20mm");
+    expect(m.pageMarginH).toBe("22mm");
     expect(m.headingSize).toBe(10.5);
     expect(m.headingWeight).toBe(700);
     expect(m.entryTitleSize).toBe(11);
     expect(m.bulletIndent).toBe(11);
     expect(m.bulletHang).toBe(7.5);
-    expect(m.accentName).toBe(true);
+    // El acento vive en rótulos y filetes; el nombre se sostiene por tamaño y peso.
+    expect(m.accentName).toBe(false);
     expect(m.accentHeadings).toBe(true);
-    // …y la clásica del catálogo declara exactamente esos mismos números.
-    expect(resolveMetrics(getTemplate("ats-clasica").metrics)).toEqual(m);
+    // El esqueleto por defecto es el PLANO: la columna colgante es un eje opcional,
+    // no un cambio de comportamiento por la puerta de atrás.
+    expect(m.skeleton).toBe("flat");
+    expect(m.dateStyle).toBe("right");
+    expect(m.photoSlot).toBe("none");
+    expect(m.contactAlign).toBe("inherit");
+    expect(m.headingBand).toBe(false);
+
+    // …y la clásica del catálogo es EXACTAMENTE esos defaults más UNA decisión: el
+    // margen horizontal que le baja la medida de 96 caracteres a 83. Es la plantilla
+    // que menos decisiones toma del catálogo, y la única que toma es la de la medida.
+    //
+    // No cuelga la columna, que sería el arreglo más elegante, por un motivo que no
+    // es de diseño: es la plantilla POR DEFECTO y su texto plano está atado byte a
+    // byte al golden, que escribe las fechas pegadas al cargo. La columna colgante
+    // las emite aparte —tiene que hacerlo, es el orden en que se leen— así que
+    // adoptarla aquí habría obligado a regenerar el golden.
+    expect(resolveMetrics(getTemplate("ats-clasica").metrics)).toEqual({ ...m, pageMarginH: "32mm" });
+  });
+
+  it("7 · el esqueleto colgante IMPONE dónde van las fechas (una sola fuente de verdad)", () => {
+    // Si `dateStyle` se pudiera declarar por libre junto a `skeleton: "hanging"`, el
+    // PDF y el texto plano podrían deducir cosas distintas y el round-trip compararía
+    // dos documentos. Aquí se fija que el esqueleto gana siempre.
+    const colgante = resolveMetrics({
+      nameSize: 21, bodySize: 10.5, bodyLeading: 1.25, sectionGap: 14,
+      upperHeadings: true, headingRule: true,
+      skeleton: "hanging", dateStyle: "inline", // se declara y se ignora, a propósito
+    });
+    expect(colgante.dateStyle).toBe("hanging");
+    for (const t of TODAS) {
+      const m = resolveMetrics(t.metrics);
+      expect(m.skeleton === "hanging", `${t.id}: esqueleto y fechas descuadrados`).toBe(m.dateStyle === "hanging");
+    }
   });
 });

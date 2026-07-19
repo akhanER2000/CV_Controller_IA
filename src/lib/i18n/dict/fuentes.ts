@@ -135,6 +135,14 @@ export const fuentes = {
       "Tu CV, una carta, un certificado. Lo leemos y proponemos items al staging — nada entra al master sin tu visto bueno.",
     "fuentes.card.files.button": "Elegir PDF o DOCX",
 
+    // Zonas de arrastre (el mismo gesto del volcado, componente DropZone)
+    "fuentes.drop.files.bold": "Arrastra aquí tu PDF o DOCX",
+    "fuentes.drop.files.rest": " · o pulsa para elegirlo",
+    "fuentes.drop.images.bold": "Arrastra aquí tus capturas",
+    "fuentes.drop.images.rest": " · o pulsa para elegirlas",
+    "fuentes.drop.li.bold": "Arrastra aquí el PDF de LinkedIn o tus capturas",
+    "fuentes.drop.li.rest": " · o pulsa para elegirlos",
+
     // Tarjeta capturas / imágenes
     "fuentes.card.images.name": "capturas · imágenes",
     "fuentes.card.images.tag": "transcritas literal",
@@ -319,6 +327,14 @@ export const fuentes = {
     "fuentes.card.files.body":
       "Your resume, a cover letter, a certificate. We read it and propose items to staging — nothing enters your master without your say-so.",
     "fuentes.card.files.button": "Choose PDF or DOCX",
+
+    // Drop zones (the same gesture as the dump box, DropZone component)
+    "fuentes.drop.files.bold": "Drop your PDF or DOCX here",
+    "fuentes.drop.files.rest": " · or click to choose it",
+    "fuentes.drop.images.bold": "Drop your screenshots here",
+    "fuentes.drop.images.rest": " · or click to choose them",
+    "fuentes.drop.li.bold": "Drop your LinkedIn PDF or screenshots here",
+    "fuentes.drop.li.rest": " · or click to choose them",
 
     // Screenshots / images card
     "fuentes.card.images.name": "screenshots · images",

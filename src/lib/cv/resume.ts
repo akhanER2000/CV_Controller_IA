@@ -388,13 +388,24 @@ export function skillLines(skills: ResumeSkill[], m: ResolvedMetrics): ResumeSki
   }
 }
 
-/** Las líneas de una entrada de experiencia/formación según el eje de fechas. */
+/**
+ * Las líneas de una entrada de experiencia/formación según el eje de fechas.
+ *
+ * El caso "hanging" (columna colgante) es el único que ADELANTA algo: las fechas y
+ * la organización van en la columna de la izquierda, así que el PDF las emite antes
+ * que el cargo. Aquí se escribe ese mismo orden a propósito — el texto plano es el
+ * rayos-X de ESTE documento, y si el PDF leyera "mar 2022 – hoy / Santiago, Chile /
+ * Backend Developer" y el rayos-X dijera otra cosa, la pantalla "cómo lo lee el ATS"
+ * estaría enseñando un documento que no existe.
+ */
 export function entryLines(titulo: string, fechas: string, pie: string, m: ResolvedMetrics): string[] {
   switch (m.dateStyle) {
     case "inline":
       return [`${titulo}${CX.mid}${fechas}`, pie];
     case "own-line":
       return [titulo, fechas, pie];
+    case "hanging":
+      return [fechas, pie, titulo];
     default:
       return [`${titulo}${CX.space}${fechas}`, pie];
   }

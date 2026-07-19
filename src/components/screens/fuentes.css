@@ -1,6 +1,12 @@
-/* ── fuentes.html — MURO. Inventario de fuentes vivas; NO monta la aurora. ──
+/* ── fuentes.html — VENTANA. Inventario de fuentes vivas; monta la aurora. ──
    PORTE LITERAL del 2º <style> de corpus-design/04-pantallas/fuentes.html
-   (fuera de data-corpus-system). Sin @keyframes propios. Clases sin renombrar. */
+   (fuera de data-corpus-system). Sin @keyframes propios. Clases sin renombrar.
+
+   Cambio de gramática: Fuentes pasó de muro a ventana (aquí se DECIDE por qué
+   vía entra el material, no se lee trabajo denso). Las tarjetas .fu-card llevan
+   ahora .c-panel en vez de .c-card, así que sus rellenos internos macizos
+   (var(--surface) opaco) taparían el vidrio: el bloque del final los pasa a
+   translúcidos. Nada de esto toca globals.css. */
 .fu-main{flex:1;padding:30px 0 120px}
 .fu-lead{display:flex;align-items:baseline;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:16px}
 .fu-lead p{color:var(--text-muted);font-size:var(--fs-ui);max-width:62ch}
@@ -34,8 +40,8 @@
 /* linkedin */
 .fu-li p{padding:2px 22px 14px;color:var(--text-muted);font-size:13px;line-height:1.65;max-width:70ch}
 .fu-li .vias{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:var(--border);border-top:1px solid var(--border)}
-.fu-li .vias>a{background:var(--surface);padding:13px 18px;font:400 var(--fs-data)/1.6 var(--font-sans);color:var(--text-muted);text-decoration:none}
-.fu-li .vias>a:hover{background:var(--surface-elevated);color:var(--text)}
+.fu-li .vias>a{background:color-mix(in srgb,var(--surface) 58%,transparent);padding:13px 18px;font:400 var(--fs-data)/1.6 var(--font-sans);color:var(--text-muted);text-decoration:none}
+.fu-li .vias>a:hover{background:color-mix(in srgb,var(--surface-elevated) 72%,transparent);color:var(--text)}
 .fu-li .vias b{display:block;color:var(--text);font-weight:500;margin-bottom:3px}
 .fu-add{margin-top:22px;display:flex;gap:10px;flex-wrap:wrap}
 .fu-add input{max-width:420px}
@@ -61,9 +67,23 @@
 .fu-confirm{padding:12px 22px 16px;border-top:1px dashed var(--border);display:flex;flex-direction:column;gap:10px;
   font:400 13px/1.6 var(--font-sans);color:var(--text-muted)}
 .fu-confirm-acts{display:flex;gap:8px;flex-wrap:wrap}
+/* Zona de arrastre compartida (components/DropZone) dentro de una tarjeta:
+   solo COLOCACIÓN — el aspecto del gesto vive en DropZone.css. */
+.dz.fu-drop{margin:0 22px 16px;width:auto}
+
+/* ── El vidrio por dentro ────────────────────────────────────────────────────
+   .c-panel es translúcido; cualquier relleno macizo dentro lo convierte otra
+   vez en tarjeta opaca. Estos son los rellenos de Fuentes, en su versión
+   ahumada. Las líneas de 1px del grid siguen viéndose porque la celda y el
+   hueco tienen ahora tonos distintos, no porque una sea opaca. */
+.fu-card .fu-facts>div{background:color-mix(in srgb,var(--surface) 58%,transparent)}
+.fu-card .fu-repos{background:color-mix(in srgb,var(--surface-sunken) 62%,transparent)}
+.fu-card .fu-repo:hover{background:color-mix(in srgb,var(--surface) 58%,transparent)}
+.fu-card .c-input{background:color-mix(in srgb,var(--surface-sunken) 70%,transparent)}
+
 /* vías de LinkedIn como botones ejecutables (mismo look que los enlaces .vias>a) */
-.fu-li .vias>button{background:var(--surface);border:0;text-align:left;cursor:pointer;padding:13px 18px;
+.fu-li .vias>button{background:color-mix(in srgb,var(--surface) 58%,transparent);border:0;text-align:left;cursor:pointer;padding:13px 18px;
   font:400 var(--fs-data)/1.6 var(--font-sans);color:var(--text-muted)}
-.fu-li .vias>button:hover:not(:disabled){background:var(--surface-elevated);color:var(--text)}
+.fu-li .vias>button:hover:not(:disabled){background:color-mix(in srgb,var(--surface-elevated) 72%,transparent);color:var(--text)}
 .fu-li .vias>button:disabled{opacity:.55;cursor:default}
 .fu-li .vias>button b{display:block;color:var(--text);font-weight:500;margin-bottom:3px}

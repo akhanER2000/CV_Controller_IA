@@ -32,10 +32,11 @@
 .imp-file .tag{margin-left:auto;color:var(--text-subtle);font-size:10px;letter-spacing:.08em;text-transform:uppercase}
 .imp-file .rm{color:var(--text-subtle);padding:2px 6px;border-radius:4px;line-height:1}
 .imp-file .rm:hover{color:var(--danger);background:var(--danger-quiet)}
-.imp-drop{margin:0 28px 24px;padding:16px;border:1px dashed var(--border-strong);border-radius:var(--radius-sm);
-  text-align:center;font:400 var(--fs-data)/1.6 var(--font-mono);color:var(--text-subtle);cursor:pointer;transition:border-color .14s,color .14s}
-.imp-drop:hover{border-color:var(--border-patina);color:var(--text-muted)}
-.imp-drop b{color:var(--text-muted);font-weight:500}
+/* El ASPECTO de la zona de arrastre ya no vive aquí: se extrajo a
+   components/DropZone.css (.dz) para que Fuentes use el mismo gesto y no una
+   copia parecida. Lo que queda es solo COLOCACIÓN dentro de la caja de volcado
+   — con `width:auto` para que el ancho lo fijen los márgenes, no el 100% de .dz. */
+.dz.imp-drop{margin:0 28px 24px;width:auto}
 /* LinkedIn: el momento de honestidad. Guía, no error. */
 .imp-li{width:100%;margin-top:14px;text-align:left;padding:22px 26px}
 .imp-li h3{font-size:15px;margin-bottom:4px}
@@ -98,7 +99,7 @@
   .imp-main{padding-top:40px}
   .imp-ta{min-height:190px;padding:20px 20px 10px}
   .imp-meta,.imp-detect,.imp-files{padding-inline:20px}
-  .imp-drop{margin-inline:20px}
+  .dz.imp-drop{margin-inline:20px}
   .fin-grid{grid-template-columns:repeat(2,1fr)}
   .ing-count{font-size:56px}
   /* En estrecho manda LA SALIDA: cae el rótulo de paso (y su separador, que si

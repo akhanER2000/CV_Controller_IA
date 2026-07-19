@@ -17,6 +17,7 @@ import {
   bulletMark,
   headingLabelText,
   nameText,
+  photoHeight,
   resolveMetrics,
   resolveTemplate,
   resolveTypography,
@@ -39,10 +40,21 @@ function hrefOf(url: string): string {
  * El documento CV en @react-pdf/renderer v4, según docs/spec/documento-cv.md.
  * Consume directamente el shape de datos-ejemplo.json.
  *
- * Reglas ATS materializadas (spec §8): UNA columna · cero tablas (fechas a la
- * derecha por flex) · contacto en el cuerpo con prefijos de texto "Email:"/"Tel:"
- * · cero iconos · cero fotos · texto seleccionable · viñeta "• " (U+2022, glifo de
- * texto que parsea limpio) · cargo en negrita · un solo acento #1F6E5A.
+ * Reglas ATS materializadas (spec §8): UNA columna · cero tablas · contacto en el
+ * cuerpo con prefijos de texto "Email:"/"Tel:" · cero iconos junto a los rótulos ·
+ * texto seleccionable · viñeta "• " (U+2022, glifo de texto que parsea limpio) ·
+ * cargo en negrita · un solo acento, en rótulos y filetes.
+ *
+ * DOS COSAS QUE PARECEN DOS COLUMNAS Y NO LO SON, y por qué se pueden hacer:
+ *   · la COLUMNA COLGANTE (`skeleton: "hanging"`) — cada ENTRADA es una fila flex
+ *     con las fechas y la organización a la izquierda; la fila lleva wrap={false},
+ *     así que nunca se parte entre páginas, y el content stream sale en el mismo
+ *     orden que escribe entryLines() para el texto plano;
+ *   · la CABECERA CON FOTO (`photoSlot: "header-right"`) — el bloque de nombre y
+ *     contacto va primero y la imagen después, y una imagen no aporta texto.
+ * Las dos están cubiertas por el round-trip, que es lo único que las autoriza: si
+ * el PDF re-parseado dejara de coincidir con su rayos-X, no serían un estilo, serían
+ * una barra lateral disfrazada.
  *
  * TRAMPA 1 — Font.register a NIVEL DE MÓDULO (fuera del componente), una vez.
  * TRAMPA 2 — .ttf, NO .woff2. Se registran las MISMAS .ttf que usa la app
@@ -141,6 +153,24 @@ function stylesFor(tpl: CvTemplate) {
   // para mover los bytes del PDF por defecto, que es justo lo que no puede pasar.
   const centrarCabecera = m.nameAlign === "center" ? ({ textAlign: "center" } as const) : null;
   const centrarRotulo = m.headingAlign === "center" ? ({ textAlign: "center" } as const) : null;
+  // El contacto puede alinearse por su cuenta: «nombre a la izquierda, contacto a la
+  // derecha» es un patrón de cabecera muy común y NO es una segunda columna — son los
+  // mismos párrafos, en el mismo flujo, alineados al otro lado. Por defecto ("inherit")
+  // sigue a la cabecera, que es lo que hacía antes de que este eje existiera.
+  const alinearContacto =
+    m.contactAlign === "inherit"
+      ? centrarCabecera
+      : m.contactAlign === "center"
+        ? ({ textAlign: "center" } as const)
+        : m.contactAlign === "right"
+          ? ({ textAlign: "right" } as const)
+          : null;
+  // Rótulo sobre bloque tintado. El fondo es el gris del FILETE (neutro), no el
+  // acento: sobre el acento el propio rótulo bajaría de AA. Y por eso mismo el
+  // rótulo con banda va en tinta, no en acento — lo comprueba un test de contraste.
+  const banda = m.headingBand
+    ? ({ backgroundColor: p.hair, paddingHorizontal: 5, paddingVertical: 2.5 } as const)
+    : null;
   // El filete completo se dibuja como borde del propio rótulo (así era y así sigue).
   // "partial" y "double" necesitan un elemento aparte: se dibujan como <View>, que no
   // aporta texto y por tanto no toca el orden de lectura.
@@ -175,8 +205,8 @@ function stylesFor(tpl: CvTemplate) {
           fontSize: m.labelSize, lineHeight: 1.3, marginTop: 2, ...centrarCabecera,
         }
       : { fontWeight: 600, fontSize: m.labelSize, lineHeight: 1.3, marginTop: 2, ...centrarCabecera },
-    contact: { fontSize: m.contactSize, lineHeight: 1.5, color: p.muted, marginTop: 5, ...centrarCabecera },
-    contact2: { fontSize: m.contactSize, lineHeight: 1.5, color: p.muted, marginTop: 1, ...centrarCabecera },
+    contact: { fontSize: m.contactSize, lineHeight: 1.5, color: p.muted, marginTop: 5, ...alinearContacto },
+    contact2: { fontSize: m.contactSize, lineHeight: 1.5, color: p.muted, marginTop: 1, ...alinearContacto },
     /** Filete bajo TODA la cabecera (opt-in): separa identidad de contenido. */
     headRule: { paddingBottom: 7, borderBottomWidth: m.headingRuleWidth, borderBottomColor: p.hair },
     // ⚠ SIN letterSpacing: el tracking de imprenta (.h del diseño usa .1em) hace
@@ -195,12 +225,13 @@ function stylesFor(tpl: CvTemplate) {
       fontSize: m.headingSize,
       lineHeight: 1.1,
       textTransform: m.upperHeadings ? "uppercase" : "none",
-      color: headColor,
+      color: banda ? p.ink : headColor,
       marginTop: m.sectionGap,
       marginBottom: ruleGap,
       ...filete,
       ...(m.headingTracking ? { letterSpacing: m.headingTracking } : null),
       ...centrarRotulo,
+      ...banda,
     },
     /** Filete PARCIAL: un trazo corto bajo el rótulo, no una raya de lado a lado. */
     rulePartial: {
@@ -246,8 +277,48 @@ function stylesFor(tpl: CvTemplate) {
       fontSize: body, lineHeight: m.bodyLeading, marginTop: m.bulletGap,
       paddingLeft: m.bulletIndent,
     },
+    // ── COLUMNA COLGANTE ─────────────────────────────────────────────────────
+    // Tres estilos y nada más. `hangRow` es la fila de UNA ENTRADA (nunca la de una
+    // sección entera): con wrap={false} la fila se cierra en sí misma, así que no
+    // hay ninguna fila flex que pueda partirse entre páginas — que es el único modo
+    // en que un esqueleto de dos bloques se estropea de verdad.
+    hangRow: { flexDirection: "row", marginTop: m.entryGap },
+    // El aire va DENTRO de la columna (padding a su derecha): así el contenido
+    // arranca EXACTAMENTE en `hangingWidth` y la sangría de los bloques planos
+    // —resumen, habilidades, proyectos— cae en la misma vertical al milímetro.
+    hangGutter: { width: m.hangingWidth, paddingRight: m.hangingGap },
+    // flexBasis 0: sin él la base de la columna es el ancho intrínseco de su texto
+    // y yoga la encoge; las URLs (que no se parten: el guionado está desactivado)
+    // se recortarían a media palabra. Es el mismo bug que costó la barra lateral.
+    hangBody: { flexGrow: 1, flexBasis: 0 },
+    /** Sangría de los bloques que NO son entradas, para que casen con la columna. */
+    hangIndent: { paddingLeft: m.hangingWidth },
+    /** Fechas y organización dentro de la columna colgante. */
+    dHang: { fontFamily: ty.figuresFace, fontWeight: 400, fontSize: m.dateSize, lineHeight: 1.3, color: p.muted },
+    orgHang: { fontSize: m.dateSize, lineHeight: 1.3, color: p.muted, marginTop: 1 },
+    /** Cargo/título dentro del bloque de contenido (el aire ya lo pone la fila). */
+    tHang: { fontWeight: 700, fontSize: m.entryTitleSize, lineHeight: 1.3 },
+    tEduHang: { fontWeight: 700, fontSize: m.eduTitleSize, lineHeight: 1.3 },
+
+    // ── CABECERA CON FOTO ────────────────────────────────────────────────────
+    // Fila: el bloque de nombre y contacto PRIMERO, la imagen después. El orden del
+    // content stream es ese, y una imagen no aporta texto: el parser lee el contacto
+    // seguido, sin fragmentarlo. La foto solo puede ir aquí — esquina superior
+    // derecha—, nunca centrada arriba ni en una banda a ancho completo.
+    headRow: { flexDirection: "row", alignItems: "flex-start" },
+    headMain: { flexGrow: 1, flexBasis: 0 },
     // Foto — OPT-IN (versión "visual"). Nunca en el render por defecto (golden).
     photo: { width: 84, height: 84, borderRadius: 4, marginBottom: 8, objectFit: "cover" },
+    /** Foto en el hueco de la maqueta: proporción 35:45 y recorte según el eje. */
+    photoSlot: {
+      width: m.photoSize,
+      height: photoHeight(m),
+      marginLeft: 16,
+      objectFit: "cover",
+      borderRadius:
+        m.photoShape === "circle" ? m.photoSize / 2 : m.photoShape === "rounded" ? 6 : 0,
+      ...(m.photoBorder ? { borderWidth: 0.75, borderColor: p.hair } : null),
+    },
     // QR honesto al pie: el glifo + la URL SIEMPRE como texto (una columna).
     qrRow: { flexDirection: "row", alignItems: "center", marginTop: 18 },
     qrImg: { width: 56, height: 56, marginRight: 10 },
@@ -336,9 +407,25 @@ export function ResumePDF({
   // exactamente, lo que un parser de ATS lee bien o mal.
 
   /* Foto — solo si el usuario la puso explícitamente. NUNCA es el avatar. Es un
-     opt-in suyo y se respeta en cualquier plantilla (retrocompatible); la gama ATS
-     simplemente no reserva hueco para ella en su composición. */
-  const photoBlock = data.photo ? <Image src={data.photo} style={s.photo} /> : null;
+     opt-in suyo y se respeta en cualquier plantilla (retrocompatible).
+     Dos sitios posibles y ni uno más:
+       · la plantilla RESERVA hueco (photoSlot: "header-right") → va dentro de la
+         cabecera, a la derecha del nombre y el contacto, en su proporción de foto
+         de documento (35:45);
+       · la plantilla no reserva hueco → se dibuja arriba del todo, como siempre.
+     En los dos casos la imagen va DESPUÉS del texto que la acompaña en el content
+     stream, así que no puede fragmentar el bloque de contacto. */
+  const conHueco = m.photoSlot === "header-right";
+  const photoSlotBlock = data.photo && conHueco ? <Image src={data.photo} style={s.photoSlot} /> : null;
+  const photoBlock = data.photo && !conHueco ? <Image src={data.photo} style={s.photo} /> : null;
+
+  /**
+   * La sangría de los bloques que NO son entradas cuando el esqueleto es colgante.
+   * Con el esqueleto plano devuelve el nodo tal cual —sin envoltorio— para que el
+   * documento por defecto salga con exactamente el mismo árbol que antes.
+   */
+  const sangrar = (nodo: ReactNode) =>
+    m.skeleton === "hanging" ? <View style={s.hangIndent}>{nodo}</View> : nodo;
 
   /* Cabecera — contacto EN EL CUERPO (no header/footer), con prefijos de texto */
   const nameBlock = (
@@ -378,10 +465,16 @@ export function ResumePDF({
 
   // El nombre y el contacto son UN bloque: el filete de cabecera (opt-in) los separa
   // del contenido. Sin él no hay envoltorio ninguno — el documento clásico intacto.
-  const headerBlock = m.nameRule ? (
-    <View style={s.headRule}>
-      {nameBlock}
-      {contactBlock}
+  // Con hueco de foto, ese bloque se convierte en la mitad izquierda de una fila y la
+  // imagen ocupa la derecha; el texto sale antes que la imagen, y por eso el contacto
+  // sigue leyéndose de corrido (lo verifica el round-trip con foto puesta).
+  const identidad = photoSlotBlock ? (
+    <View style={s.headRow}>
+      <View style={s.headMain}>
+        {nameBlock}
+        {contactBlock}
+      </View>
+      {photoSlotBlock}
     </View>
   ) : (
     <>
@@ -389,6 +482,7 @@ export function ResumePDF({
       {contactBlock}
     </>
   );
+  const headerBlock = m.nameRule ? <View style={s.headRule}>{identidad}</View> : identidad;
 
   /**
    * El rótulo de una sección. La numeración sale de headingLabelText (la misma que
@@ -429,6 +523,27 @@ export function ResumePDF({
     key: number,
     hijos?: ReactNode,
   ) => {
+    // COLUMNA COLGANTE. La entrada entera es UNA fila: a la izquierda las fechas y
+    // la organización, a la derecha el cargo y sus viñetas. El content stream sale
+    // en ese mismo orden (fechas → organización → cargo → viñetas) y entryLines()
+    // escribe esas tres líneas en ese mismo orden en el texto plano: por eso el
+    // round-trip —que compara el PDF re-parseado con su propio rayos-X, en orden de
+    // lectura— sigue pasando. No es una tabla y no es una barra lateral: es una fila
+    // que se cierra en sí misma, dentro del flujo único del documento.
+    if (m.dateStyle === "hanging") {
+      return (
+        <View key={key} style={s.hangRow} wrap={false}>
+          <View style={s.hangGutter}>
+            <Text style={s.dHang}>{fechas}</Text>
+            <Text style={s.orgHang}>{pie}</Text>
+          </View>
+          <View style={s.hangBody}>
+            <Text style={edu ? s.tEduHang : s.tHang}>{titulo}</Text>
+            {hijos}
+          </View>
+        </View>
+      );
+    }
     const cuerpo =
       m.dateStyle === "right" ? (
         <View style={s.erow}>
@@ -461,23 +576,25 @@ export function ResumePDF({
   const summaryBlock = (
     <>
       {heading("summary")}
-      <Text style={s.sum}>{tt(b.summary)}</Text>
+      {sangrar(<Text style={s.sum}>{tt(b.summary)}</Text>)}
     </>
   );
 
   const skillsBlock = (
     <>
       {heading("skills")}
-      {skillLines(data.skills, m).map((linea, i) => (
-        <Text key={i} style={s.skline}>
-          {linea.map((sk, j) => (
-            <Fragment key={j}>
-              {j > 0 ? " · " : null}
-              <Text style={s.skLabel}>{tt(sk.group)}:</Text> {tt(sk.items)}
-            </Fragment>
-          ))}
-        </Text>
-      ))}
+      {sangrar(
+        skillLines(data.skills, m).map((linea, i) => (
+          <Text key={i} style={s.skline}>
+            {linea.map((sk, j) => (
+              <Fragment key={j}>
+                {j > 0 ? " · " : null}
+                <Text style={s.skLabel}>{tt(sk.group)}:</Text> {tt(sk.items)}
+              </Fragment>
+            ))}
+          </Text>
+        )),
+      )}
     </>
   );
 
@@ -503,7 +620,7 @@ export function ResumePDF({
   const projectsBlock = projects.length > 0 && (
     <>
       {heading("projects")}
-      {projects.map((p, i) => bullet(tt(p), i))}
+      {sangrar(projects.map((p, i) => bullet(tt(p), i)))}
     </>
   );
 

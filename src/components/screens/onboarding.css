@@ -24,7 +24,11 @@
 .ob-note{margin-top:44px;max-width:56ch;font:400 var(--fs-micro)/1.8 var(--font-mono);color:var(--text-subtle)}
 
 /* Puerta A convertida en <button> por a11y (spec §8): resetea el aspecto de
-   botón para heredar el de .c-card. NO cambia clases ni tamaño. */
-button.ob-door{width:100%;text-align:left;font:inherit;color:inherit;background:var(--surface);display:block}
+   botón para heredar el de .c-panel. NO cambia clases ni tamaño.
+   Ya NO declara `background`: las puertas son VIDRIO sobre la aurora y este
+   selector (0,1,1) le ganaría a .c-panel (0,1,0) y taparía el humo. El reset
+   del fondo de botón ya lo hace `button{background:none}` de globals.css, que
+   .c-panel gana por especificidad. */
+button.ob-door{width:100%;text-align:left;font:inherit;color:inherit;display:block}
 
 @media (max-width:768px){.ob-doors{grid-template-columns:1fr}.ob-tpl .rows{grid-template-columns:1fr}.ob-h1{font-size:34px}}

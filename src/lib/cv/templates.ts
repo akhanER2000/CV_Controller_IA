@@ -87,8 +87,69 @@ export type RulePosition = "below" | "above";
 /** Cómo se reparte el contacto en líneas. */
 export type ContactStyle = "inline" | "split" | "stacked";
 
-/** Dónde caen las fechas de una entrada. */
-export type DateStyle = "right" | "inline" | "own-line";
+/**
+ * ⚠ POR QUÉ NO HAY EJE DE «GLIFOS EN EL CONTACTO». Estaba previsto un eje que
+ * pusiera un glifo Unicode discreto delante de cada dato (✉ para el email, ☎ para
+ * el teléfono), siempre con la etiqueta en texto al lado. No existe porque no se
+ * PUEDE: las tres familias del repo (Geist, Geist Mono, Playfair Display) no traen
+ * esos glifos — comprobado con fontkit, `glyphsForString("✉")` devuelve el glifo 0,
+ * el .notdef. En @react-pdf un carácter sin glifo no falla: se dibuja vacío. El PDF
+ * saldría con un hueco donde debería ir el icono y el texto plano escribiría el
+ * carácter igualmente, así que documento y rayos-X dejarían de coincidir y el
+ * round-trip caería. Y añadir un .ttf nuevo no está sobre la mesa. El único glifo
+ * de esa familia que sí existe en Geist es ↗ (U+2197), que no es un icono de
+ * contacto sino una flecha: no compensa montar un eje entero por ella.
+ */
+
+/**
+ * Alineación del bloque de contacto. "inherit" = la de la cabecera (nameAlign),
+ * que es lo de siempre. "right" da el patrón «nombre a la izquierda, contacto a la
+ * derecha» SIN partir el documento en dos columnas: es el MISMO flujo, con los
+ * párrafos del contacto alineados al otro lado. El parser lee exactamente igual.
+ */
+export type ContactAlign = "inherit" | "left" | "center" | "right";
+
+/**
+ * Dónde caen las fechas de una entrada.
+ *  · right    — a la derecha del cargo, en la misma fila (flex, sin tablas).
+ *  · inline   — pegadas al cargo, dentro del mismo párrafo.
+ *  · own-line — en una línea propia bajo el cargo.
+ *  · hanging  — en la COLUMNA COLGANTE de la izquierda. No se declara a mano: lo
+ *               impone `skeleton: "hanging"` (resolveMetrics lo normaliza), porque
+ *               la columna colgante ES el sitio de las fechas en ese esqueleto.
+ */
+export type DateStyle = "right" | "inline" | "own-line" | "hanging";
+
+/**
+ * ESQUELETO del documento — el eje que corrige la MEDIDA DE LÍNEA.
+ *
+ *  · "flat"    — todo a ancho completo. Es el de siempre y el valor por defecto.
+ *  · "hanging" — COLUMNA COLGANTE: las fechas y la organización (la ubicación en
+ *                experiencia, el centro en formación) caen en una columna estrecha
+ *                a la izquierda, y el contenido —cargo, viñetas, resumen,
+ *                habilidades— vive en el bloque restante. Los rótulos de sección
+ *                se quedan a ras del margen, dentro de esa misma columna.
+ *
+ * POR QUÉ EXISTE. La medida efectiva de las plantillas planas es de ~96 caracteres
+ * por línea (medido, no estimado: tests/medida-linea.test.ts reconstruye las líneas
+ * del PDF agrupando los items de texto por coordenada Y). El óptimo de legibilidad
+ * está en 45-75 y el techo accesible en 80. Un bloque al 72 % del ancho deja la
+ * medida en ~69 caracteres, que es justo el centro del óptimo.
+ *
+ * ⚠ SE LEE COMO DOS COLUMNAS Y ES UN FLUJO ÚNICO. No hay tablas ni hay una barra
+ * lateral: cada ENTRADA es una fila flex que se cierra en sí misma (wrap={false},
+ * así que ninguna fila se parte entre páginas) y el resto de bloques son sangría.
+ * El content stream sale en el orden: fechas → organización → cargo → viñetas, y
+ * `entryLines` (resume.ts) emite EXACTAMENTE ese mismo orden en el texto plano.
+ * Que el round-trip siga pasando es la prueba de que el orden de lectura aguanta.
+ */
+export type Skeleton = "flat" | "hanging";
+
+/** Dónde se reserva hueco para la foto. "none" = sin hueco (el de siempre). */
+export type PhotoSlot = "none" | "header-right";
+
+/** Tratamiento del recorte de la foto. La circular NO es un eje de la gama ATS. */
+export type PhotoShape = "square" | "rounded" | "circle";
 
 /** Marcador de viñeta. `none` = solo sangría (el texto empieza sin glifo). */
 export type BulletMarker = "dot" | "dash" | "emdash" | "none";
@@ -209,8 +270,41 @@ export interface TemplateMetrics {
   /** Prefijos "Email:" y "Tel:". Defecto true. */
   contactLabels?: boolean;
 
-  /** Dónde caen las fechas de cada entrada. Defecto "right" (flex, sin tablas). */
+  /** Dónde caen las fechas de cada entrada. Defecto "right" (flex, sin tablas).
+   *  Con `skeleton: "hanging"` este eje lo decide el esqueleto y se normaliza a
+   *  "hanging": declarar otra cosa no lo cambia (una sola fuente de verdad). */
   dateStyle?: DateStyle;
+
+  /** Esqueleto del documento. Defecto "flat" (ancho completo, el de siempre). */
+  skeleton?: Skeleton;
+  /** Ancho de la columna colgante, en % del ancho de texto. Defecto "28%".
+   *  El contenido arranca EXACTAMENTE en este porcentaje, así que este número es
+   *  la medida de línea: 28 % de columna deja el cuerpo al 72 %. */
+  hangingWidth?: string;
+  /** Aire entre la columna colgante y el contenido (pt). Va DENTRO de la columna
+   *  (padding a su derecha) para que el contenido siga arrancando en `hangingWidth`
+   *  y las sangrías de los bloques planos casen con él al milímetro. Defecto 10. */
+  hangingGap?: number;
+
+  /** Hueco reservado para la foto. Defecto "none". La foto que el usuario sube
+   *  (data.photo) se respeta en cualquier plantilla; esto decide si la MAQUETA le
+   *  hace sitio y dónde. Solo hay una posición: la esquina superior derecha, junto
+   *  al bloque de nombre y contacto (nunca centrada arriba ni en banda). */
+  photoSlot?: PhotoSlot;
+  /** Recorte de la foto. Defecto "square". */
+  photoShape?: PhotoShape;
+  /** Ancho de la foto en pt; el alto sale de la proporción 35:45 (3,5×4,5 cm).
+   *  Defecto 92 (≈3,25 cm de ancho, ≈4,2 cm de alto). */
+  photoSize?: number;
+  /** Filete fino alrededor de la foto. Defecto false. */
+  photoBorder?: boolean;
+
+  /** Alineación del bloque de contacto. Defecto "inherit" (sigue a nameAlign). */
+  contactAlign?: ContactAlign;
+
+  /** Rótulo de sección sobre un bloque de fondo tintado. Defecto false.
+   *  Es un <Text> con fondo, NO una tabla ni una celda: no añade nodos al flujo. */
+  headingBand?: boolean;
 
   /** Marcador de viñeta. Defecto "dot" (• U+2022). */
   bulletMarker?: BulletMarker;
@@ -291,6 +385,12 @@ export function templatesByTags(tags: TemplateTag[]): CvTemplate[] {
 export type ResolvedMetrics = Required<TemplateMetrics>;
 
 export function resolveMetrics(m: TemplateMetrics): ResolvedMetrics {
+  // El esqueleto DECIDE dónde caen las fechas: en la columna colgante no hay otro
+  // sitio posible. Se normaliza aquí, y no en cada renderizador, porque el PDF y el
+  // texto plano tienen que estar de acuerdo en el orden en que se emiten fechas,
+  // organización y cargo — si cada uno lo dedujera por su cuenta, el round-trip
+  // compararía dos documentos distintos.
+  const skeleton = m.skeleton ?? "flat";
   return {
     nameSize: m.nameSize,
     bodySize: m.bodySize,
@@ -298,8 +398,11 @@ export function resolveMetrics(m: TemplateMetrics): ResolvedMetrics {
     sectionGap: m.sectionGap,
     upperHeadings: m.upperHeadings,
     headingRule: m.headingRule,
-    pageMarginV: m.pageMarginV ?? "18mm",
-    pageMarginH: m.pageMarginH ?? "20mm",
+    // Márgenes: el mínimo del núcleo de legibilidad (≥20mm). Antes eran 18/20mm;
+    // subirlos como DEFECTO significa que una plantilla que no declare nada nace
+    // ya dentro del núcleo, en vez de nacer fuera y tener que acordarse.
+    pageMarginV: m.pageMarginV ?? "20mm",
+    pageMarginH: m.pageMarginH ?? "22mm",
     nameLeading: m.nameLeading ?? 1.15,
     labelSize: m.labelSize ?? 11,
     contactSize: m.contactSize ?? 9.5,
@@ -318,7 +421,9 @@ export function resolveMetrics(m: TemplateMetrics): ResolvedMetrics {
     bulletHang: m.bulletHang ?? 7.5,
     skillGap: m.skillGap ?? 1.5,
     skillLeading: m.skillLeading ?? 1.5,
-    accentName: m.accentName ?? true,
+    // El núcleo de la gama ATS dice: UN acento, y solo en rótulos y filetes. El
+    // nombre se sostiene por tamaño y peso, que es lo que sobrevive a una fotocopia.
+    accentName: m.accentName ?? false,
     accentHeadings: m.accentHeadings ?? true,
     sidebarWidth: m.sidebarWidth ?? "33%",
     sidebarGap: m.sidebarGap ?? 14,
@@ -336,11 +441,28 @@ export function resolveMetrics(m: TemplateMetrics): ResolvedMetrics {
     headingLabel: m.headingLabel ?? true,
     contactStyle: m.contactStyle ?? "inline",
     contactLabels: m.contactLabels ?? true,
-    dateStyle: m.dateStyle ?? "right",
+    contactAlign: m.contactAlign ?? "inherit",
+    dateStyle: skeleton === "hanging" ? "hanging" : (m.dateStyle ?? "right"),
     bulletMarker: m.bulletMarker ?? "dot",
     skillStyle: m.skillStyle ?? "grouped",
     sectionOrder: m.sectionOrder ?? DEFAULT_SECTION_ORDER,
+    skeleton,
+    hangingWidth: m.hangingWidth ?? "28%",
+    hangingGap: m.hangingGap ?? 10,
+    photoSlot: m.photoSlot ?? "none",
+    photoShape: m.photoShape ?? "square",
+    photoSize: m.photoSize ?? 92,
+    photoBorder: m.photoBorder ?? false,
+    headingBand: m.headingBand ?? false,
   };
+}
+
+/** Proporción de la foto de CV: 3,5 × 4,5 cm (el estándar de foto de documento). */
+export const PHOTO_RATIO = 45 / 35;
+
+/** El alto de la foto que corresponde a su ancho. */
+export function photoHeight(m: ResolvedMetrics): number {
+  return Math.round(m.photoSize * PHOTO_RATIO * 10) / 10;
 }
 
 // ── Traducción de los ejes a texto ────────────────────────────────────────────
