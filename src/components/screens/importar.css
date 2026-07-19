@@ -84,7 +84,7 @@
 .fin-cta{margin-top:36px;display:flex;flex-direction:column;align-items:center;gap:14px}
 .fin-sub{font:400 var(--fs-data)/1.6 var(--font-mono);color:var(--text-subtle)}
 /* header */
-.hd-crumb{display:flex;align-items:center;gap:14px}
+.hd-crumb{display:flex;align-items:center;gap:14px;min-width:0}
 .hd-sep{width:1px;height:18px;background:var(--border-strong)}
 .hd-step{font:500 var(--fs-micro)/1 var(--font-mono);letter-spacing:.14em;color:var(--text-muted)}
 .hd-right{margin-left:auto;display:flex;align-items:center;gap:16px}
@@ -101,7 +101,9 @@
   .imp-drop{margin-inline:20px}
   .fin-grid{grid-template-columns:repeat(2,1fr)}
   .ing-count{font-size:56px}
-  .hd-step{display:none}
+  /* En estrecho manda LA SALIDA: cae el rótulo de paso (y su separador, que si
+     no queda de barra huérfana); el botón volver del <Breadcrumb> no cae nunca. */
+  .hd-step,.imp-hd-sep-step{display:none}
 }
 @media (max-width:480px){
   .imp-h1{font-size:32px}

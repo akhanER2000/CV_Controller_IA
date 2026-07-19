@@ -89,6 +89,18 @@ export interface ResumeData {
    *              se cumple igual; no se emite URL extra al pie.
    */
   qr?: { mode?: "url" | "vcard"; url?: string };
+  /**
+   * Plantilla del documento — OPCIONAL y RETROCOMPATIBLE. Sin `templateId` se usa
+   * la de por defecto ("ats-clasica"), que reproduce exactamente el documento de
+   * siempre. `paletteId`/`typographyId` cambian solo la paleta o la pareja
+   * tipográfica sobre la plantilla elegida; ids desconocidos se ignoran.
+   *
+   * NO afecta a toPlainText: el texto plano (cómo lo lee el ATS) es el mismo con
+   * cualquier plantilla — por eso el golden sigue siendo byte-a-byte el mismo.
+   */
+  templateId?: string;
+  paletteId?: string;
+  typographyId?: string;
 }
 
 // ── Presentación / contacto por variante (merge PURO, testeable) ──────────────
@@ -107,10 +119,18 @@ export interface PresentationPatch {
   phone?: string | null;
   location?: string | null;
   links?: ResumeLinkInput[] | null;
+  /** Diseño del documento, por variante. null ⇒ vuelve a la plantilla por defecto. */
+  templateId?: string | null;
+  paletteId?: string | null;
+  typographyId?: string | null;
 }
 
 /** Campos de contacto (identidad) que la variante puede sobrescribir en su basics. */
 export const CONTACT_OVERRIDE_FIELDS = ["name", "email", "phone", "location"] as const;
+
+/** Campos de DISEÑO que la variante guarda junto a su basics (misma regla de merge
+ *  que el contacto: undefined no toca, null revierte al valor por defecto). */
+export const DESIGN_OVERRIDE_FIELDS = ["templateId", "paletteId", "typographyId"] as const;
 
 /**
  * Merge PURO de un patch de presentación/contacto sobre el `override_data` actual
@@ -140,6 +160,12 @@ export function mergePresentationOverride(
   if (patch.links !== undefined) {
     if (patch.links === null) delete next.links;
     else next.links = normalizeLinks(patch.links);
+  }
+  for (const f of DESIGN_OVERRIDE_FIELDS) {
+    const v = patch[f];
+    if (v === undefined) continue;
+    if (v === null || v === "") delete next[f]; // volver a la plantilla por defecto
+    else next[f] = v;
   }
   return next;
 }

@@ -1,0 +1,74 @@
+/* ── Breadcrumb — migas + botón volver. Clases nuevas con prefijo bc-. ──
+   No renombra ni pisa nada del sistema (c-*, hd-*): se incrusta dentro de las
+   barras existentes (.hd-crumb, .sl-bar, .tl-bar) y hereda sus tokens.
+   La voz es la del sistema: sans para el destino (es un lugar al que vas),
+   mono en versalitas para la miga actual (es un rótulo, como .hd-step). */
+.bc {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.bc-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  flex: none;
+  padding: 6px 10px;
+  margin-inline-start: -10px; /* el texto queda alineado con el resto de la barra */
+  border-radius: 6px;
+  font: 500 var(--fs-ui) / 1 var(--font-sans);
+  color: var(--text-muted);
+  white-space: nowrap;
+  transition: color 0.14s var(--ease-standard), background-color 0.14s var(--ease-standard);
+}
+.bc-back:hover {
+  color: var(--text);
+  background: var(--surface);
+  text-decoration: none;
+}
+.bc-back:focus-visible {
+  outline: 2px solid var(--border-patina);
+  outline-offset: 2px;
+}
+.bc-arrow {
+  font: 400 13px / 1 var(--font-mono);
+  color: var(--text-subtle);
+  transition: color 0.14s var(--ease-standard), transform 0.14s var(--ease-standard);
+}
+.bc-back:hover .bc-arrow {
+  color: var(--accent-text);
+  transform: translateX(-2px);
+}
+.bc-sep {
+  flex: none;
+  font: 400 var(--fs-micro) / 1 var(--font-mono);
+  color: var(--text-subtle);
+}
+.bc-current {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font: 500 var(--fs-micro) / 1 var(--font-mono);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+/* En estrecho la miga actual sobra (la pantalla ya se rotula sola); el botón
+   volver NO se oculta jamás: es la salida. */
+@media (max-width: 700px) {
+  .bc-sep,
+  .bc-current {
+    display: none;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .bc-back,
+  .bc-arrow {
+    transition: none;
+  }
+  .bc-back:hover .bc-arrow {
+    transform: none;
+  }
+}

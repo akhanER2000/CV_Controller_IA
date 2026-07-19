@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { Aurora } from "@/components/Aurora";
+import { Breadcrumb, readOrigin, withOrigin } from "@/components/Breadcrumb";
 import { createClient } from "@/lib/supabase/client";
 import { useT } from "@/lib/i18n";
 import "./importar.css";
@@ -164,6 +165,9 @@ function countWords(txt: string): number {
   return (txt.trim().match(/\S+/g) ?? []).length;
 }
 
+/* Salida declarada cuando nadie dijo de dónde venías. Nunca se queda sin una. */
+const FALLBACK = "/app";
+
 export function ImportarScreen() {
   const t = useT();
   const [text, setText] = useState("");
@@ -174,6 +178,19 @@ export function ImportarScreen() {
   const [result, setResult] = useState<ImportResponse | null>(null);
   const [warnings, setWarnings] = useState<string[]>([]);
   const [err, setErr] = useState<string | null>(null);
+
+  /* ── De dónde vienes (?from=) ────────────────────────────────────────────────
+     El <Breadcrumb> resuelve su destino solo. Aquí hace falta el MISMO origen
+     para PROPAGARLO al enlace de staging: cuando terminas de volcar, "volver"
+     desde la revisión debe llevarte al sitio del que saliste (Fuentes), no a
+     esta pantalla, que al remontarse ya no recuerda nada. Se lee de
+     window.location.search en vez de useSearchParams() para no arrastrar un
+     límite de <Suspense> hasta el CTA; hasta que hidrata vale el fallback, que
+     ya es una salida válida. */
+  const [origen, setOrigen] = useState(FALLBACK);
+  useEffect(() => {
+    setOrigen(readOrigin(window.location.search, FALLBACK));
+  }, []);
 
   // Cliente de Supabase del navegador: la subida es DIRECTA a Storage (los
   // archivos nunca pasan por el body de la ruta, límite 4,5 MB de Vercel).
@@ -478,6 +495,9 @@ export function ImportarScreen() {
               Corpus
             </Link>
             <span className="hd-sep" />
+            {/* La salida: vuelve a donde estabas (?from=), no "al Panel". */}
+            <Breadcrumb fallback={FALLBACK} current={t("nav.importar")} />
+            <span className="hd-sep imp-hd-sep-step" />
             <span className="hd-step" id="hdStep">
               {hdStep}
             </span>
@@ -801,7 +821,7 @@ export function ImportarScreen() {
 
           <div className="fin-cta">
             <span className="c-forge">
-              <Link className="c-btn c-btn--forge c-btn--hero" href="/app/staging">
+              <Link className="c-btn c-btn--forge c-btn--hero" href={withOrigin("/app/staging", origen)}>
                 {t("importar.fin.reviewCta")}
               </Link>
             </span>

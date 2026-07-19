@@ -8,12 +8,16 @@ export const editor = {
     "editor.defaultVariantName": "Variante",
 
     // Barra de estado (#edState). stIdle = reposo; el resto son flashes efímeros.
+    // Los mensajes de error llevan {r}: ahí se interpola el MOTIVO REAL (lo que
+    // devuelve el servidor o lanza el navegador). Un error mudo no es un error.
     "editor.stIdle": "al día · guardado",
     "editor.stSavedItem": "guardado en esta variante",
-    "editor.stSaveItemErr": "no se pudo guardar el cambio",
+    "editor.stSaveItemErr": "no se pudo guardar el cambio — {r}",
     "editor.stSaved": "guardado",
-    "editor.stSaveErr": "no se pudo guardar",
-    "editor.stAddErr": "no se pudo añadir el item",
+    "editor.stSaveErr": "no se pudo guardar — {r}",
+    "editor.stAddErr": "no se pudo añadir el item — {r}",
+    "editor.stRemoveErr": "se quitó de la pantalla, pero el servidor no lo borró — {r}",
+    "editor.stLoadErr": "no se pudo leer esta variante — {r}",
     "editor.stRemoved": "quitado de la variante",
     "editor.stAdded": "añadido a la variante",
     "editor.stShown": "mostrado en esta variante",
@@ -21,10 +25,9 @@ export const editor = {
     "editor.stReverted": "override revertido — vuelve a seguir al master",
     "editor.stOvrSaved": "override guardado — solo en esta variante",
     "editor.stReordered": "viñeta reordenada",
-    "editor.stPdfLocal": "el PDF se genera del mismo estado que ves — sin sorpresas",
     "editor.stPdfGen": "generando PDF…",
     "editor.stPdfDone": "PDF descargado ✓",
-    "editor.stPdfErr": "no se pudo generar el PDF",
+    "editor.stPdfErr": "no se pudo generar el PDF — {r}",
 
     // Pestañas de columna (móvil) y su aria.
     "editor.tabMaster": "Master",
@@ -93,12 +96,20 @@ export const editor = {
     "editor.previewFoot":
       "El preview ES el PDF: mismo motor, mismos cortes de página. Si el preview miente, el producto miente.",
     "editor.xrayLegend": "texto extraído del PDF — esto es lo que indexa el reclutador",
+    "editor.pvUpdating": "actualizando…",
+    "editor.pvBuilding": "Generando el PDF…",
+    "editor.pvNoPages": "sin páginas",
+    "editor.pvFailedShort": "⚠ preview no disponible",
+    "editor.pvErrTitle": "El PDF no se pudo generar",
+    "editor.pvRetry": "Reintentar",
+    "editor.pvFrameTitle": "El PDF de esta variante",
 
     // Presentación OPT-IN (foto / QR) — solo esta variante.
     "editor.presOverline": "Presentación",
     "editor.presHint": "Opcional · solo esta variante",
     "editor.stPresSaved": "presentación guardada — solo esta variante",
-    "editor.stPresErr": "no se pudo guardar la presentación",
+    "editor.stPresErr": "no se pudo guardar la presentación — {r}",
+    "editor.stPhotoErr": "no se pudo leer la imagen — {r}",
     "editor.stPhotoBig": "la foto es muy pesada — prueba una imagen más pequeña",
     "editor.photoLabel": "Foto",
     "editor.photoOnAria": "Incluir foto en esta variante",
@@ -139,13 +150,23 @@ export const editor = {
     "editor.contactRevert": "revertir",
     "editor.contactSeedHint": "Cada campo hereda del master; al editarlo se vuelve override SOLO de esta variante. Si tu master aún no tiene contacto, estos datos base van a tu master.",
 
+    // Diseño del documento: plantilla · paleta · tipografía (solo esta variante).
+    "editor.designOverline": "Diseño",
+    "editor.designHint": "Solo esta variante · no cambia tus datos",
+    "editor.designTemplate": "Plantilla",
+    "editor.designPalette": "Paleta",
+    "editor.designTypography": "Tipografía",
+    "editor.designFromTemplate": "La de la plantilla",
+    "editor.designAtsNote": "Una columna, sin foto y sin iconos: apta para portales con ATS.",
+    "editor.designNote": "Cambiar de diseño no toca ningún dato: el mismo contenido, otra forma.",
+
     // Eliminar variante (archiva; recuperable).
     "editor.deleteVariant": "Eliminar variante",
     "editor.deleteConfirm": "¿Eliminar esta variante?",
     "editor.deleteCancel": "Cancelar",
     "editor.deleteYes": "Eliminar",
     "editor.stDeleteLocal": "en modo local no se eliminan variantes",
-    "editor.stDeleteErr": "no se pudo eliminar la variante",
+    "editor.stDeleteErr": "no se pudo eliminar la variante — {r}",
   } as Record<string, string>,
   en: {
     // Variant top bar.
@@ -154,12 +175,16 @@ export const editor = {
     "editor.defaultVariantName": "Variant",
 
     // Status bar (#edState). stIdle = at rest; the rest are ephemeral flashes.
+    // Error messages carry {r}: the REAL reason is interpolated there (whatever
+    // the server returned or the browser threw). A mute error isn't an error.
     "editor.stIdle": "up to date · saved",
     "editor.stSavedItem": "saved in this variant",
-    "editor.stSaveItemErr": "couldn't save the change",
+    "editor.stSaveItemErr": "couldn't save the change — {r}",
     "editor.stSaved": "saved",
-    "editor.stSaveErr": "couldn't save",
-    "editor.stAddErr": "couldn't add the item",
+    "editor.stSaveErr": "couldn't save — {r}",
+    "editor.stAddErr": "couldn't add the item — {r}",
+    "editor.stRemoveErr": "it left the screen, but the server didn't delete it — {r}",
+    "editor.stLoadErr": "couldn't read this variant — {r}",
     "editor.stRemoved": "removed from the variant",
     "editor.stAdded": "added to the variant",
     "editor.stShown": "shown in this variant",
@@ -167,10 +192,9 @@ export const editor = {
     "editor.stReverted": "override reverted — follows the master again",
     "editor.stOvrSaved": "override saved — this variant only",
     "editor.stReordered": "bullet reordered",
-    "editor.stPdfLocal": "the PDF is built from the same state you see — no surprises",
     "editor.stPdfGen": "generating PDF…",
     "editor.stPdfDone": "PDF downloaded ✓",
-    "editor.stPdfErr": "couldn't generate the PDF",
+    "editor.stPdfErr": "couldn't generate the PDF — {r}",
 
     // Column tabs (mobile) and their aria.
     "editor.tabMaster": "Master",
@@ -239,12 +263,20 @@ export const editor = {
     "editor.previewFoot":
       "The preview IS the PDF: same engine, same page breaks. If the preview lies, the product lies.",
     "editor.xrayLegend": "text extracted from the PDF — this is what the recruiter's search indexes",
+    "editor.pvUpdating": "updating…",
+    "editor.pvBuilding": "Generating the PDF…",
+    "editor.pvNoPages": "no pages",
+    "editor.pvFailedShort": "⚠ preview unavailable",
+    "editor.pvErrTitle": "The PDF couldn't be generated",
+    "editor.pvRetry": "Try again",
+    "editor.pvFrameTitle": "This variant's PDF",
 
     // Opt-in presentation (photo / QR) — this variant only.
     "editor.presOverline": "Presentation",
     "editor.presHint": "Optional · this variant only",
     "editor.stPresSaved": "presentation saved — this variant only",
-    "editor.stPresErr": "couldn't save the presentation",
+    "editor.stPresErr": "couldn't save the presentation — {r}",
+    "editor.stPhotoErr": "couldn't read the image — {r}",
     "editor.stPhotoBig": "the photo is too heavy — try a smaller image",
     "editor.photoLabel": "Photo",
     "editor.photoOnAria": "Include a photo in this variant",
@@ -285,12 +317,22 @@ export const editor = {
     "editor.contactRevert": "revert",
     "editor.contactSeedHint": "Each field inherits from the master; editing it becomes an override for THIS variant only. If your master has no contact yet, this base data goes to your master.",
 
+    // Document design: template · palette · typography (this variant only).
+    "editor.designOverline": "Design",
+    "editor.designHint": "This variant only · doesn't change your data",
+    "editor.designTemplate": "Template",
+    "editor.designPalette": "Palette",
+    "editor.designTypography": "Typeface",
+    "editor.designFromTemplate": "From the template",
+    "editor.designAtsNote": "One column, no photo, no icons: safe for ATS portals.",
+    "editor.designNote": "Switching design touches no data: same content, different form.",
+
     // Delete variant (archives; recoverable).
     "editor.deleteVariant": "Delete variant",
     "editor.deleteConfirm": "Delete this variant?",
     "editor.deleteCancel": "Cancel",
     "editor.deleteYes": "Delete",
     "editor.stDeleteLocal": "variants aren't deleted in local mode",
-    "editor.stDeleteErr": "couldn't delete the variant",
+    "editor.stDeleteErr": "couldn't delete the variant — {r}",
   } as Record<string, string>,
 } as const;

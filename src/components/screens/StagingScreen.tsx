@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useT } from "@/lib/i18n";
+import { Breadcrumb } from "@/components/Breadcrumb";
 import "./staging.css";
 
 /* ============================================================================
@@ -74,6 +75,9 @@ const withoutDoubt = (d: Record<string, unknown>): Record<string, unknown> => {
   for (const [k, v] of Object.entries(d)) if (k !== "_classDoubt" && k !== "_classReason") out[k] = v;
   return out;
 };
+
+/* Salida declarada cuando nadie dijo de dónde venías. */
+const FALLBACK = "/app";
 
 export function StagingScreen() {
   const t = useT();
@@ -361,14 +365,17 @@ export function StagingScreen() {
     <div className="c-page">
       <header className="c-header">
         <div className="c-container">
-          <div className="hd-crumb" style={{ display: "flex", alignItems: "center", gap: "14px" }}>
+          <div className="hd-crumb stg-crumb">
             <Link className="c-logo" href="/app">
               Corpus
             </Link>
-            <span style={{ width: "1px", height: "18px", background: "var(--border-strong)" }} />
-            <span style={{ font: "500 var(--fs-micro)/1 var(--font-mono)", letterSpacing: ".14em", color: "var(--text-muted)" }}>
-              {t("staging.microStep")}
-            </span>
+            <span className="stg-hd-sep" aria-hidden="true" />
+            {/* La salida. Volver NO tira el trabajo revisado: aceptar/descartar
+                ya escribió en el servidor, así que al regresar la cola se
+                recarga con exactamente lo que quedaba pendiente. */}
+            <Breadcrumb fallback={FALLBACK} current={t("nav.staging")} />
+            <span className="stg-hd-sep stg-hd-sep--step" aria-hidden="true" />
+            <span className="stg-hd-step">{t("staging.microStep")}</span>
           </div>
           <div className="hd-right">
             <div className="hd-lang">

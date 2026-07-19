@@ -6,6 +6,7 @@ import { useBoot } from "@/lib/corpus/runtime";
 import { supabaseEnabled } from "@/lib/supabase/config";
 import { createClient } from "@/lib/supabase/client";
 import { useT } from "@/lib/i18n";
+import { withOrigin } from "@/components/Breadcrumb";
 import { fileKindFromName, safeStorageName, type FileKind } from "@/lib/db/sources";
 import "./fuentes.css";
 
@@ -20,6 +21,14 @@ import "./fuentes.css";
    cada fuente ya ingerida ofrece «releer» y «quitar». La maqueta completa (persona
    Diego Gatica) SOLO se usa como fallback del modo local.
    ============================================================================ */
+
+/* Origen que Fuentes declara al mandarte a una pantalla interior. Toda salida de
+   aquí hacia /app/importar o /app/staging lo lleva, para que el botón volver de
+   esas pantallas te devuelva A FUENTES y no "al Panel por defecto". */
+const ORIGEN = "/app/fuentes";
+const HREF_IMPORTAR = withOrigin("/app/importar", ORIGEN);
+const HREF_STAGING = withOrigin("/app/staging", ORIGEN);
+const hrefStagingDe = (sourceId: string) => withOrigin(`/app/staging?source=${sourceId}`, ORIGEN);
 
 type Repo = { n: string; m: string; on: boolean; why?: string };
 
@@ -345,7 +354,7 @@ export function FuentesScreen() {
         <span aria-hidden="true">✓</span> {t("fuentes.act.done").replace("{n}", String(p.staged))}
         {p.sourceId ? (
           <span className="go">
-            <Link className="c-btn c-btn--quiet" href={`/app/staging?source=${p.sourceId}`}>
+            <Link className="c-btn c-btn--quiet" href={hrefStagingDe(p.sourceId)}>
               {t("fuentes.act.reviewStaging")}
             </Link>
           </span>
@@ -371,15 +380,15 @@ export function FuentesScreen() {
       </div>
       <p>{t("fuentes.li.body")}</p>
       <div className="vias">
-        <Link href="/app/importar">
+        <Link href={HREF_IMPORTAR}>
           <b>{t("fuentes.li.via1Bold")}</b>
           {t("fuentes.li.via1")}
         </Link>
-        <Link href="/app/importar">
+        <Link href={HREF_IMPORTAR}>
           <b>{t("fuentes.li.via2Bold")}</b>
           {t("fuentes.li.via2")}
         </Link>
-        <Link href="/app/importar">
+        <Link href={HREF_IMPORTAR}>
           <b>{t("fuentes.li.via3Bold")}</b>
           {t("fuentes.li.via3")}
         </Link>
@@ -647,7 +656,7 @@ export function FuentesScreen() {
                 <b style={{ color: "var(--text)", fontWeight: 500 }}>{t("fuentes.lead.bold")}</b>
                 {t("fuentes.lead.suffixReal")}
               </p>
-              <Link className="c-btn" href="/app/importar">
+              <Link className="c-btn" href={HREF_IMPORTAR}>
                 {t("fuentes.dumpMore")}
               </Link>
             </div>
@@ -701,7 +710,7 @@ export function FuentesScreen() {
                         <button type="button" className="c-btn c-btn--quiet" disabled={rowBusy(s.id)} onClick={() => setConfirmRemove(s.id)}>
                           {t("fuentes.item.remove")}
                         </button>
-                        <Link className="c-btn c-btn--quiet" href={`/app/staging?source=${s.id}`}>
+                        <Link className="c-btn c-btn--quiet" href={hrefStagingDe(s.id)}>
                           {t("fuentes.item.viewStaging")}
                         </Link>
                       </span>
@@ -773,7 +782,7 @@ export function FuentesScreen() {
               <b style={{ color: "var(--text)", fontWeight: 500 }}>{t("fuentes.lead.bold")}</b>
               {t("fuentes.lead.suffixLocal")}
             </p>
-            <Link className="c-btn" href="/app/importar">
+            <Link className="c-btn" href={HREF_IMPORTAR}>
               {t("fuentes.dumpMore")}
             </Link>
           </div>
@@ -846,7 +855,7 @@ export function FuentesScreen() {
                   <span aria-hidden="true">✓</span> {t("fuentes.gh.readDonePre")} <b>{t("fuentes.gh.readDoneBold")}</b>
                   {t("fuentes.gh.readDoneSuf")}{" "}
                   <span className="go">
-                    <Link className="c-btn c-btn--quiet" href="/app/staging">
+                    <Link className="c-btn c-btn--quiet" href={HREF_STAGING}>
                       {t("fuentes.gh.review")}
                     </Link>
                   </span>
@@ -942,7 +951,7 @@ export function FuentesScreen() {
               <span className="nm">{t("fuentes.files.name")}</span>
               <span className="tag">{t("fuentes.files.tag")}</span>
               <span className="acts">
-                <Link className="c-btn c-btn--quiet" href="/app/importar">
+                <Link className="c-btn c-btn--quiet" href={HREF_IMPORTAR}>
                   {t("fuentes.files.upload")}
                 </Link>
               </span>

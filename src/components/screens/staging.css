@@ -2,6 +2,14 @@
    PORTE LITERAL del 2º <style> de corpus-design/04-pantallas/staging.html
    (fuera de data-corpus-system). Sin @keyframes propios. Clases sin renombrar. */
 body{background:var(--bg)}
+/* Cabecera: logo · volver · paso. Los estilos vivían inline en el JSX; se
+   trasladan aquí (mismos valores) al entrar el <Breadcrumb>, con prefijo stg-. */
+.stg-crumb{display:flex;align-items:center;gap:14px;min-width:0}
+.stg-hd-sep{width:1px;height:18px;background:var(--border-strong);flex:none}
+.stg-hd-step{font:500 var(--fs-micro)/1 var(--font-mono);letter-spacing:.14em;color:var(--text-muted);white-space:nowrap}
+/* En estrecho manda LA SALIDA: cae el rótulo de paso y su separador; el botón
+   volver no cae nunca. */
+@media (max-width:768px){.stg-hd-step,.stg-hd-sep--step{display:none}}
 .stg-sub{position:sticky;top:var(--header-h);z-index:9;background:color-mix(in srgb,var(--bg) 86%,transparent);
   backdrop-filter:blur(8px);border-bottom:1px solid var(--border)}
 .stg-sub .c-container{display:flex;align-items:center;gap:20px;padding-block:12px;flex-wrap:wrap}

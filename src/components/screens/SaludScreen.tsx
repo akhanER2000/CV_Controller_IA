@@ -2,7 +2,9 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { useParams } from "next/navigation";
 import { useT } from "@/lib/i18n";
+import { Breadcrumb } from "@/components/Breadcrumb";
 import "./salud.css";
 
 /* ============================================================================
@@ -32,8 +34,12 @@ import "./salud.css";
    ignora (spec §12); editor-variante.html → /app/variantes/[id],
    tailor.html → /app/variantes/[id]/tailor. */
 const VARIANT_ID = "backend-fintech";
+const VARIANT_TITLE = "Backend — Fintech";
 const EDITOR_HREF = `/app/variantes/${VARIANT_ID}`;
 const TAILOR_HREF = `/app/variantes/${VARIANT_ID}/tailor`;
+/* Salida de último recurso si la ruta no trae [id] (no debería, pero una
+   pantalla sin salida es el bug que estamos matando). */
+const FALLBACK = "/app/variantes";
 
 interface Finding {
   id: string; // c1..c4 — cableado a la cita
@@ -132,6 +138,11 @@ const buildGuaranteed = (t: (key: string) => string): React.ReactNode[] => [
 
 export function SaludScreen() {
   const t = useT();
+  /* La salud SIEMPRE es la salud DE una variante: su salida natural es esa
+     variante, tomada del [id] real de la ruta (no del id de maqueta). Si por lo
+     que sea no hay [id], se cae al listado — nunca a "ningún sitio". */
+  const routeId = useParams()?.id;
+  const volverA = typeof routeId === "string" && routeId ? `/app/variantes/${routeId}` : FALLBACK;
   const findings = buildFindings(t);
   const guaranteed = buildGuaranteed(t);
   const hasFindings = findings.length > 0;
@@ -209,12 +220,9 @@ export function SaludScreen() {
 
       <div className="sl-bar" data-screen-label="salud-toolbar">
         <div className="c-container">
-          <Link
-            style={{ font: "500 var(--fs-ui)/1 var(--font-sans)", color: "var(--text-muted)" }}
-            href={EDITOR_HREF}
-          >
-            ← Backend — Fintech
-          </Link>
+          {/* La salida: a la variante de la que cuelga esta salud, o a donde
+              dijo el ?from si vienes de otro sitio. */}
+          <Breadcrumb fallback={volverA} fallbackLabel={VARIANT_TITLE} />
           <span
             style={{ width: "1px", height: "16px", background: "var(--border-strong)" }}
             aria-hidden="true"

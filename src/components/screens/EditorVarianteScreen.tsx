@@ -1,14 +1,6 @@
 "use client";
 
-import {
-  Fragment,
-  useCallback,
-  useEffect,
-  useLayoutEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useBoot } from "@/lib/corpus/runtime";
@@ -20,8 +12,18 @@ import {
   linkLabel,
   mergePresentationOverride,
   type PresentationPatch,
+  type ResumeData,
+  type I18n,
 } from "@/lib/cv/resume";
+// El catálogo se auto-registra al importarse y no toca APIs de servidor: el selector
+// del editor lee las MISMAS plantillas que usa el render, no una copia.
+import { listTemplates, listPalettes, listTypographies, getTemplate } from "@/lib/cv/templates";
 import "./editor-variante.css";
+
+// Listas estables (el catálogo no cambia en runtime): fuera del componente.
+const TEMPLATES = listTemplates();
+const PALETTES = listPalettes();
+const TYPOGRAPHIES = listTypographies();
 
 /* ============================================================================
    Editor de variante — porte de corpus-design/04-pantallas/editor-variante.html
@@ -37,13 +39,23 @@ import "./editor-variante.css";
      - override por campo     → PATCH  /api/variants/[id]/items { id, override_data }
                                 (override_data:null = revertir al master)
      - título objetivo/nombre → PATCH  /api/variants/[id] { target_title, name }
-     - Descargar PDF          → POST   /api/cv { variantId, download:true } (blob)
+     - Preview (doc + ATS)    → POST   /api/cv { data, as:'preview' } → {pdf,text,pages}
+     - Descargar PDF          → POST   /api/cv { data, download:true } (blob)
+   Preview y descarga mandan EL MISMO `data` (el estado que ves): no pueden derivar.
    La maqueta (persona Diego Gatica) SOLO se usa como fallback del modo local sin
    Supabase; en modo Supabase NO hay ni un dato de demo.
 
+   ★ EL PREVIEW ES EL PDF, LITERALMENTE. Esta pantalla NO dibuja el documento: pide
+   el PDF a POST /api/cv (`as:'preview'`) y lo embebe en un <iframe>. El rayos-X
+   («Cómo lo lee el ATS») es el texto que unpdf extrae de ESE MISMO buffer, y el
+   contador de páginas es su numPages. No hay ningún segundo renderizador ni ningún
+   segundo generador de texto en el cliente: la promesa del pie («si el preview
+   miente, el producto miente») dejó de depender de que dos códigos coincidan.
+   El botón Descargar manda EL MISMO body → mismo artefacto, byte a byte.
+
    MURO: no monta la aurora ("donde hay trabajo, el trabajo gana"). Por eso NO se
    importa ni renderiza <Aurora>. Tres columnas: biblioteca del master · composición
-   de la variante · preview que ES el PDF (misma paginación real medida en el DOM)
+   de la variante · preview que ES el PDF (el PDF real, embebido)
    con su rayos-X. El override gana siempre; si el texto vuelve a igualar al master,
    el override se revierte. Añadir una viñeta arrastra su experiencia padre. El
    reordenamiento (drag y su alternativa de teclado) solo mueve dentro de la misma
@@ -88,13 +100,47 @@ const S = (o: Record<string, unknown> | null | undefined, k: string): string => 
   return v == null ? "" : String(v);
 };
 const bySort = (a: VItem, b: VItem) => a.sort_order - b.sort_order;
-const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-const numWrap = (t: string): string => t.replace(/(\d[\d.,%~½]*)/g, '<span class="num">$1</span>');
 
-// Solo dejamos entrar data-URLs de imagen al preview (defensa del innerHTML): el
-// cuerpo COMPLETO debe ser base64 (ancla $), así ninguna comilla ni "<" puede
-// romper el src="…" e inyectar HTML. buildBlocks concatena esto a mano.
+/** El motivo REAL de un fallo, en texto. Es lo que ve el usuario: nunca "algo falló". */
+const reason = (e: unknown): string => (e instanceof Error ? e.message : String(e));
+
+/**
+ * Motivo legible de una respuesta HTTP fallida. /api/cv y /api/variants devuelven
+ * { error } con el mensaje real; si el cuerpo no es JSON se usa el texto crudo, y
+ * si no hay cuerpo, el código. Nunca devuelve "" (un error mudo no es un error).
+ */
+async function readApiError(res: Response): Promise<string> {
+  let raw = "";
+  try {
+    raw = await res.text();
+  } catch (e) {
+    console.error("[editor] no se pudo leer el cuerpo del error", e);
+  }
+  if (raw) {
+    try {
+      const j = JSON.parse(raw) as { error?: unknown };
+      if (typeof j?.error === "string" && j.error.trim()) return j.error.trim();
+    } catch {
+      /* no era JSON: el texto crudo ya es el motivo */
+    }
+    return raw.slice(0, 300);
+  }
+  return `HTTP ${res.status}`;
+}
+
+// Solo dejamos entrar data-URLs de imagen a la miniatura del panel: el cuerpo
+// COMPLETO debe ser base64 (ancla $), así ninguna comilla ni "<" puede romper el
+// src="…". El DOCUMENTO ya no se dibuja aquí (lo dibuja el PDF), pero la foto sí
+// se previsualiza en la tarjeta de Presentación.
 const isPhotoDataUrl = (s: string): boolean => /^data:image\/(png|jpe?g|webp);base64,[a-z0-9+/]+=*$/i.test(s);
+
+/** Blob de PDF a partir del base64 que devuelve /api/cv (`as:'preview'`). */
+function pdfBlobFromBase64(b64: string): Blob {
+  const bin = atob(b64);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i += 1) bytes[i] = bin.charCodeAt(i);
+  return new Blob([bytes], { type: "application/pdf" });
+}
 
 // Reduce la imagen elegida a una data-URL liviana (máx 512 px, JPEG q.85): una foto
 // de CV no necesita más y así el override de basics no se infla. NUNCA es el avatar.
@@ -102,13 +148,14 @@ async function fileToPhotoDataUrl(file: File): Promise<string> {
   const dataUrl = await new Promise<string>((res, rej) => {
     const r = new FileReader();
     r.onload = () => res(String(r.result));
-    r.onerror = () => rej(new Error("read"));
+    // El motivo viaja hasta la barra de estado: tiene que decir algo.
+    r.onerror = () => rej(new Error(`no se pudo leer el archivo "${file.name}"`));
     r.readAsDataURL(file);
   });
   const img = await new Promise<HTMLImageElement>((res, rej) => {
     const im = new Image();
     im.onload = () => res(im);
-    im.onerror = () => rej(new Error("img"));
+    im.onerror = () => rej(new Error(`el navegador no pudo decodificar la imagen (${file.type || "tipo desconocido"})`));
     im.src = dataUrl;
   });
   const MAX = 512;
@@ -149,131 +196,102 @@ function normalizeIncoming(raw: unknown): VItem {
   };
 }
 
-// ── DOC model: lo que se dibuja en el preview y el rayos-X (solo visibles) ────
-interface Doc {
-  basics: { name: string; email: string; phone: string; location: string; links: string[]; label: string };
+// ── El estado del editor → ResumeData ────────────────────────────────────────
+/**
+ * Traduce lo que el usuario compuso al ÚNICO modelo del documento (ResumeData, el
+ * que consume ResumePDF). Es un espejo EXACTO de buildVariantResumeData
+ * (src/lib/db/variants.ts): mismo filtro (solo visibles), mismo orden (sort_order),
+ * mismas reglas de label/foto/QR. Por eso el PDF que ve el editor y el que arma el
+ * servidor desde la variante guardada son el MISMO documento.
+ *
+ * Es PURO y exportado a propósito: es lo único testeable de esta pantalla
+ * (tests/pdf-preview.test.ts lo renderiza de verdad y re-parsea el PDF).
+ */
+const i18nBoth = (v: string): I18n => ({ es: v, en: v });
+
+export interface EditorDocInput {
+  items: VItem[];
+  basicsData: Record<string, unknown>;
+  masterById: Map<string, MasterRow>;
   targetTitle: string;
-  summary: string | null;
-  skills: { group: string; items: string }[];
-  work: { title: string; company: string; location: string; dates: string; bullets: string[] }[];
-  projects: string[];
-  education: { title: string; dates: string; org: string }[];
-  /** Foto opt-in (data-URL). El preview la dibuja arriba, como el PDF. */
-  photo?: string;
-  /** URL del QR opt-in. En modo 'url' va también como texto al pie; en 'vcard' no. */
-  qrUrl?: string;
-  /** Modo del QR: 'url' (codifica la URL) o 'vcard' (codifica la vCard del contacto). */
-  qrMode?: "url" | "vcard";
+  variantName?: string;
 }
 
-// Carta 816×1056 @96dpi, márgenes 68/76 → 920px de caja útil.
-const PAGE_H = 1056 - 68 * 2;
+export function buildEditorResumeData({
+  items,
+  basicsData,
+  masterById,
+  targetTitle,
+  variantName,
+}: EditorDocInput): ResumeData {
+  const vis = items.filter((i) => i.visible);
+  const by = (kind: string) => vis.filter((i) => i.kind === kind).sort(bySort);
+  // La viñeta cuelga del rol por el parent_id del MASTER (o, en optimista, por el
+  // del propio variant_item). Misma regla que `belongsTo` de la composición.
+  const belongs = (b: VItem, w: VItem) =>
+    (masterById.get(b.item_id)?.parent_id ?? b.parent_id) === w.item_id || b.parent_id === w.id;
 
-// ── Bloques del documento → HTML (el corte de página ocurre ENTRE bloques). El
-//    preview ES el PDF. Todo el texto de usuario se escapa. ──
-function buildBlocks(doc: Doc): string[] {
-  const B: string[] = [];
-  const contact =
-    "Email: " + esc(doc.basics.email) + " · Tel: " + esc(doc.basics.phone) + " · " + esc(doc.basics.location);
-  const links = doc.basics.links.filter(Boolean).map(esc).join(" · ");
-  // Foto opt-in: arriba del nombre, como en el PDF. Solo data-URLs de imagen.
-  const photoHtml = doc.photo && isPhotoDataUrl(doc.photo) ? '<img class="cvd-photo" alt="" src="' + doc.photo + '">' : "";
-  B.push(
-    photoHtml +
-      '<div class="cvd-name">' + esc(doc.basics.name) + "</div>" +
-      '<div class="cvd-label">' + esc(doc.targetTitle) + "</div>" +
-      '<div class="cvd-contact">' + contact + (links ? "<br>" + links : "") + "</div>",
-  );
-  if (doc.summary != null && doc.summary.trim())
-    B.push('<div class="cvd-h">Resumen</div><p class="cvd-sum">' + esc(doc.summary) + "</p>");
-  if (doc.skills.length)
-    B.push(
-      '<div class="cvd-h">Habilidades</div>' +
-        doc.skills
-          .map((s) => '<p class="cvd-skline"><b>' + esc(s.group) + ":</b> " + esc(s.items) + "</p>")
-          .join(""),
-    );
-  if (doc.work.length) {
-    B.push('<div class="cvd-h">Experiencia</div>');
-    doc.work.forEach((w) => {
-      B.push(
-        '<div class="cvd-erow"><span class="t">' + esc(w.title) + " — " + esc(w.company) +
-          '</span><span class="d">' + esc(w.dates) + '</span></div><div class="cvd-org">' + esc(w.location) + "</div>",
-      );
-      w.bullets.forEach((tx) => B.push('<p class="cvd-b">• ' + numWrap(esc(tx)) + "</p>"));
-    });
-  }
-  if (doc.projects.length)
-    B.push(
-      '<div class="cvd-h">Proyectos</div>' +
-        doc.projects.map((tx) => '<p class="cvd-b">• ' + esc(tx) + "</p>").join(""),
-    );
-  if (doc.education.length) {
-    B.push('<div class="cvd-h">Educación</div>');
-    doc.education.forEach((d) =>
-      B.push(
-        '<div class="cvd-erow"><span class="t">' + esc(d.title) + '</span><span class="d">' + esc(d.dates) +
-          '</span></div><div class="cvd-org">' + esc(d.org) + "</div>",
-      ),
-    );
-  }
-  // QR opt-in AL PIE: el glifo no lo lee el ATS. En modo 'url' la URL de al lado SÍ
-  // (va como texto); en modo 'vcard' solo la leyenda (el contacto ya está en el cuerpo).
-  if (doc.qrMode === "vcard") {
-    B.push(
-      '<div class="cvd-qr"><span class="cvd-qrbox" aria-hidden="true">QR</span>' +
-        '<span class="cvd-qrcap">Escanea para guardar el contacto</span></div>',
-    );
-  } else if (doc.qrUrl) {
-    B.push(
-      '<div class="cvd-qr"><span class="cvd-qrbox" aria-hidden="true">QR</span>' +
-        '<span class="cvd-qrcap">Escanea o visita:<br><span class="cvd-qrurl">' + esc(doc.qrUrl) + "</span></span></div>",
-    );
-  }
-  return B;
-}
+  const summary = by("summary")[0];
+  // El título objetivo manda como label; si no hay, cae al label del basics.
+  const label = (targetTitle || S(basicsData, "label")).trim();
 
-// ── Rayos-X: texto plano en el ORDEN del documento, generado del ESTADO. La
-//    leyenda (.cap) es copy de UI y se inyecta traducida; los encabezados del
-//    documento son contenido del CV (siguen el idioma de la variante). ──
-function buildRaw(doc: Doc, legend: string): string {
-  const L: string[] = [];
-  L.push(doc.basics.name);
-  const o = doc.targetTitle.trim();
-  if (o) L.push(o);
-  L.push("Email: " + doc.basics.email + " · Tel: " + doc.basics.phone + " · " + doc.basics.location);
-  const links = doc.basics.links.filter(Boolean).join(" · ");
-  if (links) L.push(links);
-  L.push("");
-  if (doc.summary != null && doc.summary.trim()) L.push("RESUMEN", doc.summary, "");
-  if (doc.skills.length) {
-    L.push("HABILIDADES");
-    doc.skills.forEach((s) => L.push(s.group + ": " + s.items));
-    L.push("");
-  }
-  if (doc.work.length) {
-    L.push("EXPERIENCIA");
-    doc.work.forEach((w) => {
-      L.push(w.title + " — " + w.company + "   " + w.dates, w.location);
-      w.bullets.forEach((tx) => L.push("• " + tx));
-      L.push("");
-    });
-  }
-  if (doc.projects.length) {
-    L.push("PROYECTOS");
-    doc.projects.forEach((tx) => L.push("• " + tx));
-    L.push("");
-  }
-  if (doc.education.length) {
-    L.push("EDUCACIÓN");
-    doc.education.forEach((d) => L.push(d.title + "   " + d.dates, d.org));
-  }
-  // La URL del QR, como TEXTO al pie: es lo que el ATS lee del QR (el glifo, no).
-  // Solo en modo 'url'; en 'vcard' no se emite nada (el contacto ya está arriba).
-  // La foto NO aparece aquí: es una imagen, invisible para el parser — honesto.
-  if (doc.qrMode !== "vcard" && doc.qrUrl) L.push("", doc.qrUrl);
-  const body = L.join("\n").replace(/&/g, "&amp;").replace(/</g, "&lt;");
-  return '<span class="cap">' + legend + "</span>" + body;
+  const qrObj = (basicsData.qr as Record<string, unknown> | undefined) ?? {};
+  const qrMode: "url" | "vcard" = qrObj.mode === "vcard" ? "vcard" : "url";
+  const qrU = S(qrObj, "url").trim();
+  // ON si hay URL (modo 'url') o si el modo es 'vcard' (el glifo sale del contacto).
+  const qrOn = qrMode === "vcard" || qrU !== "";
+
+  return {
+    meta: variantName ? { variant: variantName } : undefined,
+    basics: {
+      name: S(basicsData, "name"),
+      label: i18nBoth(label),
+      email: S(basicsData, "email"),
+      phone: S(basicsData, "phone"),
+      location: i18nBoth(S(basicsData, "location")),
+      // Los enlaces pueden venir como string suelto o como {label,url} (contacto
+      // por variante). normalizeLinks los deja en el shape del modelo; ResumePDF
+      // imprime la URL (lo único que lee el ATS), nunca el objeto.
+      links: normalizeLinks(basicsData.links),
+      summary: i18nBoth(summary ? S(summary.data, "text") : ""),
+    },
+    photo: S(basicsData, "photo").trim() || undefined,
+    qr: qrOn ? { mode: qrMode, url: qrU || undefined } : undefined,
+    // Diseño de ESTA variante. Va en el mismo viaje que el resto del documento, así
+    // que el preview embebido ya refleja el cambio de plantilla sin ruta aparte.
+    templateId: S(basicsData, "templateId").trim() || undefined,
+    paletteId: S(basicsData, "paletteId").trim() || undefined,
+    typographyId: S(basicsData, "typographyId").trim() || undefined,
+    skills: by("skill").map((s) => ({ group: i18nBoth(S(s.data, "group")), items: i18nBoth(S(s.data, "items")) })),
+    work: by("work").map((w) => ({
+      company: S(w.data, "company"),
+      location: i18nBoth(S(w.data, "location")),
+      title: i18nBoth(S(w.data, "title")),
+      dates: i18nBoth(S(w.data, "dates")),
+      p1: true,
+      bullets: vis
+        .filter((b) => b.kind === "bullet" && belongs(b, w))
+        .sort(bySort)
+        .map((b) => ({ p1: true, es: S(b.data, "text"), en: S(b.data, "text") })),
+    })),
+    projects: by("project").map((p) => {
+      const line = [S(p.data, "name"), S(p.data, "description")].filter(Boolean).join(" — ");
+      return { p1: true, es: line, en: line };
+    }),
+    education: by("education").map((e) => ({
+      title: i18nBoth(S(e.data, "degree")),
+      org: S(e.data, "institution"),
+      dates: i18nBoth(S(e.data, "dates")),
+      p1: true,
+    })),
+    headings: {
+      summary: i18nBoth("Resumen"),
+      skills: i18nBoth("Habilidades"),
+      work: i18nBoth("Experiencia"),
+      projects: i18nBoth("Proyectos"),
+      education: i18nBoth("Educación"),
+    },
+  };
 }
 
 // ── Fallback del MODO LOCAL (persona Diego Gatica) — jamás con Supabase ──────
@@ -365,9 +383,6 @@ function buildFallback(variantId: string): { master: MasterRow[]; items: VItem[]
   };
 }
 
-// Ejecuta layout-effect en cliente sin avisar en SSR.
-const useIsoLayoutEffect = typeof window !== "undefined" ? useLayoutEffect : useEffect;
-
 type Mode = "doc" | "raw";
 type View = "master" | "mid" | "preview";
 
@@ -426,6 +441,24 @@ export function EditorVarianteScreen({ variantId = "editor" }: { variantId?: str
   }, []);
   useEffect(() => () => { if (flashTimer.current) clearTimeout(flashTimer.current); }, []);
 
+  // `t` cambia de identidad al cambiar de idioma; guardarlo en un ref deja que los
+  // efectos de datos dependan SOLO de sus datos (cambiar de idioma no recarga nada).
+  const tRef = useRef(t);
+  tRef.current = t;
+
+  /**
+   * DESTAPAR EL ERROR. Todo fallo pasa por aquí: al log con contexto (para quien
+   * depura) y a la barra de estado con el MOTIVO REAL interpolado en {r} (para
+   * quien usa). Ningún catch de esta pantalla se queda callado.
+   */
+  const fail = useCallback(
+    (context: string, e: unknown, key: string) => {
+      console.error(`[editor] ${context}`, e);
+      flash(tRef.current(key).replace("{r}", reason(e)));
+    },
+    [flash],
+  );
+
   // ── Carga real (modo Supabase) ──
   useEffect(() => {
     if (!supabaseEnabled) return;
@@ -433,7 +466,7 @@ export function EditorVarianteScreen({ variantId = "editor" }: { variantId?: str
     (async () => {
       try {
         const res = await fetch(`/api/variants/${variantId}`);
-        if (!res.ok) throw new Error(String(res.status));
+        if (!res.ok) throw new Error(await readApiError(res));
         const data = await res.json();
         if (!active) return;
         setMaster((data.master ?? []) as MasterRow[]);
@@ -441,11 +474,12 @@ export function EditorVarianteScreen({ variantId = "editor" }: { variantId?: str
         const m = data.variant as VMeta | undefined;
         setMeta(m ?? null);
         setTargetTitle(m?.target_title ?? "");
-      } catch {
+      } catch (e) {
         if (active) {
           setMaster([]);
           setItems([]);
           setMeta(null);
+          fail(`carga de la variante ${variantId}`, e, "editor.stLoadErr");
         }
       } finally {
         if (active) setLoading(false);
@@ -454,7 +488,7 @@ export function EditorVarianteScreen({ variantId = "editor" }: { variantId?: str
     return () => {
       active = false;
     };
-  }, [variantId]);
+  }, [variantId, fail]);
 
   // ── Índices derivados ──
   const masterById = useMemo(() => {
@@ -522,6 +556,13 @@ export function EditorVarianteScreen({ variantId = "editor" }: { variantId?: str
   const qrOn = qrMode === "vcard" || !!qrUrl;
   const qrChecked = qrOn || qrCustom;
   const qrCustomMode = qrMode === "url" && (qrCustom || (!!qrUrl && !linkOptions.some((l) => l.url === qrUrl)));
+
+  // Diseño elegido para esta variante. Vacío ⇒ la plantilla por defecto (getTemplate
+  // resuelve el id desconocido sin lanzar: un id roto no puede dejarte sin CV).
+  const designTemplateId = S(basicsData, "templateId").trim() || getTemplate(null).id;
+  const designPaletteId = S(basicsData, "paletteId").trim();
+  const designTypographyId = S(basicsData, "typographyId").trim();
+  const activeTemplate = getTemplate(designTemplateId);
 
   // Reconcilia el estado del cliente con la VERDAD del servidor tras guardar la
   // presentación: fija el id real del variant_item de basics, su override_data
@@ -596,8 +637,13 @@ export function EditorVarianteScreen({ variantId = "editor" }: { variantId?: str
             headers: JSON_HEADERS,
             body: JSON.stringify({ presentation: patch }),
           });
-          if (!res.ok) throw new Error();
-          const json = (await res.json().catch(() => null)) as {
+          if (!res.ok) throw new Error(await readApiError(res));
+          const json = (await res.json().catch((e: unknown) => {
+            // Guardó bien (2xx) pero el cuerpo no se pudo leer: no se reconcilia,
+            // el optimista se queda. Se registra para no perder la pista.
+            console.error("[editor] respuesta de presentación ilegible", e);
+            return null;
+          })) as {
             presentation?: {
               basicsItemId?: string;
               override?: Record<string, unknown> | null;
@@ -607,12 +653,12 @@ export function EditorVarianteScreen({ variantId = "editor" }: { variantId?: str
           } | null;
           if (json?.presentation) applyPresentationTruth(json.presentation);
           flash(t("editor.stPresSaved"));
-        } catch {
-          flash(t("editor.stPresErr"));
+        } catch (e) {
+          fail("guardado de presentación/contacto", e, "editor.stPresErr");
         }
       });
     },
-    [master, variantId, flash, t, applyPresentationTruth],
+    [master, variantId, flash, t, fail, applyPresentationTruth],
   );
 
   const onPhotoFile = useCallback(
@@ -626,14 +672,16 @@ export function EditorVarianteScreen({ variantId = "editor" }: { variantId?: str
           return;
         }
         savePresentation({ photo: dataUrl });
-      } catch {
-        flash(t("editor.stPresErr"));
+      } catch (e) {
+        // Archivo corrupto, formato que el navegador no decodifica, canvas sin
+        // contexto… el motivo va a la barra: el usuario sabe qué reintentar.
+        fail(`lectura de la foto "${file.name}"`, e, "editor.stPhotoErr");
       } finally {
         setBusyPhoto(false);
         if (photoInputRef.current) photoInputRef.current.value = "";
       }
     },
-    [savePresentation, flash, t],
+    [savePresentation, flash, t, fail],
   );
 
   // Foto ON abre el selector (el guardado ocurre al elegir archivo); OFF la quita.
@@ -768,106 +816,93 @@ export function EditorVarianteScreen({ variantId = "editor" }: { variantId?: str
     }
     try {
       const res = await fetch(`/api/variants/${variantId}`, { method: "DELETE" });
-      if (!res.ok) throw new Error();
+      if (!res.ok) throw new Error(await readApiError(res));
       router.push("/app/variantes");
-    } catch {
-      flash(t("editor.stDeleteErr"));
+    } catch (e) {
+      fail(`eliminación de la variante ${variantId}`, e, "editor.stDeleteErr");
       setConfirmDelete(false);
     }
-  }, [variantId, router, flash, t]);
+  }, [variantId, router, flash, t, fail]);
 
-  // ── DOC model (solo visibles), para preview + rayos-X ──
-  const doc = useMemo<Doc>(() => {
-    const summaryV = items.find((i) => i.kind === "summary" && i.visible) ?? null;
-    const skillV = items.filter((i) => i.kind === "skill" && i.visible).sort(bySort);
-    const workV = items.filter((i) => i.kind === "work" && i.visible).sort(bySort);
-    const projectV = items.filter((i) => i.kind === "project" && i.visible).sort(bySort);
-    const eduV = items.filter((i) => i.kind === "education" && i.visible).sort(bySort);
-    const label = (targetTitle || S(basicsData, "label")).trim();
-    return {
-      basics: {
-        name: S(basicsData, "name"),
-        email: S(basicsData, "email"),
-        phone: S(basicsData, "phone"),
-        location: S(basicsData, "location"),
-        // Los enlaces pueden venir como string suelto o como {label,url} (contacto
-        // por variante). String(x) sobre el objeto daba "[object Object]" en el
-        // preview y en el rayos-X: al DOCUMENTO va la URL (es lo único que lee el
-        // ATS); la etiqueta es solo para la UI del editor.
-        links: normalizeLinks(basicsData.links).map(linkUrl),
-        label,
-      },
-      targetTitle: label,
-      summary: summaryV ? S(summaryV.data, "text") : null,
-      skills: skillV.map((s) => ({ group: S(s.data, "group"), items: S(s.data, "items") })),
-      work: workV.map((w) => ({
-        title: S(w.data, "title"),
-        company: S(w.data, "company"),
-        location: S(w.data, "location"),
-        dates: S(w.data, "dates"),
-        bullets: bulletsForWork(w).filter((b) => b.visible).map((b) => S(b.data, "text")),
-      })),
-      projects: projectV.map((p) => [S(p.data, "name"), S(p.data, "description")].filter(Boolean).join(" — ")),
-      education: eduV.map((e) => ({ title: S(e.data, "degree"), dates: S(e.data, "dates"), org: S(e.data, "institution") })),
-      photo: S(basicsData, "photo").trim() || undefined,
-      qrUrl: qrUrl || undefined,
-      qrMode: qrOn ? qrMode : undefined,
-    };
-  }, [items, basicsData, targetTitle, bulletsForWork, qrUrl, qrOn, qrMode]);
+  // ── EL DOCUMENTO: un solo modelo (ResumeData) para el preview y la descarga ──
+  const resumeData = useMemo(
+    () => buildEditorResumeData({ items, basicsData, masterById, targetTitle, variantName: meta?.name }),
+    [items, basicsData, masterById, targetTitle, meta?.name],
+  );
+  // Ref para que el efecto del preview y la descarga usen SIEMPRE el último
+  // documento sin volverse a crear en cada render.
+  const resumeRef = useRef(resumeData);
+  resumeRef.current = resumeData;
+  // Firma del documento: si no cambia, no se vuelve a pedir un PDF. Es también el
+  // disparador del debounce (escribir no dispara nada hasta que paras).
+  const docSig = useMemo(() => JSON.stringify(resumeData), [resumeData]);
 
-  // ── Paginación real (medición en el DOM). El error posible queda del lado
-  //    honesto: nunca se recorta contenido. ──
-  const [pages, setPages] = useState<string[]>([]);
-  const [scale, setScale] = useState(1);
+  // ── El preview ES el PDF: bytes reales de /api/cv, embebidos en un <iframe> ──
+  const [pdfUrl, setPdfUrl] = useState("");
+  const [xrayText, setXrayText] = useState("");
+  const [pageCount, setPageCount] = useState(0);
+  const [pvBusy, setPvBusy] = useState(true);
+  const [pvError, setPvError] = useState("");
+  const [pvRetry, setPvRetry] = useState(0);
+  const pdfUrlRef = useRef("");
 
-  const recompute = useCallback(() => {
-    const blks = buildBlocks(doc);
-    const meas = document.createElement("div");
-    meas.style.cssText = "position:absolute;visibility:hidden;left:-9999px;top:0;width:664px";
-    const inner = document.createElement("div");
-    inner.style.cssText = "display:flow-root;width:664px;font:400 13.3px/1.5 var(--font-sans)";
-    meas.appendChild(inner);
-    document.body.appendChild(meas);
-    const pagesArr: string[][] = [[]];
-    blks.forEach((html) => {
-      inner.insertAdjacentHTML("beforeend", html);
-      if (inner.scrollHeight > PAGE_H && pagesArr[pagesArr.length - 1].length) {
-        pagesArr.push([]);
-        inner.innerHTML = html;
-      }
-      pagesArr[pagesArr.length - 1].push(html);
-    });
-    meas.remove();
-    const sc = Math.min(1, ((pvScrollRef.current?.clientWidth || 470) - 36) / 816);
-    setPages(pagesArr.map((pg) => pg.join("")));
-    setScale(sc);
-  }, [doc]);
-
-  const computeRef = useRef(recompute);
-  computeRef.current = recompute;
-  useIsoLayoutEffect(() => {
-    recompute();
-  }, [recompute]);
+  // Un object URL vivo por PDF: se revoca el anterior al llegar el nuevo y el
+  // último al desmontar (si no, cada tecleo filtraría un blob).
+  useEffect(
+    () => () => {
+      if (pdfUrlRef.current) URL.revokeObjectURL(pdfUrlRef.current);
+    },
+    [],
+  );
 
   useEffect(() => {
-    const run = () => computeRef.current();
-    const el = pvScrollRef.current;
-    const ro = el ? new ResizeObserver(run) : null;
-    if (el && ro) ro.observe(el);
-    window.addEventListener("resize", run);
+    if (loading) return; // aún no sabemos qué documento es
     let cancelled = false;
-    if (typeof document !== "undefined" && document.fonts?.ready)
-      document.fonts.ready.then(() => { if (!cancelled) run(); });
+    setPvBusy(true);
+    // DEBOUNCE: no se pide un PDF por tecla. Se regenera ~600 ms después de la
+    // última edición (y al desenfocar, porque el commit cambia `docSig`).
+    const timer = setTimeout(() => {
+      void (async () => {
+        try {
+          const res = await fetch("/api/cv", {
+            method: "POST",
+            headers: JSON_HEADERS,
+            // El MISMO body que la descarga: mismo artefacto, sin excepciones.
+            // `data` (y no `variantId`) para que el preview refleje lo que ves
+            // AHORA, incluso antes de que el guardado optimista llegue al servidor,
+            // y para que funcione igual sin Supabase (modo local).
+            body: JSON.stringify({ data: resumeRef.current, as: "preview" }),
+          });
+          if (!res.ok) throw new Error(await readApiError(res));
+          const json = (await res.json()) as { pdf?: string; text?: string; pages?: number };
+          if (cancelled) return;
+          if (!json.pdf) throw new Error("La respuesta no trae el PDF.");
+          const url = URL.createObjectURL(pdfBlobFromBase64(json.pdf));
+          if (pdfUrlRef.current) URL.revokeObjectURL(pdfUrlRef.current);
+          pdfUrlRef.current = url;
+          setPdfUrl(url);
+          // El rayos-X NO se genera aquí: es el texto que unpdf extrajo de ESTE
+          // mismo PDF en el servidor. Y las páginas son su numPages real.
+          setXrayText(json.text ?? "");
+          setPageCount(Number(json.pages ?? 0));
+          setPvError("");
+        } catch (e) {
+          if (cancelled) return;
+          // Nunca un panel en blanco y mudo: el motivo real se pinta en el panel
+          // y en la barra de estado.
+          console.error("[editor] preview: no se pudo generar el PDF", e);
+          setPvError(reason(e));
+          flash(tRef.current("editor.stPdfErr").replace("{r}", reason(e)));
+        } finally {
+          if (!cancelled) setPvBusy(false);
+        }
+      })();
+    }, 600);
     return () => {
       cancelled = true;
-      if (ro) ro.disconnect();
-      window.removeEventListener("resize", run);
+      clearTimeout(timer);
     };
-  }, []);
-
-  const rawHtml = useMemo(() => buildRaw(doc, t("editor.xrayLegend")), [doc, t]);
-  const pageCount = pages.length;
-  const docHeight = pageCount * (1056 + 30) * scale;
+  }, [docSig, loading, pvRetry, flash]);
 
   // ── Persistencia (contra el contrato; en modo local es no-op) ──
   const patchItem = useCallback(
@@ -880,14 +915,16 @@ export function EditorVarianteScreen({ variantId = "editor" }: { variantId?: str
             headers: JSON_HEADERS,
             body: JSON.stringify({ id: vitemId, ...patch }),
           });
-          if (!res.ok) throw new Error();
+          if (!res.ok) throw new Error(await readApiError(res));
           flash(t("editor.stSavedItem"));
-        } catch {
-          flash(t("editor.stSaveItemErr"));
+        } catch (e) {
+          // El estado local ya cambió (optimista): si el servidor lo rechazó, el
+          // usuario tiene que enterarse, o creerá que guardó.
+          fail(`PATCH del item ${vitemId} · ${Object.keys(patch).join(",")}`, e, "editor.stSaveItemErr");
         }
       })();
     },
-    [variantId, flash, t],
+    [variantId, flash, t, fail],
   );
 
   const patchVariant = useCallback(
@@ -900,14 +937,14 @@ export function EditorVarianteScreen({ variantId = "editor" }: { variantId?: str
             headers: JSON_HEADERS,
             body: JSON.stringify(patch),
           });
-          if (!res.ok) throw new Error();
+          if (!res.ok) throw new Error(await readApiError(res));
           flash(t("editor.stSaved"));
-        } catch {
-          flash(t("editor.stSaveErr"));
+        } catch (e) {
+          fail(`PATCH de la variante · ${Object.keys(patch).join(",")}`, e, "editor.stSaveErr");
         }
       })();
     },
-    [variantId, flash, t],
+    [variantId, flash, t, fail],
   );
 
   const nextSortOrder = useCallback(
@@ -942,19 +979,19 @@ export function EditorVarianteScreen({ variantId = "editor" }: { variantId?: str
           headers: JSON_HEADERS,
           body: JSON.stringify({ item_id: masterId }),
         });
-        if (!res.ok) throw new Error();
+        if (!res.ok) throw new Error(await readApiError(res));
         const { item } = (await res.json()) as { item?: unknown };
         if (item) {
           const norm = normalizeIncoming(item);
           if (!norm.data || Object.keys(norm.data).length === 0) norm.data = m.data;
           setItems((prev) => prev.map((i) => (i.id === tmpId ? norm : i)));
         }
-      } catch {
+      } catch (e) {
         setItems((prev) => prev.filter((i) => i.id !== tmpId));
-        flash(t("editor.stAddErr"));
+        fail(`POST del item ${masterId} a la variante`, e, "editor.stAddErr");
       }
     },
-    [masterById, items, nextSortOrder, variantId, flash, t],
+    [masterById, items, nextSortOrder, variantId, flash, t, fail],
   );
 
   const removeItem = useCallback(
@@ -970,10 +1007,21 @@ export function EditorVarianteScreen({ variantId = "editor" }: { variantId?: str
       if (!supabaseEnabled) return;
       allIds.forEach((id) => {
         if (id.startsWith("tmp-")) return;
-        void fetch(`/api/variants/${variantId}/items?id=${encodeURIComponent(id)}`, { method: "DELETE" }).catch(() => {});
+        void (async () => {
+          try {
+            const res = await fetch(`/api/variants/${variantId}/items?id=${encodeURIComponent(id)}`, {
+              method: "DELETE",
+            });
+            if (!res.ok) throw new Error(await readApiError(res));
+          } catch (e) {
+            // Ya desapareció de la pantalla: si el servidor no lo borró, volverá al
+            // recargar. Decirlo es la diferencia entre un bug y una sorpresa.
+            fail(`DELETE del item ${id} de la variante`, e, "editor.stRemoveErr");
+          }
+        })();
       });
     },
-    [items, belongsTo, variantId, flash, t],
+    [items, belongsTo, variantId, flash, t, fail],
   );
 
   // Biblioteca: clic en una fila = alternar (añadir/quitar). Añadir una viñeta
@@ -1158,32 +1206,33 @@ export function EditorVarianteScreen({ variantId = "editor" }: { variantId?: str
     [items, belongsTo, bulletsForWork, reorder],
   );
 
-  // ── Descargar PDF (mismo motor que el preview → cero deriva) ──
+  // ── Descargar PDF ─────────────────────────────────────────────────────────
+  // MISMO endpoint y MISMO body que el preview (solo cambia `download`): el PDF
+  // que se descarga es, byte a byte, el que estás viendo. Funciona igual sin
+  // Supabase, porque el documento viaja en `data`, no en un id de la base.
   const downloadPdf = useCallback(async () => {
-    if (!supabaseEnabled) {
-      flash(t("editor.stPdfLocal"));
-      return;
-    }
     flash(t("editor.stPdfGen"));
     try {
       const res = await fetch("/api/cv", {
         method: "POST",
         headers: JSON_HEADERS,
-        body: JSON.stringify({ variantId, download: true }),
+        body: JSON.stringify({ data: resumeRef.current, download: true }),
       });
-      if (!res.ok) throw new Error();
+      if (!res.ok) throw new Error(await readApiError(res));
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `CV-${(doc.basics.name || "corpus").replace(/[^a-z0-9]+/gi, "-").replace(/^-|-$/g, "")}.pdf`;
+      const safe = (resumeRef.current.basics.name || "corpus").replace(/[^a-z0-9]+/gi, "-").replace(/^-|-$/g, "");
+      a.download = `CV-${safe}.pdf`;
       a.click();
-      URL.revokeObjectURL(url);
+      // Revocar en el mismo tick corta la descarga en algunos navegadores.
+      setTimeout(() => URL.revokeObjectURL(url), 30_000);
       flash(t("editor.stPdfDone"));
-    } catch {
-      flash(t("editor.stPdfErr"));
+    } catch (e) {
+      fail("descarga del PDF", e, "editor.stPdfErr");
     }
-  }, [variantId, doc.basics.name, flash, t]);
+  }, [flash, t, fail]);
 
   // ── Nombre / título objetivo ──
   const onNameBlur = useCallback(
@@ -1632,6 +1681,78 @@ export function EditorVarianteScreen({ variantId = "editor" }: { variantId?: str
             <p className="note">{t("editor.contactSeedHint")}</p>
           </div>
 
+          {/* ── Diseño del documento: plantilla · paleta · tipografía ──
+              La gama ATS va primero porque es la que se sube a un portal. La gama
+              visual lleva su aviso: el usuario elige informado, no a ciegas. */}
+          <div className="c-card var-design" data-screen-label="editor-diseno">
+            <div className="presh">
+              <span className="t-overline">{t("editor.designOverline")}</span>
+              <span className="n">{t("editor.designHint")}</span>
+            </div>
+
+            <div className="cfield">
+              <label className="f" htmlFor="tplSel">
+                {t("editor.designTemplate")}
+              </label>
+              <select
+                id="tplSel"
+                className="c-input"
+                value={designTemplateId}
+                onChange={(e) => savePresentation({ templateId: e.target.value })}
+              >
+                {TEMPLATES.map((tpl) => (
+                  <option key={tpl.id} value={tpl.id}>
+                    {tpl.name} — {tpl.description}
+                  </option>
+                ))}
+              </select>
+              {activeTemplate.warning ? (
+                <p className="note warn">⚠ {activeTemplate.warning}</p>
+              ) : (
+                <p className="note">{t("editor.designAtsNote")}</p>
+              )}
+            </div>
+
+            <div className="cfield">
+              <label className="f" htmlFor="palSel">
+                {t("editor.designPalette")}
+              </label>
+              <select
+                id="palSel"
+                className="c-input"
+                value={designPaletteId}
+                onChange={(e) => savePresentation({ paletteId: e.target.value || null })}
+              >
+                <option value="">{t("editor.designFromTemplate")}</option>
+                {PALETTES.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="cfield">
+              <label className="f" htmlFor="typSel">
+                {t("editor.designTypography")}
+              </label>
+              <select
+                id="typSel"
+                className="c-input"
+                value={designTypographyId}
+                onChange={(e) => savePresentation({ typographyId: e.target.value || null })}
+              >
+                <option value="">{t("editor.designFromTemplate")}</option>
+                {TYPOGRAPHIES.map((ty) => (
+                  <option key={ty.id} value={ty.id}>
+                    {ty.name}
+                  </option>
+                ))}
+              </select>
+              <p className="note">{t("editor.designNote")}</p>
+            </div>
+          </div>
+
           {hasBasics && (
             <div className="c-card var-pres" data-screen-label="editor-presentacion">
               <div className="presh">
@@ -1879,8 +2000,16 @@ export function EditorVarianteScreen({ variantId = "editor" }: { variantId?: str
                 {t("editor.viewRaw")}
               </button>
             </div>
+            {/* Estado HONESTO del preview: actualizando · error · páginas reales
+                (numPages del PDF que estás viendo, no una estimación del DOM). */}
             <span className="pv-pages" id="pvPages">
-              {pageCount <= 2 ? (
+              {pvBusy ? (
+                <span className="pv-busy">{t("editor.pvUpdating")}</span>
+              ) : pvError ? (
+                <span className="warn">{t("editor.pvFailedShort")}</span>
+              ) : pageCount === 0 ? (
+                t("editor.pvNoPages")
+              ) : pageCount <= 2 ? (
                 t("editor.pageLabel")
                   .replace("{a}", String(Math.min(pageCount, 1)))
                   .replace("{b}", String(pageCount))
@@ -1891,22 +2020,36 @@ export function EditorVarianteScreen({ variantId = "editor" }: { variantId?: str
           </div>
           <div className="pv-scroll" ref={pvScrollRef}>
             <div className="pv-fit c-xray" id="xray" data-mode={mode}>
-              <div
-                className="c-xray__doc pv-doc"
-                id="pvDoc"
-                style={{ height: docHeight ? docHeight + "px" : undefined }}
-              >
-                <div className="pv-pagewrap" style={{ transform: `scale(${scale})`, width: "816px" }}>
-                  {pages.map((html, i) => (
-                    <div className={"pv-page" + (i >= 2 ? " pv-p3" : "")} key={i}>
-                      <span className="pv-pnum">{t("editor.pageNum").replace("{n}", String(i + 1))}</span>
-                      <div className="inner" dangerouslySetInnerHTML={{ __html: html }} />
-                    </div>
-                  ))}
-                </div>
+              <div className="c-xray__doc pv-doc" id="pvDoc">
+                {pvError ? (
+                  <div className="pv-fail" role="alert">
+                    <span className="t-overline">{t("editor.pvErrTitle")}</span>
+                    <p className="why">{pvError}</p>
+                    <button
+                      type="button"
+                      className="c-btn c-btn--quiet"
+                      onClick={() => setPvRetry((n) => n + 1)}
+                    >
+                      {t("editor.pvRetry")}
+                    </button>
+                  </div>
+                ) : pdfUrl ? (
+                  // EL PDF REAL. No es una maqueta del PDF: son los bytes que
+                  // devuelve /api/cv, los mismos que baja el botón Descargar.
+                  <iframe className="pv-frame" src={pdfUrl} title={t("editor.pvFrameTitle")} />
+                ) : (
+                  <div className="pv-fail" aria-live="polite">
+                    <span className="t-overline">{t("editor.pvBuilding")}</span>
+                  </div>
+                )}
               </div>
               <div className="c-xray__raw" id="pvRawWrap" style={{ width: "100%" }}>
-                <div className="pv-raw" id="pvRaw" dangerouslySetInnerHTML={{ __html: rawHtml }} />
+                {/* Rayos-X: el texto que unpdf extrajo de ESE PDF. Cero generadores
+                    paralelos — si el parser no lo lee, aquí no aparece. */}
+                <div className="pv-raw" id="pvRaw">
+                  <span className="cap">{t("editor.xrayLegend")}</span>
+                  {pvError ? pvError : xrayText}
+                </div>
               </div>
             </div>
           </div>

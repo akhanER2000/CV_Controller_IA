@@ -689,6 +689,11 @@ export async function buildVariantResumeData(
     },
     photo,
     qr: qrOn ? { mode: qrMode, url: qrUrl || undefined } : undefined,
+    // Diseño elegido para ESTA variante (vive en el override de basics, como la
+    // foto y el QR). Vacío ⇒ undefined ⇒ el render cae a la plantilla por defecto.
+    templateId: str(basicsItem, "templateId").trim() || undefined,
+    paletteId: str(basicsItem, "paletteId").trim() || undefined,
+    typographyId: str(basicsItem, "typographyId").trim() || undefined,
     skills: by("skill").map((s) => ({ group: i18n(str(s.data, "group")), items: i18n(str(s.data, "items")) })),
     work,
     projects: by("project").map((p) => ({

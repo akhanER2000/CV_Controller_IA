@@ -55,6 +55,16 @@
 .var-pres .photo-row{display:flex;align-items:center;gap:12px}
 .var-pres .photo-thumb{width:56px;height:56px;border-radius:4px;object-fit:cover;border:1px solid var(--border);flex:none;background:var(--surface-sunken)}
 .var-pres .photo-acts{display:flex;gap:8px;flex-wrap:wrap}
+/* ── Diseño del documento (plantilla · paleta · tipografía) — misma caja ── */
+.var-design{margin:6px 18px 6px;padding:16px 18px}
+.var-design .presh{display:flex;align-items:baseline;gap:10px}
+.var-design .presh .t-overline{font-size:10px}
+.var-design .presh .n{font:400 10px/1 var(--font-mono);color:var(--text-subtle)}
+.var-design .cfield{margin-top:12px}
+.var-design label.f{display:block;font:500 9.5px/1 var(--font-mono);letter-spacing:.1em;text-transform:uppercase;color:var(--text-subtle);margin-bottom:6px}
+.var-design select.c-input{height:36px;background:var(--surface-sunken);width:100%}
+.var-design .note{margin-top:7px;font:400 var(--fs-micro)/1.6 var(--font-mono);color:var(--text-subtle)}
+.var-design .note.warn{color:var(--accent-text)}
 /* ── Contacto por variante — misma caja que var-obj/var-pres ── */
 .var-contact{margin:6px 18px 6px;padding:16px 18px}
 .var-contact .presh{display:flex;align-items:baseline;gap:10px}
@@ -121,42 +131,25 @@
 .pv-seg button[aria-pressed="true"]{color:var(--text);background:var(--surface-elevated);box-shadow:inset 0 0 0 1px var(--border-patina)}
 .pv-pages{margin-left:auto;font:500 var(--fs-micro)/1 var(--font-mono);color:var(--text-muted)}
 .pv-pages .warn{color:var(--danger)}
-.pv-scroll{flex:1;overflow-y:auto;padding:18px}
-.pv-fit{position:relative;margin:0 auto}
-.pv-doc{position:relative}
-.pv-pagewrap{transform-origin:0 0}
-.pv-page{position:relative;width:816px;height:1056px;background:#FFFFFF;color:#14181A;
-  box-shadow:0 2px 24px rgba(0,0,0,.5);margin-bottom:30px;overflow:hidden}
-.pv-page .inner{position:absolute;inset:68px 76px;font:400 13.3px/1.5 var(--font-sans)}
-.pv-pnum{position:absolute;right:-56px;top:8px;font:500 10px/1 var(--font-mono);color:var(--text-subtle)}
-.pv-p3{outline:2px dashed color-mix(in srgb,var(--danger) 55%,transparent);outline-offset:4px}
-/* tipografía del documento (espejo de 05-documento-cv, 1pt≈1.333px) */
-.cvd-name{font:600 29px/1.15 var(--font-display);color:#1F6E5A;letter-spacing:.002em}
-.cvd-label{margin-top:3px;font:500 14.7px/1.3 var(--font-sans);color:#14181A}
-.cvd-contact{margin-top:8px;font:400 12px/1.5 var(--font-sans);color:#454B49}
-.cvd-h{margin:22px 0 6px;font:600 12px/1 var(--font-sans);letter-spacing:.12em;text-transform:uppercase;color:#1F6E5A;
-  padding-bottom:5px;border-bottom:1px solid #D9DCD8}
-.cvd-sum{color:#14181A}
-.cvd-skline{margin-top:3px}
-.cvd-skline b{font-weight:600}
-.cvd-erow{display:flex;justify-content:space-between;align-items:baseline;margin-top:12px}
-.cvd-erow .t{font-weight:600;font-size:14px}
-.cvd-erow .d{font:400 12px/1.4 var(--font-sans);color:#454B49;white-space:nowrap;padding-left:16px}
-.cvd-org{font-size:12.7px;color:#454B49;margin-top:1px}
-.cvd-b{margin-top:5px;padding-left:16px;text-indent:-10px}
-.cvd-b .num{font-variant-numeric:tabular-nums}
-.cvd-mini{margin-top:4px}
-/* Foto opt-in (arriba del nombre) y QR al pie — espejan el ResumePDF. */
-.cvd-photo{display:block;width:84px;height:84px;border-radius:4px;object-fit:cover;margin-bottom:8px}
-.cvd-qr{display:flex;align-items:center;gap:12px;margin-top:22px}
-.cvd-qrbox{width:56px;height:56px;flex:none;display:flex;align-items:center;justify-content:center;
-  border:1px solid #D8DAD6;border-radius:3px;font:600 10px/1 var(--font-mono);color:#454B49;background:#fff}
-.cvd-qrcap{font:400 11px/1.4 var(--font-sans);color:#454B49}
-.cvd-qrurl{color:#14181A;font-size:12px}
+.pv-busy{color:var(--text-subtle)}
+/* El preview ES el PDF: la columna deja de dibujar el documento (ya no hay .pv-page
+   ni tipografía .cvd-*: eso era un SEGUNDO renderizador que podía mentir) y embebe
+   los bytes reales que devuelve /api/cv. El visor del navegador pagina y hace su
+   propio scroll, así que la caja se estira a la altura disponible. */
+.pv-scroll{flex:1;overflow-y:auto;padding:18px;display:flex;min-height:0}
+.pv-fit{position:relative;margin:0 auto;flex:1;min-width:0;min-height:0;display:flex}
+.pv-doc{position:relative;flex:1;min-height:0;display:flex}
+.pv-frame{flex:1;width:100%;min-height:520px;border:0;border-radius:var(--radius-md);
+  background:#FFFFFF;box-shadow:0 2px 24px rgba(0,0,0,.5)}
+/* Estado honesto cuando no hay PDF que mostrar (generando o error CON motivo). */
+.pv-fail{flex:1;display:flex;flex-direction:column;align-items:flex-start;gap:10px;
+  padding:26px 24px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-md)}
+.pv-fail .why{font:400 11.5px/1.7 var(--font-mono);color:var(--danger);word-break:break-word}
 /* rayos-X */
 .pv-xray{position:relative}
 .pv-raw{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-md);
-  padding:26px 28px;font:400 11.5px/1.75 var(--font-mono);color:var(--text-muted);white-space:pre-wrap;overflow:auto}
+  padding:26px 28px;font:400 11.5px/1.75 var(--font-mono);color:var(--text-muted);white-space:pre-wrap;overflow:auto;
+  height:100%;max-height:100%}
 .pv-raw .cap{display:block;margin-bottom:16px;font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--text-subtle)}
 .pv-foot{padding:10px 16px;border-top:1px solid var(--border);font:400 10px/1.6 var(--font-mono);color:var(--text-subtle)}
 @media (max-width:1240px){.ed-grid{grid-template-columns:250px 1fr 400px}}

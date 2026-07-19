@@ -2,9 +2,16 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { useParams } from "next/navigation";
 import { useT } from "@/lib/i18n";
 import { useBoot } from "@/lib/corpus/runtime";
+import { Breadcrumb } from "@/components/Breadcrumb";
 import "./tailor.css";
+
+/* Nombre de maqueta de la variante abierta y salida de último recurso: adaptar
+   siempre se hace SOBRE una variante, y de una variante se vuelve a ella. */
+const VARIANT_TITLE = "Backend — Fintech";
+const FALLBACK = "/app/variantes";
 
 /* ============================================================================
    Tailor — porte de corpus-design/04-pantallas/tailor.html
@@ -146,6 +153,9 @@ const editNote: React.CSSProperties = { font: "400 10px/1.5 var(--font-mono)", c
 export function TailorScreen() {
   const bootRef = useBoot<HTMLDivElement>();
   const t = useT();
+  // La variante real de la ruta; si no hay [id], al listado (nunca a la nada).
+  const routeId = useParams()?.id;
+  const volverA = typeof routeId === "string" && routeId ? `/app/variantes/${routeId}` : FALLBACK;
 
   const [jd, setJd] = useState("");
   const [analyzing, setAnalyzing] = useState(false);
@@ -325,12 +335,8 @@ export function TailorScreen() {
 
       <div className="tl-bar" data-screen-label="tailor-toolbar">
         <div className="c-container">
-          <Link
-            style={{ font: "500 var(--fs-ui)/1 var(--font-sans)", color: "var(--text-muted)" }}
-            href="/app/variantes"
-          >
-            ← Backend — Fintech
-          </Link>
+          {/* La salida: a la variante que estás adaptando (o al ?from). */}
+          <Breadcrumb fallback={volverA} fallbackLabel={VARIANT_TITLE} />
           <span style={{ width: "1px", height: "16px", background: "var(--border-strong)" }} />
           <span
             style={{

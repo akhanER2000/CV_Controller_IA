@@ -5,6 +5,7 @@ import path from "node:path";
 import { extractText, getDocumentProxy } from "unpdf";
 import { toPlainText, type ResumeData } from "../src/lib/cv/resume";
 import { renderResumeToBuffer } from "../src/lib/cv/ResumePDF";
+import { listTemplates } from "../src/lib/cv/templates";
 
 /**
  * EL TEST QUE NADIE HACE (documento-cv.md §6). Renderiza el PDF desde el golden
@@ -284,5 +285,183 @@ describe("CV round-trip ATS · QR modo vcard (contacto en el cuerpo, orden intac
     for (const needle of ["Diego Gatica Morales", "diego.gatica@ejemplo.cl", "+56 9 6123 4567"]) {
       expect(extractedVc, `dato perdido con QR vcard: "${needle}"`).toContain(needle);
     }
+  });
+});
+
+/**
+ * EL CANDADO DEL CATÁLOGO (§C4). Todo lo de arriba prueba UNA plantilla: la de por
+ * defecto. Este bloque lo prueba para TODAS las de gama ATS, una por una, con el
+ * mismo golden: si una plantilla no sobrevive al round-trip, no se publica como
+ * ATS. Es lo que separa un sistema de plantillas de un catálogo de promesas.
+ *
+ * Las de gama 'visual' quedan FUERA del bucle a propósito —su composición de dos
+ * columnas rompe el orden de lectura, y ese es justo su trato— pero se les exige
+ * lo único que las hace honestas: un `warning` de verdad.
+ */
+const ATS_TEMPLATES = listTemplates().filter((t) => t.gama === "ats");
+const VISUAL_TEMPLATES = listTemplates().filter((t) => t.gama === "visual");
+
+describe("CV round-trip ATS · PARAMETRIZADO por plantilla del catálogo", () => {
+  // Un render por plantilla, reutilizado por sus tres comprobaciones (renderizar un
+  // PDF de dos páginas cinco veces por aserción sería absurdo).
+  const salida = new Map<string, string>();
+
+  beforeAll(async () => {
+    for (const tpl of ATS_TEMPLATES) {
+      const buf = await renderResumeToBuffer({ ...data, templateId: tpl.id }, { locale: "es", onePage: false });
+      expect(buf.length, `${tpl.id}: PDF vacío`).toBeGreaterThan(0);
+      expect(buf.length, `${tpl.id}: pasa de 2,5 MB (umbral Greenhouse)`).toBeLessThan(2.5 * 1024 * 1024);
+      const pdf = await getDocumentProxy(new Uint8Array(buf));
+      const { text } = await extractText(pdf, { mergePages: true });
+      salida.set(tpl.id, norm(text));
+    }
+  }, 180000);
+
+  it("0 · el catálogo trae al menos CUATRO plantillas de gama ATS", () => {
+    expect(ATS_TEMPLATES.length).toBeGreaterThanOrEqual(4);
+    expect(ATS_TEMPLATES.map((t) => t.id)).toContain("ats-clasica");
+  });
+
+  it("0b · 'Compacta' cumple su nombre: el contenido de DOS páginas le cabe en UNA", async () => {
+    // El nombre de una plantilla es una promesa. Esta la cumple con el mismo golden
+    // que la clásica reparte en dos páginas — sin recortar una sola palabra (eso lo
+    // comprueba el test 'b' de esta misma tanda, que exige el golden entero).
+    const paginas = async (id: string) => {
+      const buf = await renderResumeToBuffer({ ...data, templateId: id }, { locale: "es", onePage: false });
+      return (await getDocumentProxy(new Uint8Array(buf))).numPages;
+    };
+    expect(await paginas("ats-compacta")).toBe(1);
+    expect(await paginas("ats-clasica")).toBe(2);
+  }, 60000);
+
+  it("0c · la versión de una página CABE en una página, en todas las plantillas ATS", async () => {
+    // Con el filtro p1 puesto, "1 página" tiene que ser verdad. Una plantilla con
+    // tanto aire que se desborda a dos no es un estilo: es una promesa incumplida.
+    for (const tpl of ATS_TEMPLATES) {
+      const buf = await renderResumeToBuffer({ ...data, templateId: tpl.id }, { locale: "es", onePage: true });
+      const pdf = await getDocumentProxy(new Uint8Array(buf));
+      expect(pdf.numPages, `${tpl.id}: la versión de una página sale en ${pdf.numPages}`).toBe(1);
+    }
+  }, 120000);
+
+  for (const tpl of ATS_TEMPLATES) {
+    describe(`${tpl.id} · ${tpl.name}`, () => {
+      it("a · nombre, contacto, cargos y fechas sobreviven al parseo", () => {
+        const out = salida.get(tpl.id)!;
+        for (const needle of [
+          "Diego Gatica Morales", // nombre
+          "diego.gatica@ejemplo.cl", // email
+          "+56 9 6123 4567", // teléfono
+          "github.com/dgatica", // enlace
+          "Backend Developer — Altiplano Pagos SpA", // cargo (con la raya larga)
+          "Backend Developer, equipo Checkout — Rayén Retail S.A.", // el cargo más largo
+          "mar 2022 – hoy", // fechas (con guion corto)
+          "ene 2020 – feb 2022",
+          "2014 – 2019", // fechas de formación
+          "Go, Python, SQL, TypeScript", // habilidades
+          "40.000", // cifra dentro de una viñeta
+        ]) {
+          expect(out, `${tpl.id} · dato perdido: "${needle}"`).toContain(needle);
+        }
+      });
+
+      it("b · TODAS las líneas del golden, en ORDEN DE LECTURA", () => {
+        const out = salida.get(tpl.id)!;
+        let cursor = 0;
+        for (const line of golden.split("\n").map(norm).filter(Boolean)) {
+          const idx = out.indexOf(line, cursor);
+          expect(idx, `${tpl.id} · fuera de orden o ausente: "${line}"`).toBeGreaterThanOrEqual(0);
+          cursor = idx + line.length;
+        }
+      });
+
+      it("c · sin basura de embedding (letras espaciadas / mojibake)", () => {
+        const out = salida.get(tpl.id)!;
+        expect(out).not.toMatch(/D i e g o|E x p e r i e n c i a/);
+        expect(out).not.toContain("[object Object]");
+        expect(out.length).toBeGreaterThan(500);
+      });
+    });
+  }
+});
+
+/**
+ * GAMA VISUAL. No pasa por el round-trip —su barra lateral rompe el orden de
+ * lectura, y por eso existe el aviso— pero sí tiene que: (1) llevar un `warning`
+ * que diga POR QUÉ, y (2) generar un PDF sin reventar, con el contacto dentro.
+ */
+describe("CV gama visual · exenta del round-trip, obligada al aviso", () => {
+  it("1 · hay al menos una plantilla visual y TODAS llevan warning no vacío", () => {
+    expect(VISUAL_TEMPLATES.length).toBeGreaterThanOrEqual(1);
+    for (const tpl of VISUAL_TEMPLATES) {
+      expect(tpl.warning?.trim(), `${tpl.id} sin aviso`).toBeTruthy();
+      expect(tpl.warning!.trim().length, `${tpl.id}: aviso demasiado corto para explicar nada`).toBeGreaterThan(30);
+      expect(tpl.warning!.toLowerCase(), `${tpl.id}: el aviso no nombra el ATS`).toContain("ats");
+    }
+  });
+
+  it("2 · ninguna plantilla de gama ATS lleva warning (si lo necesitara, no sería ATS)", () => {
+    for (const tpl of ATS_TEMPLATES) expect(tpl.warning, `${tpl.id} no debería avisar de nada`).toBeUndefined();
+  });
+
+  it("3 · lee en otro ORDEN, pero no PIERDE texto (la frontera entre 'peor' y 'roto')", async () => {
+    // Un CV que parsea en mal orden es un mal CV; uno que se come media URL o el
+    // último empleo está ROTO, y eso no lo salva ningún aviso. Este test nació de un
+    // fallo real: sin `flexBasis: 0` la columna de contenido se encogía y las URLs
+    // (palabras que no se pueden partir) se cortaban a media palabra.
+    const palabras = [...new Set(golden.split(/\s+/).filter((w) => w.length >= 4))];
+    for (const tpl of VISUAL_TEMPLATES) {
+      const buf = await renderResumeToBuffer({ ...data, templateId: tpl.id }, { locale: "es", onePage: false });
+      const pdf = await getDocumentProxy(new Uint8Array(buf));
+      const { text } = await extractText(pdf, { mergePages: true });
+      const out = norm(text);
+      const perdidas = palabras.filter((w) => !out.includes(w));
+      expect(perdidas, `${tpl.id} · palabras recortadas: ${perdidas.slice(0, 8).join(", ")}`).toEqual([]);
+    }
+  }, 60000);
+
+  it("4 · renderiza un PDF válido y el contacto sigue estando como texto", async () => {
+    for (const tpl of VISUAL_TEMPLATES) {
+      const buf = await renderResumeToBuffer({ ...data, templateId: tpl.id }, { locale: "es", onePage: true });
+      expect(buf.length, `${tpl.id}: PDF vacío`).toBeGreaterThan(0);
+      const pdf = await getDocumentProxy(new Uint8Array(buf));
+      const { text } = await extractText(pdf, { mergePages: true });
+      const out = norm(text);
+      for (const needle of ["Diego Gatica Morales", "diego.gatica@ejemplo.cl", "+56 9 6123 4567"]) {
+        expect(out, `${tpl.id} · dato perdido: "${needle}"`).toContain(needle);
+      }
+    }
+  }, 60000);
+});
+
+/**
+ * RETROCOMPATIBILIDAD, dicha en un test. Un documento SIN templateId debe salir
+ * exactamente igual que uno con la plantilla por defecto: mismos bytes. Es la
+ * garantía de que meter un sistema de plantillas no le cambió el CV a nadie.
+ */
+describe("CV plantillas · sin templateId = plantilla por defecto (bytes idénticos)", () => {
+  it("1 · el PDF sin plantilla y el PDF con 'ats-clasica' son el MISMO documento", async () => {
+    const sin = await renderResumeToBuffer(data, { locale: "es", onePage: false });
+    const con = await renderResumeToBuffer({ ...data, templateId: "ats-clasica" }, { locale: "es", onePage: false });
+    // El PDF lleva fechas de creación: se comparan por tamaño y por texto extraído,
+    // que es lo que de verdad define "el mismo documento" para este producto.
+    expect(con.length).toBe(sin.length);
+    const t1 = await extractText(await getDocumentProxy(new Uint8Array(sin)), { mergePages: true });
+    const t2 = await extractText(await getDocumentProxy(new Uint8Array(con)), { mergePages: true });
+    expect(norm(t2.text)).toBe(norm(t1.text));
+  }, 60000);
+
+  it("2 · un templateId DESCONOCIDO no deja a nadie sin CV: cae en la de por defecto", async () => {
+    const raro = await renderResumeToBuffer({ ...data, templateId: "no-existe-esta-plantilla" }, { locale: "es" });
+    const sin = await renderResumeToBuffer(data, { locale: "es" });
+    expect(raro.length).toBe(sin.length);
+  }, 60000);
+
+  it("3 · el texto plano (rayos-X) NO depende de la plantilla", () => {
+    const base = toPlainText(data, { locale: "es", onePage: false });
+    for (const tpl of listTemplates()) {
+      expect(toPlainText({ ...data, templateId: tpl.id }, { locale: "es", onePage: false })).toBe(base);
+    }
+    expect(base).toBe(golden);
   });
 });
