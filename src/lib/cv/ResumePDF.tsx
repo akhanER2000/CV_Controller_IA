@@ -1,6 +1,7 @@
 import { Document, Page, View, Text, Image, Link, Font, StyleSheet, renderToBuffer } from "@react-pdf/renderer";
 import { Fragment } from "react";
 import { fileURLToPath } from "node:url";
+import { existsSync } from "node:fs";
 import path from "node:path";
 import * as QRCode from "qrcode";
 import { selectContent, linkUrl, buildVCard, type ResumeData, type Locale } from "./resume";
@@ -30,8 +31,35 @@ function hrefOf(url: string): string {
  *            (src/lib/fonts/), así el preview en pantalla y el PDF no derivan.
  */
 
-// src/lib/cv → ../fonts = src/lib/fonts
-const FONTS = path.join(path.dirname(fileURLToPath(import.meta.url)), "../fonts");
+/**
+ * TRAMPA 3 (la que rompía la descarga en producción) — la carpeta de fuentes NO
+ * puede salir de `import.meta.url`: webpack lo INLINEA con la ruta absoluta de la
+ * máquina de build. Verificado en el artefacto:
+ *   path.dirname(fileURLToPath("file:///J:/Code/.../src/lib/cv/ResumePDF.tsx"))
+ * En Vercel esa carpeta no existe → Font.register apunta a archivos fantasma → el
+ * render lanza y /api/cv devuelve 500 ("no se pudo generar el PDF"). En local
+ * funciona porque la ruta sí existe, así que el bug solo aparece desplegado.
+ *
+ * Se resuelve desde process.cwd() (raíz del proyecto = raíz de la lambda, que es
+ * donde `outputFileTracingIncludes` deja las .ttf), con respaldo a la ruta del
+ * módulo por si algún entorno no corre desde la raíz. Se elige comprobando que el
+ * archivo EXISTE, no por convención.
+ */
+function resolveFontsDir(): string {
+  const candidates = [
+    path.join(process.cwd(), "src", "lib", "fonts"),
+    path.join(path.dirname(fileURLToPath(import.meta.url)), "../fonts"),
+  ];
+  for (const dir of candidates) {
+    try {
+      if (existsSync(path.join(dir, "Geist-Regular.ttf"))) return dir;
+    } catch {
+      /* candidato inválido: se prueba el siguiente */
+    }
+  }
+  return candidates[0]!;
+}
+const FONTS = resolveFontsDir();
 const f = (name: string) => path.join(FONTS, name);
 
 Font.register({
