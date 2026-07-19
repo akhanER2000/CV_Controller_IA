@@ -80,6 +80,41 @@ describe("CV round-trip ATS · golden (Diego Gatica, 2 páginas, es)", () => {
 });
 
 /**
+ * ENLACES CON HIPERVÍNCULO REAL. Cada URL de la línea de contacto se envuelve en un
+ * <Link> de @react-pdf; el TEXTO visible sigue siendo la URL tal cual, así que el
+ * round-trip no lo nota. Este bloque fija ese candado: los enlaces del golden se
+ * extraen EN ORDEN aunque ahora sean hipervínculos.
+ */
+describe("CV round-trip ATS · enlaces como hipervínculo (el texto no cambia)", () => {
+  let extractedLinks = "";
+
+  beforeAll(async () => {
+    const buf = await renderResumeToBuffer(data, { locale: "es", onePage: false });
+    const pdf = await getDocumentProxy(new Uint8Array(buf));
+    const { text } = await extractText(pdf, { mergePages: true });
+    extractedLinks = norm(text);
+  });
+
+  it("1 · cada URL de contacto sigue como TEXTO seleccionable, en orden", () => {
+    let cursor = extractedLinks.indexOf("github.com/dgatica");
+    for (const url of ["github.com/dgatica", "dgatica.cl", "linkedin.com/in/diego-gatica"]) {
+      const idx = extractedLinks.indexOf(url, cursor);
+      expect(idx, `enlace fuera de orden o ausente: "${url}"`).toBeGreaterThanOrEqual(0);
+      cursor = idx + url.length;
+    }
+  });
+
+  it("2 · el golden completo sigue EN ORDEN con los enlaces envueltos en <Link>", () => {
+    let cursor = 0;
+    for (const line of golden.split("\n").map(norm).filter(Boolean)) {
+      const idx = extractedLinks.indexOf(line, cursor);
+      expect(idx, `fuera de orden o ausente: "${line}"`).toBeGreaterThanOrEqual(0);
+      cursor = idx + line.length;
+    }
+  });
+});
+
+/**
  * QR opt-in y HONESTO. Con qr puesto se dibuja un QR al pie, pero la URL SIEMPRE
  * va también como TEXTO al lado (el ATS no lee el QR). El round-trip debe SEGUIR
  * pasando: la URL se extrae y el orden de lectura del documento no se rompe.
@@ -175,5 +210,44 @@ describe("CV round-trip ATS · QR con URL larga degrada a solo-texto (no revient
     const { text } = await extractText(pdf, { mergePages: true });
     // El prefijo estable de la URL debe estar en el texto extraído.
     expect(norm(text)).toContain("https://ejemplo.cl/aaaaaaaa");
+  });
+});
+
+/**
+ * QR modo 'vcard'. El QR codifica una vCard de los basics; el contacto YA está como
+ * texto en el CUERPO (el candado ATS se cumple ahí), así que al pie NO se emite URL
+ * extra, solo una leyenda honesta. El round-trip del golden debe seguir intacto y el
+ * PDF no puede reventar. La vCard en sí NO debe aparecer como texto (vive en la imagen).
+ */
+describe("CV round-trip ATS · QR modo vcard (contacto en el cuerpo, orden intacto)", () => {
+  const withVcard: ResumeData = { ...data, qr: { mode: "vcard" } };
+  let extractedVc = "";
+
+  beforeAll(async () => {
+    const buf = await renderResumeToBuffer(withVcard, { locale: "es", onePage: false });
+    expect(buf.length).toBeGreaterThan(0);
+    const pdf = await getDocumentProxy(new Uint8Array(buf));
+    const { text } = await extractText(pdf, { mergePages: true });
+    extractedVc = norm(text);
+  });
+
+  it("1 · el golden sigue EN ORDEN — el QR vcard no altera la lectura", () => {
+    let cursor = 0;
+    for (const line of golden.split("\n").map(norm).filter(Boolean)) {
+      const idx = extractedVc.indexOf(line, cursor);
+      expect(idx, `fuera de orden o ausente con QR vcard: "${line}"`).toBeGreaterThanOrEqual(0);
+      cursor = idx + line.length;
+    }
+  });
+
+  it("2 · la vCard NO se filtra como texto (vive dentro del glifo, no en el stream)", () => {
+    expect(extractedVc).not.toContain("BEGIN:VCARD");
+    expect(extractedVc).not.toContain("VERSION:3.0");
+  });
+
+  it("3 · el contacto en texto (nombre/email/tel) sobrevive igual", () => {
+    for (const needle of ["Diego Gatica Morales", "diego.gatica@ejemplo.cl", "+56 9 6123 4567"]) {
+      expect(extractedVc, `dato perdido con QR vcard: "${needle}"`).toContain(needle);
+    }
   });
 });

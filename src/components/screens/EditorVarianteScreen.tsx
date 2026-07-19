@@ -10,10 +10,17 @@ import {
   useState,
 } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useBoot } from "@/lib/corpus/runtime";
 import { useT } from "@/lib/i18n";
 import { supabaseEnabled } from "@/lib/supabase/config";
-import { normalizeLinks, linkUrl, linkLabel } from "@/lib/cv/resume";
+import {
+  normalizeLinks,
+  linkUrl,
+  linkLabel,
+  mergePresentationOverride,
+  type PresentationPatch,
+} from "@/lib/cv/resume";
 import "./editor-variante.css";
 
 /* ============================================================================
@@ -153,8 +160,10 @@ interface Doc {
   education: { title: string; dates: string; org: string }[];
   /** Foto opt-in (data-URL). El preview la dibuja arriba, como el PDF. */
   photo?: string;
-  /** URL del QR opt-in. En el documento SIEMPRE va también como texto, al pie. */
+  /** URL del QR opt-in. En modo 'url' va también como texto al pie; en 'vcard' no. */
   qrUrl?: string;
+  /** Modo del QR: 'url' (codifica la URL) o 'vcard' (codifica la vCard del contacto). */
+  qrMode?: "url" | "vcard";
 }
 
 // Carta 816×1056 @96dpi, márgenes 68/76 → 920px de caja útil.
@@ -208,8 +217,14 @@ function buildBlocks(doc: Doc): string[] {
       ),
     );
   }
-  // QR opt-in AL PIE: el glifo no lo lee el ATS; la URL de al lado SÍ (va como texto).
-  if (doc.qrUrl) {
+  // QR opt-in AL PIE: el glifo no lo lee el ATS. En modo 'url' la URL de al lado SÍ
+  // (va como texto); en modo 'vcard' solo la leyenda (el contacto ya está en el cuerpo).
+  if (doc.qrMode === "vcard") {
+    B.push(
+      '<div class="cvd-qr"><span class="cvd-qrbox" aria-hidden="true">QR</span>' +
+        '<span class="cvd-qrcap">Escanea para guardar el contacto</span></div>',
+    );
+  } else if (doc.qrUrl) {
     B.push(
       '<div class="cvd-qr"><span class="cvd-qrbox" aria-hidden="true">QR</span>' +
         '<span class="cvd-qrcap">Escanea o visita:<br><span class="cvd-qrurl">' + esc(doc.qrUrl) + "</span></span></div>",
@@ -254,8 +269,9 @@ function buildRaw(doc: Doc, legend: string): string {
     doc.education.forEach((d) => L.push(d.title + "   " + d.dates, d.org));
   }
   // La URL del QR, como TEXTO al pie: es lo que el ATS lee del QR (el glifo, no).
+  // Solo en modo 'url'; en 'vcard' no se emite nada (el contacto ya está arriba).
   // La foto NO aparece aquí: es una imagen, invisible para el parser — honesto.
-  if (doc.qrUrl) L.push("", doc.qrUrl);
+  if (doc.qrMode !== "vcard" && doc.qrUrl) L.push("", doc.qrUrl);
   const body = L.join("\n").replace(/&/g, "&amp;").replace(/</g, "&lt;");
   return '<span class="cap">' + legend + "</span>" + body;
 }
@@ -357,6 +373,7 @@ type View = "master" | "mid" | "preview";
 
 export function EditorVarianteScreen({ variantId = "editor" }: { variantId?: string } = {}) {
   const t = useT();
+  const router = useRouter();
   const [fb] = useState(() => (supabaseEnabled ? null : buildFallback(variantId)));
   const [master, setMaster] = useState<MasterRow[]>(() => fb?.master ?? []);
   const [items, setItems] = useState<VItem[]>(() => fb?.items ?? []);
@@ -374,6 +391,12 @@ export function EditorVarianteScreen({ variantId = "editor" }: { variantId?: str
   const [qrCustom, setQrCustom] = useState(false);
   const [busyPhoto, setBusyPhoto] = useState(false);
   const photoInputRef = useRef<HTMLInputElement>(null);
+  // Eliminar variante: confirmación INLINE (no window.confirm) porque tras archivar se
+  // navega a /app/variantes; el toast diferido de deshacer no encaja al desmontar aquí.
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  // Borrador local de los enlaces del contacto (se confirma al desenfocar / quitar).
+  const [linkRows, setLinkRows] = useState<{ label: string; url: string }[]>([]);
+  const linksSigRef = useRef<string>("");
   // Serializa los guardados de presentación: setVariantPresentation hace un
   // read-modify-write de override_data; sin esto, dos ediciones seguidas (subir
   // foto + activar QR) se pisarían campo a campo. La cadena garantiza que el 2º
@@ -482,29 +505,80 @@ export function EditorVarianteScreen({ variantId = "editor" }: { variantId?: str
     }
     return out;
   }, [basicsData.links]);
-  const photoUrl = S(basicsData, "photo").trim();
-  const qrUrl = S((basicsData.qr as Record<string, unknown> | undefined) ?? {}, "url").trim();
-  const photoOn = !!photoUrl;
-  const qrOn = !!qrUrl;
-  const qrChecked = qrOn || qrCustom;
-  const qrCustomMode = qrCustom || (qrOn && !linkOptions.some((l) => l.url === qrUrl));
+  // override_data del variant_item de basics: qué campos de contacto están tuneados
+  // SOLO en esta variante (marca visual + revertir). masterBasics = la identidad
+  // canónica de la que hereda cada campo.
+  const basicsOverride = useMemo(() => {
+    const vi = items.find((i) => i.kind === "basics");
+    return (vi?.override_data as Record<string, unknown> | null) ?? {};
+  }, [items]);
+  const masterBasics = useMemo(() => master.find((m) => m.kind === "basics")?.data ?? {}, [master]);
 
-  // Persiste foto/QR: optimista en items (para que el preview cambie ya) + PATCH.
+  const photoUrl = S(basicsData, "photo").trim();
+  const qrObj = (basicsData.qr as Record<string, unknown> | undefined) ?? {};
+  const qrUrl = S(qrObj, "url").trim();
+  const qrMode: "url" | "vcard" = qrObj.mode === "vcard" ? "vcard" : "url";
+  const photoOn = !!photoUrl;
+  const qrOn = qrMode === "vcard" || !!qrUrl;
+  const qrChecked = qrOn || qrCustom;
+  const qrCustomMode = qrMode === "url" && (qrCustom || (!!qrUrl && !linkOptions.some((l) => l.url === qrUrl)));
+
+  // Reconcilia el estado del cliente con la VERDAD del servidor tras guardar la
+  // presentación: fija el id real del variant_item de basics, su override_data
+  // efectivo (limpia marcas de override que en realidad quedaron canónicas), y —si
+  // la primera guardada SEMBRÓ el basics del master— añade/actualiza esa fila.
+  const applyPresentationTruth = useCallback(
+    (p: {
+      basicsItemId?: string;
+      override?: Record<string, unknown> | null;
+      masterBasicsId?: string;
+      masterBasics?: Record<string, unknown>;
+    }) => {
+      if (p.masterBasicsId) {
+        const mid = p.masterBasicsId;
+        const mdata = p.masterBasics ?? {};
+        setMaster((prev) =>
+          prev.some((m) => m.id === mid)
+            ? prev.map((m) => (m.id === mid ? { ...m, data: mdata } : m))
+            : [...prev, { id: mid, kind: "basics", data: mdata, parent_id: null, sort_order: -1 }],
+        );
+      }
+      setItems((prev) => {
+        const ov = (p.override ?? null) as Record<string, unknown> | null;
+        const base = p.masterBasics ?? prev.find((i) => i.kind === "basics")?.data ?? {};
+        const data = { ...base, ...(ov ?? {}) };
+        const existing = prev.find((i) => i.kind === "basics");
+        if (existing) {
+          return prev.map((i) =>
+            i.id === existing.id
+              ? { ...i, id: p.basicsItemId ?? i.id, item_id: p.masterBasicsId ?? i.item_id, override_data: ov, data }
+              : i,
+          );
+        }
+        if (!p.basicsItemId) return prev;
+        return [
+          ...prev,
+          { id: p.basicsItemId, item_id: p.masterBasicsId ?? "", kind: "basics", visible: true, sort_order: -1, override_data: ov, data, parent_id: null },
+        ];
+      });
+    },
+    [],
+  );
+
+  // Persiste foto/QR/contacto: optimista en items (para que el preview cambie ya) +
+  // PATCH. El merge optimista usa el MISMO helper puro que el servidor.
   const savePresentation = useCallback(
-    (patch: { photo?: string; qrUrl?: string }) => {
+    (patch: PresentationPatch) => {
       setItems((prev) => {
         const basicsMaster = master.find((m) => m.kind === "basics");
         const existing = prev.find((i) => i.kind === "basics");
-        const base = existing?.data ?? basicsMaster?.data ?? {};
+        const base = basicsMaster?.data ?? existing?.data ?? {};
         const curOv = (existing?.override_data as Record<string, unknown> | null) ?? {};
-        const nextOv: Record<string, unknown> = { ...curOv };
-        if (patch.photo !== undefined) nextOv.photo = patch.photo;
-        if (patch.qrUrl !== undefined) nextOv.qr = { url: patch.qrUrl };
+        const nextOv = mergePresentationOverride(curOv, patch);
         const nextData = { ...base, ...nextOv };
         if (existing) return prev.map((i) => (i.id === existing.id ? { ...i, override_data: nextOv, data: nextData } : i));
-        if (!basicsMaster) return prev;
         const tmp: VItem = {
-          id: "tmp-basics", item_id: basicsMaster.id, kind: "basics", visible: true,
+          id: "tmp-basics", item_id: basicsMaster?.id ?? "tmp-basics-master", kind: "basics", visible: true,
           sort_order: -1, override_data: nextOv, data: nextData, parent_id: null,
         };
         return [...prev, tmp];
@@ -523,13 +597,22 @@ export function EditorVarianteScreen({ variantId = "editor" }: { variantId?: str
             body: JSON.stringify({ presentation: patch }),
           });
           if (!res.ok) throw new Error();
+          const json = (await res.json().catch(() => null)) as {
+            presentation?: {
+              basicsItemId?: string;
+              override?: Record<string, unknown> | null;
+              masterBasicsId?: string;
+              masterBasics?: Record<string, unknown>;
+            };
+          } | null;
+          if (json?.presentation) applyPresentationTruth(json.presentation);
           flash(t("editor.stPresSaved"));
         } catch {
           flash(t("editor.stPresErr"));
         }
       });
     },
-    [master, variantId, flash, t],
+    [master, variantId, flash, t, applyPresentationTruth],
   );
 
   const onPhotoFile = useCallback(
@@ -566,14 +649,31 @@ export function EditorVarianteScreen({ variantId = "editor" }: { variantId?: str
     (on: boolean) => {
       if (on) {
         const def = pickDefaultQrLink(linkOptions);
-        setQrCustom(!def); // sin enlaces → arranca en modo "otra URL"
-        savePresentation({ qrUrl: def });
+        setQrCustom(false);
+        // Con enlace → modo 'url' con ese enlace. Sin enlaces → modo 'vcard' (no
+        // necesita URL: el glifo sale del contacto), así el QR queda ON de una.
+        if (def) savePresentation({ qrUrl: def, qrMode: "url" });
+        else savePresentation({ qrUrl: "", qrMode: "vcard" });
       } else {
         setQrCustom(false);
-        savePresentation({ qrUrl: "" });
+        savePresentation({ qrUrl: "", qrMode: "url" });
       }
     },
     [linkOptions, savePresentation],
+  );
+
+  const changeQrMode = useCallback(
+    (m: "url" | "vcard") => {
+      if (m === "vcard") {
+        savePresentation({ qrMode: "vcard" });
+      } else {
+        // Volver a 'url' necesita una URL para quedar ON; si no hay, toma el default.
+        const url = qrUrl || pickDefaultQrLink(linkOptions);
+        setQrCustom(!url);
+        savePresentation({ qrMode: "url", qrUrl: url });
+      }
+    },
+    [qrUrl, linkOptions, savePresentation],
   );
 
   const onQrSelect = useCallback(
@@ -583,12 +683,98 @@ export function EditorVarianteScreen({ variantId = "editor" }: { variantId?: str
         return;
       }
       setQrCustom(false);
-      savePresentation({ qrUrl: val });
+      savePresentation({ qrUrl: val, qrMode: "url" });
     },
     [savePresentation],
   );
 
-  const onQrCustomInput = useCallback((val: string) => savePresentation({ qrUrl: val.trim() }), [savePresentation]);
+  const onQrCustomInput = useCallback((val: string) => savePresentation({ qrUrl: val.trim(), qrMode: "url" }), [savePresentation]);
+
+  // ── Contacto por variante: cada campo hereda del master; al editarlo se vuelve
+  //    override SOLO de esta variante. Si el valor vuelve a igualar al master, se
+  //    revierte (se quita el override). ──
+  const onContactBlur = useCallback(
+    (field: "name" | "email" | "phone" | "location", raw: string) => {
+      const v = raw.trim();
+      const masterVal = S(masterBasics, field).trim();
+      const overridden = field in basicsOverride;
+      if (v === masterVal) {
+        if (overridden) savePresentation({ [field]: null } as PresentationPatch);
+      } else {
+        savePresentation({ [field]: v } as PresentationPatch);
+      }
+    },
+    [masterBasics, basicsOverride, savePresentation],
+  );
+
+  const revertContact = useCallback(
+    (field: "name" | "email" | "phone" | "location" | "links") =>
+      savePresentation({ [field]: null } as PresentationPatch),
+    [savePresentation],
+  );
+
+  // Enlaces efectivos (para sembrar el borrador editable) y su firma para resincronizar
+  // el borrador cuando cambian por fuera (carga, revert, reconciliación).
+  const effectiveLinks = useMemo(
+    () => normalizeLinks(basicsData.links).map((l) => ({ label: linkLabel(l), url: linkUrl(l) })),
+    [basicsData.links],
+  );
+  useEffect(() => {
+    const sig = JSON.stringify(effectiveLinks);
+    if (linksSigRef.current !== sig) {
+      linksSigRef.current = sig;
+      setLinkRows(effectiveLinks);
+    }
+  }, [effectiveLinks]);
+
+  // Confirma los enlaces: limpia filas sin URL, compara con el master y decide entre
+  // override (distinto del master) o revertir (igual al master).
+  const commitLinks = useCallback(
+    (rows: { label: string; url: string }[]) => {
+      const cleaned = rows.map((r) => ({ label: r.label.trim(), url: r.url.trim() })).filter((r) => r.url);
+      const asInput = cleaned.map((r) => (r.label ? { label: r.label, url: r.url } : r.url));
+      const sameAsMaster =
+        JSON.stringify(normalizeLinks(asInput)) === JSON.stringify(normalizeLinks(masterBasics.links));
+      if (sameAsMaster) {
+        if ("links" in basicsOverride) savePresentation({ links: null });
+      } else {
+        savePresentation({ links: asInput });
+      }
+    },
+    [masterBasics.links, basicsOverride, savePresentation],
+  );
+
+  const updateLinkRow = useCallback((i: number, key: "label" | "url", val: string) => {
+    setLinkRows((prev) => prev.map((r, k) => (k === i ? { ...r, [key]: val } : r)));
+  }, []);
+  const addLinkRow = useCallback(() => setLinkRows((prev) => [...prev, { label: "", url: "" }]), []);
+  const removeLinkRow = useCallback(
+    (i: number) => {
+      setLinkRows((prev) => {
+        const next = prev.filter((_, k) => k !== i);
+        commitLinks(next);
+        return next;
+      });
+    },
+    [commitLinks],
+  );
+
+  // ── Eliminar variante (archiva) → navega a la lista. Confirmación inline. ──
+  const doDeleteVariant = useCallback(async () => {
+    if (!supabaseEnabled) {
+      flash(t("editor.stDeleteLocal"));
+      setConfirmDelete(false);
+      return;
+    }
+    try {
+      const res = await fetch(`/api/variants/${variantId}`, { method: "DELETE" });
+      if (!res.ok) throw new Error();
+      router.push("/app/variantes");
+    } catch {
+      flash(t("editor.stDeleteErr"));
+      setConfirmDelete(false);
+    }
+  }, [variantId, router, flash, t]);
 
   // ── DOC model (solo visibles), para preview + rayos-X ──
   const doc = useMemo<Doc>(() => {
@@ -620,9 +806,10 @@ export function EditorVarianteScreen({ variantId = "editor" }: { variantId?: str
       projects: projectV.map((p) => [S(p.data, "name"), S(p.data, "description")].filter(Boolean).join(" — ")),
       education: eduV.map((e) => ({ title: S(e.data, "degree"), dates: S(e.data, "dates"), org: S(e.data, "institution") })),
       photo: S(basicsData, "photo").trim() || undefined,
-      qrUrl: S((basicsData.qr as Record<string, unknown> | undefined) ?? {}, "url").trim() || undefined,
+      qrUrl: qrUrl || undefined,
+      qrMode: qrOn ? qrMode : undefined,
     };
-  }, [items, basicsData, targetTitle, bulletsForWork]);
+  }, [items, basicsData, targetTitle, bulletsForWork, qrUrl, qrOn, qrMode]);
 
   // ── Paginación real (medición en el DOM). El error posible queda del lado
   //    honesto: nunca se recorta contenido. ──
@@ -1215,6 +1402,25 @@ export function EditorVarianteScreen({ variantId = "editor" }: { variantId?: str
             {stMsg || t("editor.stIdle")}
           </span>
           <span className="acts">
+            {confirmDelete ? (
+              <span className="ed-delconfirm" role="group" aria-label={t("editor.deleteConfirm")}>
+                <span className="q">{t("editor.deleteConfirm")}</span>
+                <button type="button" className="c-btn c-btn--quiet" onClick={() => setConfirmDelete(false)}>
+                  {t("editor.deleteCancel")}
+                </button>
+                <button type="button" className="c-btn ed-del-yes" onClick={() => void doDeleteVariant()}>
+                  {t("editor.deleteYes")}
+                </button>
+              </span>
+            ) : (
+              <button
+                type="button"
+                className="c-btn c-btn--quiet ed-del-btn"
+                onClick={() => setConfirmDelete(true)}
+              >
+                {t("editor.deleteVariant")}
+              </button>
+            )}
             <Link className="c-btn c-btn--quiet" href={`/app/variantes/${variantId}/tailor`}>
               {t("common.tailor")}
             </Link>
@@ -1340,6 +1546,88 @@ export function EditorVarianteScreen({ variantId = "editor" }: { variantId?: str
             </p>
           </div>
 
+          {/* ── Contacto por variante — se imprime en el CUERPO; hereda del master ── */}
+          <div className="c-card var-contact" data-screen-label="editor-contacto">
+            <div className="presh">
+              <span className="t-overline">{t("editor.contactOverline")}</span>
+              <span className="n">{t("editor.contactHint")}</span>
+            </div>
+            {(["name", "email", "phone", "location"] as const).map((field) => {
+              const eff = S(basicsData, field);
+              const overridden = field in basicsOverride;
+              return (
+                <div className="cfield" key={field}>
+                  <label className="f" htmlFor={`c-${field}`}>
+                    {t(`editor.contact_${field}`)}
+                    {overridden && (
+                      <button type="button" className="crev" onClick={() => revertContact(field)}>
+                        {t("editor.contactRevert")}
+                      </button>
+                    )}
+                  </label>
+                  <input
+                    id={`c-${field}`}
+                    key={`c-${field}-${eff}`}
+                    className={"c-input" + (overridden ? " ovr" : "")}
+                    type={field === "email" ? "email" : field === "phone" ? "tel" : "text"}
+                    defaultValue={eff}
+                    spellCheck={false}
+                    placeholder={t(`editor.contact_${field}_ph`)}
+                    onBlur={(e) => onContactBlur(field, e.target.value)}
+                  />
+                </div>
+              );
+            })}
+
+            <div className="cfield">
+              <label className="f">
+                {t("editor.contactLinks")}
+                {"links" in basicsOverride && (
+                  <button type="button" className="crev" onClick={() => revertContact("links")}>
+                    {t("editor.contactRevert")}
+                  </button>
+                )}
+              </label>
+              <div className="clinks">
+                {linkRows.map((r, i) => (
+                  <div className="clink" key={i}>
+                    <input
+                      className="c-input lbl"
+                      value={r.label}
+                      placeholder={t("editor.contactLinkLabel")}
+                      aria-label={t("editor.contactLinkLabel")}
+                      onChange={(e) => updateLinkRow(i, "label", e.target.value)}
+                      onBlur={() => commitLinks(linkRows)}
+                    />
+                    <input
+                      className="c-input url"
+                      value={r.url}
+                      type="url"
+                      inputMode="url"
+                      placeholder={t("editor.contactLinkUrl")}
+                      aria-label={t("editor.contactLinkUrl")}
+                      onChange={(e) => updateLinkRow(i, "url", e.target.value)}
+                      onBlur={() => commitLinks(linkRows)}
+                    />
+                    <button
+                      type="button"
+                      className="clink-rm"
+                      title={t("editor.contactRemoveLink")}
+                      aria-label={t("editor.contactRemoveLink")}
+                      onClick={() => removeLinkRow(i)}
+                    >
+                      ×
+                    </button>
+                  </div>
+                ))}
+                <button type="button" className="caddlink" onClick={addLinkRow}>
+                  + {t("editor.contactAddLink")}
+                </button>
+              </div>
+            </div>
+            <p className="note">{t("editor.contactSeedHint")}</p>
+          </div>
+
           {hasBasics && (
             <div className="c-card var-pres" data-screen-label="editor-presentacion">
               <div className="presh">
@@ -1405,35 +1693,54 @@ export function EditorVarianteScreen({ variantId = "editor" }: { variantId?: str
                 </label>
                 {qrChecked && (
                   <div className="pbody">
-                    <label className="f" htmlFor="qrLink">
-                      {t("editor.qrLinkLabel")}
+                    <label className="f" htmlFor="qrMode">
+                      {t("editor.qrModeLabel")}
                     </label>
-                    {linkOptions.length > 0 && (
-                      <select
-                        id="qrLink"
-                        className="c-input"
-                        value={qrCustomMode ? "__custom__" : qrUrl}
-                        onChange={(e) => onQrSelect(e.target.value)}
-                      >
-                        {linkOptions.map((l) => (
-                          <option key={l.url} value={l.url}>
-                            {l.label ? `${l.label} — ${l.url}` : l.url}
-                          </option>
-                        ))}
-                        <option value="__custom__">{t("editor.qrCustom")}</option>
-                      </select>
+                    <select
+                      id="qrMode"
+                      className="c-input"
+                      value={qrMode}
+                      onChange={(e) => changeQrMode(e.target.value as "url" | "vcard")}
+                    >
+                      <option value="url">{t("editor.qrModeUrl")}</option>
+                      <option value="vcard">{t("editor.qrModeVcard")}</option>
+                    </select>
+
+                    {qrMode === "vcard" ? (
+                      <p className="note">{t("editor.qrVcardNote")}</p>
+                    ) : (
+                      <>
+                        <label className="f" htmlFor="qrLink">
+                          {t("editor.qrLinkLabel")}
+                        </label>
+                        {linkOptions.length > 0 && (
+                          <select
+                            id="qrLink"
+                            className="c-input"
+                            value={qrCustomMode ? "__custom__" : qrUrl}
+                            onChange={(e) => onQrSelect(e.target.value)}
+                          >
+                            {linkOptions.map((l) => (
+                              <option key={l.url} value={l.url}>
+                                {l.label ? `${l.label} — ${l.url}` : l.url}
+                              </option>
+                            ))}
+                            <option value="__custom__">{t("editor.qrCustom")}</option>
+                          </select>
+                        )}
+                        {(qrCustomMode || linkOptions.length === 0) && (
+                          <input
+                            className="c-input"
+                            type="url"
+                            inputMode="url"
+                            placeholder={t("editor.qrCustomPlaceholder")}
+                            defaultValue={qrUrl}
+                            onBlur={(e) => onQrCustomInput(e.target.value)}
+                          />
+                        )}
+                        {linkOptions.length === 0 && <p className="note">{t("editor.qrNoLinks")}</p>}
+                      </>
                     )}
-                    {(qrCustomMode || linkOptions.length === 0) && (
-                      <input
-                        className="c-input"
-                        type="url"
-                        inputMode="url"
-                        placeholder={t("editor.qrCustomPlaceholder")}
-                        defaultValue={qrUrl}
-                        onBlur={(e) => onQrCustomInput(e.target.value)}
-                      />
-                    )}
-                    {linkOptions.length === 0 && <p className="note">{t("editor.qrNoLinks")}</p>}
                   </div>
                 )}
                 <p className="note warn">{t("editor.qrNote")}</p>

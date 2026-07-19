@@ -81,10 +81,105 @@ export interface ResumeData {
    */
   photo?: string;
   /**
-   * QR honesto — OPT-IN. Si está puesto, se dibuja un QR AL PIE con la URL SIEMPRE
-   * también como TEXTO al lado (el ATS no lee el QR; la URL en texto es la máquina).
+   * QR honesto — OPT-IN, con DOS modos (retrocompatible: `{ url }` sin `mode` = 'url').
+   *  - 'url'   : el QR codifica una URL; esa URL va SIEMPRE también como TEXTO al lado
+   *              (el ATS no lee el QR; la URL en texto es la máquina).
+   *  - 'vcard' : el QR codifica una vCard 3.0 de los basics EFECTIVOS (buildVCard).
+   *              El contacto YA está como texto en el CUERPO, así que el candado ATS
+   *              se cumple igual; no se emite URL extra al pie.
    */
-  qr?: { url: string };
+  qr?: { mode?: "url" | "vcard"; url?: string };
+}
+
+// ── Presentación / contacto por variante (merge PURO, testeable) ──────────────
+/**
+ * Patch de presentación: foto, QR (url + modo) y contacto (identidad). Reglas de
+ * merge por campo (mergePresentationOverride): `undefined` = no tocar; `null` =
+ * quitar el override de ese campo (revertir al master); string (incluida `""`) =
+ * fijar override. `links` se normaliza al shape del modelo.
+ */
+export interface PresentationPatch {
+  photo?: string;
+  qrUrl?: string;
+  qrMode?: "url" | "vcard";
+  name?: string | null;
+  email?: string | null;
+  phone?: string | null;
+  location?: string | null;
+  links?: ResumeLinkInput[] | null;
+}
+
+/** Campos de contacto (identidad) que la variante puede sobrescribir en su basics. */
+export const CONTACT_OVERRIDE_FIELDS = ["name", "email", "phone", "location"] as const;
+
+/**
+ * Merge PURO de un patch de presentación/contacto sobre el `override_data` actual
+ * del variant_item de basics. No muta `current`. photo/qr/qrMode y los campos de
+ * contacto siguen las reglas de PresentationPatch. `qr` se mantiene como un objeto
+ * único `{ url, mode }` para que url y modo no se pisen al editarse por separado.
+ */
+export function mergePresentationOverride(
+  current: Record<string, unknown>,
+  patch: PresentationPatch,
+): Record<string, unknown> {
+  const next: Record<string, unknown> = { ...current };
+  if (patch.photo !== undefined) next.photo = patch.photo; // "" = apagar la foto
+  if (patch.qrUrl !== undefined || patch.qrMode !== undefined) {
+    const curQr = (next.qr as { url?: string; mode?: string } | undefined) ?? {};
+    const nextQr: { url?: string; mode?: string } = { ...curQr };
+    if (patch.qrUrl !== undefined) nextQr.url = patch.qrUrl;
+    if (patch.qrMode !== undefined) nextQr.mode = patch.qrMode;
+    next.qr = nextQr;
+  }
+  for (const f of CONTACT_OVERRIDE_FIELDS) {
+    const v = patch[f];
+    if (v === undefined) continue;
+    if (v === null) delete next[f];
+    else next[f] = v;
+  }
+  if (patch.links !== undefined) {
+    if (patch.links === null) delete next.links;
+    else next.links = normalizeLinks(patch.links);
+  }
+  return next;
+}
+
+// ── vCard 3.0 (RFC 2426) — lo que codifica el QR en modo 'vcard' ──────────────
+/** Escapa un valor de texto de vCard 3.0 (RFC 2426 §5): `\` `,` `;` y saltos de línea. */
+function vcardEscape(v: string): string {
+  return v
+    .replace(/\\/g, "\\\\")
+    .replace(/\n/g, "\\n")
+    .replace(/,/g, "\\,")
+    .replace(/;/g, "\\;");
+}
+
+/**
+ * vCard 3.0 de los basics EFECTIVOS (para el QR en modo 'vcard'). PURO y
+ * determinista (testeable). El nombre se parte en given (primer token) / family
+ * (el resto) para el campo estructurado N; los `;` de N son separadores, los `;`/`,`
+ * DENTRO de cada componente se escapan. Líneas separadas por CRLF (spec).
+ */
+export function buildVCard(basics: ResumeData["basics"], locale: Locale = "es"): string {
+  const name = (basics.name ?? "").trim();
+  const parts = name.split(/\s+/).filter(Boolean);
+  const given = parts.length ? parts[0]! : "";
+  const family = parts.length > 1 ? parts.slice(1).join(" ") : "";
+  const label = t(basics.label, locale).trim();
+  const location = t(basics.location, locale).trim();
+  const lines: string[] = ["BEGIN:VCARD", "VERSION:3.0"];
+  lines.push(`N:${vcardEscape(family)};${vcardEscape(given)};;;`);
+  if (name) lines.push(`FN:${vcardEscape(name)}`);
+  if (label) lines.push(`TITLE:${vcardEscape(label)}`);
+  if (basics.email?.trim()) lines.push(`EMAIL;TYPE=INTERNET:${vcardEscape(basics.email.trim())}`);
+  if (basics.phone?.trim()) lines.push(`TEL;TYPE=CELL:${vcardEscape(basics.phone.trim())}`);
+  if (location) lines.push(`ADR;TYPE=HOME:;;${vcardEscape(location)};;;;`);
+  for (const l of basics.links ?? []) {
+    const url = linkUrl(l).trim();
+    if (url) lines.push(`URL:${vcardEscape(url)}`);
+  }
+  lines.push("END:VCARD");
+  return lines.join("\r\n");
 }
 
 // ── Enlaces: URL (lo que lee el ATS) y etiqueta (solo para el humano) ─────────
@@ -207,9 +302,12 @@ export function toPlainText(data: ResumeData, opts: PlainTextOpts = {}): string 
     }
   }
 
-  // QR (opt-in): la URL SIEMPRE también como texto, al pie (orden de lectura).
+  // QR (opt-in): en modo 'url' la URL va SIEMPRE también como texto, al pie (orden
+  // de lectura). En modo 'vcard' NO se emite nada extra: el contacto ya está como
+  // texto en el CUERPO, así que la vCard del QR es un ademÁs, no una línea de texto.
   // El fixture golden no lleva qr → esta línea no existe ahí (byte-a-byte intacto).
-  if (data.qr?.url) lines.push("", data.qr.url);
+  const qr = data.qr;
+  if (qr && (qr.mode ?? "url") === "url" && qr.url) lines.push("", qr.url);
 
   return lines.join("\n") + "\n";
 }

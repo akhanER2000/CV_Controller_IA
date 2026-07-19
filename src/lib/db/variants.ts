@@ -1,6 +1,12 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { normalizeLinks, type ResumeData } from "@/lib/cv/resume";
-import { ensureMaster, getMasterItems, type MasterItem } from "@/lib/db/queries";
+import {
+  normalizeLinks,
+  mergePresentationOverride,
+  CONTACT_OVERRIDE_FIELDS,
+  type ResumeData,
+  type PresentationPatch,
+} from "@/lib/cv/resume";
+import { ensureMaster, getMasterItems, createMasterItem, type MasterItem } from "@/lib/db/queries";
 
 /**
  * Capa de datos de las VARIANTES (contra el esquema 0001). Igual que queries.ts:
@@ -139,40 +145,49 @@ export async function updateVariant(
   if (error) throw new Error(error.message);
 }
 
+/** Estado efectivo + verdad de la persistencia que la UI usa para reconciliar. */
+export interface PresentationResult {
+  photo: string;
+  qrUrl: string;
+  qrMode: "url" | "vcard";
+  /** id del variant_item de basics (para fijar el id optimista del cliente). */
+  basicsItemId: string;
+  /** override_data resultante del variant_item de basics (marca overrides en la UI). */
+  override: Record<string, unknown>;
+  /** id + data del basics del MASTER (por si esta guardada lo acaba de sembrar). */
+  masterBasicsId: string;
+  masterBasics: Record<string, unknown>;
+}
+
 /**
- * Presentación OPT-IN de una variante: FOTO y CÓDIGO QR. Se guardan como override
- * del variant_item de `basics` (el render lee foto/QR de la data EFECTIVA de
- * basics), así son POR VARIANTE: una "versión visual" para enviar a una persona no
+ * Presentación + CONTACTO OPT-IN de una variante: FOTO, CÓDIGO QR (url|vcard) e
+ * identidad (nombre/email/teléfono/ciudad/enlaces). Todo se guarda como override
+ * del variant_item de `basics` (el render lee la data EFECTIVA de basics), así es
+ * POR VARIANTE: una "versión visual" o un contacto ajustado para una persona no
  * contamina las demás variantes ni el master.
  *
  * ⚠ Candados del producto:
- *  - La URL del QR va SIEMPRE también como TEXTO en el documento (el ATS no lee el
- *    QR). Eso lo garantiza el render (ResumePDF/toPlainText); aquí solo se guarda
- *    la url elegida.
- *  - La foto NUNCA es el avatar de la UI (user_settings.avatar_url): es una imagen
- *    que el usuario sube aparte para ESTE CV. Llega ya reducida como data-URL.
+ *  - En modo 'url', la URL del QR va SIEMPRE también como TEXTO en el documento (el
+ *    ATS no lee el QR). Lo garantiza el render; aquí solo se guarda lo elegido.
+ *  - La foto NUNCA es el avatar de la UI: es una imagen que el usuario sube aparte
+ *    para ESTE CV. Llega ya reducida como data-URL.
  *
- * patch.photo / patch.qrUrl === undefined ⇒ ese campo no se toca. "" ⇒ se apaga
- * EXPLÍCITAMENTE (fuerza OFF aunque el master tuviera algo). Crea el variant_item
- * de basics si no existía (así una variante manual también puede presentar). Devuelve
- * el estado efectivo resultante.
+ * MERGE por campo (mergePresentationOverride): undefined ⇒ no toca; "" ⇒ override
+ * vacío explícito; null ⇒ quita el override de ese campo (revertir al master).
+ *
+ * Si el master NO tiene basics, la PRIMERA guardada lo CREA (origin manual) sembrado
+ * con los campos de contacto de este patch — esos datos base van al MASTER (identidad
+ * canónica) y no se marcan como override; foto/QR/qrMode siempre son override
+ * per-variante. Así el PDF nunca sale con «Email: · Tel:» vacío.
  */
 export async function setVariantPresentation(
   sb: SB,
   userId: string,
   variantId: string,
-  patch: { photo?: string; qrUrl?: string },
-): Promise<{ photo: string; qrUrl: string }> {
+  patch: PresentationPatch,
+): Promise<PresentationResult> {
   const owned = await ownedVariant(sb, userId, variantId);
   if (!owned) throw new Error("Variante no encontrada.");
-
-  // El item basics del master: el variant_item lo referencia para heredar
-  // nombre/email/etc. Sin basics no hay identidad que presentar.
-  const master = await getMasterItems(sb, userId);
-  const basicsMaster = master.find((m) => m.kind === "basics");
-  if (!basicsMaster) {
-    throw new Error("Tu master aún no tiene bloque de contacto. Agrega tu identidad antes de la foto o el QR.");
-  }
 
   // Candados de la foto (el cliente ya reduce y valida; esto es la defensa server):
   // solo data-URLs de imagen con cuerpo base64 (nada de HTML/URLs externas), y con
@@ -191,6 +206,30 @@ export async function setVariantPresentation(
   // ni de lejos a 1.5 KB. "" pasa (es apagar el QR).
   if (patch.qrUrl && patch.qrUrl.length > 1500) {
     throw new Error("La URL del QR es demasiado larga para caber en un código QR.");
+  }
+  if (patch.qrMode !== undefined && patch.qrMode !== "url" && patch.qrMode !== "vcard") {
+    throw new Error("Modo de QR inválido.");
+  }
+
+  // El item basics del master: el variant_item lo referencia para heredar
+  // nombre/email/etc. Si no existe, esta guardada lo siembra con el contacto dado.
+  const master = await getMasterItems(sb, userId);
+  let basicsMaster = master.find((m) => m.kind === "basics");
+  const seededKeys = new Set<string>();
+  if (!basicsMaster) {
+    const seed: Record<string, unknown> = {};
+    for (const f of CONTACT_OVERRIDE_FIELDS) {
+      const v = patch[f];
+      if (v !== undefined && v !== null) {
+        seed[f] = v;
+        seededKeys.add(f);
+      }
+    }
+    if (patch.links !== undefined && patch.links !== null) {
+      seed.links = normalizeLinks(patch.links);
+      seededKeys.add("links");
+    }
+    basicsMaster = await createMasterItem(sb, userId, "basics", seed);
   }
 
   // find-or-create del variant_item de basics (unique (variant_id, item_id)).
@@ -214,9 +253,12 @@ export async function setVariantPresentation(
     current = (row.override_data as Record<string, unknown> | null) ?? {};
   }
 
-  const next: Record<string, unknown> = { ...current };
-  if (patch.photo !== undefined) next.photo = patch.photo; // "" = apagar la foto
-  if (patch.qrUrl !== undefined) next.qr = { url: patch.qrUrl }; // {url:""} = apagar el QR
+  // Los campos recién sembrados en el master NO se marcan como override (son la base
+  // canónica ahora). El resto del patch (foto/QR + contacto sobre un master existente)
+  // sí se aplica como override per-variante.
+  const overridePatch: PresentationPatch = { ...patch };
+  for (const k of seededKeys) delete (overridePatch as Record<string, unknown>)[k];
+  const next = mergePresentationOverride(current, overridePatch);
 
   const { error } = await sb
     .from("variant_items")
@@ -225,9 +267,129 @@ export async function setVariantPresentation(
     .eq("user_id", userId);
   if (error) throw new Error(error.message);
 
+  const qr = (next.qr as { url?: unknown; mode?: unknown } | undefined) ?? {};
   return {
     photo: String(next.photo ?? ""),
-    qrUrl: String((next.qr as Record<string, unknown> | undefined)?.url ?? ""),
+    qrUrl: String(qr.url ?? ""),
+    qrMode: qr.mode === "vcard" ? "vcard" : "url",
+    basicsItemId: vitemId,
+    override: next,
+    masterBasicsId: basicsMaster.id,
+    masterBasics: basicsMaster.data,
+  };
+}
+
+// ── Gestión de variantes (archivar / duplicar / contar) ──────────────────────
+/** Borrado SUAVE: archived=true. listVariants filtra archived=false → desaparece. */
+export async function archiveVariant(sb: SB, userId: string, variantId: string): Promise<void> {
+  const { error } = await sb
+    .from("cv_variants")
+    .update({ archived: true })
+    .eq("id", variantId)
+    .eq("user_id", userId);
+  if (error) throw new Error(error.message);
+}
+
+/** Restaura una variante archivada (archived=false). Simétrico a archiveVariant. */
+export async function unarchiveVariant(sb: SB, userId: string, variantId: string): Promise<void> {
+  const { error } = await sb
+    .from("cv_variants")
+    .update({ archived: false })
+    .eq("id", variantId)
+    .eq("user_id", userId);
+  if (error) throw new Error(error.message);
+}
+
+/** Conteos de una variante: nº de items y cuántos llevan override propio (no vacío). */
+export async function variantCounts(
+  sb: SB,
+  userId: string,
+  variantId: string,
+): Promise<{ itemCount: number; overrideCount: number }> {
+  const owned = await ownedVariant(sb, userId, variantId);
+  if (!owned) throw new Error("Variante no encontrada.");
+  const { data, error } = await sb
+    .from("variant_items")
+    .select("override_data")
+    .eq("variant_id", variantId)
+    .eq("user_id", userId);
+  if (error) throw new Error(error.message);
+  const rows = data ?? [];
+  const overrideCount = rows.filter((r) => {
+    const ov = r.override_data as Record<string, unknown> | null;
+    return ov != null && Object.keys(ov).length > 0;
+  }).length;
+  return { itemCount: rows.length, overrideCount };
+}
+
+/**
+ * Duplica una variante: copia la fila cv_variants (name + « (copia)», mismo
+ * target_title/lang, archived=false, master_seen_at=now) y TODOS sus variant_items
+ * tal cual (visible, sort_order, override_* completos). user_id del usuario en cada
+ * inserción → el trigger anti-IDOR pasa (item_id y override_source_item ya son de SU
+ * master). Devuelve la nueva variante.
+ */
+export async function duplicateVariant(
+  sb: SB,
+  userId: string,
+  variantId: string,
+): Promise<{ id: string; name: string; target_title: string | null; lang: string; master_seen_at: string | null; updated_at: string }> {
+  const { data: src, error: srcErr } = await sb
+    .from("cv_variants")
+    .select("id,name,target_title,lang,profile_id")
+    .eq("id", variantId)
+    .eq("user_id", userId)
+    .maybeSingle();
+  if (srcErr) throw new Error(srcErr.message);
+  if (!src) throw new Error("Variante no encontrada.");
+
+  const now = new Date().toISOString();
+  const { data: dup, error: dupErr } = await sb
+    .from("cv_variants")
+    .insert({
+      user_id: userId,
+      profile_id: src.profile_id,
+      name: `${(src.name as string) ?? "Variante"} (copia)`,
+      target_title: (src.target_title as string | null) ?? null,
+      lang: (src.lang as string) ?? "es",
+      archived: false,
+      master_seen_at: now,
+    })
+    .select("id,name,target_title,lang,master_seen_at,updated_at")
+    .single();
+  if (dupErr) throw new Error(`No se pudo duplicar la variante: ${dupErr.message}`);
+
+  const { data: vitems, error: viErr } = await sb
+    .from("variant_items")
+    .select("item_id,visible,sort_order,override_data,override_origin,override_verified,override_source_item,override_reason")
+    .eq("variant_id", variantId)
+    .eq("user_id", userId);
+  if (viErr) throw new Error(viErr.message);
+
+  if (vitems && vitems.length) {
+    const rows = vitems.map((v) => ({
+      variant_id: dup.id as string,
+      user_id: userId,
+      item_id: v.item_id,
+      visible: v.visible,
+      sort_order: v.sort_order,
+      override_data: v.override_data,
+      override_origin: v.override_origin,
+      override_verified: v.override_verified,
+      override_source_item: v.override_source_item,
+      override_reason: v.override_reason,
+    }));
+    const { error: insErr } = await sb.from("variant_items").insert(rows);
+    if (insErr) throw new Error(`No se pudieron copiar los items: ${insErr.message}`);
+  }
+
+  return {
+    id: dup.id as string,
+    name: dup.name as string,
+    target_title: (dup.target_title as string | null) ?? null,
+    lang: (dup.lang as string) ?? "es",
+    master_seen_at: (dup.master_seen_at as string | null) ?? null,
+    updated_at: dup.updated_at as string,
   };
 }
 
@@ -507,7 +669,12 @@ export async function buildVariantResumeData(
 
   // Foto y QR OPT-IN (guardados en la data de basics). photo NUNCA es el avatar.
   const photo = str(basicsItem, "photo").trim() || undefined;
-  const qrUrl = str((basicsItem.qr as Record<string, unknown>) ?? {}, "url").trim();
+  const qrObj = (basicsItem.qr as Record<string, unknown>) ?? {};
+  const qrMode: "url" | "vcard" = qrObj.mode === "vcard" ? "vcard" : "url";
+  const qrUrl = str(qrObj, "url").trim();
+  // El QR está ON si hay URL (modo 'url') o si el modo es 'vcard' (no necesita URL:
+  // el glifo sale de la vCard de los basics efectivos).
+  const qrOn = qrMode === "vcard" || qrUrl !== "";
 
   return {
     meta: { variant: owned.name },
@@ -521,7 +688,7 @@ export async function buildVariantResumeData(
       summary: i18n(str(summaryItem, "text")),
     },
     photo,
-    qr: qrUrl ? { url: qrUrl } : undefined,
+    qr: qrOn ? { mode: qrMode, url: qrUrl || undefined } : undefined,
     skills: by("skill").map((s) => ({ group: i18n(str(s.data, "group")), items: i18n(str(s.data, "items")) })),
     work,
     projects: by("project").map((p) => ({

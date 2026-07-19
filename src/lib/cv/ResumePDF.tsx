@@ -1,8 +1,20 @@
-import { Document, Page, View, Text, Image, Font, StyleSheet, renderToBuffer } from "@react-pdf/renderer";
+import { Document, Page, View, Text, Image, Link, Font, StyleSheet, renderToBuffer } from "@react-pdf/renderer";
+import { Fragment } from "react";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 import * as QRCode from "qrcode";
-import { selectContent, linkUrl, type ResumeData, type Locale } from "./resume";
+import { selectContent, linkUrl, buildVCard, type ResumeData, type Locale } from "./resume";
+
+/**
+ * href navegable de una URL de texto: añade https:// si no trae esquema. Se aplica
+ * SOLO al `src` del <Link>; el TEXTO visible sigue siendo la URL tal cual (el
+ * round-trip ATS verifica el texto, no el destino del hipervínculo).
+ */
+function hrefOf(url: string): string {
+  const u = (url ?? "").trim();
+  if (!u) return u;
+  return /^[a-z][a-z0-9+.-]*:/i.test(u) ? u : "https://" + u;
+}
 
 /**
  * El documento CV en @react-pdf/renderer v4, según docs/spec/documento-cv.md.
@@ -72,6 +84,10 @@ const s = StyleSheet.create({
   qrImg: { width: 56, height: 56, marginRight: 10 },
   qrCap: { fontSize: 8.5, lineHeight: 1.4, color: C.mut },
   qrUrl: { fontSize: 9.5, lineHeight: 1.4, color: C.ink },
+  // Los hipervínculos NO cambian el aspecto: mismo color, sin subrayado. El glifo
+  // del enlace es un ADEMÁS invisible al parser; el texto sigue siendo la URL.
+  linkContact: { color: C.mut, textDecoration: "none" },
+  linkUrl: { color: C.ink, textDecoration: "none" },
 });
 
 export interface RenderOpts {
@@ -107,7 +123,21 @@ export function ResumePDF({
         <Text style={s.contact}>
           Email: {b.email} · Tel: {b.phone} · {tt(b.location)}
         </Text>
-        <Text style={s.contact2}>{b.links.map(linkUrl).join(" · ")}</Text>
+        {/* Cada URL es TEXTO seleccionable Y, ademÁs, un hipervínculo real (<Link>).
+            El texto visible no cambia (la URL tal cual) — el href sí lleva https://. */}
+        <Text style={s.contact2}>
+          {b.links.map((l, i) => {
+            const url = linkUrl(l);
+            return (
+              <Fragment key={i}>
+                {i > 0 ? " · " : ""}
+                <Link src={hrefOf(url)} style={s.linkContact}>
+                  {url}
+                </Link>
+              </Fragment>
+            );
+          })}
+        </Text>
 
         {/* Resumen */}
         <Text style={s.h}>{tt(data.headings.summary)}</Text>
@@ -172,19 +202,35 @@ export function ResumePDF({
           </>
         )}
 
-        {/* QR AL PIE — opt-in. El glifo no lo lee el ATS; la URL de al lado, sí.
-            Va al final del todo para no alterar el orden de lectura del documento.
-            La URL en TEXTO se dibuja SIEMPRE que haya qr.url: si el glifo no se pudo
-            generar (p. ej. URL muy larga), cae a solo-texto — el candado "la URL va
-            como texto" no depende de que el QR exista. */}
-        {data.qr?.url ? (
-          <View style={s.qrRow} wrap={false}>
-            {qrImage ? <Image src={qrImage} style={s.qrImg} /> : null}
-            <View>
-              <Text style={s.qrCap}>Escanea o visita:</Text>
-              <Text style={s.qrUrl}>{data.qr.url}</Text>
+        {/* QR AL PIE — opt-in, dos modos. El glifo no lo lee el ATS.
+            - 'url'  : la URL va SIEMPRE como TEXTO al lado (y como hipervínculo). Si
+                       el glifo no se pudo generar (URL muy larga), cae a solo-texto —
+                       el candado "la URL va como texto" no depende del QR.
+            - 'vcard': codifica la vCard de los basics; el contacto YA está como texto
+                       en el cuerpo, así que aquí solo va el glifo + una leyenda honesta
+                       (sin URL extra al pie).
+            Va al final del todo para no alterar el orden de lectura del documento. */}
+        {data.qr ? (
+          (data.qr.mode ?? "url") === "vcard" ? (
+            <View style={s.qrRow} wrap={false}>
+              {qrImage ? <Image src={qrImage} style={s.qrImg} /> : null}
+              <View>
+                <Text style={s.qrCap}>Escanea para guardar el contacto</Text>
+              </View>
             </View>
-          </View>
+          ) : data.qr.url ? (
+            <View style={s.qrRow} wrap={false}>
+              {qrImage ? <Image src={qrImage} style={s.qrImg} /> : null}
+              <View>
+                <Text style={s.qrCap}>Escanea o visita:</Text>
+                <Text style={s.qrUrl}>
+                  <Link src={hrefOf(data.qr.url)} style={s.linkUrl}>
+                    {data.qr.url}
+                  </Link>
+                </Text>
+              </View>
+            </View>
+          ) : null
         ) : null}
       </Page>
     </Document>
@@ -193,16 +239,22 @@ export function ResumePDF({
 
 export async function renderResumeToBuffer(data: ResumeData, opts: RenderOpts = {}): Promise<Buffer> {
   // El QR se genera aquí (async) para que ResumePDF siga siendo síncrono: recibe
-  // la data-URL ya lista. Sin data.qr no se genera nada (OFF por defecto).
+  // la data-URL ya lista. Sin data.qr no se genera nada (OFF por defecto). El
+  // PAYLOAD depende del modo: 'url' codifica la URL; 'vcard' codifica la vCard de
+  // los basics EFECTIVOS.
   let qrImage: string | undefined;
-  if (data.qr?.url) {
-    try {
-      qrImage = await QRCode.toDataURL(data.qr.url, { margin: 1, width: 240, errorCorrectionLevel: "M" });
-    } catch {
-      // URL sobre la capacidad del QR (u otro fallo): no se genera el glifo, pero
-      // la URL igual va como TEXTO (ResumePDF la dibuja aunque falte qrImage). Así
-      // el documento nunca revienta por una URL demasiado larga.
-      qrImage = undefined;
+  if (data.qr) {
+    const mode = data.qr.mode ?? "url";
+    const payload = mode === "vcard" ? buildVCard(data.basics, opts.locale ?? "es") : data.qr.url;
+    if (payload) {
+      try {
+        qrImage = await QRCode.toDataURL(payload, { margin: 1, width: 240, errorCorrectionLevel: "M" });
+      } catch {
+        // Contenido sobre la capacidad del QR (u otro fallo): no se genera el glifo,
+        // pero el documento no revienta. En modo 'url' la URL igual va como TEXTO
+        // (ResumePDF la dibuja aunque falte qrImage).
+        qrImage = undefined;
+      }
     }
   }
   return renderToBuffer(<ResumePDF data={data} opts={opts} qrImage={qrImage} />);

@@ -55,6 +55,34 @@
 .var-pres .photo-row{display:flex;align-items:center;gap:12px}
 .var-pres .photo-thumb{width:56px;height:56px;border-radius:4px;object-fit:cover;border:1px solid var(--border);flex:none;background:var(--surface-sunken)}
 .var-pres .photo-acts{display:flex;gap:8px;flex-wrap:wrap}
+/* ── Contacto por variante — misma caja que var-obj/var-pres ── */
+.var-contact{margin:6px 18px 6px;padding:16px 18px}
+.var-contact .presh{display:flex;align-items:baseline;gap:10px}
+.var-contact .presh .t-overline{font-size:10px}
+.var-contact .presh .n{font:400 10px/1 var(--font-mono);color:var(--text-subtle)}
+.var-contact .cfield{margin-top:12px}
+.var-contact label.f{display:flex;align-items:baseline;gap:8px;font:500 9.5px/1 var(--font-mono);letter-spacing:.1em;text-transform:uppercase;color:var(--text-subtle);margin-bottom:6px}
+.var-contact .c-input{height:36px;background:var(--surface-sunken)}
+/* Override visible (mismo lenguaje que .var-b.ovr): filete patina a la izquierda. */
+.var-contact .c-input.ovr{box-shadow:inset 2px 0 0 var(--patina-500)}
+.var-contact .crev{margin-left:auto;flex:none;font:500 9px/1 var(--font-mono);letter-spacing:.06em;text-transform:uppercase;color:var(--accent-text)}
+.var-contact .crev:hover{text-decoration:underline}
+.var-contact .clinks{display:flex;flex-direction:column;gap:8px}
+.var-contact .clink{display:flex;gap:8px;align-items:center}
+.var-contact .clink .lbl{flex:0 0 34%;min-width:0}
+.var-contact .clink .url{flex:1;min-width:0}
+.var-contact .clink-rm{flex:none;width:28px;height:28px;border-radius:5px;border:1px solid var(--border);color:var(--text-subtle);font:400 14px/1 var(--font-mono);display:grid;place-items:center}
+.var-contact .clink-rm:hover{color:var(--danger);border-color:var(--border-strong)}
+.var-contact .caddlink{align-self:flex-start;font:500 var(--fs-micro)/1 var(--font-mono);color:var(--text-muted);border:1px dashed var(--border-strong);border-radius:6px;padding:8px 11px}
+.var-contact .caddlink:hover{color:var(--accent-text);border-color:var(--border-patina)}
+.var-contact .note{margin-top:10px;font:400 var(--fs-micro)/1.6 var(--font-mono);color:var(--text-subtle)}
+/* ── Eliminar variante: confirmación inline en la barra ── */
+.ed-delconfirm{display:flex;align-items:center;gap:8px}
+.ed-delconfirm .q{font:500 var(--fs-micro)/1 var(--font-mono);color:var(--text-muted)}
+.ed-del-yes{color:var(--danger);border-color:color-mix(in srgb,var(--danger) 45%,transparent)}
+.ed-del-yes:hover{color:var(--ink-on-patina);background:var(--danger);border-color:transparent}
+.ed-del-btn{color:var(--text-subtle)}
+.ed-del-btn:hover{color:var(--danger)}
 .var-g{margin:18px 18px 0}
 .var-g>.gh{display:flex;align-items:baseline;gap:10px;padding-bottom:8px}
 .var-g>.gh .t-overline{font-size:10px}

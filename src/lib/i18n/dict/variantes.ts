@@ -48,6 +48,20 @@ export const variantes = {
     "variantes.objectivePrefix": "objetivo: ",
     "variantes.noObjective": "sin objetivo definido",
 
+    // Gestión de filas: renombrar, duplicar, eliminar, chip «borrador».
+    "variantes.renameAria": "Nombre de la variante",
+    "variantes.renameTitle": "clic para renombrar",
+    "variantes.rowDuplicate": "Duplicar variante",
+    "variantes.rowDuplicateShort": "duplicar",
+    "variantes.rowDelete": "Eliminar variante",
+    "variantes.rowDeleteShort": "eliminar",
+    "variantes.draftChip": "borrador",
+    "variantes.draftTitle": "Sin título objetivo ni items — es un punto de partida vacío.",
+    "variantes.errDuplicate": "No se pudo duplicar la variante. Intenta de nuevo.",
+    "variantes.announceDuplicated": "Variante «{nm}» duplicada.",
+    "variantes.undoDeleted": "Variante «{nm}» eliminada",
+    "variantes.undoDeletedOverrides": "Variante «{nm}» eliminada · se pierden {n} ajuste{s} propio{s}",
+
     // Panel de diferencias (variante desactualizada).
     "variantes.diffOverline": "Qué cambió en el master",
     "variantes.diffBody":
@@ -114,6 +128,20 @@ export const variantes = {
     "variantes.openLink": "open →",
     "variantes.objectivePrefix": "target: ",
     "variantes.noObjective": "no target set",
+
+    // Row management: rename, duplicate, delete, «draft» chip.
+    "variantes.renameAria": "Variant name",
+    "variantes.renameTitle": "click to rename",
+    "variantes.rowDuplicate": "Duplicate variant",
+    "variantes.rowDuplicateShort": "duplicate",
+    "variantes.rowDelete": "Delete variant",
+    "variantes.rowDeleteShort": "delete",
+    "variantes.draftChip": "draft",
+    "variantes.draftTitle": "No target title and no items — an empty starting point.",
+    "variantes.errDuplicate": "Couldn't duplicate the variant. Try again.",
+    "variantes.announceDuplicated": "Variant «{nm}» duplicated.",
+    "variantes.undoDeleted": "Variant «{nm}» deleted",
+    "variantes.undoDeletedOverrides": "Variant «{nm}» deleted · {n} of your own tweak{s} lost",
 
     "variantes.diffOverline": "What changed in the master",
     "variantes.diffBody":

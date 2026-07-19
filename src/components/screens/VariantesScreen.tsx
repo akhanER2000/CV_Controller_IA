@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useT, useLang } from "@/lib/i18n";
 import { supabaseEnabled } from "@/lib/supabase/config";
+import { useUndoToast } from "@/components/UndoToast";
 import "./variantes.css";
 
 /* ============================================================================
@@ -34,6 +35,8 @@ type Variant = {
   id?: string;
   nm: string;
   obj: string;
+  /** target_title crudo (null/"" = candidato a «borrador»). */
+  rawObj?: string | null;
   pg: string;
   touch: string;
   old: boolean;
@@ -87,6 +90,13 @@ export function VariantesScreen() {
   const [gen, setGen] = useState(0);
   const [announce, setAnnounce] = useState("");
 
+  // Gestión de filas: renombrado inline, chip «borrador» y toast de deshacer.
+  const [renaming, setRenaming] = useState<number | null>(null);
+  const [nameDraft, setNameDraft] = useState("");
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [draftIds, setDraftIds] = useState<Set<string>>(new Set());
+  const undo = useUndoToast();
+
   // Creación de variantes.
   const [newName, setNewName] = useState("");
   const [aiPrompt, setAiPrompt] = useState("");
@@ -112,12 +122,34 @@ export function VariantesScreen() {
           id: x.id,
           nm: x.name,
           obj: x.targetTitle || t("variantes.noObjective"),
+          rawObj: x.targetTitle,
           pg: "",
           touch: t("dashboard.variant.touched").replace("{rel}", rel(x.updatedAt, t)),
           old: x.outdated,
         }));
         setVariants(list);
         setMasterItems((data.masterItems as number) ?? 0);
+        // «Borrador»: variante SIN título objetivo Y SIN items. Solo se consultan las
+        // que no tienen objetivo (subconjunto), con un fetch ligero de conteos.
+        const candidates = list.filter((v) => v.id && !(v.rawObj && v.rawObj.trim()));
+        if (candidates.length) {
+          void Promise.all(
+            candidates.map(async (v) => {
+              try {
+                const r = await fetch(`/api/variants/${v.id}?counts=1`);
+                if (!r.ok) return null;
+                const j = (await r.json()) as { itemCount?: number };
+                return (j.itemCount ?? 0) === 0 ? v.id! : null;
+              } catch {
+                return null;
+              }
+            }),
+          ).then((ids) => {
+            if (active) setDraftIds(new Set(ids.filter((x): x is string => !!x)));
+          });
+        } else if (active) {
+          setDraftIds(new Set());
+        }
       } catch {
         if (active) setVariants([]);
       } finally {
@@ -180,6 +212,107 @@ export function VariantesScreen() {
     setOpenRows(new Set());
     setGen((g) => g + 1);
     setAnnounce(t("variantes.announceKept").replace("{nm}", variants[i].nm));
+  }
+
+  // ── Renombrar inline (input al clic, Enter guarda, Esc cancela). ────────────
+  function startRename(i: number) {
+    setNameDraft(variants[i].nm);
+    setRenaming(i);
+  }
+  function commitRename(i: number) {
+    const nm = nameDraft.trim();
+    setRenaming(null);
+    if (!nm || nm === variants[i].nm) return;
+    setVariants((prev) => prev.map((v, k) => (k === i ? { ...v, nm } : v)));
+    const id = variants[i].id;
+    if (supabaseEnabled && id) {
+      void fetch(`/api/variants/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: nm }),
+      }).catch(() => {});
+    }
+  }
+
+  // ── Duplicar: POST /duplicate → inserta la copia justo debajo. ──────────────
+  async function duplicateRow(i: number) {
+    const v = variants[i];
+    if (!supabaseEnabled || !v.id || busyId) return;
+    setBusyId(v.id);
+    setCreateErr("");
+    try {
+      const res = await fetch(`/api/variants/${v.id}/duplicate`, { method: "POST" });
+      if (!res.ok) throw new Error();
+      const { variant } = (await res.json()) as {
+        variant: { id: string; name: string; target_title: string | null; master_seen_at: string | null; updated_at: string };
+      };
+      const row: Variant = {
+        id: variant.id,
+        nm: variant.name,
+        obj: variant.target_title || t("variantes.noObjective"),
+        rawObj: variant.target_title,
+        pg: "",
+        touch: t("dashboard.variant.touched").replace("{rel}", rel(variant.updated_at, t)),
+        old: false,
+      };
+      setVariants((prev) => {
+        const next = [...prev];
+        next.splice(i + 1, 0, row);
+        return next;
+      });
+      setAnnounce(t("variantes.announceDuplicated").replace("{nm}", variant.name));
+    } catch {
+      setCreateErr(t("variantes.errDuplicate"));
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  // ── Eliminar: quita optimista + toast de deshacer; el DELETE (archivar) se
+  //    ejecuta DIFERIDO al confirmar (onCommit); deshacer restaura sin llamada. ──
+  async function deleteRow(i: number) {
+    const v = variants[i];
+    if (!supabaseEnabled || !v.id) return;
+    const id = v.id;
+    // Conteo real de overrides para el aviso «se pierden N ajustes propios».
+    let overrideCount = 0;
+    try {
+      const r = await fetch(`/api/variants/${id}?counts=1`);
+      if (r.ok) overrideCount = ((await r.json()) as { overrideCount?: number }).overrideCount ?? 0;
+    } catch {
+      /* sin conteo → mensaje simple */
+    }
+    setVariants((prev) => prev.filter((row) => row.id !== id));
+    setDraftIds((prev) => {
+      if (!prev.has(id)) return prev;
+      const next = new Set(prev);
+      next.delete(id);
+      return next;
+    });
+    const message =
+      overrideCount > 0
+        ? t("variantes.undoDeletedOverrides")
+            .replace("{nm}", v.nm)
+            .replace("{n}", String(overrideCount))
+            .replace("{s}", overrideCount === 1 ? "" : "s")
+        : t("variantes.undoDeleted").replace("{nm}", v.nm);
+    undo.show({
+      message,
+      onUndo: () =>
+        setVariants((prev) => {
+          if (prev.some((row) => row.id === id)) return prev;
+          const next = [...prev];
+          next.splice(Math.min(i, next.length), 0, v);
+          return next;
+        }),
+      onCommit: async () => {
+        try {
+          await fetch(`/api/variants/${id}`, { method: "DELETE" });
+        } catch {
+          /* la variante queda; el usuario puede reintentar */
+        }
+      },
+    });
   }
 
   // ── Creación ──────────────────────────────────────────────────────────────
@@ -443,7 +576,46 @@ export function VariantesScreen() {
                     >
                       <span className="nm">
                         {v.old && <span className="c-pulse-dot" title={t("variantes.dotTitle")} aria-hidden="true" />}
-                        {v.nm}
+                        {renaming === i ? (
+                          <input
+                            className="vr-rename c-input"
+                            autoFocus
+                            value={nameDraft}
+                            aria-label={t("variantes.renameAria")}
+                            onChange={(e) => setNameDraft(e.target.value)}
+                            onClick={(e) => e.stopPropagation()}
+                            onBlur={() => commitRename(i)}
+                            onKeyDown={(e) => {
+                              e.stopPropagation();
+                              if (e.key === "Enter") {
+                                e.preventDefault();
+                                commitRename(i);
+                              } else if (e.key === "Escape") {
+                                e.preventDefault();
+                                setRenaming(null);
+                              }
+                            }}
+                          />
+                        ) : supabaseEnabled && v.id ? (
+                          <button
+                            type="button"
+                            className="vr-name"
+                            title={t("variantes.renameTitle")}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              startRename(i);
+                            }}
+                          >
+                            {v.nm}
+                          </button>
+                        ) : (
+                          v.nm
+                        )}
+                        {v.id && draftIds.has(v.id) && (
+                          <span className="vr-chip-draft" title={t("variantes.draftTitle")}>
+                            {t("variantes.draftChip")}
+                          </span>
+                        )}
                       </span>
                       <button type="button" className="pdf" title={t("variantes.pdfTitle")} onClick={(e) => e.stopPropagation()}>
                         {t("variantes.pdfBtn")}
@@ -457,6 +629,35 @@ export function VariantesScreen() {
                       <Link className="open" href={href}>
                         {t("variantes.openLink")}
                       </Link>
+                      {supabaseEnabled && v.id && (
+                        <span className="vr-acts">
+                          <button
+                            type="button"
+                            className="dup"
+                            title={t("variantes.rowDuplicate")}
+                            aria-label={t("variantes.rowDuplicate")}
+                            disabled={busyId === v.id}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              void duplicateRow(i);
+                            }}
+                          >
+                            {t("variantes.rowDuplicateShort")}
+                          </button>
+                          <button
+                            type="button"
+                            className="del"
+                            title={t("variantes.rowDelete")}
+                            aria-label={t("variantes.rowDelete")}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              void deleteRow(i);
+                            }}
+                          >
+                            {t("variantes.rowDeleteShort")}
+                          </button>
+                        </span>
+                      )}
                       <span className="obj">{t("variantes.objectivePrefix")}{v.obj}</span>
                     </div>
 
@@ -525,6 +726,7 @@ export function VariantesScreen() {
           )}
         </div>
       </main>
+      {undo.node}
     </div>
   );
 }
