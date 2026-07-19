@@ -1,10 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useBoot } from "@/lib/corpus/runtime";
 import { supabaseEnabled } from "@/lib/supabase/config";
+import { createClient } from "@/lib/supabase/client";
 import { useT } from "@/lib/i18n";
+import { fileKindFromName, safeStorageName, type FileKind } from "@/lib/db/sources";
 import "./fuentes.css";
 
 /* ============================================================================
@@ -12,11 +14,11 @@ import "./fuentes.css";
    (ver docs/spec/pantallas/fuentes.md). Es un MURO: NO monta la aurora. El único
    movimiento de montaje es el hr.c-divider que dibuja CorpusMotion.boot().
 
-   ★ CABLEADO A DATOS REALES. En modo Supabase el inventario sale de /api/sources
-   (ingestion_sources del usuario, RLS por auth.uid()), más un SHELL de GitHub
-   (afordancia, sin repos ficticios) y la tarjeta educativa de LinkedIn (genérica,
-   sin datos). Una cuenta nueva ⇒ estado vacío. La maqueta completa (persona Diego
-   Gatica, con la lista de repos) SOLO se usa como fallback del modo local.
+   ★ CABLEADO A DATOS REALES (agente B). En modo Supabase cada tarjeta ES la acción
+   IN SITU (sin salir de Fuentes): PDF/DOCX, imágenes, texto, URL y GitHub suben /
+   pegan / consultan y stagean; LinkedIn ejecuta sus tres vías dentro de su tarjeta;
+   cada fuente ya ingerida ofrece «releer» y «quitar». La maqueta completa (persona
+   Diego Gatica) SOLO se usa como fallback del modo local.
    ============================================================================ */
 
 type Repo = { n: string; m: string; on: boolean; why?: string };
@@ -74,12 +76,35 @@ function reduced(): boolean {
 }
 const wait = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
+/** Estado por fases de una acción de una tarjeta (subir → extraer → resultado). */
+type Phase =
+  | { state: "idle" }
+  | { state: "working"; msg: string }
+  | { state: "error"; msg: string }
+  | { state: "done"; staged: number; sourceId: string | null; extra: string[] };
+
+/** Estado de una acción por fila (releer / quitar). */
+type RowState2 = { state: "idle" | "working" | "done" | "error"; msg?: string };
+
+/** Respuesta de POST /api/sources · resync (lo que la UI consume). */
+interface PostResult {
+  sourceId?: string | null;
+  staged?: number;
+  warnings?: string[];
+  github?: { handle: string; repos: string[]; languages: string[] };
+  error?: string;
+}
+
 export function FuentesScreen() {
   // boot() dibuja el hr.c-divider del scope.
   const bootRef = useBoot<HTMLElement>();
   const t = useT();
   const kindLabel = (k: string) => (KIND_KEYS.has(k) ? t(`fuentes.kind.${k}`) : k);
   const statusLabel = (s: string) => (STATUS_KEYS.has(s) ? t(`fuentes.status.${s}`) : s);
+
+  // Cliente de Supabase del navegador SOLO en modo Supabase (createClient exige
+  // las NEXT_PUBLIC_*; en modo local no existen y lanzaría al construirse).
+  const supabase = useMemo(() => (supabaseEnabled ? createClient() : null), []);
 
   // Estado del MODO LOCAL (demo interactiva).
   const [repos, setRepos] = useState<Repo[]>(INITIAL_REPOS);
@@ -91,24 +116,159 @@ export function FuentesScreen() {
   const [sources, setSources] = useState<SourceView[]>([]);
   const [loading, setLoading] = useState(supabaseEnabled);
 
+  // Buffers y estado de las acciones in situ.
+  const [openCard, setOpenCard] = useState<null | "paste" | "li-paste">(null);
+  const [pasteText, setPasteText] = useState("");
+  const [urlText, setUrlText] = useState("");
+  const [ghText, setGhText] = useState("");
+  const [liText, setLiText] = useState("");
+  const [phases, setPhases] = useState<Record<string, Phase>>({});
+  const [rowPhase, setRowPhase] = useState<Record<string, RowState2>>({});
+  const [confirmRemove, setConfirmRemove] = useState<string | null>(null);
+
+  const pdfInRef = useRef<HTMLInputElement>(null);
+  const imgInRef = useRef<HTMLInputElement>(null);
+  const liPdfInRef = useRef<HTMLInputElement>(null);
+  const liImgInRef = useRef<HTMLInputElement>(null);
+
+  const setPhase = (k: string, p: Phase) => setPhases((prev) => ({ ...prev, [k]: p }));
+  const busy = (k: string) => phases[k]?.state === "working";
+  const rowBusy = (id: string) => rowPhase[id]?.state === "working";
+
+  const loadSources = useCallback(async () => {
+    try {
+      const res = await fetch("/api/sources");
+      const data = await res.json();
+      setSources((data.sources ?? []) as SourceView[]);
+    } catch {
+      /* conserva la lista actual */
+    }
+  }, []);
+
   useEffect(() => {
     if (!supabaseEnabled) return;
     let active = true;
     (async () => {
-      try {
-        const res = await fetch("/api/sources");
-        const data = await res.json();
-        if (active) setSources((data.sources ?? []) as SourceView[]);
-      } catch {
-        if (active) setSources([]);
-      } finally {
-        if (active) setLoading(false);
-      }
+      await loadSources();
+      if (active) setLoading(false);
     })();
     return () => {
       active = false;
     };
-  }, []);
+  }, [loadSources]);
+
+  // ── Acciones reales (modo Supabase) ─────────────────────────────────────────
+  function extrasFrom(data: PostResult): string[] {
+    const out: string[] = [];
+    if (data.github?.repos?.length) out.push(`${t("fuentes.gh2.readLabel")} ${data.github.repos.join(", ")}`);
+    if (Array.isArray(data.warnings)) out.push(...data.warnings);
+    return out;
+  }
+
+  /** Sube archivos a Storage y los ingiere. Fases honestas: subiendo → extrayendo. */
+  async function runFileUpload(cardKey: string, list: File[]) {
+    if (!list.length || !supabase) return;
+    setConfirmRemove(null);
+    setPhase(cardKey, { state: "working", msg: t("fuentes.act.busy.uploading") });
+    try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) {
+        setPhase(cardKey, { state: "error", msg: t("fuentes.act.needSession") });
+        return;
+      }
+      const refs: { path: string; name: string; kind: FileKind }[] = [];
+      const skipped: string[] = [];
+      for (const f of list) {
+        const kind = fileKindFromName(f.name, f.type || undefined);
+        if (!kind) {
+          skipped.push(f.name);
+          continue;
+        }
+        const path = `${user.id}/${crypto.randomUUID()}/${safeStorageName(f.name)}`;
+        const { error } = await supabase.storage.from("sources").upload(path, f, {
+          contentType: f.type || undefined,
+          upsert: false,
+        });
+        if (error) throw new Error(error.message);
+        refs.push({ path, name: f.name, kind });
+      }
+      if (!refs.length) {
+        setPhase(cardKey, { state: "error", msg: t("fuentes.act.unsupported") });
+        return;
+      }
+      setPhase(cardKey, { state: "working", msg: t("fuentes.act.busy.extracting") });
+      const res = await fetch("/api/sources", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ kind: refs[0]!.kind, files: refs }),
+      });
+      const data = (await res.json()) as PostResult;
+      if (!res.ok) throw new Error(data.error || t("fuentes.act.failed"));
+      const extra = extrasFrom(data);
+      if (skipped.length) extra.push(t("fuentes.act.skipped").replace("{f}", skipped.join(", ")));
+      setPhase(cardKey, { state: "done", staged: data.staged ?? 0, sourceId: data.sourceId ?? null, extra });
+      await loadSources();
+    } catch (e) {
+      setPhase(cardKey, { state: "error", msg: e instanceof Error ? e.message : t("fuentes.act.failed") });
+    }
+  }
+
+  /** Envía texto / URL / handle al endpoint y refresca la lista. */
+  async function runTextPost(cardKey: string, payload: Record<string, unknown>, clear?: () => void) {
+    setConfirmRemove(null);
+    setPhase(cardKey, { state: "working", msg: t("fuentes.act.busy.extracting") });
+    try {
+      const res = await fetch("/api/sources", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const data = (await res.json()) as PostResult;
+      if (!res.ok) throw new Error(data.error || t("fuentes.act.failed"));
+      setPhase(cardKey, { state: "done", staged: data.staged ?? 0, sourceId: data.sourceId ?? null, extra: extrasFrom(data) });
+      clear?.();
+      await loadSources();
+    } catch (e) {
+      setPhase(cardKey, { state: "error", msg: e instanceof Error ? e.message : t("fuentes.act.failed") });
+    }
+  }
+
+  async function resyncSource(id: string) {
+    setRowPhase((p) => ({ ...p, [id]: { state: "working", msg: t("fuentes.item.resyncBusy") } }));
+    try {
+      const res = await fetch(`/api/sources/${id}/resync`, { method: "POST" });
+      const data = (await res.json()) as PostResult;
+      if (!res.ok) throw new Error(data.error || t("fuentes.act.failed"));
+      const warn = data.warnings?.length ? ` · ${data.warnings.join(" ")}` : "";
+      setRowPhase((p) => ({
+        ...p,
+        [id]: { state: "done", msg: t("fuentes.item.resynced").replace("{n}", String(data.staged ?? 0)) + warn },
+      }));
+      await loadSources();
+    } catch (e) {
+      setRowPhase((p) => ({ ...p, [id]: { state: "error", msg: e instanceof Error ? e.message : t("fuentes.act.failed") } }));
+    }
+  }
+
+  async function removeSource(id: string) {
+    setRowPhase((p) => ({ ...p, [id]: { state: "working", msg: t("fuentes.item.removeBusy") } }));
+    try {
+      const res = await fetch(`/api/sources/${id}`, { method: "DELETE" });
+      const data = (await res.json().catch(() => ({}))) as PostResult;
+      if (!res.ok) throw new Error(data.error || t("fuentes.act.failed"));
+      setConfirmRemove(null);
+      setRowPhase((p) => {
+        const next = { ...p };
+        delete next[id];
+        return next;
+      });
+      await loadSources();
+    } catch (e) {
+      setRowPhase((p) => ({ ...p, [id]: { state: "error", msg: e instanceof Error ? e.message : t("fuentes.act.failed") } }));
+    }
+  }
 
   const total = repos.length;
   const selected = repos.filter((r) => r.on).length;
@@ -159,9 +319,51 @@ export function FuentesScreen() {
     </header>
   );
 
-  // La tarjeta educativa de LinkedIn es genérica (sin datos de persona): se
-  // muestra en ambos modos.
-  const linkedInCard = (
+  // Línea de estado por fases (compartida por todas las tarjetas de acción).
+  function phaseLine(pk: string) {
+    const p = phases[pk];
+    if (!p || p.state === "idle") return null;
+    if (p.state === "working") {
+      return (
+        <div className="fu-status" role="status" aria-live="polite">
+          <span className="c-spin" aria-hidden="true">
+            ⟳
+          </span>{" "}
+          {p.msg}
+        </div>
+      );
+    }
+    if (p.state === "error") {
+      return (
+        <div className="fu-status is-err" role="alert">
+          <span aria-hidden="true">✕</span> {p.msg}
+        </div>
+      );
+    }
+    return (
+      <div className="fu-status is-ok" role="status" aria-live="polite">
+        <span aria-hidden="true">✓</span> {t("fuentes.act.done").replace("{n}", String(p.staged))}
+        {p.sourceId ? (
+          <span className="go">
+            <Link className="c-btn c-btn--quiet" href={`/app/staging?source=${p.sourceId}`}>
+              {t("fuentes.act.reviewStaging")}
+            </Link>
+          </span>
+        ) : null}
+        {p.extra.length ? (
+          <div className="fu-extra">
+            {p.extra.map((x, i) => (
+              <div key={i}>{x}</div>
+            ))}
+          </div>
+        ) : null}
+      </div>
+    );
+  }
+
+  // La tarjeta educativa de LinkedIn del MODO LOCAL (genérica, sin datos, con las
+  // vías como enlaces al volcado — el modo Supabase usa la versión ejecutable).
+  const linkedInCardLocal = (
     <article className="c-card fu-card fu-li" data-screen-label="fuentes-linkedin">
       <div className="fu-h">
         <span className="nm">linkedin</span>
@@ -170,13 +372,16 @@ export function FuentesScreen() {
       <p>{t("fuentes.li.body")}</p>
       <div className="vias">
         <Link href="/app/importar">
-          <b>{t("fuentes.li.via1Bold")}</b>{t("fuentes.li.via1")}
+          <b>{t("fuentes.li.via1Bold")}</b>
+          {t("fuentes.li.via1")}
         </Link>
         <Link href="/app/importar">
-          <b>{t("fuentes.li.via2Bold")}</b>{t("fuentes.li.via2")}
+          <b>{t("fuentes.li.via2Bold")}</b>
+          {t("fuentes.li.via2")}
         </Link>
         <Link href="/app/importar">
-          <b>{t("fuentes.li.via3Bold")}</b>{t("fuentes.li.via3")}
+          <b>{t("fuentes.li.via3Bold")}</b>
+          {t("fuentes.li.via3")}
         </Link>
       </div>
     </article>
@@ -185,6 +390,252 @@ export function FuentesScreen() {
   // ═══════════════════════ MODO SUPABASE (datos reales) ═══════════════════════
   if (supabaseEnabled) {
     const sourcesEmpty = !loading && sources.length === 0;
+
+    // Tarjetas de acción (añadir una fuente). Cada una ES la acción, in situ.
+    const addCards = (
+      <>
+        <div className="fu-sub">
+          <span className="t-overline">{t("fuentes.add.heading")}</span>
+        </div>
+
+        {/* PDF / DOCX */}
+        <article className="c-card fu-card" data-screen-label="fuentes-add-archivos">
+          <div className="fu-h">
+            <span className="nm">{t("fuentes.card.files.name")}</span>
+            <span className="tag">{t("fuentes.card.files.tag")}</span>
+            <span className="acts">
+              <button type="button" className="c-btn" disabled={busy("filesCard")} onClick={() => pdfInRef.current?.click()}>
+                {t("fuentes.card.files.button")}
+              </button>
+            </span>
+          </div>
+          <div className="fu-body">{t("fuentes.card.files.body")}</div>
+          {phaseLine("filesCard")}
+          <input
+            ref={pdfInRef}
+            type="file"
+            accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+            hidden
+            onChange={(e) => {
+              if (e.target.files) void runFileUpload("filesCard", Array.from(e.target.files));
+              e.target.value = "";
+            }}
+          />
+        </article>
+
+        {/* Capturas / imágenes */}
+        <article className="c-card fu-card" data-screen-label="fuentes-add-imagenes">
+          <div className="fu-h">
+            <span className="nm">{t("fuentes.card.images.name")}</span>
+            <span className="tag">{t("fuentes.card.images.tag")}</span>
+            <span className="acts">
+              <button type="button" className="c-btn" disabled={busy("imagesCard")} onClick={() => imgInRef.current?.click()}>
+                {t("fuentes.card.images.button")}
+              </button>
+            </span>
+          </div>
+          <div className="fu-body">{t("fuentes.card.images.body")}</div>
+          {phaseLine("imagesCard")}
+          <input
+            ref={imgInRef}
+            type="file"
+            accept="image/png,image/jpeg,image/webp,.png,.jpg,.jpeg,.webp"
+            multiple
+            hidden
+            onChange={(e) => {
+              if (e.target.files) void runFileUpload("imagesCard", Array.from(e.target.files));
+              e.target.value = "";
+            }}
+          />
+        </article>
+
+        {/* Texto pegado */}
+        <article className="c-card fu-card" data-screen-label="fuentes-add-texto">
+          <div className="fu-h">
+            <span className="nm">{t("fuentes.card.paste.name")}</span>
+            <span className="tag">{t("fuentes.card.paste.tag")}</span>
+            <span className="acts">
+              <button
+                type="button"
+                className="c-btn c-btn--quiet"
+                aria-expanded={openCard === "paste"}
+                onClick={() => setOpenCard(openCard === "paste" ? null : "paste")}
+              >
+                {t("fuentes.card.paste.open")}
+              </button>
+            </span>
+          </div>
+          <div className="fu-body">{t("fuentes.card.paste.body")}</div>
+          {openCard === "paste" ? (
+            <div className="fu-inline">
+              <textarea
+                className="c-input fu-ta"
+                placeholder={t("fuentes.card.paste.placeholder")}
+                value={pasteText}
+                onChange={(e) => setPasteText(e.target.value)}
+              />
+              <div className="fu-inline-acts">
+                <button
+                  type="button"
+                  className="c-btn"
+                  disabled={busy("pasteCard") || pasteText.trim().length < 20}
+                  onClick={() => runTextPost("pasteCard", { kind: "paste", text: pasteText }, () => setPasteText(""))}
+                >
+                  {t("fuentes.card.paste.submit")}
+                </button>
+                <button type="button" className="c-btn c-btn--quiet" onClick={() => setOpenCard(null)}>
+                  {t("fuentes.card.paste.cancel")}
+                </button>
+              </div>
+            </div>
+          ) : null}
+          {phaseLine("pasteCard")}
+        </article>
+
+        {/* Enlace (URL) */}
+        <article className="c-card fu-card" data-screen-label="fuentes-add-url">
+          <div className="fu-h">
+            <span className="nm">{t("fuentes.card.url.name")}</span>
+            <span className="tag">{t("fuentes.card.url.tag")}</span>
+          </div>
+          <div className="fu-body">{t("fuentes.card.url.body")}</div>
+          <div className="fu-form">
+            <input
+              className="c-input"
+              type="url"
+              inputMode="url"
+              placeholder={t("fuentes.card.url.placeholder")}
+              value={urlText}
+              onChange={(e) => setUrlText(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && urlText.trim() && !busy("urlCard"))
+                  runTextPost("urlCard", { kind: "url", url: urlText }, () => setUrlText(""));
+              }}
+            />
+            <button
+              type="button"
+              className="c-btn"
+              disabled={busy("urlCard") || !urlText.trim()}
+              onClick={() => runTextPost("urlCard", { kind: "url", url: urlText }, () => setUrlText(""))}
+            >
+              {t("fuentes.card.url.submit")}
+            </button>
+          </div>
+          {phaseLine("urlCard")}
+        </article>
+
+        {/* GitHub — dato duro, sin IA (API pública, sin OAuth) */}
+        <article className="c-card fu-card" data-screen-label="fuentes-github">
+          <div className="fu-h">
+            <span className="nm">GitHub</span>
+            <span className="tag star">{t("fuentes.tag.noAiApi")}</span>
+          </div>
+          <div className="fu-body">{t("fuentes.gh2.body")}</div>
+          <div className="fu-form">
+            <span className="fu-at">github.com/</span>
+            <input
+              className="c-input"
+              placeholder={t("fuentes.gh2.placeholder")}
+              value={ghText}
+              onChange={(e) => setGhText(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && ghText.trim() && !busy("ghCard"))
+                  runTextPost("ghCard", { kind: "github", handle: ghText }, () => setGhText(""));
+              }}
+            />
+            <button
+              type="button"
+              className="c-btn"
+              disabled={busy("ghCard") || !ghText.trim()}
+              onClick={() => runTextPost("ghCard", { kind: "github", handle: ghText }, () => setGhText(""))}
+            >
+              {t("fuentes.gh2.submit")}
+            </button>
+          </div>
+          {phaseLine("ghCard")}
+          <div className="fu-note">{t("fuentes.gh.note")}</div>
+        </article>
+
+        {/* LinkedIn — las TRES vías se ejecutan aquí (nada de mandar al volcado) */}
+        <article className="c-card fu-card fu-li" data-screen-label="fuentes-linkedin">
+          <div className="fu-h">
+            <span className="nm">linkedin</span>
+            <span className="tag">{t("fuentes.li.tag")}</span>
+          </div>
+          <p>{t("fuentes.li.body")}</p>
+          <div className="vias">
+            <button
+              type="button"
+              className="fu-via"
+              aria-expanded={openCard === "li-paste"}
+              onClick={() => setOpenCard(openCard === "li-paste" ? null : "li-paste")}
+            >
+              <b>{t("fuentes.li.via1Bold")}</b>
+              {t("fuentes.li.via1")}
+            </button>
+            <button type="button" className="fu-via" disabled={busy("liCard")} onClick={() => liPdfInRef.current?.click()}>
+              <b>{t("fuentes.li.via2Bold")}</b>
+              {t("fuentes.li.via2")}
+            </button>
+            <button type="button" className="fu-via" disabled={busy("liCard")} onClick={() => liImgInRef.current?.click()}>
+              <b>{t("fuentes.li.via3Bold")}</b>
+              {t("fuentes.li.via3")}
+            </button>
+          </div>
+          {openCard === "li-paste" ? (
+            <div className="fu-inline">
+              <textarea
+                className="c-input fu-ta"
+                placeholder={t("fuentes.li2.pastePlaceholder")}
+                value={liText}
+                onChange={(e) => setLiText(e.target.value)}
+              />
+              <div className="fu-inline-acts">
+                <button
+                  type="button"
+                  className="c-btn"
+                  disabled={busy("liCard") || liText.trim().length < 20}
+                  onClick={() =>
+                    runTextPost("liCard", { kind: "paste", text: liText, name: t("fuentes.li2.pasteName") }, () => {
+                      setLiText("");
+                      setOpenCard(null);
+                    })
+                  }
+                >
+                  {t("fuentes.li2.pasteSubmit")}
+                </button>
+                <button type="button" className="c-btn c-btn--quiet" onClick={() => setOpenCard(null)}>
+                  {t("fuentes.card.paste.cancel")}
+                </button>
+              </div>
+            </div>
+          ) : null}
+          {phaseLine("liCard")}
+          <input
+            ref={liPdfInRef}
+            type="file"
+            accept=".pdf,application/pdf"
+            hidden
+            onChange={(e) => {
+              if (e.target.files) void runFileUpload("liCard", Array.from(e.target.files));
+              e.target.value = "";
+            }}
+          />
+          <input
+            ref={liImgInRef}
+            type="file"
+            accept="image/png,image/jpeg,image/webp,.png,.jpg,.jpeg,.webp"
+            multiple
+            hidden
+            onChange={(e) => {
+              if (e.target.files) void runFileUpload("liCard", Array.from(e.target.files));
+              e.target.value = "";
+            }}
+          />
+        </article>
+      </>
+    );
+
     return (
       <div className="c-page">
         {header}
@@ -212,27 +663,45 @@ export function FuentesScreen() {
               <div style={{ textAlign: "center", padding: "48px 0 40px" }} data-screen-label="fuentes-vacio">
                 <span className="t-overline">{t("fuentes.empty.overline")}</span>
                 <h2 style={{ marginTop: "14px" }}>{t("fuentes.empty.title")}</h2>
-                <p style={{ color: "var(--text-muted)", maxWidth: "52ch", margin: "10px auto 0" }}>
-                  {t("fuentes.empty.body")}
-                </p>
+                <p style={{ color: "var(--text-muted)", maxWidth: "52ch", margin: "10px auto 0" }}>{t("fuentes.empty.body")}</p>
                 <div style={{ marginTop: "24px" }}>
-                  <Link className="c-btn c-btn--patina" href="/app/importar">
+                  <button type="button" className="c-btn c-btn--patina" onClick={() => setOpenCard("paste")}>
                     {t("fuentes.empty.cta")}
-                  </Link>
+                  </button>
                 </div>
               </div>
             ) : null}
 
+            {/* Fuentes ya ingeridas: cada fila con acciones «releer» y «quitar». */}
             {!loading &&
               sources.map((s) => {
                 const name = s.originalName || s.sourceUrl || kindLabel(s.kind);
+                const canResync = s.kind !== "paste" && s.kind !== "manual";
+                const rp = rowPhase[s.id];
                 return (
                   <article className="c-card fu-card" key={s.id} data-screen-label="fuentes-item">
                     <div className="fu-h">
                       <span className="nm">{name}</span>
                       <span className="tag">{kindLabel(s.kind)}</span>
                       <span className="acts">
-                        <Link className="c-btn c-btn--quiet" href="/app/staging">
+                        {canResync ? (
+                          <button
+                            type="button"
+                            className="c-btn c-btn--quiet"
+                            disabled={rowBusy(s.id)}
+                            onClick={() => resyncSource(s.id)}
+                          >
+                            {rowBusy(s.id) && rp?.msg === t("fuentes.item.resyncBusy") ? t("fuentes.item.resyncBusy") : t("fuentes.item.resync")}
+                          </button>
+                        ) : (
+                          <button type="button" className="c-btn c-btn--quiet" disabled title={t("fuentes.item.resyncPasteDisabled")}>
+                            {t("fuentes.item.resync")}
+                          </button>
+                        )}
+                        <button type="button" className="c-btn c-btn--quiet" disabled={rowBusy(s.id)} onClick={() => setConfirmRemove(s.id)}>
+                          {t("fuentes.item.remove")}
+                        </button>
+                        <Link className="c-btn c-btn--quiet" href={`/app/staging?source=${s.id}`}>
                           {t("fuentes.item.viewStaging")}
                         </Link>
                       </span>
@@ -260,34 +729,31 @@ export function FuentesScreen() {
                         <div className="k">{t("fuentes.item.added")}</div>
                       </div>
                     </div>
+
+                    {confirmRemove === s.id ? (
+                      <div className="fu-confirm" role="alertdialog" aria-label={t("fuentes.item.remove")}>
+                        <span>{t("fuentes.item.removeConfirm")}</span>
+                        <div className="fu-confirm-acts">
+                          <button type="button" className="c-btn" disabled={rowBusy(s.id)} onClick={() => removeSource(s.id)}>
+                            {rowBusy(s.id) ? t("fuentes.item.removeBusy") : t("fuentes.item.removeYes")}
+                          </button>
+                          <button type="button" className="c-btn c-btn--quiet" onClick={() => setConfirmRemove(null)}>
+                            {t("fuentes.item.removeNo")}
+                          </button>
+                        </div>
+                      </div>
+                    ) : null}
+
+                    {rp && rp.state !== "working" && rp.msg ? (
+                      <div className={`fu-status ${rp.state === "error" ? "is-err" : "is-ok"}`} role="status" aria-live="polite">
+                        {rp.state === "error" ? <span aria-hidden="true">✕</span> : <span aria-hidden="true">✓</span>} {rp.msg}
+                      </div>
+                    ) : null}
                   </article>
                 );
               })}
 
-            {/* GitHub: shell (afordancia real, sin repos ficticios) */}
-            <article className="c-card fu-card" data-screen-label="fuentes-github">
-              <div className="fu-h">
-                <span className="nm">GitHub</span>
-                <span className="tag star">{t("fuentes.tag.noAiApi")}</span>
-                <span className="acts">
-                  <Link className="c-btn c-btn--quiet" href="/app/importar">
-                    {t("fuentes.ghShell.connect")}
-                  </Link>
-                </span>
-              </div>
-              <div className="fu-note">
-                {t("fuentes.ghShell.notePre")}<b>{t("fuentes.ghShell.noteBold")}</b>{t("fuentes.ghShell.noteSuf")}
-              </div>
-            </article>
-
-            {linkedInCard}
-
-            <div className="fu-add">
-              <input className="c-input" placeholder={t("fuentes.add.placeholder")} />
-              <button type="button" className="c-btn">
-                {t("fuentes.add.button")}
-              </button>
-            </div>
+            {addCards}
           </div>
         </main>
       </div>
@@ -399,9 +865,7 @@ export function FuentesScreen() {
             </div>
             <div className={`fu-repos${reposOpen ? " open" : ""}`} id="repos">
               <div className="fu-rh">
-                <b>
-                  {t("fuentes.repo.selected").replace("{sel}", String(selected)).replace("{tot}", String(total))}
-                </b>
+                <b>{t("fuentes.repo.selected").replace("{sel}", String(selected)).replace("{tot}", String(total))}</b>
                 {t("fuentes.repo.mid")}<b>{t("fuentes.repo.boldRule")}</b>{t("fuentes.repo.end")}
               </div>
               <div id="repoRows">
@@ -499,7 +963,7 @@ export function FuentesScreen() {
             </div>
           </article>
 
-          {linkedInCard}
+          {linkedInCardLocal}
 
           <div className="fu-add">
             <input className="c-input" placeholder={t("fuentes.add.placeholder")} />

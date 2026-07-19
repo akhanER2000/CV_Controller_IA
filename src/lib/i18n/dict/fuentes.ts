@@ -113,6 +113,76 @@ export const fuentes = {
     "fuentes.li.via2": "En tu perfil: Más… → Guardar como PDF → súbelo.",
     "fuentes.li.via3Bold": "Capturas",
     "fuentes.li.via3": "Se transcriben literal. Lo que no se lee, no se inventa.",
+
+    // ── Cableado B — acciones in situ (modo Supabase) ──
+    // Estado por fases de una acción (subir → extraer → resultado)
+    "fuentes.act.busy.uploading": "subiendo…",
+    "fuentes.act.busy.extracting": "extrayendo…",
+    "fuentes.act.done": "{n} ítems al staging",
+    "fuentes.act.reviewStaging": "revisar en staging →",
+    "fuentes.act.failed": "No se pudo completar.",
+    "fuentes.act.needSession": "Inicia sesión para volcar material.",
+    "fuentes.act.unsupported": "Ese tipo de archivo no se puede leer aquí.",
+    "fuentes.act.skipped": "Omitidos (tipo no soportado): {f}",
+
+    // Sección "añadir una fuente"
+    "fuentes.add.heading": "Añadir una fuente",
+
+    // Tarjeta PDF / DOCX
+    "fuentes.card.files.name": "PDF · DOCX",
+    "fuentes.card.files.tag": "sube un archivo",
+    "fuentes.card.files.body":
+      "Tu CV, una carta, un certificado. Lo leemos y proponemos items al staging — nada entra al master sin tu visto bueno.",
+    "fuentes.card.files.button": "Elegir PDF o DOCX",
+
+    // Tarjeta capturas / imágenes
+    "fuentes.card.images.name": "capturas · imágenes",
+    "fuentes.card.images.tag": "transcritas literal",
+    "fuentes.card.images.body":
+      "PNG, JPG o WEBP. Se transcriben palabra por palabra antes de extraer nada: lo que no se lee, no se inventa.",
+    "fuentes.card.images.button": "Elegir imágenes",
+
+    // Tarjeta texto pegado
+    "fuentes.card.paste.name": "texto",
+    "fuentes.card.paste.tag": "pega y extrae",
+    "fuentes.card.paste.body":
+      "Pega lo que tengas — un borrador, la descripción de un puesto, notas sueltas. Extraemos con evidencia.",
+    "fuentes.card.paste.open": "Pegar texto",
+    "fuentes.card.paste.placeholder": "Pega aquí tu experiencia, un CV en texto, notas…",
+    "fuentes.card.paste.submit": "Extraer con evidencia",
+    "fuentes.card.paste.cancel": "cancelar",
+
+    // Tarjeta enlace (URL)
+    "fuentes.card.url.name": "enlace",
+    "fuentes.card.url.tag": "portfolio · blog · repo",
+    "fuentes.card.url.body":
+      "Pega la dirección de tu portfolio, tu blog o un repositorio. Lo leemos y proponemos items al staging.",
+    "fuentes.card.url.placeholder": "https://tu-portfolio.cl",
+    "fuentes.card.url.submit": "Leer enlace",
+
+    // Tarjeta GitHub (real, sin IA)
+    "fuentes.gh2.body":
+      "Leemos tus repos públicos por la API oficial — sin IA, sin alucinación. Lo que ves es la API.",
+    "fuentes.gh2.placeholder": "tu-usuario",
+    "fuentes.gh2.submit": "Leer repos",
+    "fuentes.gh2.readLabel": "leídos:",
+
+    // LinkedIn — las tres vías se ejecutan en la tarjeta
+    "fuentes.li2.pastePlaceholder": "Ctrl+A y Ctrl+C sobre tu perfil de LinkedIn, pega el texto aquí…",
+    "fuentes.li2.pasteSubmit": "Extraer",
+    "fuentes.li2.pasteName": "LinkedIn (texto pegado)",
+
+    // Acciones por fila de una fuente ya ingerida
+    "fuentes.item.resync": "releer",
+    "fuentes.item.resyncBusy": "releyendo…",
+    "fuentes.item.resyncPasteDisabled": "el texto pegado no tiene un origen externo que releer",
+    "fuentes.item.resynced": "releída — {n} al staging",
+    "fuentes.item.remove": "quitar",
+    "fuentes.item.removeBusy": "quitando…",
+    "fuentes.item.removeConfirm":
+      "¿Quitar esta fuente? Se borran sus propuestas pendientes en staging. Lo que ya aceptaste en tu master se queda (pierde el vínculo a la fuente).",
+    "fuentes.item.removeYes": "quitar fuente",
+    "fuentes.item.removeNo": "cancelar",
   } as Record<string, string>,
   en: {
     // Source-kind labels (KIND_LABEL)
@@ -228,5 +298,75 @@ export const fuentes = {
     "fuentes.li.via2": "On your profile: More… → Save to PDF → upload it.",
     "fuentes.li.via3Bold": "Screenshots",
     "fuentes.li.via3": "Transcribed verbatim. What can't be read doesn't get made up.",
+
+    // ── Wiring B — in-situ actions (Supabase mode) ──
+    // Phased status of an action (upload → extract → result)
+    "fuentes.act.busy.uploading": "uploading…",
+    "fuentes.act.busy.extracting": "extracting…",
+    "fuentes.act.done": "{n} items to staging",
+    "fuentes.act.reviewStaging": "review in staging →",
+    "fuentes.act.failed": "Couldn't complete.",
+    "fuentes.act.needSession": "Sign in to dump material.",
+    "fuentes.act.unsupported": "That file type can't be read here.",
+    "fuentes.act.skipped": "Skipped (unsupported type): {f}",
+
+    // "Add a source" section
+    "fuentes.add.heading": "Add a source",
+
+    // PDF / DOCX card
+    "fuentes.card.files.name": "PDF · DOCX",
+    "fuentes.card.files.tag": "upload a file",
+    "fuentes.card.files.body":
+      "Your resume, a cover letter, a certificate. We read it and propose items to staging — nothing enters your master without your say-so.",
+    "fuentes.card.files.button": "Choose PDF or DOCX",
+
+    // Screenshots / images card
+    "fuentes.card.images.name": "screenshots · images",
+    "fuentes.card.images.tag": "transcribed verbatim",
+    "fuentes.card.images.body":
+      "PNG, JPG or WEBP. Transcribed word for word before extracting anything: what can't be read doesn't get made up.",
+    "fuentes.card.images.button": "Choose images",
+
+    // Pasted-text card
+    "fuentes.card.paste.name": "text",
+    "fuentes.card.paste.tag": "paste and extract",
+    "fuentes.card.paste.body":
+      "Paste whatever you have — a draft, a job description, loose notes. We extract with evidence.",
+    "fuentes.card.paste.open": "Paste text",
+    "fuentes.card.paste.placeholder": "Paste your experience, a resume as text, notes…",
+    "fuentes.card.paste.submit": "Extract with evidence",
+    "fuentes.card.paste.cancel": "cancel",
+
+    // Link (URL) card
+    "fuentes.card.url.name": "link",
+    "fuentes.card.url.tag": "portfolio · blog · repo",
+    "fuentes.card.url.body":
+      "Paste the address of your portfolio, your blog or a repository. We read it and propose items to staging.",
+    "fuentes.card.url.placeholder": "https://your-portfolio.com",
+    "fuentes.card.url.submit": "Read link",
+
+    // GitHub card (real, no AI)
+    "fuentes.gh2.body":
+      "We read your public repos through the official API — no AI, no hallucination. What you see is the API.",
+    "fuentes.gh2.placeholder": "your-username",
+    "fuentes.gh2.submit": "Read repos",
+    "fuentes.gh2.readLabel": "read:",
+
+    // LinkedIn — the three ways run inside the card
+    "fuentes.li2.pastePlaceholder": "Ctrl+A and Ctrl+C on your LinkedIn profile, paste the text here…",
+    "fuentes.li2.pasteSubmit": "Extract",
+    "fuentes.li2.pasteName": "LinkedIn (pasted text)",
+
+    // Per-row actions on an already-ingested source
+    "fuentes.item.resync": "re-read",
+    "fuentes.item.resyncBusy": "re-reading…",
+    "fuentes.item.resyncPasteDisabled": "pasted text has no external origin to re-read",
+    "fuentes.item.resynced": "re-read — {n} to staging",
+    "fuentes.item.remove": "remove",
+    "fuentes.item.removeBusy": "removing…",
+    "fuentes.item.removeConfirm":
+      "Remove this source? Its pending staging proposals are deleted. What you already accepted into your master stays (it loses the link to the source).",
+    "fuentes.item.removeYes": "remove source",
+    "fuentes.item.removeNo": "cancel",
   } as Record<string, string>,
 } as const;
