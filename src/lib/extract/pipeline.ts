@@ -1,6 +1,8 @@
 import { verifyEvidence, normalize } from "../verify";
 import { detectAndClassify } from "./urls";
 import { looksLikeDuplicate } from "./dedup";
+import { classifyBulletText, linkedInSkillLines, normalizeLine } from "./classify";
+import { normalizeDateRange } from "./dates";
 import type { Extractor } from "./llm";
 import type { GithubFetcher } from "./github";
 import type { StagedRow, ImportResult, EvidenceLevel } from "./types";
@@ -34,6 +36,27 @@ const key = (p: string) => `${p}-${++seq}`;
 
 const verified = (level: EvidenceLevel) => level === "verified" || level === "api";
 
+/**
+ * Anota las fechas normalizadas en `data`, o admite honestamente que faltan (§C2).
+ * Estas señales van SIN prefijo `_` a propósito: deben SOBREVIVIR al master
+ * (dateMissing/dateInvalid son honestidad hacia el usuario, no metadato interno;
+ * persistImport solo limpia las claves con `_`). Nunca se inventa lo ausente.
+ */
+function applyDates(data: Record<string, unknown>, rawDates: string): void {
+  const dr = normalizeDateRange(rawDates);
+  if (dr.invalid) {
+    data.dateInvalid = dr.invalid; // el texto ORIGINAL; lo arregla un humano
+    return;
+  }
+  if (dr.start || dr.end || dr.current) {
+    if (dr.start) data.dateStart = dr.start;
+    if (dr.end) data.dateEnd = dr.end;
+    if (dr.current) data.dateCurrent = true;
+    return;
+  }
+  data.dateMissing = true;
+}
+
 export async function runImport(input: ImportInput, deps: ImportDeps): Promise<ImportResult> {
   const detected = detectAndClassify(input.pastedText);
   const sources: string[] = [];
@@ -62,7 +85,8 @@ export async function runImport(input: ImportInput, deps: ImportDeps): Promise<I
     } else if (u.kind === "web" && deps.fetchWeb) {
       const md = await deps.fetchWeb(u.url);
       if (md.trim()) {
-        raw += `\n\n[${u.handle} — portfolio]\n${md.slice(0, 8000)}`;
+        // hasta 12k: da aire al JSON-LD + crawl de secciones internas (§C4).
+        raw += `\n\n[${u.handle} — portfolio]\n${md.slice(0, 12000)}`;
         sources.push(u.handle ?? u.url);
       }
     }
@@ -96,20 +120,52 @@ export async function runImport(input: ImportInput, deps: ImportDeps): Promise<I
     });
   }
 
+  // Red de seguridad §C5: líneas que en el origen cuelgan de «Aptitudes/Skills»
+  // (típico de capturas de LinkedIn) son habilidades, jamás viñetas de logro.
+  const skillLines = linkedInSkillLines(raw);
+
   for (const w of ex.work) {
     const wk = key("work");
     const level = check(w.evidence);
+    const workData: Record<string, unknown> = { title: w.title, company: w.company, location: w.location, dates: w.dates };
+    applyDates(workData, w.dates);
     staged.push({
-      key: wk, kind: "work",
-      data: { title: w.title, company: w.company, location: w.location, dates: w.dates },
+      key: wk, kind: "work", data: workData,
       lang: "es", origin: "extracted", sourceLabel: "texto pegado",
       evidenceSnippet: w.evidence || null, evidenceLevel: level, evidenceVerified: verified(level),
     });
+
+    const roleLabel = w.title || w.company || "";
     for (const bl of w.bullets) {
       const bLevel = check(bl.evidence);
+      // §C1 · clasificar ANTES de stagear: ¿viñeta, habilidad o duda?
+      let cls = classifyBulletText(bl.text);
+      if (cls.kind !== "skill" && skillLines.has(normalizeLine(bl.text))) {
+        cls = { kind: "skill", reason: "aparece bajo «Aptitudes/Skills» en el origen" };
+      }
+
+      if (cls.kind === "skill") {
+        // se convierte en habilidad stageada, con su MISMA evidencia y sourceLabel.
+        // sourceContext (§C3) conserva de qué rol salió — honesto, sobrevive al master.
+        staged.push({
+          key: key("skill"), kind: "skill",
+          data: { group: "Herramientas", items: bl.text, sourceContext: roleLabel, _classFrom: "bullet" },
+          lang: "es", origin: "extracted", sourceLabel: "texto pegado",
+          evidenceSnippet: bl.evidence || null, evidenceLevel: bLevel, evidenceVerified: verified(bLevel),
+        });
+        continue;
+      }
+
+      const bData: Record<string, unknown> = { text: bl.text };
+      if (cls.kind === "doubt") {
+        // se stagea COMO VIÑETA pero con la duda VISIBLE — no se adivina en silencio.
+        // `_` = metadato de staging: se resuelve antes de promover, no viaja al master.
+        bData._classDoubt = "skill";
+        bData._classReason = cls.reason;
+      }
       staged.push({
         key: key("bullet"), parentKey: wk, kind: "bullet",
-        data: { text: bl.text }, lang: "es", origin: "extracted", sourceLabel: "texto pegado",
+        data: bData, lang: "es", origin: "extracted", sourceLabel: "texto pegado",
         evidenceSnippet: bl.evidence || null, evidenceLevel: bLevel, evidenceVerified: verified(bLevel),
       });
     }
@@ -147,9 +203,10 @@ export async function runImport(input: ImportInput, deps: ImportDeps): Promise<I
   for (const p of ex.projects) {
     if (p.name && apiProjects.has(normalize(p.name))) continue;
     const level = check(p.evidence);
+    const projData: Record<string, unknown> = { name: p.name, url: p.url, description: p.description, dates: p.dates };
+    applyDates(projData, p.dates);
     staged.push({
-      key: key("proj"), kind: "project",
-      data: { name: p.name, url: p.url, description: p.description },
+      key: key("proj"), kind: "project", data: projData,
       lang: "es", origin: "extracted", sourceLabel: "texto pegado",
       evidenceSnippet: p.evidence || null, evidenceLevel: level, evidenceVerified: verified(level),
     });

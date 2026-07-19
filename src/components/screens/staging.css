@@ -127,6 +127,39 @@ body{background:var(--bg)}
 .stg-empty p{margin-top:12px;color:var(--text-muted)}
 .stg-empty .c-forge{margin-top:30px}
 .stg-empty .fine{margin-top:22px;font:400 var(--fs-micro)/1.7 var(--font-mono);color:var(--text-subtle)}
+/* §C3 · de qué rol/proyecto salió una habilidad reclasificada */
+.stg-ctx{margin:-4px 20px 10px;font:400 var(--fs-micro)/1.4 var(--font-mono);color:var(--text-subtle)}
+/* §C1 · duda de clasificación: ¿viñeta o habilidad? (no se adivina en silencio) */
+.stg-classq{display:flex;align-items:center;gap:10px;margin:0 20px 12px;padding:8px 12px;flex-wrap:wrap;
+  border-left:2px solid var(--border-patina);background:color-mix(in srgb,var(--patina-500) 5%,var(--surface));border-radius:0 6px 6px 0}
+.stg-classq .q{font:500 var(--fs-micro)/1 var(--font-mono);letter-spacing:.04em;color:var(--accent-text);
+  padding:4px 8px;border:1px solid var(--border-patina);border-radius:999px;white-space:nowrap}
+.stg-classq .why{flex:1;min-width:120px;font:400 var(--fs-data)/1.4 var(--font-sans);color:var(--text-muted)}
+.stg-classq .acts{display:flex;gap:4px}
+.stg-classq .acts button{font:500 var(--fs-micro)/1 var(--font-mono);padding:6px 10px;border:1px solid var(--border-strong);
+  border-radius:5px;color:var(--text-muted);white-space:nowrap}
+.stg-classq .acts button:hover{color:var(--text);border-color:var(--border-patina)}
+.stg-classq .acts button.ok:hover{color:var(--accent-text)}
+.stg-classq .acts button:disabled{opacity:.5;cursor:default}
+/* §C2 · falta fecha / fecha imposible: se rellena a mano, no se inventa */
+.stg-datefix{display:flex;align-items:center;gap:10px;margin:0 20px 12px;padding:8px 12px;flex-wrap:wrap;
+  border-left:2px solid var(--border-strong);background:var(--surface-sunken);border-radius:0 6px 6px 0;
+  font:400 var(--fs-data)/1.4 var(--font-mono);color:var(--text-muted)}
+.stg-datefix .lbl{font:500 var(--fs-micro)/1 var(--font-mono);letter-spacing:.06em;text-transform:uppercase;color:var(--text-subtle)}
+.stg-datefix.bad{border-left-color:color-mix(in srgb,var(--danger) 55%,transparent);background:color-mix(in srgb,var(--danger) 4%,var(--surface))}
+.stg-datefix.bad .lbl{color:var(--danger)}
+.stg-datefix .orig{color:var(--text);font-weight:500}
+.stg-datefix .why{color:var(--text-subtle);font-size:var(--fs-micro)}
+.stg-dateadd{font:500 var(--fs-micro)/1 var(--font-mono);padding:6px 10px;border:1px solid var(--border-strong);
+  border-radius:5px;color:var(--text-muted)}
+.stg-dateadd:hover{color:var(--accent-text);border-color:var(--border-patina)}
+.stg-dateinput{display:flex;gap:6px;align-items:center;flex:1;min-width:200px}
+.stg-dateinput input{flex:1;min-width:120px;height:30px;padding:0 10px;font:400 var(--fs-data)/1 var(--font-mono);
+  border:1px solid var(--border-strong);border-radius:5px;background:var(--surface);color:var(--text)}
+.stg-dateinput input:focus{outline:none;border-color:var(--border-patina)}
+.stg-dateinput button{font:500 var(--fs-micro)/1 var(--font-mono);padding:7px 12px;border:1px solid var(--border-patina);
+  border-radius:5px;color:var(--accent-text)}
+.stg-dateinput button:disabled{opacity:.5;cursor:default}
 /* skeleton */
 .stg-skelrow{height:64px;margin-top:12px;border-radius:var(--radius-md)}
 @media (max-width:768px){

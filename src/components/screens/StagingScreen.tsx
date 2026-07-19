@@ -63,6 +63,18 @@ function textOf(it: Item): string {
 }
 const sourceOf = (it: Item) => s(it.data, "_source");
 
+// §C1/§C2/§C3 — señales que la UI hace visibles (nunca se adivina en silencio).
+const doubtOf = (it: Item) => s(it.data, "_classDoubt");
+const ctxOf = (it: Item) => s(it.data, "sourceContext");
+const dateInvalidOf = (it: Item) => s(it.data, "dateInvalid");
+const dateMissingOf = (it: Item) => Boolean(it.data.dateMissing);
+const isDated = (it: Item) => it.kind === "work" || it.kind === "project";
+const withoutDoubt = (d: Record<string, unknown>): Record<string, unknown> => {
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(d)) if (k !== "_classDoubt" && k !== "_classReason") out[k] = v;
+  return out;
+};
+
 export function StagingScreen() {
   const t = useT();
   const [items, setItems] = useState<Item[]>([]);
@@ -70,6 +82,8 @@ export function StagingScreen() {
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState<Set<string>>(new Set());
   const [openFrag, setOpenFrag] = useState<Set<string>>(new Set());
+  const [openDate, setOpenDate] = useState<Set<string>>(new Set());
+  const [dateDraft, setDateDraft] = useState<Record<string, string>>({});
   const [filter, setFilter] = useState<"all" | Ver>("all");
   const [acc, setAcc] = useState(0);
   const [dis, setDis] = useState(0);
@@ -163,6 +177,79 @@ export function StagingScreen() {
       return n;
     });
 
+  // ── Reclasificación y fechas (PATCH /api/staging) ──────────────────────────
+  async function patch(id: string, extra: Record<string, unknown>) {
+    setBusy((p) => new Set(p).add(id));
+    try {
+      const res = await fetch("/api/staging", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id, ...extra }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || t("staging.errGeneric"));
+      return data as Record<string, unknown>;
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : t("staging.errGeneric"));
+      return null;
+    } finally {
+      setBusy((p) => {
+        const n = new Set(p);
+        n.delete(id);
+        return n;
+      });
+    }
+  }
+
+  // «es habilidad»: la viñeta pasa a la sección de habilidades (kind skill).
+  async function reclassSkill(it: Item) {
+    const ok = await patch(it.id, { kind: "skill", group: "Herramientas" });
+    if (!ok) return;
+    const parent = items.find((x) => x.id === it.parent_staged_id);
+    const ctx = ctxOf(it) || (parent ? s(parent.data, "title") || s(parent.data, "company") : "");
+    setItems((p) =>
+      p.map((x) =>
+        x.id === it.id
+          ? {
+              ...x,
+              kind: "skill",
+              parent_staged_id: null,
+              data: { ...withoutDoubt(x.data), group: "Herramientas", items: s(x.data, "text") || s(x.data, "items"), sourceContext: ctx },
+            }
+          : x,
+      ),
+    );
+  }
+
+  // «es viñeta»: solo se limpia la duda; sigue siendo viñeta.
+  async function clearDoubt(it: Item) {
+    const ok = await patch(it.id, { clearDoubt: true });
+    if (!ok) return;
+    setItems((p) => p.map((x) => (x.id === it.id ? { ...x, data: withoutDoubt(x.data) } : x)));
+  }
+
+  // «falta fecha» → el humano la escribe; el origen de la fecha es el humano.
+  async function saveDate(it: Item, value: string) {
+    const raw = value.trim();
+    if (!raw) return;
+    const ok = await patch(it.id, { dates: raw });
+    if (!ok) return;
+    setItems((p) =>
+      p.map((x) => {
+        if (x.id !== it.id) return x;
+        const d: Record<string, unknown> = { ...x.data, dates: raw, dateByHuman: true };
+        delete d.dateMissing;
+        delete d.dateInvalid;
+        return { ...x, data: d };
+      }),
+    );
+    setOpenDate((p) => {
+      const n = new Set(p);
+      n.delete(it.id);
+      return n;
+    });
+  }
+
   const shown = (it: Item) => filter === "all" || verOf(it) === filter;
 
   const parents = items.filter((it) => it.kind !== "bullet");
@@ -183,9 +270,38 @@ export function StagingScreen() {
     );
   }
 
+  function DateFix({ it }: { it: Item }) {
+    const b = busy.has(it.id);
+    if (!openDate.has(it.id)) {
+      return (
+        <button className="stg-dateadd" onClick={() => setOpenDate((p) => new Set(p).add(it.id))}>
+          {t("staging.dateAdd")}
+        </button>
+      );
+    }
+    const val = dateDraft[it.id] ?? "";
+    return (
+      <span className="stg-dateinput">
+        <input
+          value={val}
+          placeholder={t("staging.datePlaceholder")}
+          onChange={(e) => setDateDraft((p) => ({ ...p, [it.id]: e.target.value }))}
+          onKeyDown={(e) => e.key === "Enter" && saveDate(it, val)}
+        />
+        <button disabled={b || !val.trim()} onClick={() => saveDate(it, val)}>
+          {b ? t("staging.dateSaving") : t("staging.dateSave")}
+        </button>
+      </span>
+    );
+  }
+
   function Unit({ it, cls }: { it: Item; cls: string }) {
     if (!shown(it)) return null;
     const v = verOf(it);
+    const doubt = doubtOf(it);
+    const badDate = dateInvalidOf(it);
+    const noDate = isDated(it) && !badDate && dateMissingOf(it);
+    const ctx = it.kind === "skill" ? ctxOf(it) : "";
     return (
       <>
         <div className={`${cls} stg-unit`} data-id={it.id} data-ver={v}>
@@ -200,6 +316,43 @@ export function StagingScreen() {
           <span className="from">{sourceOf(it) || t("staging.sourceFallback")}</span>
           {it.evidence_snippet ?? t("staging.noFragment")}
         </div>
+
+        {ctx && (
+          <div className="stg-ctx">
+            {t("staging.skillFrom")} {ctx}
+          </div>
+        )}
+
+        {doubt && (
+          <div className="stg-classq">
+            <span className="q">{t("staging.doubtChip")}</span>
+            <span className="why">{s(it.data, "_classReason") || t("staging.doubtWhy")}</span>
+            <span className="acts">
+              <button className="ok" disabled={busy.has(it.id)} onClick={() => reclassSkill(it)}>
+                {t("staging.doubtIsSkill")}
+              </button>
+              <button disabled={busy.has(it.id)} onClick={() => clearDoubt(it)}>
+                {t("staging.doubtIsBullet")}
+              </button>
+            </span>
+          </div>
+        )}
+
+        {badDate && (
+          <div className="stg-datefix bad">
+            <span className="lbl">⚠ {t("staging.dateInvalid")}</span>
+            <span className="orig">{badDate}</span>
+            <span className="why">{t("staging.dateInvalidHint")}</span>
+            <DateFix it={it} />
+          </div>
+        )}
+
+        {noDate && (
+          <div className="stg-datefix">
+            <span className="lbl">{t("staging.dateMissing")}</span>
+            <DateFix it={it} />
+          </div>
+        )}
       </>
     );
   }

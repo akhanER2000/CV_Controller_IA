@@ -89,7 +89,14 @@ export async function transcribeImage(dataUrl: string, apiKey?: string): Promise
         content: [
           {
             type: "text",
-            text: "Transcribe LITERALMENTE todo el texto visible en esta imagen, en orden de lectura. No interpretes, no resumas, no completes lo que no se lee. Devuelve solo el texto transcrito.",
+            text:
+              "Transcribe LITERALMENTE todo el texto visible en esta imagen, en orden de lectura. " +
+              "No interpretes, no resumas, no completes lo que no se lee. " +
+              "Es CLAVE para capturas de LinkedIn: transcribe los ENCABEZADOS DE SECCIÓN tal cual, " +
+              "cada uno en su propia línea y en su lugar (Experiencia/Experience, Aptitudes/Skills, " +
+              "Educación/Education, Acerca de/About, Licencias y certificaciones/Licenses & certifications, " +
+              "Proyectos/Projects, Idiomas/Languages). Así se sabe qué es habilidad y qué es logro. " +
+              "Devuelve solo el texto transcrito.",
           },
           { type: "image", image: new URL(dataUrl) },
         ],
@@ -119,6 +126,9 @@ export async function transcribePdf(bytes: Uint8Array, apiKey?: string): Promise
               "Este PDF es un ESCANEO (páginas como imagen, sin capa de texto). " +
               "Transcribe LITERALMENTE todo el texto visible, página por página, en orden de lectura. " +
               "No interpretes, no resumas, no reordenes ni completes lo que no se lee. " +
+              "Transcribe los ENCABEZADOS DE SECCIÓN tal cual y en su propia línea (Experiencia/Experience, " +
+              "Aptitudes/Skills, Educación/Education, Acerca de/About, Licencias y certificaciones/Licenses & " +
+              "certifications, Proyectos/Projects, Idiomas/Languages): sirven para no confundir habilidades con logros. " +
               "Si una página es ilegible, omítela. Devuelve solo el texto transcrito.",
           },
           { type: "file", data: bytes, mediaType: "application/pdf" },

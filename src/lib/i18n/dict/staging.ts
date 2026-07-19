@@ -46,6 +46,22 @@ export const staging = {
     "staging.accept": "✓ aceptar",
     "staging.discard": "× descartar",
 
+    // Clasificación en duda (§C1): ¿viñeta o habilidad?
+    "staging.doubtChip": "¿habilidad?",
+    "staging.doubtWhy": "Parece una etiqueta de habilidad, no un logro.",
+    "staging.doubtIsSkill": "es habilidad",
+    "staging.doubtIsBullet": "es viñeta",
+    "staging.skillFrom": "de:",
+
+    // Fechas (§C2)
+    "staging.dateMissing": "falta fecha",
+    "staging.dateInvalid": "fecha imposible",
+    "staging.dateInvalidHint": "el fin va antes del inicio — corrígela",
+    "staging.dateAdd": "añadir fecha",
+    "staging.datePlaceholder": "ej. mar 2022 – hoy",
+    "staging.dateSave": "guardar",
+    "staging.dateSaving": "guardando…",
+
     // Estado vacío
     "staging.emptyTitle": "Staging limpio.",
     "staging.emptyBody":
@@ -102,6 +118,22 @@ export const staging = {
     // Per-item actions
     "staging.accept": "✓ accept",
     "staging.discard": "× discard",
+
+    // Classification doubt (§C1): bullet or skill?
+    "staging.doubtChip": "a skill?",
+    "staging.doubtWhy": "Looks like a skill tag, not an achievement.",
+    "staging.doubtIsSkill": "it's a skill",
+    "staging.doubtIsBullet": "it's a bullet",
+    "staging.skillFrom": "from:",
+
+    // Dates (§C2)
+    "staging.dateMissing": "missing date",
+    "staging.dateInvalid": "impossible date",
+    "staging.dateInvalidHint": "end is before start — fix it",
+    "staging.dateAdd": "add date",
+    "staging.datePlaceholder": "e.g. Mar 2022 – present",
+    "staging.dateSave": "save",
+    "staging.dateSaving": "saving…",
 
     // Empty state
     "staging.emptyTitle": "Staging clear.",

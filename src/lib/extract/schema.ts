@@ -77,6 +77,7 @@ export const ProjectsSchema = z.object({
       name: z.string(),
       url: z.string().describe("URL del proyecto, o \"\""),
       description: z.string().describe("Qué es y qué hiciste"),
+      dates: z.string().describe("Rango o año del proyecto tal cual aparece, o \"\" si no hay"),
       evidence: z.string().describe(EVIDENCE),
     }),
   ),
