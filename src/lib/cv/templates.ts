@@ -141,6 +141,43 @@ export interface CvTemplate {
   palette: TemplatePalette;
   typography: TemplateTypography;
   metrics: TemplateMetrics;
+  /**
+   * ETIQUETAS para el selector. Una plantilla lleva varias; no son categorías
+   * cerradas. Con treinta opciones el problema deja de ser la variedad y pasa a ser
+   * la parálisis de elección, así que esto es curación, no taxonomía.
+   * Vocabulario (usa SOLO estos ids; el selector los traduce):
+   *   tono      → clasica · editorial · tecnica · minimal · moderna
+   *   densidad  → 1pagina · 2paginas
+   *   afinidad  → ingenieria · datos-ia · academia · general · primer-empleo
+   * La gama (ats|visual) NO va aquí: ya es un campo propio.
+   */
+  tags?: TemplateTag[];
+}
+
+/** Vocabulario cerrado de etiquetas: si no está aquí, no es una etiqueta válida. */
+export type TemplateTag =
+  | "clasica" | "editorial" | "tecnica" | "minimal" | "moderna"
+  | "1pagina" | "2paginas"
+  | "ingenieria" | "datos-ia" | "academia" | "general" | "primer-empleo";
+
+export const TEMPLATE_TAGS: readonly TemplateTag[] = [
+  "clasica", "editorial", "tecnica", "minimal", "moderna",
+  "1pagina", "2paginas",
+  "ingenieria", "datos-ia", "academia", "general", "primer-empleo",
+] as const;
+
+/** Las etiquetas de una plantilla, siempre como array (nunca undefined). */
+export function tagsOf(t: CvTemplate): TemplateTag[] {
+  return t.tags ?? [];
+}
+
+/** Plantillas que llevan TODAS las etiquetas pedidas (filtro del selector). */
+export function templatesByTags(tags: TemplateTag[]): CvTemplate[] {
+  if (!tags.length) return listTemplates();
+  return listTemplates().filter((t) => {
+    const own = tagsOf(t);
+    return tags.every((tag) => own.includes(tag));
+  });
 }
 
 // ── Valores por defecto ───────────────────────────────────────────────────────
