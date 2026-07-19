@@ -5,6 +5,15 @@ import type { ReactNode } from "react";
 import Link from "next/link";
 import { useT } from "@/lib/i18n";
 import { supabaseEnabled } from "@/lib/supabase/config";
+import { useUndoToast } from "@/components/UndoToast";
+import {
+  looksLikeSkillTag,
+  splitChipInput,
+  normalizeSkillName,
+  chipsFromCsv,
+  chipsToCsv,
+} from "@/lib/db/master";
+import type { ItemUsage } from "@/lib/db/master";
 import "./master.css";
 
 /* ============================================================================
@@ -26,7 +35,6 @@ import "./master.css";
    - El estado vacío deriva de los datos (total === 0) y conserva su markup.
    ============================================================================ */
 
-type Ver = "ok" | "partial" | "none";
 type FilterKey = "all" | "sin-cifra" | "sin-evidencia" | "sin-fechas";
 
 /* ── Vista unificada: la pintan los mismos helpers, venga de la demo o de la DB ─
@@ -52,11 +60,17 @@ interface VRole {
   warn?: string;
   bullets: VBullet[];
 }
+/* Un grupo de habilidades = UN profile_item skill { group, items:CSV }. Los chips
+   son una capa de UI sobre ese CSV; por eso la procedencia/evidencia es POR GRUPO,
+   no por chip individual (el render del PDF consume el CSV tal cual). */
 interface VSkill {
-  n: string;
-  ver: Ver;
-  ev: ReactNode;
-  ask?: string;
+  id: string | null;
+  data: Record<string, unknown>;
+  group: string;
+  chips: string[];
+  origin: string;
+  evidence: string | null;
+  verified: boolean;
 }
 interface VRow {
   id: string | null;
@@ -213,17 +227,21 @@ const DEMO_EXP: DemoRole[] = [
   },
 ];
 
-const DEMO_SK: VSkill[] = [
-  { n: "Go", ver: "ok", ev: "412 KB · 3 repos · citada en 2 viñetas de experiencia" },
-  { n: "Python", ver: "ok", ev: "188 KB · 2 repos · scripts de migración (práctica UNAB)" },
-  { n: "PostgreSQL", ver: "ok", ev: "APIs del checkout (Rayén) · docker-compose en 2 repos" },
-  { n: "Node.js", ver: "ok", ev: "CV_2023 · checkout de Rayén, 2 años" },
-  { n: "SQL", ver: "ok", ev: "texto pegado · consultas en 3 repos" },
-  { n: "TypeScript", ver: "ok", ev: "96 KB · 2 repos (front del portfolio)" },
-  { n: "Docker", ver: "ok", ev: "Dockerfile en 5 repos" },
-  { n: "Kubernetes", ver: "partial", ev: "tu texto: «lo usamos pero no lo administraba yo» — nivel declarado: usuario" },
-  { n: "Kafka", ver: "none", ev: "No aparece en ninguna viñeta, ni en tus repos, ni en tu portfolio.", ask: "¿Dónde lo usaste?" },
-  { n: "AWS", ver: "none", ev: "Un README la menciona; ninguna viñeta ni proyecto la usa.", ask: "¿Dónde la usaste?" },
+/* Demo agrupada: cada grupo es un item skill {group, items:CSV}, igual que el
+   modelo real. Los chips salen del CSV. La procedencia es POR GRUPO. */
+const DEMO_SK_GROUPS: { group: string; items: string; src: SrcKey; ev: string | null }[] = [
+  {
+    group: "Lenguajes", items: "Go, Python, SQL, TypeScript", src: "gh",
+    ev: "Go: 412 KB · 3 repos, citado en 2 viñetas. Python: scripts de migración (práctica UNAB).",
+  },
+  {
+    group: "Backend e infraestructura", items: "PostgreSQL, Node.js, Docker", src: "cv",
+    ev: "PostgreSQL: APIs del checkout (Rayén). Docker: Dockerfile en 5 repos.",
+  },
+  {
+    group: "Declaradas — por verificar", items: "Kubernetes, Kafka, AWS", src: "man",
+    ev: null,
+  },
 ];
 
 const DEMO_PJ: VRow[] = [
@@ -262,14 +280,19 @@ function buildDemoView(): MasterView {
       origin: MANUAL_LABEL,
       evidence: "escrito por ti (onboarding) — el origen manual es el más verificable de todos.",
     },
-    roles: DEMO_EXP.map((e) => ({
-      id: null, data: {},
+    // Ids sintéticos "demo-*": el prefijo local hace que borrar/reclasificar
+    // operen SOBRE LA VISTA sin llamar a la API (modo local sin Supabase).
+    roles: DEMO_EXP.map((e, ei) => ({
+      id: `demo-work-${ei}`, data: {},
       tt: e.tt, org: e.org, dates: e.dates, origin: SRC[e.src], evidence: e.ev, warn: e.warn,
-      bullets: e.bullets.map((b) => ({ id: null, data: {}, tx: b.tx, num: b.num, origin: SRC[b.src], evidence: null, nudge: b.nudge })),
+      bullets: e.bullets.map((b, bi) => ({ id: `demo-b-${ei}-${bi}`, data: { text: b.tx }, tx: b.tx, num: b.num, origin: SRC[b.src], evidence: null, nudge: b.nudge })),
     })),
-    skills: DEMO_SK,
-    projects: DEMO_PJ,
-    education: DEMO_ED,
+    skills: DEMO_SK_GROUPS.map((g, gi) => ({
+      id: `demo-sk-${gi}`, data: {}, group: g.group, chips: chipsFromCsv(g.items),
+      origin: SRC[g.src], evidence: g.ev, verified: !!g.ev,
+    })),
+    projects: DEMO_PJ.map((p, i) => ({ ...p, id: `demo-pj-${i}` })),
+    education: DEMO_ED.map((d, i) => ({ ...d, id: `demo-ed-${i}` })),
   };
 }
 
@@ -326,16 +349,15 @@ function buildRealView(items: ApiItem[]): MasterView {
     };
   });
 
-  const skills: VSkill[] = by("skill").map((s) => {
-    const group = str(s.data, "group");
-    const list = str(s.data, "items");
-    return {
-      n: group || list.split(",")[0]?.trim() || "Skill",
-      ver: s.evidenceVerified ? "ok" : "none",
-      ev: s.evidenceSnippet || list || "sin evidencia registrada",
-      ask: s.evidenceVerified ? undefined : "¿Dónde lo usaste?",
-    };
-  });
+  const skills: VSkill[] = by("skill").map((s) => ({
+    id: s.id,
+    data: s.data,
+    group: str(s.data, "group") || "Habilidades",
+    chips: chipsFromCsv(str(s.data, "items")),
+    origin: originLabel(s.origin),
+    evidence: s.evidenceSnippet,
+    verified: s.evidenceVerified,
+  }));
 
   const projects: VRow[] = by("project").map((p) => ({
     id: p.id,
@@ -376,6 +398,101 @@ function wrapNums(text: string): ReactNode[] {
   );
 }
 
+/* ── Alta manual: filas nuevas editables por sección (A1) ─────────────────────
+   Cada sección tiene su forma; el kind del profile_item y los campos van aquí.
+   La primera clave es la OBLIGATORIA (título/texto/nombre/carrera): sin ella no
+   se guarda. Enter guarda y abre otra fila; Esc cancela; Tab pasa de campo. */
+type DraftSection = "work" | "bullet" | "project" | "education";
+interface DraftField {
+  key: string;
+  ph: string; // clave i18n del placeholder
+}
+const DRAFT_FIELDS: Record<DraftSection, DraftField[]> = {
+  work: [
+    { key: "title", ph: "master.draft.title" },
+    { key: "company", ph: "master.draft.company" },
+    { key: "dates", ph: "master.draft.dates" },
+  ],
+  bullet: [{ key: "text", ph: "master.draft.bullet" }],
+  project: [
+    { key: "name", ph: "master.draft.projectName" },
+    { key: "description", ph: "master.draft.projectDesc" },
+  ],
+  education: [
+    { key: "degree", ph: "master.draft.degree" },
+    { key: "institution", ph: "master.draft.institution" },
+    { key: "dates", ph: "master.draft.dates" },
+  ],
+};
+const DRAFT_KIND: Record<DraftSection, string> = {
+  work: "work",
+  bullet: "bullet",
+  project: "project",
+  education: "education",
+};
+interface Draft {
+  tempId: string;
+  section: DraftSection;
+  parentId: string | null;
+  values: Record<string, string>;
+}
+// Ids "locales" (demo o alta en modo sin Supabase): las operaciones actúan sobre
+// la vista, sin llamar a la API. Los ids reales son UUID de profile_items.
+const isLocalId = (id: string | null | undefined): boolean =>
+  !id || id.startsWith("local-") || id.startsWith("demo-");
+
+let draftSeq = 0;
+const newDraft = (section: DraftSection, parentId: string | null): Draft => ({
+  tempId: `draft-${section}-${++draftSeq}`,
+  section,
+  parentId,
+  values: Object.fromEntries(DRAFT_FIELDS[section].map((f) => [f.key, ""])),
+});
+
+/* Item creado por la API (createItem) → objetos de la vista. Todo origin manual. */
+interface CreatedItem {
+  id: string;
+  data: Record<string, unknown>;
+  origin?: string;
+  evidenceSnippet?: string | null;
+}
+function createdToBullet(it: CreatedItem): VBullet {
+  const tx = String(it.data.text ?? "");
+  return { id: it.id, data: it.data, tx, num: hasDigit(tx), origin: MANUAL_LABEL, evidence: it.evidenceSnippet ?? null };
+}
+function createdToRole(it: CreatedItem): VRole {
+  const dates = String(it.data.dates ?? "");
+  return {
+    id: it.id, data: it.data,
+    tt: String(it.data.title ?? "") || "(rol sin título)",
+    org: [String(it.data.company ?? ""), String(it.data.location ?? "")].filter(Boolean).join(" · "),
+    dates, origin: MANUAL_LABEL, evidence: it.evidenceSnippet ?? null,
+    warn: dates.trim() ? undefined : "falta fecha", bullets: [],
+  };
+}
+function createdToProject(it: CreatedItem): VRow {
+  return {
+    id: it.id, kind: "project", data: it.data,
+    tx: [String(it.data.name ?? ""), String(it.data.description ?? "")].filter(Boolean).join(" — "),
+    m: MANUAL_LABEL,
+  };
+}
+function createdToEducation(it: CreatedItem): VRow {
+  return {
+    id: it.id, kind: "education", data: it.data,
+    tx: [String(it.data.degree ?? ""), String(it.data.institution ?? "")].filter(Boolean).join(" — "),
+    m: String(it.data.dates ?? "") || MANUAL_LABEL,
+  };
+}
+function createdToSkill(it: CreatedItem): VSkill {
+  return {
+    id: it.id, data: it.data,
+    group: String(it.data.group ?? "") || "Habilidades",
+    chips: chipsFromCsv(String(it.data.items ?? "")),
+    origin: MANUAL_LABEL, evidence: it.evidenceSnippet ?? null, verified: false,
+  };
+}
+
 export function MasterScreen() {
   const t = useT();
   const [view, setView] = useState<MasterView | null>(supabaseEnabled ? null : buildDemoView());
@@ -388,6 +505,25 @@ export function MasterScreen() {
   const [folded, setFolded] = useState<ReadonlySet<string>>(new Set());
   const [touched, setTouched] = useState<ReadonlySet<string>>(new Set());
   const [savedNote, setSavedNote] = useState("");
+
+  // Alta manual (A1): filas en edición por sección.
+  const [drafts, setDrafts] = useState<Draft[]>([]);
+  // «¿dónde se usa?» (carga perezosa al expandir la procedencia). itemId → uso.
+  const [usage, setUsage] = useState<Record<string, ItemUsage | "loading">>({});
+  // Aviso inline del borrado/reclasificación bloqueado por el RESTRICT de variantes.
+  const [blocked, setBlocked] = useState<Record<string, ItemUsage>>({});
+  // Menú de alta global.
+  const [addMenu, setAddMenu] = useState(false);
+
+  // A3 · estado de los chips de habilidades.
+  const [chipInputs, setChipInputs] = useState<Record<string, string>>({});
+  const [mergeOffer, setMergeOffer] = useState<{ groupKey: string; chip: string; existingGroup: string } | null>(null);
+  const [moveMenu, setMoveMenu] = useState<string | null>(null); // chipKey del menú «mover a…»
+  const [newGroupOpen, setNewGroupOpen] = useState(false);
+  const [newGroupName, setNewGroupName] = useState("");
+
+  const undo = useUndoToast();
+  const focusFirstDraft = useRef<string | null>(null); // tempId cuyo 1er campo enfocar
 
   const mainRef = useRef<HTMLElement>(null);
   const groupsRef = useRef<HTMLDivElement>(null);
@@ -455,6 +591,421 @@ export function MasterScreen() {
       e.currentTarget.blur();
     }
   }, []);
+
+  /* ── A1 · alta manual (filas nuevas editables) ──────────────────────────────
+     openDraft abre una fila vacía en su sección con el foco; Enter la guarda
+     (POST /api/master → createItem, origin manual) y abre OTRA debajo; Esc la
+     cancela; Tab pasa de campo. En modo local (sin Supabase) la fila se añade a la
+     vista sin persistir (no inventa un guardado). */
+  const openDraft = useCallback((section: DraftSection, parentId: string | null) => {
+    const d = newDraft(section, parentId);
+    focusFirstDraft.current = d.tempId;
+    // Un solo draft por (sección+padre) para no llenar la pantalla de filas vacías.
+    setDrafts((prev) => [...prev.filter((x) => !(x.section === section && x.parentId === parentId)), d]);
+    setAddMenu(false);
+  }, []);
+
+  const cancelDraft = useCallback((tempId: string) => {
+    setDrafts((prev) => prev.filter((d) => d.tempId !== tempId));
+  }, []);
+
+  const setDraftField = useCallback((tempId: string, key: string, value: string) => {
+    setDrafts((prev) => prev.map((d) => (d.tempId === tempId ? { ...d, values: { ...d.values, [key]: value } } : d)));
+  }, []);
+
+  // Inserta el item creado en la vista, en su sección (append al final).
+  const appendCreated = useCallback((section: DraftSection, parentId: string | null, it: CreatedItem) => {
+    setView((prev) => {
+      if (!prev) return prev;
+      if (section === "work") return { ...prev, roles: [...prev.roles, createdToRole(it)] };
+      if (section === "project") return { ...prev, projects: [...prev.projects, createdToProject(it)] };
+      if (section === "education") return { ...prev, education: [...prev.education, createdToEducation(it)] };
+      // bullet: cuelga de su rol
+      return {
+        ...prev,
+        roles: prev.roles.map((r) => (r.id === parentId ? { ...r, bullets: [...r.bullets, createdToBullet(it)] } : r)),
+      };
+    });
+  }, []);
+
+  // Guarda un draft: valida el campo obligatorio, persiste y reabre otro debajo.
+  const saveDraft = useCallback(
+    (d: Draft) => {
+      const fields = DRAFT_FIELDS[d.section];
+      const required = fields[0]!.key;
+      const value0 = (d.values[required] ?? "").trim();
+      if (!value0) {
+        cancelDraft(d.tempId);
+        return;
+      }
+      const data: Record<string, unknown> = {};
+      for (const f of fields) {
+        const val = (d.values[f.key] ?? "").trim();
+        if (val) data[f.key] = val;
+      }
+      const kind = DRAFT_KIND[d.section];
+
+      const reopen = () => {
+        const next = newDraft(d.section, d.parentId);
+        focusFirstDraft.current = next.tempId;
+        setDrafts((prev) => prev.map((x) => (x.tempId === d.tempId ? next : x)));
+      };
+
+      if (!supabaseEnabled) {
+        // Modo local: sin id real (no persiste, no borra). Es solo visual.
+        appendCreated(d.section, d.parentId, { id: `local-${d.tempId}`, data });
+        noteSaved(t("master.saved.localAdd"));
+        reopen();
+        return;
+      }
+      void (async () => {
+        try {
+          const res = await fetch("/api/master", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ kind, data, parentId: d.parentId }),
+          });
+          if (!res.ok) throw new Error();
+          const { item } = (await res.json()) as { item: CreatedItem };
+          appendCreated(d.section, d.parentId, item);
+          noteSaved(t("common.saved"));
+          reopen();
+        } catch {
+          noteSaved(t("master.saved.fail"));
+        }
+      })();
+    },
+    [appendCreated, cancelDraft, noteSaved, t],
+  );
+
+  // Enter guarda; Esc cancela. Enter en cualquier campo del draft dispara guardar.
+  const draftKeyDown = useCallback(
+    (d: Draft) => (e: React.KeyboardEvent<HTMLInputElement>) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        saveDraft(d);
+      } else if (e.key === "Escape") {
+        e.preventDefault();
+        cancelDraft(d.tempId);
+      }
+    },
+    [saveDraft, cancelDraft],
+  );
+
+  /* ── «¿dónde se usa esto?» (carga perezosa al expandir la procedencia) ─────── */
+  const loadUsage = useCallback(
+    (dbId: string) => {
+      if (!supabaseEnabled || isLocalId(dbId) || usage[dbId]) return;
+      setUsage((p) => ({ ...p, [dbId]: "loading" }));
+      void (async () => {
+        try {
+          const res = await fetch(`/api/master/${dbId}?usage=1`);
+          const j = (await res.json()) as { usage?: ItemUsage };
+          if (j.usage) setUsage((p) => ({ ...p, [dbId]: j.usage! }));
+        } catch {
+          setUsage((p) => {
+            const { [dbId]: _drop, ...rest } = p;
+            return rest;
+          });
+        }
+      })();
+    },
+    [usage],
+  );
+
+  /* ── A2 · borrar de verdad (con deshacer diferido y aviso del RESTRICT) ────── */
+  // Quita el item de la vista (optimista) y devuelve el snapshot previo para deshacer.
+  const removeFromView = useCallback(
+    (kind: "work" | "bullet" | "project" | "education" | "skill", id: string, parentId?: string | null) => {
+      setView((prev) => {
+        if (!prev) return prev;
+        if (kind === "work") return { ...prev, roles: prev.roles.filter((r) => r.id !== id) };
+        if (kind === "project") return { ...prev, projects: prev.projects.filter((p) => p.id !== id) };
+        if (kind === "education") return { ...prev, education: prev.education.filter((e) => e.id !== id) };
+        if (kind === "skill") return { ...prev, skills: prev.skills.filter((s) => s.id !== id) };
+        return {
+          ...prev,
+          roles: prev.roles.map((r) => (r.id === parentId ? { ...r, bullets: r.bullets.filter((b) => b.id !== id) } : r)),
+        };
+      });
+    },
+    [],
+  );
+
+  // Ejecuta el DELETE real (onCommit del toast). force = el usuario aceptó pese al RESTRICT.
+  const realDelete = useCallback(
+    (id: string, force: boolean) => {
+      if (!supabaseEnabled || isLocalId(id)) return;
+      void fetch(`/api/master/${id}${force ? "?force=1" : ""}`, { method: "DELETE" }).catch(() => {});
+    },
+    [],
+  );
+
+  // Borra con toast de deshacer. `label` para el mensaje; `children` viñetas arrastradas.
+  const deleteWithUndo = useCallback(
+    (
+      kind: "work" | "bullet" | "project" | "education" | "skill",
+      id: string,
+      label: string,
+      children: number,
+      force: boolean,
+      parentId?: string | null,
+    ) => {
+      const snapshot = view;
+      removeFromView(kind, id, parentId);
+      setBlocked((prev) => {
+        const { [id]: _drop, ...rest } = prev;
+        return rest;
+      });
+      const msg = children > 0
+        ? t("master.deleted.withChildren").replace("{label}", label).replace("{n}", String(children))
+        : t("master.deleted").replace("{label}", label);
+      undo.show({
+        message: msg,
+        onUndo: () => setView(snapshot),
+        onCommit: () => realDelete(id, force),
+      });
+    },
+    [view, removeFromView, undo, t, realDelete],
+  );
+
+  // Punto de entrada del borrado: consulta uso; si nadie lo referencia, borra con
+  // deshacer; si una variante lo usa, muestra el aviso inline (no modal de sistema).
+  const requestDelete = useCallback(
+    (kind: "work" | "bullet" | "project" | "education" | "skill", id: string, label: string, parentId?: string | null) => {
+      if (isLocalId(id) || !supabaseEnabled) {
+        removeFromView(kind, id, parentId);
+        return;
+      }
+      void (async () => {
+        try {
+          const res = await fetch(`/api/master/${id}?dryRun=1`, { method: "DELETE" });
+          const j = (await res.json()) as { usage?: ItemUsage };
+          const u = j.usage ?? { variantsCount: 0, overridesCount: 0, childrenCount: 0 };
+          if (u.variantsCount > 0) {
+            setBlocked((prev) => ({ ...prev, [id]: u }));
+          } else {
+            deleteWithUndo(kind, id, label, u.childrenCount, false, parentId);
+          }
+        } catch {
+          noteSaved(t("master.saved.fail"));
+        }
+      })();
+    },
+    [deleteWithUndo, removeFromView, noteSaved, t],
+  );
+
+  const dismissBlocked = useCallback((id: string) => {
+    setBlocked((prev) => {
+      const { [id]: _drop, ...rest } = prev;
+      return rest;
+    });
+  }, []);
+
+  /* ── A3 · habilidades como chips ────────────────────────────────────────────
+     Persiste el grupo (PATCH data {group, items:CSV}); si queda sin chips, lo borra
+     con deshacer. La procedencia/evidencia es POR GRUPO (limitación honesta del
+     modelo: los chips son una capa de UI sobre el CSV). */
+  const persistSkillGroup = useCallback(
+    (s: VSkill, chips: string[]) => {
+      if (chips.length === 0 && s.id) {
+        // grupo vacío → borrarlo (con deshacer). Snapshot para restaurar.
+        const snapshot = view;
+        setView((prev) => (prev ? { ...prev, skills: prev.skills.filter((g) => g.id !== s.id) } : prev));
+        undo.show({
+          message: t("master.skill.groupRemoved").replace("{label}", s.group),
+          onUndo: () => setView(snapshot),
+          onCommit: () => realDelete(s.id!, false),
+        });
+        return;
+      }
+      setView((prev) =>
+        prev ? { ...prev, skills: prev.skills.map((g) => (g.id === s.id && g.group === s.group ? { ...g, chips } : g)) } : prev,
+      );
+      saveEdit(s.id, { ...s.data, group: s.group, items: chipsToCsv(chips) });
+    },
+    [view, saveEdit, undo, t, realDelete],
+  );
+
+  // Renombrar un grupo (persiste manteniendo los chips).
+  const renameSkillGroup = useCallback(
+    (s: VSkill, name: string) => {
+      const clean = name.trim();
+      if (!clean || clean === s.group) return;
+      setView((prev) =>
+        prev ? { ...prev, skills: prev.skills.map((g) => (g.id === s.id ? { ...g, group: clean } : g)) } : prev,
+      );
+      saveEdit(s.id, { ...s.data, group: clean, items: chipsToCsv(s.chips) });
+    },
+    [saveEdit],
+  );
+
+  // Mover un chip entre grupos (persiste ambos). Se calcula sobre el view actual;
+  // los efectos (saveEdit) van FUERA del updater de estado.
+  const moveChip = useCallback(
+    (fromId: string | null, fromGroup: string, toId: string | null, toGroup: string, chip: string) => {
+      const skills = view?.skills ?? [];
+      const from = skills.find((g) => g.id === fromId && g.group === fromGroup);
+      const to = skills.find((g) => g.id === toId && g.group === toGroup);
+      if (!from || !to) return;
+      const fromChips = from.chips.filter((c) => normalizeSkillName(c) !== normalizeSkillName(chip));
+      const exists = to.chips.some((c) => normalizeSkillName(c) === normalizeSkillName(chip));
+      const toChips = exists ? to.chips : [...to.chips, chip];
+      setView((prev) =>
+        prev
+          ? {
+              ...prev,
+              skills: prev.skills.map((g) => {
+                if (g.id === fromId && g.group === fromGroup) return { ...g, chips: fromChips };
+                if (g.id === toId && g.group === toGroup) return { ...g, chips: toChips };
+                return g;
+              }),
+            }
+          : prev,
+      );
+      saveEdit(from.id, { ...from.data, group: from.group, items: chipsToCsv(fromChips) });
+      saveEdit(to.id, { ...to.data, group: to.group, items: chipsToCsv(toChips) });
+    },
+    [view, saveEdit],
+  );
+
+  // Crear un grupo de skills nuevo (POST kind skill).
+  const createSkillGroup = useCallback(
+    (name: string, firstChips: string[]) => {
+      const group = name.trim();
+      if (!group) return;
+      const items = chipsToCsv(firstChips);
+      if (!supabaseEnabled) {
+        setView((prev) =>
+          prev ? { ...prev, skills: [...prev.skills, createdToSkill({ id: `local-sk-${Date.now()}`, data: { group, items } })] } : prev,
+        );
+        noteSaved(t("master.saved.localAdd"));
+        return;
+      }
+      void (async () => {
+        try {
+          const res = await fetch("/api/master", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ kind: "skill", data: { group, items } }),
+          });
+          if (!res.ok) throw new Error();
+          const { item } = (await res.json()) as { item: CreatedItem };
+          setView((prev) => (prev ? { ...prev, skills: [...prev.skills, createdToSkill(item)] } : prev));
+          noteSaved(t("common.saved"));
+        } catch {
+          noteSaved(t("master.saved.fail"));
+        }
+      })();
+    },
+    [noteSaved, t],
+  );
+
+  // Quitar un chip del grupo (persiste; si queda vacío, persistSkillGroup lo borra).
+  const removeChip = useCallback(
+    (s: VSkill, chip: string) => {
+      const next = s.chips.filter((c) => normalizeSkillName(c) !== normalizeSkillName(chip));
+      persistSkillGroup(s, next);
+    },
+    [persistSkillGroup],
+  );
+
+  // Añadir chip(s) desde el input o un pegado. Detecta duplicados NORMALIZADOS en
+  // CUALQUIER grupo (postgres≈postgresql): no los duplica y ofrece «¿fusionar?».
+  const commitChip = useCallback(
+    (s: VSkill, groupKey: string, raw: string) => {
+      setChipInputs((p) => ({ ...p, [groupKey]: "" }));
+      const parts = splitChipInput(raw);
+      if (parts.length === 0) return;
+      const index = new Map<string, string>();
+      (view?.skills ?? []).forEach((g) => g.chips.forEach((c) => index.set(normalizeSkillName(c), g.group)));
+      const toAdd: string[] = [];
+      let firstDup: { chip: string; group: string } | null = null;
+      for (const p of parts) {
+        const key = normalizeSkillName(p);
+        const existingGroup = index.get(key);
+        if (existingGroup) {
+          if (!firstDup) firstDup = { chip: p, group: existingGroup };
+          continue;
+        }
+        index.set(key, s.group);
+        toAdd.push(p);
+      }
+      if (toAdd.length) persistSkillGroup(s, [...s.chips, ...toAdd]);
+      setMergeOffer(firstDup && toAdd.length === 0 ? { groupKey, chip: firstDup.chip, existingGroup: firstDup.group } : null);
+    },
+    [view, persistSkillGroup],
+  );
+
+  /* ── A4 · reclasificar viñeta(s) a habilidades ──────────────────────────────
+     Mueve el texto de las viñetas al grupo elegido y las borra. Si alguna está
+     referenciada por variantes (RESTRICT), el aviso sale igual que en el borrado. */
+  const reclassify = useCallback(
+    (ids: string[], group: string, force: boolean) => {
+      if (!supabaseEnabled || ids.some(isLocalId)) {
+        // Modo local: mover en la vista sin persistir.
+        setView((prev) => {
+          if (!prev) return prev;
+          const moved: string[] = [];
+          const roles = prev.roles.map((r) => {
+            const keep = r.bullets.filter((b) => {
+              if (b.id && ids.includes(b.id)) { moved.push(b.tx); return false; }
+              return true;
+            });
+            return { ...r, bullets: keep };
+          });
+          let skills = prev.skills;
+          const gi = skills.findIndex((s) => normalizeSkillName(s.group) === normalizeSkillName(group));
+          if (gi >= 0) {
+            skills = skills.map((s, i) => (i === gi ? { ...s, chips: [...s.chips, ...moved] } : s));
+          } else {
+            skills = [...skills, { id: `local-sk-${Date.now()}`, data: {}, group, chips: moved, origin: MANUAL_LABEL, evidence: null, verified: false }];
+          }
+          return { ...prev, roles, skills };
+        });
+        noteSaved(t("master.saved.localAdd"));
+        return;
+      }
+      void (async () => {
+        try {
+          const res = await fetch("/api/master", {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ reclassify: { ids, group, force } }),
+          });
+          if (res.status === 409) {
+            const j = (await res.json()) as { usage?: ItemUsage };
+            if (j.usage && ids[0]) setBlocked((prev) => ({ ...prev, [ids[0]!]: j.usage! }));
+            return;
+          }
+          if (!res.ok) throw new Error();
+          // Optimista: quita las viñetas y refresca vía recarga ligera del grupo.
+          setView((prev) => {
+            if (!prev) return prev;
+            const moved: string[] = [];
+            const roles = prev.roles.map((r) => {
+              const keep = r.bullets.filter((b) => {
+                if (b.id && ids.includes(b.id)) { moved.push(b.tx); return false; }
+                return true;
+              });
+              return { ...r, bullets: keep };
+            });
+            let skills = prev.skills;
+            const gi = skills.findIndex((s) => normalizeSkillName(s.group) === normalizeSkillName(group));
+            if (gi >= 0) {
+              skills = skills.map((s, i) => (i === gi ? { ...s, chips: [...s.chips, ...moved] } : s));
+            }
+            return { ...prev, roles, skills };
+          });
+          noteSaved(t("master.reclassified").replace("{n}", String(ids.length)).replace("{group}", group));
+          if (ids[0]) dismissBlocked(ids[0]);
+        } catch {
+          noteSaved(t("master.saved.fail"));
+        }
+      })();
+    },
+    [noteSaved, t, dismissBlocked],
+  );
 
   // ── Contacto (basics) editable ─────────────────────────────────────────────
   // Persiste el bloque completo (basics es un solo profile_item). En modo local /
@@ -586,7 +1137,9 @@ export function MasterScreen() {
     return s.size;
   }, [v]);
 
-  const isEmpty = !loading && total === 0;
+  // Con una fila en alta (draft) abierta, NO mostramos el estado vacío: hay que
+  // renderizar las secciones para alojar la fila editable.
+  const isEmpty = !loading && total === 0 && drafts.length === 0;
   const msNText = loading
     ? t("master.reading")
     : isEmpty
@@ -640,6 +1193,15 @@ export function MasterScreen() {
     }
   }, []);
 
+  // Foco al primer campo de una fila nueva (A1): «cinco seguidas sin ratón».
+  useEffect(() => {
+    const id = focusFirstDraft.current;
+    if (!id) return;
+    focusFirstDraft.current = null;
+    const el = document.querySelector<HTMLInputElement>(`[data-draft-focus="${id}"]`);
+    el?.focus();
+  }, [drafts]);
+
   // Búsqueda + filtros: réplica del applyFilter() del HTML. Se re-aplica cuando
   // cambian query/filtro O cuando llegan los datos (v).
   useLayoutEffect(() => {
@@ -669,7 +1231,9 @@ export function MasterScreen() {
     }
   }, [query, filter, v, t]);
 
-  const handleAdd = () => window.alert(t("master.addManualMock"));
+  // Alta manual global: abre un menú inline (sin modal) con las secciones. Cada
+  // opción abre una fila nueva editable en su sitio (A1).
+  const handleAdd = () => setAddMenu((o) => !o);
 
   // Traducción en el punto de PINTADO de valores que se componen a nivel de módulo
   // (orígenes, avisos, prompts, filtros). El valor interno sigue en ES y actúa de
@@ -703,8 +1267,6 @@ export function MasterScreen() {
         return w;
     }
   };
-  const tAsk = (a: string): string =>
-    a === "¿Dónde lo usaste?" || a === "¿Dónde la usaste?" ? t("master.whereUsed") : a;
   const filterLabel = (k: FilterKey): string => {
     switch (k) {
       case "sin-cifra":
@@ -719,8 +1281,9 @@ export function MasterScreen() {
     }
   };
 
-  // Botón de origen expandible (foco de teclado + aria-expanded).
-  const srcButton = (id: string, label: string): ReactNode => {
+  // Botón de origen expandible (foco de teclado + aria-expanded). Al abrirlo carga
+  // «¿dónde se usa?» de forma perezosa (dbId real).
+  const srcButton = (id: string, label: string, dbId?: string | null): ReactNode => {
     const isTouched = touched.has(id);
     return (
       <button
@@ -729,7 +1292,10 @@ export function MasterScreen() {
         aria-expanded={openFrags.has(id)}
         aria-controls={`${id}-frag`}
         style={isTouched ? { opacity: 1, color: "var(--accent-text)" } : undefined}
-        onClick={() => toggleFrag(id)}
+        onClick={() => {
+          if (!openFrags.has(id) && dbId && !isLocalId(dbId)) loadUsage(dbId);
+          toggleFrag(id);
+        }}
       >
         {isTouched ? t("master.srcEdited") : `${t("master.originPrefix")}${tOrigin(label)} ▾`}
       </button>
@@ -743,8 +1309,94 @@ export function MasterScreen() {
     return t("master.frag.none");
   };
 
+  // «lo usan N variantes» dentro del fragmento de procedencia (carga perezosa).
+  const usageLine = (dbId: string | null): ReactNode => {
+    if (!dbId || isLocalId(dbId)) return null;
+    const u = usage[dbId];
+    if (!u) return null;
+    if (u === "loading") return <div className="ms-usage">{t("master.usage.loading")}</div>;
+    const parts: string[] = [
+      u.variantsCount === 0
+        ? t("master.usage.none")
+        : (u.variantsCount === 1 ? t("master.usage.one") : t("master.usage.many")).replace("{n}", String(u.variantsCount)),
+    ];
+    if (u.overridesCount > 0) parts.push(t("master.usage.overrides").replace("{n}", String(u.overridesCount)));
+    return <div className="ms-usage">{parts.join(" · ")}</div>;
+  };
+
+  const fragBody = (id: string, dbId: string | null, origin: string, evidence: string | null): ReactNode => (
+    <div className={fragClass(id)} id={`${id}-frag`} data-frag={id}>
+      {fragmentText(origin, evidence)}
+      {usageLine(dbId)}
+    </div>
+  );
+
+  // Botón eliminar (✕) — arranca el flujo A2 (consulta uso → deshacer o aviso inline).
+  const delButton = (
+    kind: "work" | "bullet" | "project" | "education" | "skill",
+    id: string | null,
+    label: string,
+    parentId?: string | null,
+  ): ReactNode => {
+    if (!id) return null;
+    return (
+      <button
+        type="button"
+        className="ms-del"
+        aria-label={`${t("master.aria.delete")}${label}`}
+        title={t("master.aria.delete") + label}
+        onClick={() => requestDelete(kind, id, label, parentId)}
+      >
+        ✕
+      </button>
+    );
+  };
+
+  // Aviso INLINE cuando el borrado/reclasificación choca con el RESTRICT de
+  // variantes (no es un modal de sistema). Muestra el dato real y «eliminar igualmente».
+  const blockedWarning = (
+    id: string | null,
+    kind: "work" | "bullet" | "project" | "education" | "skill",
+    label: string,
+    parentId?: string | null,
+  ): ReactNode => {
+    if (!id) return null;
+    const u = blocked[id];
+    if (!u) return null;
+    const usedMsg =
+      (u.variantsCount === 1 ? t("master.blocked.one") : t("master.blocked.many")).replace("{n}", String(u.variantsCount)) +
+      (u.overridesCount > 0 ? " · " + t("master.blocked.overrides").replace("{n}", String(u.overridesCount)) : "");
+    return (
+      <div className="ms-blocked" role="alert">
+        <span>{usedMsg}</span>
+        <span className="ms-blocked__act">
+          <button type="button" className="ms-blocked__go" onClick={() => deleteWithUndo(kind, id, label, u.childrenCount, true, parentId)}>
+            {t("master.blocked.forceDelete")}
+          </button>
+          <button type="button" className="ms-blocked__no" onClick={() => dismissBlocked(id)}>
+            {t("common.cancel")}
+          </button>
+        </span>
+      </div>
+    );
+  };
+
+  // A4: la viñeta sin cifra que PARECE una etiqueta ⇒ sugerencia «esto parece una
+  // habilidad» con acción de un clic; si no, el nudge «sin cifra» de siempre.
   const nudge = (b: VBullet): ReactNode => {
     if (b.num) return null;
+    if (b.id && looksLikeSkillTag(b.tx)) {
+      return (
+        <button
+          type="button"
+          className="ms-tag-nudge"
+          title={t("master.skillTag.hint")}
+          onClick={() => reclassify([b.id!], t("master.skillTag.defaultGroup"), false)}
+        >
+          {t("master.skillTag.move")}
+        </button>
+      );
+    }
     return (
       <span className={`ms-nudge${b.nudge ? " push" : ""}`}>
         {b.nudge ? `${t("master.noNumber")} — ${b.nudge}` : t("master.noNumber")}
@@ -769,10 +1421,47 @@ export function MasterScreen() {
     );
   };
 
+  // ── Fila de alta (A1): inputs por sección; Enter guarda, Esc cancela, Tab pasa ─
+  const draftsFor = (section: DraftSection, parentId: string | null) =>
+    drafts.filter((d) => d.section === section && d.parentId === parentId);
+
+  const draftRow = (d: Draft): ReactNode => {
+    const fields = DRAFT_FIELDS[d.section];
+    return (
+      <div className="ms-draft" key={d.tempId}>
+        {fields.map((f, idx) => (
+          <input
+            key={f.key}
+            className="c-input ms-draft__in"
+            data-draft-focus={idx === 0 ? d.tempId : undefined}
+            placeholder={t(f.ph)}
+            aria-label={t(f.ph)}
+            value={d.values[f.key] ?? ""}
+            onChange={(ev) => setDraftField(d.tempId, f.key, ev.target.value)}
+            onKeyDown={draftKeyDown(d)}
+          />
+        ))}
+        <button type="button" className="ms-draft__save" onClick={() => saveDraft(d)}>
+          {t("master.draft.save")}
+        </button>
+        <button
+          type="button"
+          className="ms-draft__cancel"
+          aria-label={t("common.cancel")}
+          onClick={() => cancelDraft(d.tempId)}
+        >
+          ✕
+        </button>
+      </div>
+    );
+  };
+
   const roleCard = (e: VRole, i: number): ReactNode => {
     const headerId = `it-exp-${i}`;
+    // A4: viñetas sin cifra que parecen etiqueta (para el «mover las N sugeridas»).
+    const suggested = e.bullets.filter((b) => b.id && !b.num && looksLikeSkillTag(b.tx));
     return (
-      <article className="c-card ms-card" data-item key={headerId}>
+      <article className="c-card ms-card" data-item key={e.id ?? headerId}>
         <div className="ms-eh">
           <span
             className="tt"
@@ -795,15 +1484,17 @@ export function MasterScreen() {
               ⚠ {tWarn(e.warn)}
             </span>
           ) : null}
-          <span className="meta">{srcButton(headerId, e.origin)}</span>
+          <span className="meta">
+            {srcButton(headerId, e.origin, e.id)}
+            {delButton("work", e.id, e.tt)}
+          </span>
         </div>
-        <div className={fragClass(headerId)} id={`${headerId}-frag`} data-frag={headerId}>
-          {fragmentText(e.origin, e.evidence)}
-        </div>
+        {fragBody(headerId, e.id, e.origin, e.evidence)}
+        {blockedWarning(e.id, "work", e.tt)}
         {e.bullets.map((b, j) => {
           const bid = `it-exp-${i}-b-${j}`;
           return (
-            <Fragment key={bid}>
+            <Fragment key={b.id ?? bid}>
               <div className="ms-b" data-item data-num={String(b.num)}>
                 <span
                   className="tx"
@@ -818,37 +1509,34 @@ export function MasterScreen() {
                   {wrapNums(b.tx)}
                 </span>
                 {nudge(b)}
-                {srcButton(bid, b.origin)}
+                {srcButton(bid, b.origin, b.id)}
+                {delButton("bullet", b.id, b.tx, e.id)}
               </div>
-              <div className={fragClass(bid)} id={`${bid}-frag`} data-frag={bid}>
-                {fragmentText(b.origin, b.evidence)}
-              </div>
+              {fragBody(bid, b.id, b.origin, b.evidence)}
+              {blockedWarning(b.id, "bullet", b.tx, e.id)}
             </Fragment>
           );
         })}
+        {suggested.length > 1 ? (
+          <div className="ms-b ms-suggest-batch">
+            <button
+              type="button"
+              className="ms-tag-nudge"
+              onClick={() => reclassify(suggested.map((b) => b.id!), t("master.skillTag.defaultGroup"), false)}
+            >
+              {t("master.skillTag.moveBatch").replace("{n}", String(suggested.length))}
+            </button>
+          </div>
+        ) : null}
+        {draftsFor("bullet", e.id).map((d) => draftRow(d))}
+        {e.id ? (
+          <button type="button" className="ms-addbullet" onClick={() => openDraft("bullet", e.id)}>
+            {t("master.addBullet")}
+          </button>
+        ) : null}
       </article>
     );
   };
-
-  const skillCard = (s: VSkill, i: number): ReactNode => (
-    <div className="ms-sk" data-item data-ver={s.ver} key={`sk-${i}`}>
-      <div className="top">
-        <span className="nm">{s.n}</span>
-        <span className={`c-ver c-ver--${s.ver}`}>
-          {s.ver === "ok" ? t("master.ver.ok") : s.ver === "partial" ? t("master.ver.partial") : t("master.ver.none")}
-        </span>
-      </div>
-      <div className="ev">{s.ev}</div>
-      {s.ask ? (
-        <>
-          <hr />
-          <div className="ask">
-            {tAsk(s.ask)} <button type="button">{t("master.skillAnswer")}</button>
-          </div>
-        </>
-      ) : null}
-    </div>
-  );
 
   const denseRow = (r: VRow, key: string): ReactNode => {
     // El texto denso es "cabeza — cola" (name — description / degree — institution).
@@ -861,20 +1549,176 @@ export function MasterScreen() {
         ? { ...r.data, name: head, description: tail }
         : { ...r.data, degree: head, institution: tail };
     };
+    const kind = r.kind === "project" ? "project" : "education";
     return (
-      <div className="ms-row" data-item key={key}>
-        <span
-          contentEditable
-          suppressContentEditableWarning
-          spellCheck={false}
-          role="textbox"
-          aria-label={t("master.aria.editItem")}
-          onKeyDown={editKeyDown}
-          onBlur={commitEdit(key, r.id, r.tx, build)}
-        >
-          {r.tx}
-        </span>
-        <span className="m">{r.m}</span>
+      <Fragment key={key}>
+        <div className="ms-row" data-item>
+          <span
+            contentEditable
+            suppressContentEditableWarning
+            spellCheck={false}
+            role="textbox"
+            aria-label={t("master.aria.editItem")}
+            onKeyDown={editKeyDown}
+            onBlur={commitEdit(key, r.id, r.tx, build)}
+          >
+            {r.tx}
+          </span>
+          <span className="m">{r.m}</span>
+          {delButton(kind, r.id, r.tx)}
+        </div>
+        {blockedWarning(r.id, kind, r.tx)}
+      </Fragment>
+    );
+  };
+
+  // ── A3 · un grupo de habilidades como chips ────────────────────────────────
+  // El title/hover de cada chip muestra la procedencia del GRUPO (no por chip: el
+  // modelo guarda un CSV por grupo, los chips son una capa de UI sobre ese CSV).
+  const skillGroupCard = (s: VSkill, gi: number): ReactNode => {
+    const groupKey = `sk-${gi}`;
+    const others = (v?.skills ?? []).filter((g, idx) => idx !== gi);
+    const chipTitle = `${t("master.originPrefix")}${tOrigin(s.origin)}${s.evidence ? " — " + s.evidence : ""}`;
+    return (
+      <div
+        className="ms-skgroup"
+        data-item
+        data-ver={s.verified ? "ok" : "none"}
+        key={s.id ?? groupKey}
+        onDragOver={(ev) => ev.preventDefault()}
+        onDrop={(ev) => {
+          ev.preventDefault();
+          const chip = ev.dataTransfer.getData("text/chip");
+          const from = ev.dataTransfer.getData("text/from");
+          if (!chip || from === groupKey) return;
+          const srcGi = Number(from.split("-")[1]);
+          const src = v?.skills[srcGi];
+          if (src) moveChip(src.id, src.group, s.id, s.group, chip);
+        }}
+      >
+        <div className="ms-skgroup__h">
+          <span
+            className="ms-skgroup__nm"
+            contentEditable
+            suppressContentEditableWarning
+            spellCheck={false}
+            role="textbox"
+            aria-label={`${t("master.aria.editPrefix")}${s.group}`}
+            onKeyDown={editKeyDown}
+            onBlur={(ev) => renameSkillGroup(s, (ev.currentTarget.textContent ?? "").trim())}
+          >
+            {s.group}
+          </span>
+          <span className={`c-ver c-ver--${s.verified ? "ok" : "none"}`}>
+            {s.verified ? t("master.ver.ok") : t("master.ver.none")}
+          </span>
+          <span className="meta">
+            {srcButton(groupKey, s.origin, s.id)}
+            {delButton("skill", s.id, s.group)}
+          </span>
+        </div>
+        {fragBody(groupKey, s.id, s.origin, s.evidence)}
+        {blockedWarning(s.id, "skill", s.group)}
+        <div className="ms-chips">
+          {s.chips.map((c, ci) => {
+            const chipKey = `${groupKey}-c-${ci}`;
+            return (
+              <span
+                key={chipKey}
+                className="ms-chip"
+                tabIndex={0}
+                draggable
+                title={chipTitle}
+                onDragStart={(ev) => {
+                  ev.dataTransfer.setData("text/chip", c);
+                  ev.dataTransfer.setData("text/from", groupKey);
+                }}
+                onKeyDown={(ev) => {
+                  if (ev.key === "Backspace" || ev.key === "Delete") {
+                    ev.preventDefault();
+                    removeChip(s, c);
+                  } else if (ev.key.toLowerCase() === "m") {
+                    ev.preventDefault();
+                    setMoveMenu((cur) => (cur === chipKey ? null : chipKey));
+                  }
+                }}
+              >
+                <span className="ms-chip__tx">{c}</span>
+                <button
+                  type="button"
+                  className="ms-chip__mv"
+                  aria-label={`${t("master.chip.move")}${c}`}
+                  aria-haspopup="menu"
+                  aria-expanded={moveMenu === chipKey}
+                  onClick={() => setMoveMenu((cur) => (cur === chipKey ? null : chipKey))}
+                >
+                  ⇄
+                </button>
+                <button
+                  type="button"
+                  className="ms-chip__x"
+                  aria-label={`${t("master.chip.remove")}${c}`}
+                  onClick={() => removeChip(s, c)}
+                >
+                  ×
+                </button>
+                {moveMenu === chipKey ? (
+                  <span className="ms-chip__menu" role="menu">
+                    {others.length === 0 ? (
+                      <span className="ms-chip__none">{t("master.chip.noTargets")}</span>
+                    ) : (
+                      others.map((o, oi) => (
+                        <button
+                          key={oi}
+                          type="button"
+                          role="menuitem"
+                          onClick={() => {
+                            moveChip(s.id, s.group, o.id, o.group, c);
+                            setMoveMenu(null);
+                          }}
+                        >
+                          {o.group}
+                        </button>
+                      ))
+                    )}
+                  </span>
+                ) : null}
+              </span>
+            );
+          })}
+          <input
+            className="c-input ms-chip-in"
+            placeholder={t("master.chip.add")}
+            aria-label={`${t("master.chip.addTo")}${s.group}`}
+            value={chipInputs[groupKey] ?? ""}
+            onChange={(ev) => setChipInputs((p) => ({ ...p, [groupKey]: ev.target.value }))}
+            onPaste={(ev) => {
+              const txt = ev.clipboardData.getData("text");
+              if (/[,;\n·•|]/.test(txt)) {
+                ev.preventDefault();
+                commitChip(s, groupKey, txt);
+              }
+            }}
+            onKeyDown={(ev) => {
+              if (ev.key === "Enter") {
+                ev.preventDefault();
+                commitChip(s, groupKey, chipInputs[groupKey] ?? "");
+              }
+            }}
+          />
+        </div>
+        {mergeOffer && mergeOffer.groupKey === groupKey ? (
+          <div className="ms-merge" role="status">
+            <span>
+              {t("master.chip.dupExists")
+                .replace("{chip}", mergeOffer.chip)
+                .replace("{group}", mergeOffer.existingGroup)}
+            </span>
+            <button type="button" onClick={() => setMergeOffer(null)}>
+              {t("master.chip.merge")}
+            </button>
+          </div>
+        ) : null}
       </div>
     );
   };
@@ -1087,9 +1931,41 @@ export function MasterScreen() {
               <b style={{ color: "var(--text)", fontWeight: 500 }}>{t("master.intro.b")}</b>
               {t("master.intro.c")}
             </p>
-            <button type="button" className="c-btn" id="btnAdd" onClick={handleAdd}>
-              {t("master.addManual")}
-            </button>
+            <div className="ms-addwrap">
+              <button
+                type="button"
+                className="c-btn"
+                id="btnAdd"
+                aria-haspopup="menu"
+                aria-expanded={addMenu}
+                onClick={handleAdd}
+              >
+                {t("master.addManual")}
+              </button>
+              {addMenu ? (
+                <div className="ms-addmenu" role="menu">
+                  <button type="button" role="menuitem" onClick={() => openDraft("work", null)}>
+                    {t("master.add.role")}
+                  </button>
+                  <button type="button" role="menuitem" onClick={() => openDraft("project", null)}>
+                    {t("master.add.project")}
+                  </button>
+                  <button type="button" role="menuitem" onClick={() => openDraft("education", null)}>
+                    {t("master.add.education")}
+                  </button>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => {
+                      setNewGroupOpen(true);
+                      setAddMenu(false);
+                    }}
+                  >
+                    {t("master.add.skillGroup")}
+                  </button>
+                </div>
+              ) : null}
+            </div>
           </div>
 
           <div id="groups" ref={groupsRef}>
@@ -1119,55 +1995,113 @@ export function MasterScreen() {
                           >
                             {wrapNums(v.summary.text)}
                           </span>
-                          {srcButton("it-resumen", v.summary.origin)}
+                          {srcButton("it-resumen", v.summary.origin, v.summary.id)}
                         </div>
-                        <div className={fragClass("it-resumen")} id="it-resumen-frag" data-frag="it-resumen">
-                          {fragmentText(v.summary.origin, v.summary.evidence)}
-                        </div>
+                        {fragBody("it-resumen", v.summary.id, v.summary.origin, v.summary.evidence)}
                       </div>,
                     )
                   : null}
 
-                {v.roles.length > 0 &&
+                {(v.roles.length > 0 || draftsFor("work", null).length > 0) &&
                   groupSection(
                     "experiencia",
                     t("master.group.experience"),
                     `${v.roles.length} ${v.roles.length === 1 ? t("master.role") : t("master.roles")} · ${totalBullets} ${totalBullets === 1 ? t("master.bullet") : t("master.bullets")}`,
                     <>
                       {v.roles.map((e, i) => roleCard(e, i))}
-                      <button type="button" className="ms-add">
+                      {draftsFor("work", null).map((d) => draftRow(d))}
+                      <button type="button" className="ms-add" onClick={() => openDraft("work", null)}>
                         {t("master.addRole")}
                       </button>
                     </>,
                   )}
 
-                {v.skills.length > 0 &&
+                {(v.skills.length > 0 || newGroupOpen) &&
                   groupSection(
                     "skills",
                     t("master.group.skills"),
-                    `${v.skills.length} ${t("master.items")}`,
+                    `${v.skills.length} ${v.skills.length === 1 ? t("master.group.one") : t("master.group.many")}`,
                     <>
-                      <div className="ms-skills">{v.skills.map((s, i) => skillCard(s, i))}</div>
-                      <button type="button" className="ms-add">
-                        {t("master.addSkill")}
-                      </button>
+                      <div className="ms-skgroups">{v.skills.map((s, i) => skillGroupCard(s, i))}</div>
+                      {newGroupOpen ? (
+                        <div className="ms-draft ms-newgroup">
+                          <input
+                            className="c-input ms-draft__in"
+                            autoFocus
+                            placeholder={t("master.skill.newGroupPlaceholder")}
+                            aria-label={t("master.skill.newGroup")}
+                            value={newGroupName}
+                            onChange={(ev) => setNewGroupName(ev.target.value)}
+                            onKeyDown={(ev) => {
+                              if (ev.key === "Enter") {
+                                ev.preventDefault();
+                                if (newGroupName.trim()) createSkillGroup(newGroupName, []);
+                                setNewGroupName("");
+                                setNewGroupOpen(false);
+                              } else if (ev.key === "Escape") {
+                                ev.preventDefault();
+                                setNewGroupName("");
+                                setNewGroupOpen(false);
+                              }
+                            }}
+                          />
+                          <button
+                            type="button"
+                            className="ms-draft__save"
+                            onClick={() => {
+                              if (newGroupName.trim()) createSkillGroup(newGroupName, []);
+                              setNewGroupName("");
+                              setNewGroupOpen(false);
+                            }}
+                          >
+                            {t("master.draft.save")}
+                          </button>
+                          <button
+                            type="button"
+                            className="ms-draft__cancel"
+                            aria-label={t("common.cancel")}
+                            onClick={() => {
+                              setNewGroupName("");
+                              setNewGroupOpen(false);
+                            }}
+                          >
+                            ✕
+                          </button>
+                        </div>
+                      ) : (
+                        <button type="button" className="ms-add" onClick={() => setNewGroupOpen(true)}>
+                          {t("master.addSkillGroup")}
+                        </button>
+                      )}
                     </>,
                   )}
 
-                {v.projects.length > 0 &&
+                {(v.projects.length > 0 || draftsFor("project", null).length > 0) &&
                   groupSection(
                     "proyectos",
                     t("master.group.projects"),
                     `${v.projects.length} ${t("master.items")} — ${t("master.eachVariantPicks")}`,
-                    <div className="ms-rows">{v.projects.map((p, i) => denseRow(p, `pj-${i}`))}</div>,
+                    <>
+                      <div className="ms-rows">{v.projects.map((p, i) => denseRow(p, `pj-${i}`))}</div>
+                      {draftsFor("project", null).map((d) => draftRow(d))}
+                      <button type="button" className="ms-add" onClick={() => openDraft("project", null)}>
+                        {t("master.addProject")}
+                      </button>
+                    </>,
                   )}
 
-                {v.education.length > 0 &&
+                {(v.education.length > 0 || draftsFor("education", null).length > 0) &&
                   groupSection(
                     "educacion",
                     t("master.group.education"),
                     `${v.education.length} ${t("master.items")}`,
-                    <div className="ms-rows">{v.education.map((d, i) => denseRow(d, `ed-${i}`))}</div>,
+                    <>
+                      <div className="ms-rows">{v.education.map((d, i) => denseRow(d, `ed-${i}`))}</div>
+                      {draftsFor("education", null).map((d) => draftRow(d))}
+                      <button type="button" className="ms-add" onClick={() => openDraft("education", null)}>
+                        {t("master.addEducation")}
+                      </button>
+                    </>,
                   )}
               </>
             )}
@@ -1196,6 +2130,7 @@ export function MasterScreen() {
           </div>
         </div>
       </main>
+      {undo.node}
     </div>
   );
 }

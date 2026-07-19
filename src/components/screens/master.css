@@ -68,3 +68,91 @@
    no solo con hover del contenedor. §live: utilidad para la región viva de recuento. ── */
 .ms-b:focus-within .ms-src,.ms-eh:focus-within .ms-src,.ms-src:focus-visible{opacity:1}
 .ms-sr{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0}
+
+/* ── Pulido final (PROMPT 03 · A1–A4). Clases nuevas, prefijo de pantalla ms-*. ─
+   Ninguna renombra ni pisa las de arriba: son ADITIVAS sobre el contrato de diseño. */
+
+/* Botón eliminar (✕) — discreto como .ms-src, visible al hover/foco de la fila. */
+.ms-del{flex:none;font:400 12px/1 var(--font-mono);color:var(--text-subtle);opacity:0;padding:0 4px;border-radius:4px}
+.ms-b:hover .ms-del,.ms-eh:hover .ms-del,.ms-row:hover .ms-del,.ms-skgroup:hover .ms-del,
+.ms-b:focus-within .ms-del,.ms-eh:focus-within .ms-del,.ms-row:focus-within .ms-del,.ms-skgroup:focus-within .ms-del,
+.ms-del:focus-visible{opacity:1}
+.ms-del:hover{color:var(--danger)}
+.ms-row .ms-del{margin-left:8px}
+
+/* «lo usan N variantes» dentro del fragmento de procedencia. */
+.ms-usage{margin-top:8px;padding-top:8px;border-top:1px solid var(--border);
+  font:400 10px/1.5 var(--font-mono);color:var(--text-subtle)}
+
+/* Aviso inline del RESTRICT de variantes (no es un modal de sistema). */
+.ms-blocked{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin:0 20px 10px;padding:10px 14px;
+  background:color-mix(in srgb,var(--danger) 6%,var(--surface-sunken));border-left:2px solid var(--danger);
+  border-radius:0 6px 6px 0;font:400 var(--fs-micro)/1.5 var(--font-sans);color:var(--text-muted)}
+.ms-blocked__act{margin-left:auto;display:flex;gap:8px}
+.ms-blocked__go{font:600 var(--fs-micro)/1 var(--font-mono);color:var(--danger)}
+.ms-blocked__go:hover{text-decoration:underline}
+.ms-blocked__no{font:500 var(--fs-micro)/1 var(--font-mono);color:var(--text-subtle)}
+.ms-blocked__no:hover{color:var(--text)}
+
+/* A4 · sugerencia «esto parece una habilidad» (sustituye al nudge «sin cifra»). */
+.ms-tag-nudge{flex:none;font:500 10px/1.4 var(--font-mono);color:var(--accent-text);text-align:right;
+  border:1px dashed var(--border-patina);border-radius:6px;padding:3px 7px;max-width:200px}
+.ms-tag-nudge:hover{background:var(--surface-elevated)}
+.ms-suggest-batch{justify-content:flex-end}
+
+/* A1 · fila de alta editable. */
+.ms-draft{display:flex;gap:8px;align-items:center;padding:10px 12px;margin-top:10px;
+  border:1px solid var(--border-patina);border-radius:var(--radius-md);background:var(--surface-sunken)}
+.ms-draft__in{flex:1;min-width:0;height:34px;font-size:var(--fs-data)}
+.ms-draft__in:first-child{flex:1.4}
+.ms-draft__save{flex:none;font:600 var(--fs-micro)/1 var(--font-mono);color:var(--accent-text);
+  border:1px solid var(--border-patina);border-radius:6px;padding:8px 12px}
+.ms-draft__save:hover{background:var(--surface-elevated)}
+.ms-draft__cancel{flex:none;font:400 13px/1 var(--font-mono);color:var(--text-subtle);padding:0 6px}
+.ms-draft__cancel:hover{color:var(--danger)}
+.ms-addbullet{margin:8px 20px 4px;font:500 var(--fs-micro)/1 var(--font-mono);color:var(--text-subtle)}
+.ms-addbullet:hover{color:var(--accent-text)}
+
+/* Menú de alta global (inline, sin modal). */
+.ms-addwrap{position:relative}
+.ms-addmenu{position:absolute;right:0;top:calc(100% + 6px);z-index:20;display:flex;flex-direction:column;min-width:190px;
+  background:var(--surface-elevated);border:1px solid var(--border-strong);border-radius:var(--radius-md);
+  box-shadow:0 12px 32px rgba(0,0,0,.28);overflow:hidden}
+.ms-addmenu button{text-align:left;padding:10px 14px;font:500 var(--fs-ui)/1 var(--font-sans);color:var(--text-muted)}
+.ms-addmenu button:hover{background:var(--surface-sunken);color:var(--text)}
+
+/* A3 · grupos de habilidades como chips (reemplazan la rejilla .ms-skills). */
+.ms-skgroups{display:flex;flex-direction:column;gap:12px;margin-top:12px}
+.ms-skgroup{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-md);padding:14px 18px}
+.ms-skgroup[data-ver="none"]{background:color-mix(in srgb,var(--danger) 4%,var(--surface));
+  box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--danger) 22%,transparent)}
+.ms-skgroup__h{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
+.ms-skgroup__nm{font:600 14px/1.2 var(--font-sans);border-radius:4px}
+.ms-skgroup__nm:hover{background:var(--surface-elevated);box-shadow:0 0 0 5px var(--surface-elevated);cursor:text}
+.ms-skgroup__nm:focus{outline:none;background:var(--surface-sunken);box-shadow:0 0 0 5px var(--surface-sunken),0 0 0 6px var(--border-patina)}
+.ms-skgroup__h .c-ver{margin-left:4px}
+.ms-skgroup__h .meta{margin-left:auto;display:flex;gap:8px;align-items:baseline}
+.ms-skgroup .ms-frag,.ms-skgroup .ms-blocked{margin-left:0;margin-right:0}
+.ms-chips{display:flex;flex-wrap:wrap;gap:7px;align-items:center;margin-top:12px}
+.ms-chip{position:relative;display:inline-flex;align-items:center;gap:6px;padding:4px 6px 4px 11px;
+  background:var(--surface-elevated);border:1px solid var(--border);border-radius:999px;
+  font:500 var(--fs-micro)/1.2 var(--font-sans);color:var(--text);cursor:grab}
+.ms-chip:focus-visible{outline:none;box-shadow:0 0 0 2px var(--border-patina)}
+.ms-chip__mv,.ms-chip__x{flex:none;width:16px;height:16px;display:inline-flex;align-items:center;justify-content:center;
+  border-radius:50%;font:400 11px/1 var(--font-mono);color:var(--text-subtle)}
+.ms-chip__mv:hover{color:var(--accent-text);background:var(--surface-sunken)}
+.ms-chip__x{font-size:13px}
+.ms-chip__x:hover{color:var(--danger);background:var(--surface-sunken)}
+.ms-chip__menu{position:absolute;left:0;top:calc(100% + 4px);z-index:20;display:flex;flex-direction:column;min-width:160px;
+  background:var(--surface-elevated);border:1px solid var(--border-strong);border-radius:8px;
+  box-shadow:0 10px 26px rgba(0,0,0,.28);overflow:hidden}
+.ms-chip__menu button{text-align:left;padding:8px 12px;font:500 var(--fs-micro)/1 var(--font-sans);color:var(--text-muted)}
+.ms-chip__menu button:hover{background:var(--surface-sunken);color:var(--text)}
+.ms-chip__none{padding:8px 12px;font:400 var(--fs-micro)/1 var(--font-mono);color:var(--text-subtle)}
+.ms-chip-in{height:30px;width:150px;font-size:var(--fs-micro);border-radius:999px}
+.ms-merge{display:flex;align-items:center;gap:10px;margin-top:10px;padding:8px 12px;
+  background:var(--surface-sunken);border-radius:8px;font:400 var(--fs-micro)/1.4 var(--font-mono);color:var(--text-muted)}
+.ms-merge button{font:600 var(--fs-micro)/1 var(--font-mono);color:var(--accent-text)}
+.ms-merge button:hover{text-decoration:underline}
+.ms-newgroup{margin-top:12px}
+@media (max-width:768px){.ms-draft{flex-wrap:wrap}.ms-draft__in{flex:1 1 100%}}

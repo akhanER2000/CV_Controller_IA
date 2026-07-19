@@ -28,7 +28,10 @@ export const master = {
     "master.intro.b": "Haz clic en cualquier texto y edítalo ahí mismo",
     "master.intro.c": "; cada item recuerda de dónde salió.",
     "master.addManual": "+ Añadir item manual",
-    "master.addManualMock": "En producto: fila nueva editable al foco, origen: manual. (Mock)",
+    "master.add.role": "Rol de experiencia",
+    "master.add.project": "Proyecto",
+    "master.add.education": "Educación",
+    "master.add.skillGroup": "Grupo de habilidades",
 
     // Origen
     "master.originPrefix": "origen: ",
@@ -107,10 +110,61 @@ export const master = {
 
     // Notas de guardado (transitorias)
     "master.saved.localEdit": "editado (modo local)",
+    "master.saved.localAdd": "añadido (modo local)",
     "master.saved.fail": "no se pudo guardar",
     "master.saved.contactAddedLocal": "bloque de contacto añadido (modo local)",
     "master.saved.contactAdded": "bloque de contacto añadido ✓",
     "master.saved.contactAddFail": "no se pudo añadir",
+
+    // Alta manual — filas nuevas (A1)
+    "master.draft.title": "Título del rol (p. ej. Backend Developer)",
+    "master.draft.company": "Empresa · ciudad",
+    "master.draft.dates": "Fechas (p. ej. mar 2022 – hoy)",
+    "master.draft.bullet": "Una viñeta — Enter guarda y abre otra",
+    "master.draft.projectName": "Nombre del proyecto",
+    "master.draft.projectDesc": "Descripción breve",
+    "master.draft.degree": "Título / carrera",
+    "master.draft.institution": "Institución",
+    "master.draft.save": "guardar",
+    "master.addBullet": "+ viñeta",
+    "master.addProject": "+ añadir proyecto",
+    "master.addEducation": "+ añadir educación",
+    "master.addSkillGroup": "+ añadir grupo de habilidades",
+
+    // Borrado / uso (A2 + «¿dónde se usa?»)
+    "master.aria.delete": "Eliminar: ",
+    "master.deleted": "Eliminado: «{label}»",
+    "master.deleted.withChildren": "Eliminado: «{label}» · {n} viñetas",
+    "master.usage.loading": "viendo dónde se usa…",
+    "master.usage.none": "no lo usa ninguna variante todavía",
+    "master.usage.one": "lo usa {n} variante",
+    "master.usage.many": "lo usan {n} variantes",
+    "master.usage.overrides": "en {n} lo reescribiste",
+    "master.blocked.one": "Este item lo usa {n} variante.",
+    "master.blocked.many": "Este item lo usan {n} variantes.",
+    "master.blocked.overrides": "en {n} lo reescribiste",
+    "master.blocked.forceDelete": "Eliminar igualmente",
+
+    // Habilidades como chips (A3)
+    "master.group.one": "grupo",
+    "master.group.many": "grupos",
+    "master.chip.add": "+ habilidad…",
+    "master.chip.addTo": "Añadir habilidad a ",
+    "master.chip.remove": "Quitar ",
+    "master.chip.move": "Mover a otro grupo: ",
+    "master.chip.noTargets": "no hay otro grupo",
+    "master.chip.dupExists": "ya existe «{chip}» en {group} — ¿fusionar?",
+    "master.chip.merge": "fusionar",
+    "master.skill.newGroup": "Nombre del grupo",
+    "master.skill.newGroupPlaceholder": "Nombre del grupo (p. ej. Herramientas)",
+    "master.skill.groupRemoved": "Grupo eliminado: «{label}»",
+
+    // Reclasificar viñeta → habilidad (A4)
+    "master.skillTag.move": "esto parece una habilidad → mover",
+    "master.skillTag.moveBatch": "mover las {n} sugeridas a Habilidades",
+    "master.skillTag.hint": "Sin verbo ni cifra: parece una etiqueta, no una viñeta de logro.",
+    "master.skillTag.defaultGroup": "Herramientas",
+    "master.reclassified": "{n} movida(s) a {group}",
   } as Record<string, string>,
   en: {
     // Toolbar
@@ -139,7 +193,10 @@ export const master = {
     "master.intro.b": "Click any text and edit it in place",
     "master.intro.c": "; every item remembers where it came from.",
     "master.addManual": "+ Add manual item",
-    "master.addManualMock": "In production: a new editable row on focus, origin: manual. (Mock)",
+    "master.add.role": "Experience role",
+    "master.add.project": "Project",
+    "master.add.education": "Education",
+    "master.add.skillGroup": "Skill group",
 
     // Origin
     "master.originPrefix": "origin: ",
@@ -218,9 +275,60 @@ export const master = {
 
     // Save notes (transient)
     "master.saved.localEdit": "edited (local mode)",
+    "master.saved.localAdd": "added (local mode)",
     "master.saved.fail": "couldn't save",
     "master.saved.contactAddedLocal": "contact block added (local mode)",
     "master.saved.contactAdded": "contact block added ✓",
     "master.saved.contactAddFail": "couldn't add",
+
+    // Manual add — new rows (A1)
+    "master.draft.title": "Role title (e.g. Backend Developer)",
+    "master.draft.company": "Company · city",
+    "master.draft.dates": "Dates (e.g. Mar 2022 – present)",
+    "master.draft.bullet": "One bullet — Enter saves and opens another",
+    "master.draft.projectName": "Project name",
+    "master.draft.projectDesc": "Short description",
+    "master.draft.degree": "Degree / program",
+    "master.draft.institution": "Institution",
+    "master.draft.save": "save",
+    "master.addBullet": "+ bullet",
+    "master.addProject": "+ add project",
+    "master.addEducation": "+ add education",
+    "master.addSkillGroup": "+ add skill group",
+
+    // Delete / usage (A2 + “where is it used?”)
+    "master.aria.delete": "Delete: ",
+    "master.deleted": "Deleted: “{label}”",
+    "master.deleted.withChildren": "Deleted: “{label}” · {n} bullets",
+    "master.usage.loading": "checking where it's used…",
+    "master.usage.none": "no variant uses it yet",
+    "master.usage.one": "used by {n} variant",
+    "master.usage.many": "used by {n} variants",
+    "master.usage.overrides": "rewritten in {n}",
+    "master.blocked.one": "This item is used by {n} variant.",
+    "master.blocked.many": "This item is used by {n} variants.",
+    "master.blocked.overrides": "rewritten in {n}",
+    "master.blocked.forceDelete": "Delete anyway",
+
+    // Skills as chips (A3)
+    "master.group.one": "group",
+    "master.group.many": "groups",
+    "master.chip.add": "+ skill…",
+    "master.chip.addTo": "Add skill to ",
+    "master.chip.remove": "Remove ",
+    "master.chip.move": "Move to another group: ",
+    "master.chip.noTargets": "no other group",
+    "master.chip.dupExists": "“{chip}” already exists in {group} — merge?",
+    "master.chip.merge": "merge",
+    "master.skill.newGroup": "Group name",
+    "master.skill.newGroupPlaceholder": "Group name (e.g. Tools)",
+    "master.skill.groupRemoved": "Group removed: “{label}”",
+
+    // Reclassify bullet → skill (A4)
+    "master.skillTag.move": "this looks like a skill → move",
+    "master.skillTag.moveBatch": "move the {n} suggested to Skills",
+    "master.skillTag.hint": "No verb, no number: reads like a tag, not an achievement bullet.",
+    "master.skillTag.defaultGroup": "Tools",
+    "master.reclassified": "{n} moved to {group}",
   } as Record<string, string>,
 } as const;
