@@ -32,7 +32,10 @@ import {
   rowWarn,
   withPresent,
 } from "../src/components/screens/MasterScreen";
-import { invalidItemData } from "../src/app/api/master/[id]/route";
+// Vive en la librería, no en la ruta: un route.ts de Next solo puede exportar sus
+// manejadores, y este import desde el fichero de ruta hacía fallar `next build`
+// mientras tsc y vitest lo daban por bueno. Ver src/lib/db/item-data.ts.
+import { invalidItemData } from "../src/lib/db/item-data";
 import { LangProvider } from "../src/lib/i18n";
 
 /* Un rol como el que devuelve la API: título, empresa, ubicación y NADA de fecha.
