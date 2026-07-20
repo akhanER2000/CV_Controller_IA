@@ -2,14 +2,15 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { Aurora } from "@/components/Aurora";
+import { AuroraTune, AURORA_HOJEO } from "@/components/Aurora";
 import { useT } from "@/lib/i18n";
 import "./onboarding.css";
 
 /* ============================================================================
    Onboarding — porte de corpus-design/04-pantallas/onboarding.html
-   (ver docs/spec/pantallas/onboarding.md). VENTANA con aurora en calma.
-   Las dos puertas al mismo master; ninguna de segunda.
+   (ver docs/spec/pantallas/onboarding.md). Sala de puertas: el humo entero
+   (0.55). La aurora la monta el shell (app/app/layout); aquí solo se declara la
+   intensidad. Las dos puertas al mismo master; ninguna de segunda.
 
    Fidelidad:
    - overline con charReveal, h1 con wordReveal (una sola vez, tras el runtime).
@@ -58,7 +59,7 @@ export function OnboardingScreen() {
 
   return (
     <div className="c-page">
-      <Aurora state="calm" />
+      <AuroraTune strength={AURORA_HOJEO} />
 
       <header className="c-header">
         <div className="c-container">

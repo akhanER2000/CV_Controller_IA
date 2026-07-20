@@ -3,15 +3,20 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useT } from "@/lib/i18n";
+import { AuroraTune, AURORA_TRABAJO } from "@/components/Aurora";
 import { Breadcrumb } from "@/components/Breadcrumb";
 import { stagingProgress, ZERO_COUNTS, type StagingCounts } from "@/lib/db/staging-counts";
 import "./staging.css";
 
 /* ============================================================================
    Staging — porte de corpus-design/04-pantallas/staging.html, ahora CABLEADO a
-   los staged_items reales (GET /api/staging · POST /api/staging/accept). MURO:
-   aquí se trabaja, no monta aurora. Nada entra al master sin confirmación; los
-   lotes SOLO tocan lo verificado (§4.1).
+   los staged_items reales (GET /api/staging · POST /api/staging/accept).
+   Nada entra al master sin confirmación; los lotes SOLO tocan lo verificado (§4.1).
+
+   Atmósfera: aquí se trabaja, pero trabajar ya no significa apagar el fondo. La
+   aurora la monta el shell y esta pantalla solo BAJA el dial a 0.22; lo que
+   protege la lectura es la superficie (.c-wall pone un vidrio para toda la
+   pantalla y las unidades van sobre él). Ver src/components/Aurora.tsx.
 
    Se conservan las clases del sistema (contrato diseño↔código) y el CSS de
    pantalla. Las piezas de maqueta que aún no mapean a datos reales (la fusión de
@@ -380,6 +385,8 @@ export function StagingScreen() {
 
   return (
     <div className="c-page">
+      {/* Revisar item a item es trabajo denso: el humo baja y no estorba. */}
+      <AuroraTune strength={AURORA_TRABAJO} />
       <header className="c-header">
         <div className="c-container">
           <div className="hd-crumb stg-crumb">

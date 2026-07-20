@@ -20,6 +20,7 @@ import {
 import { listTemplates, listPalettes, listTypographies, getTemplate } from "@/lib/cv/templates";
 import { recommendTemplates, type MasterSummary } from "@/lib/cv/recommend";
 import { TemplateGallery, TemplateThumb, docHashFromSig } from "@/components/TemplateGallery";
+import { AuroraTune, AURORA_TRABAJO } from "@/components/Aurora";
 import "./editor-variante.css";
 
 // Listas estables (el catálogo no cambia en runtime): fuera del componente.
@@ -55,8 +56,16 @@ const TYPOGRAPHIES = listTypographies();
    miente, el producto miente») dejó de depender de que dos códigos coincidan.
    El botón Descargar manda EL MISMO body → mismo artefacto, byte a byte.
 
-   MURO: no monta la aurora ("donde hay trabajo, el trabajo gana"). Por eso NO se
-   importa ni renderiza <Aurora>. Tres columnas: biblioteca del master · composición
+   Atmósfera: la pantalla más densa del producto. NO monta la aurora porque la
+   monta el shell UNA sola vez (app/app/layout) para las diez pantallas; aquí solo
+   se declara la intensidad más baja (0.22 · AURORA_TRABAJO): presente,
+   perceptible al pasar, jamás protagonista. La regla vieja —era un MURO y ni la
+   montaba— venía de una landing con scroll y en una app de pestañas solo produce
+   inconsistencia; ver la doctrina en src/components/Aurora.tsx. Y el freno que
+   sigue mandando aquí: al enfocar CUALQUIER campo la aurora se pausa ('focus',
+   lo cablea motion.js). Mientras se escribe no se mueve nada.
+
+   Tres columnas: biblioteca del master · composición
    de la variante · preview que ES el PDF (el PDF real, embebido)
    con su rayos-X. El override gana siempre; si el texto vuelve a igualar al master,
    el override se revierte. Añadir una viñeta arrastra su experiencia padre. El
@@ -1443,6 +1452,8 @@ export function EditorVarianteScreen({ variantId = "editor" }: { variantId?: str
 
   return (
     <div className="c-page">
+      {/* La pantalla más densa del producto: el humo al mínimo perceptible. */}
+      <AuroraTune strength={AURORA_TRABAJO} />
       <header className="c-header">
         <div className="c-container">
           <Link className="c-logo" href="/app">

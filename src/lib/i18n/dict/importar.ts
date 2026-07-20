@@ -26,18 +26,20 @@ export const importar = {
     "importar.file.uploading": "subiendo…",
     "importar.file.errorPrefix": "error: ",
     "importar.file.uploadFailed": "no se pudo subir",
-    "importar.file.unsupported": "tipo no soportado (usa PDF, DOCX o imagen)",
+    "importar.file.unsupported":
+      "tipo no soportado — se aceptan PDF, DOCX, texto (.md, .txt) e imágenes (PNG, JPG, WEBP)",
     "importar.file.needSession": "sesión requerida para subir",
     "importar.file.tooBig": "archivo grande (>10 MB): puede tardar",
     "importar.file.remove": "Quitar",
     "importar.tag.md": "cuestionario · fuente de primera",
+    "importar.tag.text": "texto plano · se lee tal cual",
     "importar.tag.image": "captura · se transcribe literal",
 
     // ── Dropzone ──────────────────────────────────────────────────────────
     "importar.drop.bold": "arrastra archivos aquí",
     "importar.drop.rest": " — o haz clic para elegir",
     "importar.drop.line2":
-      "CV en PDF o DOCX · el cuestionario respondido (.md) · capturas de LinkedIn · certificados",
+      "CV en PDF o DOCX · el cuestionario respondido (.md) · notas en .txt · capturas de LinkedIn · certificados",
 
     // ── Meta del textarea (interpolado) ───────────────────────────────────
     "importar.meta.words": "{n} palabras",
@@ -80,6 +82,7 @@ export const importar = {
     "importar.log.transcribing": "transcribiendo literal…",
     "importar.log.readingPdf": "leyendo el PDF…",
     "importar.log.readingDocx": "leyendo el DOCX…",
+    "importar.log.readingText": "leyendo el texto tal cual…",
     "importar.log.queryingApi": "consultando la API pública…",
     "importar.log.readingPortfolio": "leyendo el portfolio…",
     "importar.log.extractingSrc": "Extrayendo con evidencia",
@@ -132,18 +135,20 @@ export const importar = {
     "importar.file.uploading": "uploading…",
     "importar.file.errorPrefix": "error: ",
     "importar.file.uploadFailed": "couldn't upload",
-    "importar.file.unsupported": "unsupported type (use PDF, DOCX or image)",
+    "importar.file.unsupported":
+      "unsupported type — we accept PDF, DOCX, text (.md, .txt) and images (PNG, JPG, WEBP)",
     "importar.file.needSession": "sign-in required to upload",
     "importar.file.tooBig": "large file (>10 MB): may take a while",
     "importar.file.remove": "Remove",
     "importar.tag.md": "questionnaire · first-hand source",
+    "importar.tag.text": "plain text · read as-is",
     "importar.tag.image": "screenshot · transcribed verbatim",
 
     // ── Dropzone ──────────────────────────────────────────────────────────
     "importar.drop.bold": "drag files here",
     "importar.drop.rest": " — or click to choose",
     "importar.drop.line2":
-      "resume in PDF or DOCX · your answered questionnaire (.md) · LinkedIn screenshots · certificates",
+      "resume in PDF or DOCX · your answered questionnaire (.md) · notes in .txt · LinkedIn screenshots · certificates",
 
     // ── Textarea meta (interpolated) ──────────────────────────────────────
     "importar.meta.words": "{n} words",
@@ -186,6 +191,7 @@ export const importar = {
     "importar.log.transcribing": "transcribing verbatim…",
     "importar.log.readingPdf": "reading the PDF…",
     "importar.log.readingDocx": "reading the DOCX…",
+    "importar.log.readingText": "reading the text as-is…",
     "importar.log.queryingApi": "querying the public API…",
     "importar.log.readingPortfolio": "reading the portfolio…",
     "importar.log.extractingSrc": "Extracting with evidence",

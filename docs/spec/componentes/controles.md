@@ -1,3 +1,13 @@
+> ⚠️ **DEROGADO (PROMPT 07) — la gramática «ventana / muro» ya NO rige.**
+> Lo que sigue describe la regla vieja: *«donde hay trabajo, el trabajo gana; los muros
+> ni montan la aurora»*. Se sacó de una landing con scroll, donde la alternancia produce
+> ritmo. Corpus es una app con pestañas: nunca ves la alternancia, solo la inconsistencia.
+>
+> **Doctrina vigente** (`src/app/globals.css` §3): la aurora está SIEMPRE presente — la
+> monta UNA vez el shell de `/app`. Lo que protege la lectura no es su ausencia, sino la
+> SUPERFICIE sobre la que vive el contenido: intensidad 0.55 al hojear, 0.22 en trabajo
+> denso, y el texto sobre vidrio. **No vuelvas a quitar la aurora de una pantalla.**
+
 # Spec — `03-componentes/controles.html`
 
 > **REGLA MADRE.** Este documento describe una **referencia visual literal**, no una sugerencia.

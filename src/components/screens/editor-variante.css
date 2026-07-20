@@ -1,7 +1,15 @@
-/* ── editor-variante.html — la pantalla más importante. MURO. ──
+/* ── editor-variante.html — la pantalla más importante. ──
    PORTE LITERAL del 2º <style> de corpus-design/04-pantallas/editor-variante.html
    (fuera de data-corpus-system, líneas 488–606). Clases SIN renombrar: son el
-   contrato diseño↔código. Sin @keyframes propios (el movimiento vive en motion.css). */
+   contrato diseño↔código. Sin @keyframes propios (el movimiento vive en motion.css).
+
+   ÚNICA desviación del porte: las tres columnas pasaron de fondo OPACO a
+   translúcido (--bg-glass / --surface-sunken al 86%). El editor ya no es un
+   «muro» que apaga la atmósfera —esa regla venía de una landing con scroll y está
+   derogada (globals.css §3)—: la aurora sigue detrás a 0.22 y se intuye en el
+   fondo de las columnas. El desenfoque lo pone UNA vez .c-wall en .ed-grid; las
+   columnas y sus filas solo llevan color, así que una biblioteca de cientos de
+   viñetas no añade ni una capa de composición. */
 .ed-bar{position:sticky;top:var(--header-h);z-index:9;height:52px;background:color-mix(in srgb,var(--bg) 88%,transparent);
   backdrop-filter:blur(8px);border-bottom:1px solid var(--border)}
 .ed-bar .c-container{max-width:none;height:100%;display:flex;align-items:center;gap:14px}
@@ -9,12 +17,21 @@
 .ed-bar .nm{font:600 14px/1 var(--font-sans)}
 .ed-bar .st{font:400 var(--fs-micro)/1 var(--font-mono);color:var(--text-subtle)}
 .ed-bar .acts{margin-left:auto;display:flex;gap:8px;align-items:center}
-.ed-grid{display:grid;grid-template-columns:290px minmax(380px,1fr) 470px;gap:1px;background:var(--border);
+/* Las tres columnas. El hairline que las separa lo dibujaba el FONDO de la
+   rejilla asomando por un gap de 1px; ese fondo era opaco y tapaba la aurora
+   entera por debajo de unas columnas que ahora son translúcidas. Mismo píxel de
+   separación, dibujado por las columnas: gap:0 + border-left. Así la rejilla no
+   pinta nada y el vidrio de .c-wall llega hasta el fondo de las columnas. */
+.ed-grid{display:grid;grid-template-columns:290px minmax(380px,1fr) 470px;gap:0;background:transparent;
   height:calc(100vh - var(--header-h) - 52px);min-height:480px}
-.ed-col{background:var(--bg);overflow-y:auto;overscroll-behavior:contain}
-.ed-col--lib{background:var(--surface-sunken)}
+.ed-col+.ed-col{border-left:1px solid var(--border)}
+.ed-col{background:var(--bg-glass);overflow-y:auto;overscroll-behavior:contain}
+.ed-col--lib{background:color-mix(in srgb,var(--surface-sunken) 86%,transparent)}
+/* La cabecera pegada NO puede heredar el color translúcido de su columna: es lo
+   único que tiene que OCLUIR lo que pasa por debajo al hacer scroll. Opaca. */
 .ed-colh{position:sticky;top:0;z-index:2;display:flex;align-items:baseline;gap:10px;padding:14px 18px 10px;
-  background:inherit;border-bottom:1px solid var(--border)}
+  background:var(--bg);border-bottom:1px solid var(--border)}
+.ed-col--lib .ed-colh{background:var(--surface-sunken)}
 .ed-colh .t-overline{font-size:10px}
 .ed-colh .n{font:400 10px/1 var(--font-mono);color:var(--text-subtle)}
 /* ── librería (master) ── */
@@ -141,7 +158,7 @@
 .var-empty{margin:60px 24px;text-align:center;color:var(--text-muted);font-size:13px;line-height:1.7}
 .var-empty .t-overline{display:block;margin-bottom:12px}
 /* ── preview (porcelana dentro de grafito) ── */
-.pv-col{display:flex;flex-direction:column;background:var(--surface-sunken)}
+.pv-col{display:flex;flex-direction:column;background:color-mix(in srgb,var(--surface-sunken) 86%,transparent)}
 .pv-tools{position:sticky;top:0;z-index:2;display:flex;align-items:center;gap:12px;padding:12px 16px;
   background:var(--surface-sunken);border-bottom:1px solid var(--border)}
 .pv-seg{display:flex;border:1px solid var(--border-strong);border-radius:6px;overflow:hidden}

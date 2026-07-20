@@ -31,7 +31,7 @@
 .tl-gh .n{font:400 var(--fs-micro)/1 var(--font-mono);color:var(--text-subtle)}
 .tl-gh .why{margin-left:auto;font:400 var(--fs-micro)/1.4 var(--font-mono);color:var(--text-subtle)}
 .tl-rows{border:1px solid var(--border);border-radius:var(--radius-md);overflow:hidden}
-.tl-row{display:flex;gap:14px;align-items:baseline;padding:11px 18px;background:var(--surface);font-size:13px;line-height:1.55}
+.tl-row{display:flex;gap:14px;align-items:baseline;padding:11px 18px;background:var(--surface-glass);font-size:13px;line-height:1.55}
 .tl-row+.tl-row{border-top:1px solid var(--border)}
 .tl-row .k{font:500 13px/1.4 var(--font-sans);min-width:150px}
 .tl-row .d{flex:1;color:var(--text-muted);font:400 var(--fs-data)/1.6 var(--font-mono)}
@@ -52,7 +52,7 @@
 .tl-phead .trace{font:400 var(--fs-micro)/1.5 var(--font-mono);color:var(--text-subtle)}
 .tl-phead .c-ver{margin-left:auto}
 .tl-cols{display:grid;grid-template-columns:1fr 1fr;gap:1px;background:var(--border)}
-.tl-cols>div{background:var(--surface);padding:14px 18px;font-size:13px;line-height:1.6}
+.tl-cols>div{background:var(--surface-glass);padding:14px 18px;font-size:13px;line-height:1.6}
 .tl-cols .lbl{display:block;font:500 9px/1 var(--font-mono);letter-spacing:.12em;text-transform:uppercase;color:var(--text-subtle);margin-bottom:8px}
 .tl-cols .orig{color:var(--text-muted)}
 .tl-cols .prop b{color:var(--text);font-weight:500;background:rgba(95,198,169,.13);border-radius:2px;padding:0 2px}

@@ -7,7 +7,10 @@
 .db-strip .t-overline{letter-spacing:.14em}
 .db-strip .acts{margin-left:auto;display:flex;gap:10px}
 .db-bento{display:grid;grid-template-columns:repeat(12,1fr);gap:2px}
-.db-cell{background:var(--surface);border-radius:0;padding:0;min-width:0}
+/* Vidrio, no pared: las celdas son translúcidas y el desenfoque lo pone UNA vez
+   .c-wall (el <main>). Sin backdrop-filter propio — hay celda por sección y fila
+   por variante, y una capa de composición por fila es justo lo que no queremos. */
+.db-cell{background:var(--surface-glass);border-radius:0;padding:0;min-width:0}
 .db-bento .db-cell:first-child{border-radius:var(--radius-md) 0 0 0}
 .db-ch{display:flex;align-items:baseline;gap:10px;padding:16px 20px 12px}
 .db-ch .t-overline{font-size:10px}
@@ -27,7 +30,7 @@
 .db-vrow .pdf:hover{color:var(--accent-text);border-color:var(--border-patina)}
 /* salud + staging */
 .db-side{grid-column:span 5;display:grid;grid-template-rows:auto auto;gap:2px;background:transparent}
-.db-s{background:var(--surface)}
+.db-s{background:var(--surface-glass)}
 .db-srow{display:flex;align-items:baseline;gap:12px;padding:11px 20px;border-top:1px solid var(--border);
   font-size:13px;color:var(--text-muted);text-decoration:none}
 .db-srow:hover{background:var(--surface-elevated);text-decoration:none;color:var(--text)}
@@ -41,7 +44,7 @@
 .db-stg .go{margin-left:auto;color:var(--accent-text);font:500 var(--fs-micro)/1 var(--font-mono)}
 /* fuentes */
 .db-f{grid-column:span 12;background:transparent;display:grid;grid-template-columns:repeat(4,1fr);gap:1px}
-.db-fcell{background:var(--surface);padding:14px 20px 16px;min-height:104px}
+.db-fcell{background:var(--surface-glass);padding:14px 20px 16px;min-height:104px}
 .db-fcell .nm{font:500 13px/1 var(--font-mono)}
 .db-fcell .facts{margin-top:8px;font:400 var(--fs-micro)/1.7 var(--font-mono);color:var(--text-subtle)}
 .db-fcell .new{margin-top:8px;display:inline-flex;align-items:center;gap:7px;font:500 var(--fs-micro)/1 var(--font-mono);color:var(--accent-text)}

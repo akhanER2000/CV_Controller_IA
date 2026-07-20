@@ -2,14 +2,17 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { Aurora } from "@/components/Aurora";
+import { AuroraTune, AURORA_HOJEO } from "@/components/Aurora";
 import "./ingesta.css";
 
 /* ============================================================================
    Ingesta — porte de corpus-design/04-pantallas/ingesta.html
-   (ver docs/spec/pantallas/ingesta.md). VENTANA con aurora ACTIVA: la única
-   pantalla del producto donde la máquina "piensa" y la única que dispara EL
-   shimmer (CorpusMotion.shimmer, autolimitado a uno por sesión).
+   (ver docs/spec/pantallas/ingesta.md). Se espera, no se trabaja: el humo va
+   entero (0.55) y además ACTIVO — es la única pantalla del producto donde la
+   máquina "piensa" (setState('active') mientras corre, 'calm' al terminar) y la
+   única que dispara EL shimmer (CorpusMotion.shimmer, uno por sesión).
+   La aurora la monta el shell (app/app/layout); aquí solo se declara la
+   intensidad y se conmuta el estado. Ver src/components/Aurora.tsx.
 
    La espera es una ruta propia: se leen las fuentes línea a línea, con la
    fuente concreta y lo hallado en ella, sin porcentaje inventado, y se entrega
@@ -208,7 +211,7 @@ export function IngestaScreen() {
 
   return (
     <div className="c-page">
-      <Aurora state="active" />
+      <AuroraTune strength={AURORA_HOJEO} />
 
       <header className="c-header">
         <div className="c-container">

@@ -32,9 +32,16 @@ describe("fileKindFromName · extensión/MIME → tipo soportado", () => {
     expect(fileKindFromName("sin-extension", "application/pdf")).toBe("pdf");
     expect(fileKindFromName("captura", "image/png")).toBe("image");
   });
-  it("rechaza lo no soportado: .doc binario, .txt, .key", () => {
+  it("detecta el texto plano (.md/.txt) — el contenido ES el raw_text", () => {
+    // Cambio deliberado: el .txt/.md ANTES se rechazaba, y la propia zona de
+    // arrastre anunciaba «el cuestionario respondido (.md)» como fuente
+    // soportada. La cobertura completa de esta ruta vive en extract-text.test.ts.
+    expect(fileKindFromName("notas.txt")).toBe("text");
+    expect(fileKindFromName("cuestionario.md")).toBe("text");
+  });
+
+  it("rechaza lo no soportado: .doc binario, sin extensión", () => {
     expect(fileKindFromName("viejo.doc")).toBeNull();
-    expect(fileKindFromName("notas.txt")).toBeNull();
     expect(fileKindFromName("archivo")).toBeNull();
   });
 });

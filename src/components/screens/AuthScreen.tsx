@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Aurora } from "@/components/Aurora";
+import { Aurora, useAuroraTune, AURORA_HOJEO } from "@/components/Aurora";
 import { useT } from "@/lib/i18n";
 import { useBoot } from "@/lib/corpus/runtime";
 import { createClient } from "@/lib/supabase/client";
@@ -12,7 +12,12 @@ import "./auth.css";
 /* ============================================================================
    Auth — porte de corpus-design/04-pantallas/auth.html (docs/spec/pantallas/auth.md)
    con autenticación real de Supabase. Una pantalla, dos modos (login · signup).
-   VENTANA con aurora en calma. El estado `error` = login + el bloque de error.
+   El estado `error` = login + el bloque de error.
+
+   ★ ES LA ÚNICA PANTALLA QUE SIGUE MONTANDO <Aurora> además del shell, porque
+   /auth, /login y /signup viven FUERA de src/app/app/layout.tsx. Dentro de /app
+   nadie la monta: la monta el layout una sola vez y cada pantalla declara su
+   intensidad. Entrar es ceremonia, no trabajo: humo entero (0.55).
 
    La spec autoriza convertir el CTA en un <form> real conservando las clases
    c-btn c-btn--forge c-btn--lg y el wrapper span.c-forge — es lo que se hace aquí.
@@ -100,6 +105,9 @@ export function AuthScreen({ initial = "login" }: { initial?: Mode }) {
       options: { redirectTo: `${location.origin}/app` },
     });
   }
+
+  // Fuera del shell /app: aquí sí se MONTA, y se declara el dial de reposo.
+  useAuroraTune(AURORA_HOJEO);
 
   return (
     <div className="c-page">

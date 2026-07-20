@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useT } from "@/lib/i18n";
 import { useBoot } from "@/lib/corpus/runtime";
+import { AuroraTune, AURORA_TRABAJO } from "@/components/Aurora";
 import { Breadcrumb } from "@/components/Breadcrumb";
 import "./tailor.css";
 
@@ -15,8 +16,11 @@ const FALLBACK = "/app/variantes";
 
 /* ============================================================================
    Tailor — porte de corpus-design/04-pantallas/tailor.html
-   (ver docs/spec/pantallas/tailor.md). MURO: NO monta la aurora
-   («donde hay trabajo, el trabajo gana»).
+   (ver docs/spec/pantallas/tailor.md).
+
+   Atmósfera: la monta el shell; aquí se declara 0.22 (trabajo denso). La regla
+   vieja —«donde hay trabajo, el trabajo gana», los muros ni la montan— está
+   derogada: ver la doctrina en src/components/Aurora.tsx.
 
    El alma ética del producto: contrasta el aviso contra el MASTER (52 items),
    no contra la variante, y responde con HECHOS en tres grupos — nunca un score
@@ -307,6 +311,8 @@ export function TailorScreen() {
 
   return (
     <div className="c-page" ref={bootRef}>
+      {/* Contrastar un aviso contra el master es trabajo denso: el humo baja. */}
+      <AuroraTune strength={AURORA_TRABAJO} />
       <header className="c-header">
         <div className="c-container">
           <Link className="c-logo" href="/app">

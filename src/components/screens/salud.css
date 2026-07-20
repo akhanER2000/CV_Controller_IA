@@ -33,7 +33,7 @@
 .sl-built>button:hover{border-color:var(--border-patina);color:var(--text)}
 .sl-built .rows{display:none;margin-top:10px;border:1px solid var(--border);border-radius:var(--radius-md);overflow:hidden}
 .sl-built.open .rows{display:block}
-.sl-brow{display:flex;gap:12px;align-items:baseline;padding:10px 18px;background:var(--surface);font:400 var(--fs-data)/1.6 var(--font-mono);color:var(--text-subtle)}
+.sl-brow{display:flex;gap:12px;align-items:baseline;padding:10px 18px;background:var(--surface-glass);font:400 var(--fs-data)/1.6 var(--font-mono);color:var(--text-subtle)}
 .sl-brow+.sl-brow{border-top:1px solid var(--border)}
 .sl-brow b{color:var(--text-muted);font-weight:500}
 .sl-ok{display:none;text-align:center;margin-top:70px}

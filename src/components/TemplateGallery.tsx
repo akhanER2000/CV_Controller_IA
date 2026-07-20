@@ -37,7 +37,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useT } from "@/lib/i18n";
-import { useAurora } from "@/lib/corpus/runtime";
+import { useAuroraTune, AURORA_HOJEO } from "@/components/Aurora";
 import type { ResumeData } from "@/lib/cv/resume";
 import {
   TEMPLATE_TAGS,
@@ -551,24 +551,25 @@ export function TemplateThumb({
 // ── Atmósfera ────────────────────────────────────────────────────────────────
 
 /**
- * La aurora, SOLO mientras se hojea. El editor es un MURO y no la monta: ahí se
- * trabaja. La galería y el visor son otra cosa —se pasan páginas, se mira— y ahí
- * la atmósfera es información: dice «esto no es la mesa de trabajo».
+ * La aurora SUBE mientras se hojea. Ya no la enciende ni la apaga: la monta el
+ * shell (src/app/app/layout.tsx) y está siempre. Lo que hace la galería es mover
+ * el dial — el editor de debajo declara 0.22 porque ahí se trabaja; la galería y
+ * el visor son otra cosa (se pasan páginas, se mira) y suben a 0.55. Esa
+ * diferencia sigue siendo información: dice «esto no es la mesa de trabajo».
  *
- * Al cerrar se DUERME el shader (`pause`), no se desmonta: el runtime vanilla no
- * sabe desmontar, y dejar un WebGL corriendo detrás de un muro opaco sería pagar
- * una animación que nadie ve. Con prefers-reduced-motion el runtime ya cae al
- * fallback estático y pause/resume no hacen nada: misma atmósfera, cero movimiento.
+ * Antes esto pausaba el shader con razón propia ('corpus-hojeo') al cerrarse.
+ * Las razones de pause/resume son un Set y la aurora solo corre con el Set
+ * VACÍO, así que esa razón se quedaba enclavada: bastaba abrir y cerrar el
+ * hojeador UNA vez para dejar el fondo congelado el resto de la sesión, también
+ * en login, onboarding, volcado y Fuentes. El latch se va con la doctrina que lo
+ * justificaba; <AuroraTune> no toca pause/resume, solo el dial, y se apila (al
+ * cerrar devuelve la intensidad del editor, no la de reposo).
  *
  * (El componente se monta y desmonta con el diálogo, por eso los hooks pueden
  * vivir dentro sin condicionales.)
  */
 function Atmosphere() {
-  useAurora("calm");
-  useEffect(() => {
-    window.CorpusAurora?.resume("corpus-hojeo");
-    return () => window.CorpusAurora?.pause("corpus-hojeo");
-  }, []);
+  useAuroraTune(AURORA_HOJEO);
   return null;
 }
 

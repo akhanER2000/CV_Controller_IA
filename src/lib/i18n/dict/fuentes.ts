@@ -122,7 +122,8 @@ export const fuentes = {
     "fuentes.act.reviewStaging": "revisar en staging →",
     "fuentes.act.failed": "No se pudo completar.",
     "fuentes.act.needSession": "Inicia sesión para volcar material.",
-    "fuentes.act.unsupported": "Ese tipo de archivo no se puede leer aquí.",
+    "fuentes.act.unsupported":
+      "Ese tipo de archivo no lo sabemos leer. Se aceptan PDF, DOCX, texto (.md, .txt) e imágenes (PNG, JPG, WEBP).",
     "fuentes.act.skipped": "Omitidos (tipo no soportado): {f}",
 
     // Sección "añadir una fuente"
@@ -315,7 +316,8 @@ export const fuentes = {
     "fuentes.act.reviewStaging": "review in staging →",
     "fuentes.act.failed": "Couldn't complete.",
     "fuentes.act.needSession": "Sign in to dump material.",
-    "fuentes.act.unsupported": "That file type can't be read here.",
+    "fuentes.act.unsupported":
+      "We don't know how to read that file type. We accept PDF, DOCX, text (.md, .txt) and images (PNG, JPG, WEBP).",
     "fuentes.act.skipped": "Skipped (unsupported type): {f}",
 
     // "Add a source" section

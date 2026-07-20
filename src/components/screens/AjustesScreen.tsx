@@ -6,12 +6,16 @@ import { useRouter } from "next/navigation";
 import { useBoot } from "@/lib/corpus/runtime";
 import { useLang, useT } from "@/lib/i18n";
 import { createClient } from "@/lib/supabase/client";
+import { AuroraTune, AURORA_HOJEO } from "@/components/Aurora";
 import { supabaseEnabled } from "@/lib/supabase/config";
 import "./ajustes.css";
 
 /* ============================================================================
    Ajustes — porte de corpus-design/04-pantallas/ajustes.html, ahora CABLEADO a
-   persistencia real (user_settings). MURO: no monta la aurora.
+   persistencia real (user_settings).
+
+   Atmósfera: la monta el shell; aquí se declara 0.55 — no es trabajo denso, se
+   entra a cambiar una cosa y se sale. Ver src/components/Aurora.tsx.
 
    Qué persiste y cómo:
    - Idioma: reutiliza el motor i18n (useLang) → re-render en vivo + user_settings.ui_lang.
@@ -272,6 +276,8 @@ export function AjustesScreen() {
 
   return (
     <div className="c-page">
+      {/* Ajustes no es trabajo denso: se entra, se cambia una cosa y se sale. */}
+      <AuroraTune strength={AURORA_HOJEO} />
       <header className="c-header">
         <div className="c-container">
           <Link className="c-logo" href="/app">

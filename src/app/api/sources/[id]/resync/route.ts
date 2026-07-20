@@ -6,7 +6,7 @@ import { fetchGithubUser } from "@/lib/extract/github";
 import { fetchViaJina } from "@/lib/extract/web";
 import { extractFile, extractDepsFor } from "@/lib/extract/files";
 import { getUserLlmKey } from "@/lib/account/byok";
-import { getSource, restageSource, parseGithubHandle, type FileKind } from "@/lib/db/sources";
+import { getSource, restageSource, parseGithubHandle, fileKindFromName, type FileKind } from "@/lib/db/sources";
 
 // Llama al LLM (salvo GitHub) → timeout generoso barato, igual que /api/sources.
 export const runtime = "nodejs";
@@ -45,10 +45,46 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
     switch (source.kind) {
       case "paste":
       case "manual":
-        return NextResponse.json(
-          { error: "El texto pegado no tiene un origen externo que releer. Si cambió, pégalo de nuevo como una fuente nueva." },
-          { status: 400 },
-        );
+        // Un .md/.txt se guarda como 'paste' (el enum de la BD no tiene valor para
+        // texto), pero SÍ tiene archivo en Storage: es releíble como cualquier otro
+        // archivo. Solo el texto pegado a mano —que no tiene storage_path— carece
+        // de origen externo. Distinguirlos por el archivo, no por el kind.
+        if (!source.storagePath) {
+          return NextResponse.json(
+            { error: "El texto pegado no tiene un origen externo que releer. Si cambió, pégalo de nuevo como una fuente nueva." },
+            { status: 400 },
+          );
+        }
+      // eslint-disable-next-line no-fallthrough
+      case "pdf":
+      case "docx":
+      case "image": {
+        if (!source.storagePath) {
+          return NextResponse.json({ error: "No guardamos el archivo original de esta fuente; vuelve a subirlo como fuente nueva." }, { status: 422 });
+        }
+        if (!hasLlm) return noKey();
+        const name = source.originalName || source.storagePath.split("/").pop() || "archivo";
+        const { data: blob, error: dlErr } = await sb.storage.from("sources").download(source.storagePath);
+        if (dlErr || !blob) return NextResponse.json({ error: `No se pudo descargar el archivo de Storage: ${dlErr?.message ?? "desconocido"}` }, { status: 422 });
+        const bytes = new Uint8Array(await blob.arrayBuffer());
+        // El kind de la BD no distingue texto: se re-deduce del nombre real, que es
+        // justo lo que conserva original_name para no haber necesitado migración.
+        const kind = (fileKindFromName(name) ?? (source.kind as FileKind)) as FileKind;
+        const ex = await extractFile({ kind, bytes, mime: blob.type || undefined, name }, extractDepsFor(byok));
+        if (!ex.text.trim()) {
+          await restageSource(sb, user.id, id, [], { status: "failed", error: ex.warning ?? "sin texto legible", raw_text: null });
+          return NextResponse.json({ sourceId: id, staged: 0, counts: { verified: 0, partial: 0, none: 0, api: 0, total: 0 }, warnings: [ex.warning ?? "No se pudo leer texto del archivo."] }, { status: 200 });
+        }
+        const result = await runImport({ pastedText: "", files: [{ label: name, text: ex.text }] }, deps);
+        const n = await restageSource(sb, user.id, id, result.staged, {
+          raw_text: result.rawText,
+          page_count: ex.pageCount ?? null,
+          raw_text_is_transcription: ex.isTranscription,
+          status: "extracted",
+          error: null,
+        });
+        return NextResponse.json({ sourceId: id, staged: n, counts: result.counts, warnings: result.warnings });
+      }
 
       case "github": {
         const handle = parseGithubHandle(source.sourceUrl ?? source.originalName ?? "");
@@ -81,33 +117,6 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
           counts: result.counts,
           warnings: n ? [] : ["No pudimos leer contenido nuevo de ese enlace."],
         });
-      }
-
-      case "pdf":
-      case "docx":
-      case "image": {
-        if (!source.storagePath) {
-          return NextResponse.json({ error: "No guardamos el archivo original de esta fuente; vuelve a subirlo como fuente nueva." }, { status: 422 });
-        }
-        if (!hasLlm) return noKey();
-        const name = source.originalName || source.storagePath.split("/").pop() || "archivo";
-        const { data: blob, error: dlErr } = await sb.storage.from("sources").download(source.storagePath);
-        if (dlErr || !blob) return NextResponse.json({ error: `No se pudo descargar el archivo de Storage: ${dlErr?.message ?? "desconocido"}` }, { status: 422 });
-        const bytes = new Uint8Array(await blob.arrayBuffer());
-        const ex = await extractFile({ kind: source.kind as FileKind, bytes, mime: blob.type || undefined, name }, extractDepsFor(byok));
-        if (!ex.text.trim()) {
-          await restageSource(sb, user.id, id, [], { status: "failed", error: ex.warning ?? "sin texto legible", raw_text: null });
-          return NextResponse.json({ sourceId: id, staged: 0, counts: { verified: 0, partial: 0, none: 0, api: 0, total: 0 }, warnings: [ex.warning ?? "No se pudo leer texto del archivo."] }, { status: 200 });
-        }
-        const result = await runImport({ pastedText: "", files: [{ label: name, text: ex.text }] }, deps);
-        const n = await restageSource(sb, user.id, id, result.staged, {
-          raw_text: result.rawText,
-          page_count: ex.pageCount ?? null,
-          raw_text_is_transcription: ex.isTranscription,
-          status: "extracted",
-          error: null,
-        });
-        return NextResponse.json({ sourceId: id, staged: n, counts: result.counts, warnings: [] });
       }
 
       default:

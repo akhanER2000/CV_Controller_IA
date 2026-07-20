@@ -5,6 +5,7 @@ import type { ReactNode } from "react";
 import Link from "next/link";
 import { useT } from "@/lib/i18n";
 import { supabaseEnabled } from "@/lib/supabase/config";
+import { AuroraTune, AURORA_HOJEO, AURORA_TRABAJO } from "@/components/Aurora";
 import { useUndoToast } from "@/components/UndoToast";
 import {
   looksLikeSkillTag,
@@ -18,7 +19,7 @@ import "./master.css";
 
 /* ============================================================================
    Master — porte de corpus-design/04-pantallas/master.html
-   (ver docs/spec/pantallas/master.md). MURO: NO monta la aurora.
+   (ver docs/spec/pantallas/master.md).
    Es el registro canónico completo — un editor, no un formulario. Se edita
    inline (contenteditable) y cada item recuerda su origen (fragmento expandible).
 
@@ -27,8 +28,19 @@ import "./master.css";
    su fragmento de evidencia REAL. Una cuenta nueva ⇒ estado vacío. La maqueta
    (persona Diego Gatica) SOLO se usa como fallback del modo local sin Supabase.
 
+   Atmósfera (doctrina vigente — ver src/components/Aurora.tsx):
+   La aurora la monta el shell (app/app/layout), no esta pantalla. Aquí solo se
+   DECLARA la intensidad: 0.22 con el registro poblado (es la pantalla más densa
+   del producto después del editor; el humo se intuye por los márgenes y entre
+   tarjetas, nunca compite con una viñeta) y 0.55 con el registro vacío, que es
+   una sala de puertas y no trabajo. Lo que protege la lectura no es apagar el
+   fondo, es la superficie: .c-wall pone UN vidrio para toda la pantalla y las
+   tarjetas (.c-card) son translúcidas SIN filtro propio, así que cientos de
+   items siguen costando una sola capa de composición.
+   Antes esto era un MURO opaco que ni montaba la aurora — regla heredada de una
+   landing con scroll, sin sentido en una app de pestañas.
+
    Decisiones de fidelidad conservadas:
-   - Muro ⇒ sin <Aurora>. El fondo es var(--bg) opaco (.c-wall).
    - Los conteos NO se hardcodean: `total` y `sourceCount` se DERIVAN de los datos.
    - Interacciones REALES con estado React: buscar, filtrar, plegar grupos,
      expandir origen, edición inline → "editado por ti".
@@ -1859,6 +1871,9 @@ export function MasterScreen() {
 
   return (
     <div className="c-page">
+      {/* El registro poblado es trabajo denso; vacío es una sala de puertas. */}
+      <AuroraTune strength={isEmpty ? AURORA_HOJEO : AURORA_TRABAJO} />
+
       <header className="c-header">
         <div className="c-container">
           <Link className="c-logo" href="/app">

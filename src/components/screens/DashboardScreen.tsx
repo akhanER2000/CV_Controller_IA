@@ -2,7 +2,7 @@
 
 import { Fragment, useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { Aurora } from "@/components/Aurora";
+import { AuroraTune, AURORA_HOJEO, AURORA_TRABAJO } from "@/components/Aurora";
 import { useT, useLang } from "@/lib/i18n";
 import { useBoot } from "@/lib/corpus/runtime";
 import { supabaseEnabled } from "@/lib/supabase/config";
@@ -20,12 +20,15 @@ type T = (key: string) => string;
    cuenta nueva (todo 0) cae al estado día-1. La maqueta (persona Diego Gatica)
    solo se usa como FALLBACK del modo local sin Supabase.
 
-   Gramática ventana/muro (spec §2):
-   - Registro CON items → estado DENSO = MURO. NO monta Aurora ("donde hay
-     trabajo, el trabajo gana": el bento tapa la aurora, sería gastar GPU).
-   - Registro VACÍO (día 1, 0 items) → VENTANA: monta <Aurora state="calm"/>
-     y las dos puertas respiran sobre el fondo. Es la ÚNICA excepción del
-     dashboard a la regla "los muros no montan aurora".
+   Atmósfera (doctrina vigente — ver src/components/Aurora.tsx):
+   La aurora NO se monta aquí; la monta una sola vez el shell (app/app/layout).
+   Esta pantalla solo declara su INTENSIDAD, y la declara en sus DOS estados:
+   - Registro VACÍO (día 1, 0 items) → 0.55. Sala de puertas: el humo entero
+     detrás de las dos tarjetas de vidrio (.c-panel).
+   - Registro CON items → 0.22. El bento sigue viéndose, la atmósfera se intuye
+     entre las celdas y por los márgenes. Antes esta rama era un MURO opaco que
+     ni montaba la aurora; eso venía de una landing con scroll y en una app de
+     pestañas no se lee como ritmo, se lee como inconsistencia.
    El estado se DERIVA de los datos (masterItems === 0 && sin variantes), no de
    un toggle. La "salud del master" ya no cita hallazgos ficticios: se derivan de
    tus propios items (viñetas sin cifra, roles sin fechas, skills sin evidencia).
@@ -288,7 +291,8 @@ export function DashboardScreen() {
     </header>
   );
 
-  // Mientras carga (modo Supabase): muro neutro, sin aurora, para no parpadear.
+  // Mientras carga (modo Supabase): superficie neutra, sin declarar intensidad,
+  // para no mover el dial dos veces antes de saber en qué estado estamos.
   if (loading || !data) {
     return (
       <div className="c-page">
@@ -307,12 +311,12 @@ export function DashboardScreen() {
 
   return (
     <div className="c-page">
-      {isEmpty ? <Aurora state="calm" /> : null}
+      <AuroraTune strength={isEmpty ? AURORA_HOJEO : AURORA_TRABAJO} />
 
       {header}
 
       {isEmpty ? (
-        /* ═══ VACÍO: día 1. Ventana: la aurora respira en calma. ═══ */
+        /* ═══ VACÍO: día 1. Sin superficie: la aurora respira entera. ═══ */
         <main className="db-empty c-window show" data-screen-label="dashboard-vacio" ref={emptyRef}>
           <span className="t-overline">{t("dashboard.empty.overline")}</span>
           <h1 style={{ marginTop: "20px" }}>
@@ -337,7 +341,7 @@ export function DashboardScreen() {
           <p className="fine">{t("dashboard.empty.fine")}</p>
         </main>
       ) : (
-        /* ═══ DENSO: muro. El estado, no un saludo. ═══ */
+        /* ═══ DENSO: el estado, no un saludo. El bento sobre vidrio (.c-wall). ═══ */
         <main className="db-main c-wall" data-screen-label="dashboard-denso" ref={bootRef}>
           <div className="c-container">
             <div className="db-strip">

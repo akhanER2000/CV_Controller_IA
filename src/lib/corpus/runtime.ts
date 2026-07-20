@@ -49,7 +49,7 @@ declare global {
 }
 
 /** Espera a que el runtime vanilla esté cargado y ejecuta `fn`. */
-function whenReady(pick: () => unknown, fn: () => void): () => void {
+export function whenReady(pick: () => unknown, fn: () => void): () => void {
   if (pick()) {
     fn();
     return () => {};
@@ -67,8 +67,11 @@ function whenReady(pick: () => unknown, fn: () => void): () => void {
 }
 
 /**
- * Monta la aurora — SOLO en pantallas VENTANA (auth, onboarding, importar,
- * ingesta, dashboard vacío). Los muros ni la montan (handoff.md §APIs).
+ * Monta la aurora. La atmósfera es CONSTANTE y el montaje es UNO SOLO por
+ * shell: /app lo hace en su layout y AuthScreen para las rutas de entrada, que
+ * quedan fuera de ese layout. Ninguna pantalla vuelve a montarla — cada una
+ * declara su INTENSIDAD con <AuroraTune> (ver src/components/Aurora.tsx).
+ * (Deroga la regla vieja «solo las ventanas la montan; los muros no».)
  * `state='active'` solo durante la ingesta: es el pulso de la máquina pensando.
  */
 export function useAurora(state: AuroraState = "calm") {

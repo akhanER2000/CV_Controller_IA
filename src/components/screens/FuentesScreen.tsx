@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { Aurora } from "@/components/Aurora";
+import { AuroraTune, AURORA_HOJEO } from "@/components/Aurora";
 import { DropZone } from "@/components/DropZone";
 import { useBoot } from "@/lib/corpus/runtime";
 import { supabaseEnabled } from "@/lib/supabase/config";
@@ -16,12 +16,14 @@ import "./fuentes.css";
    Fuentes — porte de corpus-design/04-pantallas/fuentes.html
    (ver docs/spec/pantallas/fuentes.md).
 
-   ★ VENTANA (antes muro). Aquí no se LEE trabajo denso: se DECIDE qué material
-   entra y por qué vía — arrastrar un PDF, pegar texto, conectar GitHub. Es una
-   sala de puertas, y las puertas respiran: monta <Aurora state="calm"/>, el
-   <main> es .c-window y cada tarjeta es .c-panel (vidrio ahumado) para que el
-   humo se intuya detrás sin comerse una letra. El texto suelto que no vive
-   dentro de una tarjeta lleva su velo (.c-scrim--soft).
+   ★ Aquí no se LEE trabajo denso: se DECIDE qué material entra y por qué vía —
+   arrastrar un PDF, pegar texto, conectar GitHub. Es una sala de puertas, y las
+   puertas respiran: el humo va entero (0.55 · AURORA_HOJEO), el <main> es
+   .c-window y cada tarjeta es .c-panel (vidrio ahumado) para que el humo se
+   intuya detrás sin comerse una letra. El texto suelto que no vive dentro de una
+   tarjeta lleva su velo (.c-scrim--soft).
+   La aurora NO se monta aquí: la monta el shell (app/app/layout) para las diez
+   pantallas; esta solo declara su intensidad. Ver src/components/Aurora.tsx.
    El único movimiento de montaje sigue siendo el hr.c-divider de CorpusMotion.boot().
 
    ★ CABLEADO A DATOS REALES (agente B). En modo Supabase cada tarjeta ES la acción
@@ -426,7 +428,9 @@ export function FuentesScreen() {
           <div className="fu-body">{t("fuentes.card.files.body")}</div>
           <DropZone
             className="fu-drop"
-            accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+            // Un .md/.txt entra por aquí igual que un PDF (el arrastre ya lo
+            // aceptaba porque ignora `accept`; el clic también debe ofrecerlo).
+            accept=".pdf,.docx,.md,.markdown,.txt,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain,text/markdown"
             disabled={busy("filesCard")}
             onFiles={(fs) => void runFileUpload("filesCard", fs)}
             label={
@@ -667,7 +671,7 @@ export function FuentesScreen() {
 
     return (
       <div className="c-page">
-        <Aurora state="calm" />
+        <AuroraTune strength={AURORA_HOJEO} />
         {header}
         <main className="fu-main c-window" data-screen-label="fuentes" ref={bootRef}>
           <div className="c-container">
@@ -797,7 +801,7 @@ export function FuentesScreen() {
   // ═══════════════════════ MODO LOCAL (maqueta interactiva) ═══════════════════
   return (
     <div className="c-page">
-      <Aurora state="calm" />
+      <AuroraTune strength={AURORA_HOJEO} />
       {header}
 
       <main className="fu-main c-window" data-screen-label="fuentes" ref={bootRef}>

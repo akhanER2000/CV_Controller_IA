@@ -31,6 +31,17 @@ export interface ImportDeps {
   fetchWeb?: (url: string) => Promise<string>;
 }
 
+/**
+ * ImportResult + los avisos honestos de la LECTURA (p. ej. "el documento era tan
+ * largo que se leyeron 8 de 12 partes"). Van aquí, y no dentro de ImportResult,
+ * para no tocar el contrato compartido de types.ts; las rutas los reenvían a la
+ * UI junto a los avisos por archivo. Un aviso que no llega al usuario es lo
+ * mismo que no avisar.
+ */
+export interface ImportOutcome extends ImportResult {
+  warnings: string[];
+}
+
 let seq = 0;
 const key = (p: string) => `${p}-${++seq}`;
 
@@ -57,7 +68,7 @@ function applyDates(data: Record<string, unknown>, rawDates: string): void {
   data.dateMissing = true;
 }
 
-export async function runImport(input: ImportInput, deps: ImportDeps): Promise<ImportResult> {
+export async function runImport(input: ImportInput, deps: ImportDeps): Promise<ImportOutcome> {
   const detected = detectAndClassify(input.pastedText);
   const sources: string[] = [];
   const staged: StagedRow[] = [];
@@ -95,12 +106,15 @@ export async function runImport(input: ImportInput, deps: ImportDeps): Promise<I
   // Extracción troceada (inyectada). Nada de esto es dato duro: se verifica.
   const ex = await deps.extract(raw);
   const check = (evidence: string): EvidenceLevel => verifyEvidence(raw, evidence);
+  // El raw_text normalizado UNA vez: lo comparten basics y las aptitudes. Con un
+  // dossier grande, normalizarlo por item era rehacer el mismo trabajo 150 veces.
+  const rawNorm = normalize(raw);
 
   // basics — verificado si el nombre y algún contacto aparecen literal en la fuente
   const b = ex.basics;
   if (b.name || b.email || b.phone) {
-    const nameIn = b.name ? normalize(raw).includes(normalize(b.name)) : false;
-    const contactIn = [b.email, b.phone].some((c) => c && normalize(raw).includes(normalize(c)));
+    const nameIn = b.name ? rawNorm.includes(normalize(b.name)) : false;
+    const contactIn = [b.email, b.phone].some((c) => c && rawNorm.includes(normalize(c)));
     const level: EvidenceLevel = nameIn && contactIn ? "verified" : nameIn || contactIn ? "partial" : "none";
     staged.push({
       key: key("basics"), kind: "basics",
@@ -185,7 +199,7 @@ export async function runImport(input: ImportInput, deps: ImportDeps): Promise<I
   for (const s of ex.skills) {
     const items = s.items.split(",").map((x) => x.trim()).filter(Boolean);
     if (!items.length) continue;
-    const present = items.filter((i) => normalize(raw).includes(normalize(i)));
+    const present = items.filter((i) => rawNorm.includes(normalize(i)));
     const level: EvidenceLevel =
       present.length === items.length ? "verified" : present.length >= Math.ceil(items.length / 2) ? "partial" : "none";
     staged.push({
@@ -232,5 +246,5 @@ export async function runImport(input: ImportInput, deps: ImportDeps): Promise<I
     total: staged.length,
   };
 
-  return { rawText: raw, sources, staged, linkedin, counts };
+  return { rawText: raw, sources, staged, linkedin, counts, warnings: ex.warnings ?? [] };
 }

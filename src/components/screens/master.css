@@ -1,6 +1,12 @@
 /* ── master.html — el archivo completo. Esto es un editor, no un formulario. ──
    PORTE LITERAL del 2º <style> de corpus-design/04-pantallas/master.html
-   (fuera de data-corpus-system). Sin @keyframes propios. Clases sin renombrar. */
+   (fuera de data-corpus-system). Sin @keyframes propios. Clases sin renombrar.
+
+   ÚNICA desviación del porte: las superficies de item pasaron de `var(--surface)`
+   opaco a `var(--surface-glass)` translúcido. La aurora ya no se apaga en las
+   pantallas densas (ver la doctrina en globals.css §3), así que el contenido
+   necesita SU superficie. El desenfoque NO se repite por item: lo pone una sola
+   vez .c-wall en el <main>. Con cientos de items, una capa de composición. */
 .ms-sub{position:sticky;top:var(--header-h);z-index:9;background:color-mix(in srgb,var(--bg) 86%,transparent);
   backdrop-filter:blur(8px);border-bottom:1px solid var(--border)}
 .ms-sub .c-container{display:flex;align-items:center;gap:14px;padding-block:12px;flex-wrap:wrap}
@@ -40,7 +46,7 @@
 .ms-frag mark{background:rgba(95,198,169,.16);color:var(--text);padding:0 3px;border-radius:2px}
 /* ★ tarjeta de skill con evidencia */
 .ms-skills{display:grid;grid-template-columns:1fr 1fr;gap:1px;background:var(--border);border:1px solid var(--border);border-radius:var(--radius-md);overflow:hidden;margin-top:12px}
-.ms-sk{background:var(--surface);padding:14px 18px}
+.ms-sk{background:var(--surface-glass);padding:14px 18px}
 .ms-sk .top{display:flex;align-items:baseline;gap:10px}
 .ms-sk .nm{font:500 14px/1.2 var(--font-sans)}
 .ms-sk .top .c-ver{margin-left:auto}
@@ -53,7 +59,7 @@
 .ms-sk hr{border:0;border-top:1px solid var(--border);margin:10px 0 0}
 /* fila densa (proyectos, educación) */
 .ms-rows{border:1px solid var(--border);border-radius:var(--radius-md);overflow:hidden;margin-top:12px}
-.ms-row{display:flex;gap:12px;align-items:baseline;padding:11px 18px;background:var(--surface);font-size:13px}
+.ms-row{display:flex;gap:12px;align-items:baseline;padding:11px 18px;background:var(--surface-glass);font-size:13px}
 .ms-row+.ms-row{border-top:1px solid var(--border)}
 .ms-row .m{font:400 var(--fs-micro)/1.4 var(--font-mono);color:var(--text-subtle);margin-left:auto;white-space:nowrap}
 .ms-add{margin-top:10px;width:100%;padding:12px;border:1px dashed var(--border-strong);border-radius:var(--radius-md);

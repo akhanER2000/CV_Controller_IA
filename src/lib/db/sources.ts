@@ -19,7 +19,24 @@ import type { StagedRow } from "@/lib/extract/types";
 type SB = SupabaseClient;
 
 /** Tipos de archivo que sabemos extraer (idéntico a extract/files FileKind). */
-export type FileKind = "pdf" | "docx" | "image";
+export type FileKind = "pdf" | "docx" | "image" | "text";
+
+/**
+ * El filtro del selector nativo, en UN solo sitio: lo que la interfaz OFRECE y lo
+ * que `fileKindFromName` ACEPTA tienen que ser la misma lista. Se declaran las
+ * extensiones Y los MIME porque muchos navegadores mandan MIME vacío para .md.
+ */
+export const FILE_ACCEPT =
+  ".pdf,.docx,.md,.markdown,.txt,.png,.jpg,.jpeg,.webp," +
+  "application/pdf," +
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document," +
+  "text/plain,text/markdown," +
+  "image/*";
+
+/** Las extensiones de texto plano que leemos tal cual (el contenido ES el raw_text). */
+const TEXT_EXT = ["md", "markdown", "txt", "text"];
+/** MIME de texto plano. Ojo: para .md muchos navegadores mandan "" → manda la extensión. */
+const TEXT_MIME = ["text/plain", "text/markdown", "text/x-markdown"];
 
 /* ============================================================================
    HELPERS PUROS — sin Supabase, testeables en aislamiento.
@@ -28,13 +45,31 @@ export type FileKind = "pdf" | "docx" | "image";
 /**
  * Extensión (o MIME) → tipo de archivo soportado. `null` = no soportado (se avisa,
  * no se sube). Solo .docx OOXML (mammoth no lee el .doc binario), como extract/files.
+ *
+ * El texto plano (.md/.markdown/.txt) se decide por EXTENSIÓN antes que por MIME:
+ * muchos navegadores mandan MIME vacío para .md, y el cuestionario respondido —
+ * que la propia zona de arrastre lleva anunciando como fuente de primera — es
+ * justamente un .md.
  */
 export function fileKindFromName(name: string, mime?: string): FileKind | null {
   const ext = (name.split(".").pop() ?? "").toLowerCase();
   if (mime === "application/pdf" || ext === "pdf") return "pdf";
   if (ext === "docx" || mime === "application/vnd.openxmlformats-officedocument.wordprocessingml.document") return "docx";
+  if (TEXT_EXT.includes(ext) || (mime ? TEXT_MIME.includes(mime) : false)) return "text";
   if ((mime && mime.startsWith("image/")) || ["png", "jpg", "jpeg", "webp", "gif"].includes(ext)) return "image";
   return null;
+}
+
+/**
+ * El `kind` con el que se PERSISTE en ingestion_sources. El enum de la BD
+ * (`paste|pdf|docx|image|url|github|manual`) no tiene valor para "archivo de
+ * texto", y añadirlo exigiría una migración en Supabase. Un .md/.txt es
+ * exactamente texto plano que llegó como archivo → se guarda 'paste', y el
+ * archivo real sigue identificado por original_name + storage_path. Cero
+ * migración, cero pérdida de procedencia.
+ */
+export function sourceKindFor(kind: FileKind): string {
+  return kind === "text" ? "paste" : kind;
 }
 
 /** Clave de Storage segura: conserva la extensión, sanea el resto (como ImportarScreen). */

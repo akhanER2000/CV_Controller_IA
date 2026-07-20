@@ -4,13 +4,13 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useT } from "@/lib/i18n";
+import { AuroraTune, AURORA_TRABAJO } from "@/components/Aurora";
 import { Breadcrumb } from "@/components/Breadcrumb";
 import "./salud.css";
 
 /* ============================================================================
    Salud de la variante — porte de corpus-design/04-pantallas/salud.html
-   (ver docs/spec/pantallas/salud.md). MURO: NO monta la aurora
-   ("donde hay trabajo que leer, hay muro"). Sin score, sin barras, sin
+   (ver docs/spec/pantallas/salud.md). Sin score, sin barras, sin
    umbrales, sin porcentajes. Solo lo que PUEDE fallar; cada hallazgo con su
    fuente ([fuente] = evidencia citada · [criterio] = decisión de diseño).
    "Todo en orden" = silencio (se deriva de los datos, no es un toggle de UI).
@@ -192,6 +192,8 @@ export function SaludScreen() {
 
   return (
     <div className="c-page">
+      {/* Leer hallazgos con su cita es trabajo denso: el humo baja. */}
+      <AuroraTune strength={AURORA_TRABAJO} />
       <header className="c-header">
         <div className="c-container">
           <Link className="c-logo" href="/app">

@@ -227,8 +227,11 @@
   /* Escalonado (verificado en la referencia: 80/160/240/320/400 ms) */
   --stagger-step: 80ms;
 
-  /* Intensidad del fondo vivo. Un solo número gobierna todo el humo. */
-  --aurora-strength: 0.55;   /* 0.35 discreto · 0.55 ★ · 0.8 fuerte */
+  /* Intensidad del fondo vivo. Un solo número gobierna todo el humo.
+     Es un DIAL, no un interruptor: ninguna pantalla apaga la aurora, las densas
+     la bajan. El valor de reposo (hojear/esperar) es 0.55; las pantallas de
+     trabajo denso lo bajan a 0.22 desde React (Aurora.tsx → AURORA_TRABAJO). */
+  --aurora-strength: 0.55;   /* 0.22 trabajo denso · 0.55 ★ hojeo · 0.8 fuerte */
 }
 
 /* ── TIPOGRAFÍA (sin cambios: el reparto de tres voces ES el posicionamiento) ── */
@@ -264,6 +267,14 @@
 
   /* Capas */
   --z-aurora: 0; --z-page: 1; --z-header: 10; --z-overlay: 100;
+
+  /* Superficies de vidrio. Mismo color que --surface/--bg pero con un resto de
+     transparencia: el contenido conserva SU superficie y la atmósfera se intuye
+     detrás. Se resuelven en el sitio de uso, así que siguen al tema solas.
+     NO llevan backdrop-filter: el desenfoque lo pone UNA vez el contenedor
+     (.c-wall), no cada tarjeta — ver la nota de coste en §3. */
+  --surface-glass: color-mix(in srgb, var(--surface) 88%, transparent);
+  --bg-glass:      color-mix(in srgb, var(--bg) 86%, transparent);
 
   /* Sombras y glow (grafito) */
   --shadow-1: 0 1px 2px rgba(0,0,0,.45);
@@ -373,12 +384,16 @@ a.c-logo:hover{text-decoration:none;color:var(--text)}
   box-shadow:0 0 0 3px color-mix(in srgb,var(--focus-ring) 16%,transparent)}
 .c-label{display:block;font:500 var(--fs-ui)/1 var(--font-sans);color:var(--text-muted);margin-bottom:8px}
 
-/* ── Superficies ── */
-.c-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-md)}
+/* ── Superficies ──
+   Translúcidas (--surface-glass), no opacas: el contenido conserva SU superficie
+   y la atmósfera se intuye detrás. Sin backdrop-filter propio — el desenfoque lo
+   pone el contenedor .c-wall una sola vez (§3), así que una lista de 200 filas
+   sigue costando UNA capa de composición. */
+.c-card{background:var(--surface-glass);border:1px solid var(--border);border-radius:var(--radius-md)}
 .c-card--elevated{background:var(--surface-elevated)}
 .c-hairgrid{display:grid;gap:1px}
 .c-hairgrid--bento{gap:2px}
-.c-hairgrid>*{background:var(--surface);border-radius:0}
+.c-hairgrid>*{background:var(--surface-glass);border-radius:0}
 .c-override{border-left:2px solid var(--border-patina)}
 
 /* ── Chips y filas de datos ── */
@@ -422,8 +437,31 @@ a.c-logo:hover{text-decoration:none;color:var(--text)}
 
 /* ============================================================================
    CORPUS · aurora.css — el fondo vivo y su gramática de capas
-   ventana / muro / velo / panel  ·  el dial es --aurora-strength (tokens.css)
-   El humo NUNCA lleva contenido. Atmósfera ≠ señal.
+   El dial es --aurora-strength (tokens.css). El humo NUNCA lleva contenido.
+   Atmósfera ≠ señal.
+
+   ── LA DOCTRINA ────────────────────────────────────────────────────────────
+   La aurora está SIEMPRE presente — es la atmósfera del producto, no una
+   decoración por pantalla. Lo que protege la lectura no es su ausencia, sino
+   la SUPERFICIE sobre la que vive el contenido.
+
+   Esto DEROGA la gramática vieja «ventana / muro» («donde hay trabajo que leer,
+   hay muro; los muros ni montan la aurora»). Aquella regla venía de una landing,
+   donde las secciones se alternan al hacer scroll y la alternancia se
+   experimenta EN SECUENCIA: eso produce ritmo. Corpus no es una página que se
+   recorre — es una app de pestañas. Nunca ves la alternancia: pulsas Master y no
+   hay humo, pulsas Fuentes y sí. Eso no se lee como ritmo, se lee como
+   inconsistencia. Así que ninguna pantalla apaga el humo:
+
+     · hojear o esperar (Panel vacío, Importar, Ingesta, galería, Fuentes,
+       Variantes, Ajustes, login) → --aurora-strength 0.55, sin superficie.
+     · trabajo denso (Master poblado, editor, staging, tailoring, salud, Panel
+       poblado) → 0.22 (presente, perceptible al pasar, nunca protagonista) Y el
+       contenido sobre vidrio.
+
+   Quien vuelva a poner un `background:var(--bg)` opaco a pantalla completa, o a
+   condicionar el montaje de <Aurora> por pantalla, está reinstalando el error.
+   El montaje es UNO SOLO y vive en el shell (src/app/app/layout.tsx).
    ============================================================================ */
 
 /* El contenedor del humo: fijo, detrás de todo, sin eventos */
@@ -440,14 +478,41 @@ a.c-logo:hover{text-decoration:none;color:var(--text)}
     radial-gradient(30% 26% at 74% 18%, rgba(184,115,51,.16), transparent 70%),
     radial-gradient(36% 30% at 62% 78%, rgba(173,182,194,.12), transparent 70%),
     radial-gradient(26% 22% at 38% 66%, rgba(31,110,90,.28), transparent 70%)}
+/* El fallback también sigue el dial: al cambiar de pestaña la intensidad baja o
+   sube sin salto. Bajo reduced-motion se queda el salto seco a propósito (ahí el
+   fallback ES la equivalencia estática: se pierde el movimiento, no la info). */
+@media (prefers-reduced-motion: no-preference){
+  .c-aurora-fallback{transition:opacity var(--dur-deliberate) var(--ease-signature)}
+}
 
-/* ── La gramática ventana / muro ─────────────────────────────────────────────
-   El humo no se tapa con un velo por defecto: las secciones son OPACAS (muro)
-   y algunas se declaran transparentes (ventana). Donde hay trabajo que leer,
-   hay muro. El fondo respira entre ambas. */
+/* ── Las dos superficies de pantalla ─────────────────────────────────────────
+   .c-window  → sin superficie: el humo llega entero. Hojear, esperar, entrar.
+   .c-wall    → CONSERVA EL NOMBRE (es el contrato diseño↔código en 8 pantallas)
+                pero ya NO es una pared: es la LÁMINA DE VIDRIO de una pantalla
+                densa. Un velo mínimo + UN solo desenfoque para toda la pantalla.
+
+   Dos decisiones que no son cosméticas:
+
+   1) El vidrio va en un PSEUDO-ELEMENTO, no en el elemento. `backdrop-filter`
+      crea bloque contenedor para los descendientes `position:fixed`; puesto en
+      el <main> rompería los overlays fijos de sus pantallas (p.ej. .stg-kbd).
+      En ::before no tiene descendientes, así que no rompe nada. Es el mismo
+      patrón que ya usa .c-scrim aquí abajo.
+
+   2) ⚠ COSTE — el vidrio se paga UNA VEZ POR PANTALLA, no una vez por fila.
+      Master puede pintar cientos de items: `backdrop-filter` en cada tarjeta
+      serían cientos de capas de composición y un scroll a tirones. La regla es:
+      el DESENFOQUE lo pone el contenedor (.c-wall) y las filas solo llevan
+      COLOR translúcido (--surface-glass / --bg-glass / .c-panel--solid), que se
+      compone encima del desenfoque que el contenedor ya pintó. Efecto idéntico,
+      una sola capa. .c-panel (con su propio filtro) es para tarjetas SUELTAS,
+      pocas por pantalla — nunca para el item de una lista larga. */
 .c-window{position:relative;background:transparent}
-.c-wall{position:relative;background:var(--bg)}
-.c-wall--surface{background:var(--surface)}
+.c-wall{position:relative;background:transparent}
+.c-wall::before{content:"";position:absolute;inset:0;z-index:-1;pointer-events:none;
+  background:color-mix(in srgb,var(--bg) 52%,transparent);
+  backdrop-filter:blur(18px) saturate(1.08);-webkit-backdrop-filter:blur(18px) saturate(1.08)}
+.c-wall--surface::before{background:color-mix(in srgb,var(--surface) 60%,transparent)}
 
 /* Velo: cuando hay texto directamente sobre una ventana.
    Usa siempre el mínimo que deje leer. */
@@ -461,12 +526,21 @@ a.c-logo:hover{text-decoration:none;color:var(--text)}
   color-mix(in srgb,var(--bg) 30%,transparent) 60%,
   color-mix(in srgb,var(--bg) 78%,transparent))}
 
-/* Panel: vidrio ahumado. Deja intuir el humo sin comerse una letra. */
+/* Panel: vidrio ahumado. Deja intuir el humo sin comerse una letra.
+   Trae su PROPIO backdrop-filter: es para tarjetas sueltas (puertas del día 1,
+   tarjetas de Fuentes, el panel de login), pocas por pantalla. */
 .c-panel{position:relative;
   background:color-mix(in srgb,var(--surface) 64%,transparent);
   backdrop-filter:blur(14px) saturate(1.15);-webkit-backdrop-filter:blur(14px) saturate(1.15);
   border:1px solid var(--border);border-radius:var(--radius-lg);box-shadow:var(--shadow-2)}
 [data-theme="light"] .c-panel{background:color-mix(in srgb,var(--surface) 78%,transparent)}
+
+/* Panel para LISTAS LARGAS: más opaco (el texto denso manda) y SIN filtro
+   propio — se apoya en el desenfoque que ya puso su contenedor .c-wall.
+   Es la variante que evita que 200 items cuesten 200 capas de composición. */
+.c-panel--solid{background:var(--surface-glass);
+  backdrop-filter:none;-webkit-backdrop-filter:none}
+[data-theme="light"] .c-panel--solid{background:var(--surface-glass)}
 
 
 /* ============================================================================

@@ -6,6 +6,7 @@ import { fetchGithubUser } from "@/lib/extract/github";
 import { fetchViaJina } from "@/lib/extract/web";
 import { ensureMaster, persistImport } from "@/lib/db/queries";
 import { extractFile, extractDepsFor, type FileKind } from "@/lib/extract/files";
+import { sourceKindFor } from "@/lib/db/sources";
 import { getUserLlmKey } from "@/lib/account/byok";
 
 // Esperar el I/O del LLM no cuenta como Active CPU en Fluid Compute → timeout
@@ -20,7 +21,7 @@ interface FileRef {
   kind?: string;
 }
 
-const FILE_KINDS: readonly string[] = ["pdf", "docx", "image"];
+const FILE_KINDS: readonly string[] = ["pdf", "docx", "image", "text"];
 const asKind = (k: unknown): FileKind | null =>
   typeof k === "string" && FILE_KINDS.includes(k) ? (k as FileKind) : null;
 
@@ -136,6 +137,9 @@ export async function POST(req: Request) {
       { pastedText: text, files: forPipeline },
       { extract: makeGeminiExtractor(byok), fetchGithubUser, fetchWeb: fetchViaJina },
     );
+    // Avisos de la LECTURA (p. ej. documento tan largo que no cupo entero): van a
+    // la UI junto a los de cada archivo. Nada se descarta en silencio.
+    warnings.push(...result.warnings);
     await ensureMaster(sb, user.id);
     const { sourceId, staged } = await persistImport(sb, user.id, result);
 
@@ -145,7 +149,9 @@ export async function POST(req: Request) {
       const { error: fsErr } = await sb.from("ingestion_sources").insert(
         fileSources.map((f) => ({
           user_id: user.id,
-          kind: f.kind,
+          // 'text' no existe en el enum de la BD: un .md/.txt se guarda como
+          // 'paste' (que es lo que es) sin perder original_name ni storage_path.
+          kind: sourceKindFor(f.kind),
           original_name: f.name,
           storage_path: f.path,
           status: f.status,

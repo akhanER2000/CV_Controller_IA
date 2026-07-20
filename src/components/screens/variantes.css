@@ -7,7 +7,7 @@
 .vr-lead p{color:var(--text-muted);font-size:var(--fs-ui);max-width:60ch}
 .vr-lead p b{color:var(--text);font-weight:500}
 .vr-list{border:1px solid var(--border);border-radius:var(--radius-md);overflow:hidden;margin-top:8px}
-.vr-row{background:var(--surface);border-top:1px solid var(--border);padding:0}
+.vr-row{background:var(--surface-glass);border-top:1px solid var(--border);padding:0}
 .vr-row:first-child{border-top:0}
 .vr-top{display:grid;grid-template-columns:1fr auto auto auto auto;gap:4px 18px;align-items:center;padding:14px 20px;cursor:pointer}
 .vr-top:hover{background:var(--surface-elevated)}

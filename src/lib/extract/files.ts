@@ -16,6 +16,10 @@ import { transcribeImage, transcribePdf, geminiApiKey } from "./llm";
  *                              literal (isTranscription=true). Sin IA o si es muy
  *                              grande, cae al aviso honesto de "sube una captura".
  *  · DOCX                    → mammoth (extractRawText) → raw_text.
+ *  · TEXTO (.md/.txt)        → el contenido YA ES el raw_text: se decodifica UTF-8
+ *                              y se devuelve tal cual. Cero extracción, cero LLM,
+ *                              cero OCR — la ruta más barata y fiable del pipeline
+ *                              (y la de mayor fidelidad: nada se interpreta).
  *  · Imagen (png/jpg/webp)   → ⚠️ TRANSCRIPCIÓN VERBATIM con transcribeImage ANTES
  *                              de extraer nada (marca isTranscription=true), para
  *                              que la verificación de evidencia (§4.4) corra sobre
@@ -25,7 +29,7 @@ import { transcribeImage, transcribePdf, geminiApiKey } from "./llm";
  * se prueban sin LLM en vivo.
  */
 
-export type FileKind = "pdf" | "docx" | "image";
+export type FileKind = "pdf" | "docx" | "image" | "text";
 
 export interface ExtractInput {
   kind: FileKind;
@@ -92,9 +96,48 @@ function imageMime(name?: string, mime?: string): string {
 }
 
 export async function extractFile(input: ExtractInput, deps: ExtractDeps = realDeps()): Promise<ExtractedFile> {
+  if (input.kind === "text") return extractPlainText(input.bytes);
   if (input.kind === "docx") return extractDocx(input.bytes);
   if (input.kind === "pdf") return extractPdf(input.bytes, deps);
   return extractImage(input.bytes, imageMime(input.name, input.mime), deps);
+}
+
+/** Por encima de esta proporción de caracteres irrecuperables, no es texto: es binario. */
+const MAX_REPLACEMENT_RATIO = 0.02;
+
+/**
+ * TEXTO PLANO (.md / .markdown / .txt): el contenido ES el raw_text. Se decodifica
+ * UTF-8 en estricto; si el archivo no es UTF-8 válido se reintenta en tolerante y
+ * se AVISA (no se finge una lectura limpia). Si lo tolerante sale lleno de basura
+ * (U+FFFD por encima del umbral), no era un archivo de texto: se dice, y no se
+ * devuelve el ruido como si fuera el material del usuario.
+ */
+function extractPlainText(bytes: Uint8Array): ExtractedFile {
+  if (bytes.byteLength === 0) {
+    return { text: "", isTranscription: false, warning: "El archivo de texto estaba vacío." };
+  }
+  try {
+    const text = new TextDecoder("utf-8", { fatal: true }).decode(bytes).trim();
+    if (!text) return { text: "", isTranscription: false, warning: "El archivo de texto estaba vacío." };
+    return { text, isTranscription: false };
+  } catch {
+    // No es UTF-8 válido (¿latin-1? ¿binario con otra extensión?). Se lee lo que
+    // se pueda y se dice claramente que hubo caracteres que no se pudieron leer.
+    const loose = new TextDecoder("utf-8").decode(bytes);
+    const bad = (loose.match(/�/g) ?? []).length;
+    if (!loose.trim() || bad / loose.length > MAX_REPLACEMENT_RATIO) {
+      return {
+        text: "",
+        isTranscription: false,
+        warning: "El archivo no se pudo leer como texto UTF-8 (¿es realmente un .txt/.md?). No inventamos lo que no se lee.",
+      };
+    }
+    return {
+      text: loose.trim(),
+      isTranscription: false,
+      warning: `El archivo no es UTF-8 válido: ${bad} caracteres no se pudieron decodificar y se leyó el resto.`,
+    };
+  }
 }
 
 async function extractDocx(bytes: Uint8Array): Promise<ExtractedFile> {

@@ -92,8 +92,54 @@ literalmente en `motion.css` (línea 33: `@media (prefers-reduced-motion: no-pre
   (líneas 435–463 en todas). **Total UNy;ICO de keyframes en el paquete = 7.** (Verificación abajo, §Contradicciones.)
 - **La aurora** (`aurora.js`): `calm` por defecto; `active` **solo** durante la ingesta. Se pausa al
   enfocar un campo (el editor es sagrado), con la pestaña oculta, y bajo demanda. Un dial:
-  `--aurora-strength` (0.35 discreto · 0.55 ★ · 0.8 fuerte). Solo las VENTANAS la montan; los MUROS no.
+  `--aurora-strength` (0.22 trabajo denso · 0.55 ★ hojeo · 0.8 fuerte).
+  **Se monta UNA sola vez por shell** (`src/app/app/layout.tsx` para las diez pantallas de la app;
+  `AuthScreen` y la landing, que quedan fuera de ese layout, montan la suya). Ninguna pantalla de
+  dentro la monta: cada una **declara su intensidad** con `<AuroraTune>` (`src/components/Aurora.tsx`).
+  ⚠ *Deroga* la regla anterior «solo las VENTANAS la montan; los MUROS no» — ver §2 bis.
 
+
+---
+
+## 2 bis · La atmósfera — doctrina vigente
+
+> **La aurora está SIEMPRE presente — es la atmósfera del producto, no una decoración por pantalla.
+> Lo que protege la lectura no es su ausencia, sino la SUPERFICIE sobre la que vive el contenido.**
+
+**Qué deroga.** La gramática **ventana / muro** («las secciones son opacas (muro) y algunas
+transparentes (ventana); donde hay trabajo que leer, hay muro; los muros ni montan la aurora») era un
+**error de diseño**, no de implementación. Salió de una *landing*: allí las secciones se alternan al
+hacer scroll y la alternancia se experimenta **en secuencia**, y eso produce ritmo. **Corpus no es una
+página que se recorre: es una app de pestañas.** Nunca ves la alternancia — pulsas Master y no hay
+humo, pulsas Fuentes y sí. Eso no se lee como ritmo: se lee como **inconsistencia**.
+
+**Las tres reglas que la sustituyen.**
+
+1. **Un solo montaje, en el shell.** `<Aurora>` vive en `src/app/app/layout.tsx` y cubre las diez
+   pantallas (Panel · Master · Variantes · Editor · Staging · Tailoring · Salud · Fuentes · Importar ·
+   Ajustes). Fuera de ese layout montan la suya `AuthScreen` (login/signup/auth) y la landing.
+   Montar diez veces obligaba a un baile de `pause`/`resume` por pantalla, y una razón pausada y nunca
+   levantada dejaba el fondo **congelado toda la sesión** (pasó de verdad con `'corpus-hojeo'`).
+2. **Se modula, no se enciende y apaga.** Cada pantalla declara su intensidad con `<AuroraTune>`:
+   **0.55** al hojear o esperar (Panel vacío · Importar · Ingesta · galería · Fuentes · Variantes ·
+   Ajustes · Onboarding · login) y **0.22** en trabajo denso (Master poblado · editor · staging ·
+   tailoring · salud · Panel poblado). El cambio entre pestañas se interpola (~520 ms): sin escalón.
+   `setState('active')` sigue siendo **solo** la ingesta.
+3. **El contenido, sobre vidrio.** En las pantallas densas `.c-wall` ya **no es una pared opaca**:
+   conserva el nombre (es el contrato en 8 pantallas) pero es la **lámina de vidrio** de la pantalla —
+   velo mínimo + **un** `backdrop-filter`, en un pseudo-elemento para no crear bloque contenedor y
+   romper los `position:fixed` de sus overlays. Encima, las superficies de item son **translúcidas sin
+   filtro propio** (`--surface-glass`, `--bg-glass`, `.c-panel--solid`).
+   ⚠ **Coste:** el vidrio se paga **una vez por pantalla, no una vez por fila**. `backdrop-filter` en
+   cada item de una lista de 200 son 200 capas de composición. El desenfoque lo pone el **contenedor**;
+   las filas solo llevan color. `.c-panel` (con filtro propio) es para tarjetas **sueltas**.
+
+**Los frenos no se tocan.** La aurora se pausa al enfocar cualquier campo (`'focus'`, lo cablea
+`motion.js`: mientras se escribe no se mueve nada), con la pestaña oculta (`'hidden'`), y bajo
+`prefers-reduced-motion` cae al fallback estático. **Cero scroll-reveal dentro de la app.**
+
+*(Las secciones «§2 · Ventana o muro · Aurora» de `docs/spec/pantallas/*.md` documentan el paquete de
+diseño original tal como se entregó: son **histórico**, no la regla vigente. La regla vigente es esta.)*
 ---
 
 ## 3 · Densidad y tipografía — reglas duras
@@ -142,7 +188,9 @@ Prohibiciones (cada una con su ratio de falla):
 - ❌ **Cobre / plata / acero en la UI.** Solo en el shader de fondo. Prohibidos como señal.
 - **≤ 1 elemento de pátina dominante por vista.** La pátina es el único acento interactivo.
 - Ratios de referencia (grafito): `patina-100` 10.99:1 · `patina-300` 9.47:1 (enlaces/focus) · `patina-500` 7.66:1 (★ marca/CTA) · `patina-700` 5.74:1 (sobre claro) · `patina-900` 7.99:1 (hover claro).
-- **Ventana / muro:** el humo no se tapa con velos; las secciones son opacas (muro) y algunas transparentes (ventana). **Donde hay trabajo que leer, hay muro.**
+- **Atmósfera constante (deroga «ventana / muro»):** la aurora está **siempre** presente — es la
+  atmósfera del producto, no una decoración por pantalla. Lo que protege la lectura no es su
+  ausencia, sino la **superficie** sobre la que vive el contenido. Ver §2 bis.
 - «Sin evidencia» = **borde punteado + glifo + palabra**, nunca solo color.
 - El fondo vivo es **WebGL2 crudo, cero dependencias** (fBm + domain warping). Fallback estático CSS para reduce-motion y sin WebGL2 — misma atmósfera, cero movimiento.
 - Temas: `data-theme="dark|light"` en `<html>`; contrastes verificados en `tokens.css`; focus-visible con anillo `--focus-ring`.

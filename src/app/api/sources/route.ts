@@ -13,6 +13,7 @@ import {
   isOwnedPath,
   parseGithubHandle,
   githubSourceUrl,
+  sourceKindFor,
 } from "@/lib/db/sources";
 
 // Esperar el I/O del LLM no cuenta como Active CPU en Fluid Compute → timeout
@@ -146,7 +147,7 @@ export async function POST(req: Request) {
       for (const ref of files) {
         const path = typeof ref.path === "string" ? ref.path : "";
         const name = (typeof ref.name === "string" && ref.name) || (path.split("/").pop() ?? "archivo");
-        const fk = fileKindFromName(name) ?? ((["pdf", "docx", "image"] as const).includes(ref.kind as FileKind) ? (ref.kind as FileKind) : null);
+        const fk = fileKindFromName(name) ?? ((["pdf", "docx", "image", "text"] as const).includes(ref.kind as FileKind) ? (ref.kind as FileKind) : null);
         if (!fk || !path) {
           warnings.push(`«${name}»: referencia de archivo inválida (tipo o ruta).`);
           continue;
@@ -167,7 +168,7 @@ export async function POST(req: Request) {
             const { sourceId } = await persistSource(
               sb,
               user.id,
-              { kind: fk, originalName: name, storagePath: path, pageCount: ex.pageCount ?? null, rawText: null, rawTextIsTranscription: ex.isTranscription, status: "failed", error: ex.warning ?? "sin texto legible" },
+              { kind: sourceKindFor(fk), originalName: name, storagePath: path, pageCount: ex.pageCount ?? null, rawText: null, rawTextIsTranscription: ex.isTranscription, status: "failed", error: ex.warning ?? "sin texto legible" },
               [],
             );
             sourceIds.push(sourceId);
@@ -175,15 +176,18 @@ export async function POST(req: Request) {
           }
 
           const result = await runImport({ pastedText: "", files: [{ label: name, text: ex.text }] }, deps);
+          // 'text' no existe en el enum de la BD: se persiste como 'paste' (que es
+          // lo que es) conservando original_name y storage_path.
           const { sourceId, staged: n } = await persistSource(
             sb,
             user.id,
-            { kind: fk, originalName: name, storagePath: path, pageCount: ex.pageCount ?? null, rawText: result.rawText, rawTextIsTranscription: ex.isTranscription, status: "extracted" },
+            { kind: sourceKindFor(fk), originalName: name, storagePath: path, pageCount: ex.pageCount ?? null, rawText: result.rawText, rawTextIsTranscription: ex.isTranscription, status: "extracted" },
             result.staged,
           );
           sourceIds.push(sourceId);
           staged += n;
           counts = addCounts(counts, result.counts);
+          warnings.push(...result.warnings);
         } catch (e) {
           warnings.push(`«${name}»: no se pudo procesar (${msg(e)}).`);
         }
@@ -240,7 +244,7 @@ export async function POST(req: Request) {
         { kind: "url", sourceUrl: url, rawText: result.rawText, status: "extracted" },
         result.staged,
       );
-      return NextResponse.json({ sourceId, sourceIds: [sourceId], staged, counts: result.counts, sources: result.sources, warnings: [] });
+      return NextResponse.json({ sourceId, sourceIds: [sourceId], staged, counts: result.counts, sources: result.sources, warnings: result.warnings });
     }
 
     // ── TEXTO PEGADO ──────────────────────────────────────────────────────────
@@ -264,7 +268,7 @@ export async function POST(req: Request) {
         counts: result.counts,
         sources: result.sources,
         linkedin: result.linkedin,
-        warnings: [],
+        warnings: result.warnings,
       });
     }
 

@@ -28,6 +28,35 @@ export function normalize(s: string): string {
 // ── Evidencia ────────────────────────────────────────────────────────────────
 export type EvidenceLevel = "verified" | "partial" | "none";
 
+/* Memo de UNA entrada para la FUENTE (el argumento grande y repetido).
+ *
+ * La verificación es por item: el pipeline llama verifyEvidence(raw, ev) una vez
+ * por cada item extraído, siempre con EL MISMO `raw`. Con un dossier de 106k
+ * caracteres y 150+ items, eso normalizaba el documento entero 150 veces —
+ * trabajo cuadrático invisible que crece justo cuando el usuario sube su
+ * material más valioso. Una entrada basta (las llamadas vienen en ráfaga sobre
+ * la misma fuente) y no cambia NADA de la semántica: mismo resultado, mismos
+ * niveles, mismos tests. Solo se evita repetir un cálculo idéntico.
+ */
+let memoRaw: string | null = null;
+let memoNorm = "";
+let memoTokens: Set<string> | null = null;
+
+function sourceNormalized(rawText: string): string {
+  if (memoRaw !== rawText) {
+    memoRaw = rawText;
+    memoNorm = normalize(rawText);
+    memoTokens = null; // se recalcula solo si hace falta (fallback difuso)
+  }
+  return memoNorm;
+}
+
+function sourceTokens(rawText: string): Set<string> {
+  const src = sourceNormalized(rawText);
+  if (!memoTokens) memoTokens = new Set(src.split(/[^a-z0-9]+/));
+  return memoTokens;
+}
+
 /**
  * ¿La evidencia citada está en el texto crudo de la fuente?
  *  · verified: coincidencia literal (normalizada).
@@ -35,7 +64,7 @@ export type EvidenceLevel = "verified" | "partial" | "none";
  *  · none    : ni eso → borde punteado + glifo + palabra en la UI, nunca solo color.
  */
 export function verifyEvidence(rawText: string, evidence: string): EvidenceLevel {
-  const src = normalize(rawText);
+  const src = sourceNormalized(rawText);
   const ev = normalize(evidence);
   if (!ev) return "none";
   if (src.includes(ev)) return "verified";
@@ -44,7 +73,7 @@ export function verifyEvidence(rawText: string, evidence: string): EvidenceLevel
   // no debe romper la coincidencia de tokens.
   const evTokens = ev.split(/[^a-z0-9]+/).filter((t) => t.length > 2);
   if (evTokens.length === 0) return "none";
-  const srcTokens = new Set(src.split(/[^a-z0-9]+/));
+  const srcTokens = sourceTokens(rawText);
   const hits = evTokens.filter((t) => srcTokens.has(t)).length;
   return hits / evTokens.length >= 0.7 ? "partial" : "none";
 }

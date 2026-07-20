@@ -2,10 +2,11 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { Aurora } from "@/components/Aurora";
+import { AuroraTune, AURORA_HOJEO } from "@/components/Aurora";
 import { DropZone } from "@/components/DropZone";
 import { Breadcrumb, readOrigin, withOrigin } from "@/components/Breadcrumb";
 import { createClient } from "@/lib/supabase/client";
+import { fileKindFromName, FILE_ACCEPT, type FileKind } from "@/lib/db/sources";
 import { useT } from "@/lib/i18n";
 import "./importar.css";
 
@@ -37,8 +38,6 @@ import "./importar.css";
 type Screen = "idle" | "ingest" | "done";
 type Kind = "github" | "linkedin" | "web";
 type RowState = "run" | "ok" | "err";
-/** Tipos de archivo que subimos y extraemos (PDF unpdf / DOCX mammoth / imagen transcrita). */
-type FileKind = "pdf" | "docx" | "image";
 type UploadStatus = "uploading" | "ok" | "error";
 
 interface Source {
@@ -130,7 +129,8 @@ function detectSources(txt: string): Source[] {
    la etiqueta del archivo; el texto visible se resuelve con t(f.tag) al pintar. */
 function tagFor(name: string): string {
   const ext = (name.split(".").pop() ?? "").toLowerCase();
-  if (ext === "md") return "importar.tag.md";
+  if (ext === "md" || ext === "markdown") return "importar.tag.md";
+  if (ext === "txt" || ext === "text") return "importar.tag.text";
   if (ext === "pdf") return "pdf";
   if (ext === "docx" || ext === "doc") return "docx";
   if (["png", "jpg", "jpeg", "webp"].includes(ext)) return "importar.tag.image";
@@ -143,14 +143,11 @@ function fmtSize(b: number): string {
     : Math.max(1, Math.round(b / 1024)) + " KB";
 }
 
-/** Tipo de archivo que sabemos extraer. null = no soportado (se avisa, no se sube). */
-function kindFor(name: string, mime: string): FileKind | null {
-  const ext = (name.split(".").pop() ?? "").toLowerCase();
-  if (mime === "application/pdf" || ext === "pdf") return "pdf";
-  if (ext === "docx" || mime === "application/vnd.openxmlformats-officedocument.wordprocessingml.document") return "docx";
-  if (mime.startsWith("image/") || ["png", "jpg", "jpeg", "webp"].includes(ext)) return "image";
-  return null;
-}
+/* El detector de tipo vive en @/lib/db/sources (fileKindFromName), compartido con
+   Fuentes y con las rutas de API. Antes había aquí una copia que NO reconocía el
+   .md — el mismo .md que la zona de arrastre lleva anunciando como fuente
+   soportada: la interfaz se contradecía con su propio validador delante del
+   usuario. Una sola lista, un solo sitio. */
 
 /** Clave de Storage segura: conserva la extensión, sanea el resto. */
 function safeName(name: string): string {
@@ -302,7 +299,7 @@ export function ImportarScreen() {
   }
 
   async function uploadOne(file: File, id: string) {
-    const kind = kindFor(file.name, file.type || "");
+    const kind = fileKindFromName(file.name, file.type || undefined);
     if (!kind) {
       patchFile(id, { status: "error", error: t("importar.file.unsupported") });
       return;
@@ -440,7 +437,9 @@ export function ImportarScreen() {
           ? t("importar.log.transcribing")
           : f.kind === "pdf"
             ? t("importar.log.readingPdf")
-            : t("importar.log.readingDocx");
+            : f.kind === "text"
+              ? t("importar.log.readingText")
+              : t("importar.log.readingDocx");
       rowIds.push(logRow(f.name, det, "run"));
     }
     for (const s of src) {
@@ -486,7 +485,9 @@ export function ImportarScreen() {
 
   return (
     <div className="c-page">
-      <Aurora state="calm" />
+      {/* El fondo vivo lo monta UNA vez el shell de /app; aquí solo se declara la
+          intensidad. Volcar es hojear y esperar, así que va al valor alto. */}
+      <AuroraTune strength={AURORA_HOJEO} />
 
       <header className="c-header">
         <div className="c-container">
@@ -609,6 +610,7 @@ export function ImportarScreen() {
             <DropZone
               id="drop"
               className="imp-drop"
+              accept={FILE_ACCEPT}
               multiple
               onFiles={addFiles}
               label={

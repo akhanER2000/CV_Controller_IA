@@ -5,13 +5,18 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useT, useLang } from "@/lib/i18n";
 import { supabaseEnabled } from "@/lib/supabase/config";
+import { AuroraTune, AURORA_HOJEO } from "@/components/Aurora";
 import { useUndoToast } from "@/components/UndoToast";
 import "./variantes.css";
 
 /* ============================================================================
    Variantes — porte de corpus-design/04-pantallas/variantes.html
-   (ver docs/spec/pantallas/variantes.md). MURO: NO monta la aurora. Fondo
-   var(--bg) sólido.
+   (ver docs/spec/pantallas/variantes.md).
+
+   Atmósfera: la monta el shell (app/app/layout), no esta pantalla; aquí solo se
+   declara la intensidad. Una parrilla de variantes se HOJEA, así que el humo va
+   entero (0.55). Antes era un MURO opaco que no la montaba — regla heredada de
+   una landing con scroll (ver la doctrina en src/components/Aurora.tsx).
 
    ★ CABLEADO A DATOS REALES. En modo Supabase la lista sale de /api/variants
    (cv_variants del usuario, RLS por auth.uid()) y el «N variantes» se DERIVA del
@@ -479,6 +484,8 @@ export function VariantesScreen() {
 
   return (
     <div className="c-page">
+      {/* Galería de variantes: se hojea, no se redacta. El humo, entero. */}
+      <AuroraTune strength={AURORA_HOJEO} />
       <header className="c-header">
         <div className="c-container">
           <Link className="c-logo" href="/app">
