@@ -202,5 +202,67 @@
 /* Fila densa: los campos van uno al lado del otro, cada uno el suyo. */
 .ms-row__fields{flex:1;min-width:0;display:flex;flex-wrap:wrap;gap:4px 10px;align-items:baseline}
 
+/* ── A4 · posibles duplicados ya en el master ─────────────────────────────────
+   La marca es un BOTÓN, no un cartel: la única salida de un duplicado es mirarlo.
+   Usa el color de aviso, no el de peligro: nada está roto, hay algo que decidir. */
+.ms-dup__mark{display:inline-flex;align-items:baseline;gap:6px;margin:6px 0 0;padding:3px 8px;
+  border:1px solid color-mix(in srgb,var(--warn,var(--danger)) 32%,transparent);border-radius:5px;
+  background:color-mix(in srgb,var(--warn,var(--danger)) 7%,transparent);
+  font:500 var(--fs-micro)/1.4 var(--font-mono);color:var(--text-muted);text-align:left}
+.ms-dup__mark:hover{color:var(--text);border-color:color-mix(in srgb,var(--warn,var(--danger)) 55%,transparent)}
+.ms-dup__mark:focus-visible{outline:2px solid var(--border-patina);outline-offset:1px}
+.ms-row .ms-dup__mark{margin:0}
+
+/* El comparador. Vive DENTRO de la tarjeta para que el filtro lo oculte con ella. */
+.ms-dup{margin:10px 0 4px;padding:14px 16px;background:var(--surface-sunken);
+  border:1px solid var(--border-strong);border-radius:var(--radius-md)}
+.ms-dup__h{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
+.ms-dup__h .t-overline{flex:1 1 auto}
+.ms-dup__lvl{font:500 var(--fs-micro)/1 var(--font-mono);padding:3px 7px;border-radius:999px;
+  color:var(--text-muted);border:1px solid var(--border)}
+.ms-dup__lvl--alta{color:var(--danger);border-color:color-mix(in srgb,var(--danger) 40%,transparent)}
+.ms-dup__lvl--media{color:var(--accent-text);border-color:var(--border-patina)}
+.ms-dup__x{font:500 var(--fs-micro)/1 var(--font-mono);color:var(--text-subtle);padding:2px 6px}
+.ms-dup__x:hover{color:var(--text)}
+.ms-dup__why{margin:8px 0 0;font:400 var(--fs-micro)/1.5 var(--font-mono);color:var(--text-muted)}
+.ms-dup__never{margin:2px 0 12px;font:400 var(--fs-micro)/1.5 var(--font-mono);color:var(--text-subtle)}
+
+/* Rejilla campo × versión. Las columnas las fija el inline style (dependen de
+   cuántas versiones haya: el volcado real trae clústeres de cuatro). */
+.ms-dup__grid{display:grid;gap:4px 8px;align-items:stretch;overflow-x:auto}
+.ms-dup__hd{font:600 var(--fs-micro)/1.3 var(--font-sans);color:var(--text);
+  padding:0 8px 6px;border-bottom:1px solid var(--border)}
+.ms-dup__hd em{display:block;font:400 var(--fs-micro)/1.4 var(--font-mono);color:var(--text-subtle);font-style:normal}
+.ms-dup__lb{font:400 var(--fs-micro)/1.4 var(--font-mono);color:var(--text-subtle);padding-top:7px}
+/* Cada celda es la ELECCIÓN de ese campo: se pincha, y se ve cuál gana. */
+.ms-dup__cell{text-align:left;padding:6px 8px;border:1px solid transparent;border-radius:5px;
+  font:400 var(--fs-micro)/1.5 var(--font-sans);color:var(--text-muted);background:var(--surface);
+  overflow-wrap:anywhere}
+.ms-dup__cell i{color:var(--text-subtle)}
+.ms-dup__cell:hover{border-color:var(--border-strong);color:var(--text)}
+.ms-dup__cell[aria-pressed="true"]{color:var(--text);border-color:var(--border-patina);
+  background:color-mix(in srgb,var(--accent-text) 8%,var(--surface))}
+.ms-dup__cell--both b{font:600 var(--fs-micro)/1 var(--font-mono);color:var(--accent-text);margin-right:6px}
+.ms-dup__bl{display:flex;flex-direction:column;gap:3px;padding:6px 8px;
+  font:400 var(--fs-micro)/1.5 var(--font-sans);color:var(--text-subtle)}
+
+.ms-dup__vin{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;margin-top:12px;
+  font:400 var(--fs-micro)/1.5 var(--font-mono);color:var(--text-muted)}
+.ms-dup__vin label{display:inline-flex;align-items:center;gap:6px;color:var(--text-subtle);cursor:pointer}
+
+.ms-dup__acts{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:14px}
+.ms-dup__keep,.ms-dup__merge{font:500 var(--fs-micro)/1 var(--font-mono);padding:8px 12px;
+  border:1px solid var(--border-strong);border-radius:5px;color:var(--text-muted)}
+.ms-dup__keep em{font-style:normal;color:var(--text-subtle)}
+.ms-dup__keep:hover,.ms-dup__merge:hover{color:var(--text);border-color:var(--border-patina)}
+.ms-dup__merge{border-color:var(--border-patina);color:var(--accent-text)}
+.ms-dup__keep:disabled,.ms-dup__merge:disabled{opacity:.45;cursor:default}
+.ms-dup__busy{font:400 var(--fs-micro)/1 var(--font-mono);color:var(--text-subtle)}
+.ms-dup .ms-blocked{margin:12px 0 0}
+
 @media (max-width:768px){.ms-draft{flex-wrap:wrap}.ms-draft__in{flex:1 1 100%}
-  .ms-date--open{flex:1 1 100%}}
+  .ms-date--open{flex:1 1 100%}
+  /* Con dos versiones y una pantalla estrecha la rejilla se lee en scroll
+     horizontal ANTES que apilada: comparar campo a campo exige verlos alineados. */
+  .ms-dup__grid{min-width:520px}
+  .ms-dup{overflow-x:auto}}

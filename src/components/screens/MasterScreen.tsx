@@ -14,8 +14,14 @@ import {
   normalizeSkillName,
   chipsFromCsv,
   chipsToCsv,
+  mergeChips,
 } from "@/lib/db/master";
 import type { ItemUsage } from "@/lib/db/master";
+// SOLO TIPOS: duplicados.ts arrastra el detector entero (dedup → similar → verify
+// → el diccionario TECH). El `import type` se borra al compilar, así que la
+// pantalla no se lleva nada de eso al bundle del navegador. Los datos que necesita
+// —campos comparables, viñetas, motivo— vienen ya calculados en el JSON del GET.
+import type { ClusterDuplicado, MiembroDuplicado } from "@/lib/db/duplicados";
 import "./master.css";
 
 /* ============================================================================
@@ -48,7 +54,7 @@ import "./master.css";
    - El estado vacío deriva de los datos (total === 0) y conserva su markup.
    ============================================================================ */
 
-type FilterKey = "all" | "sin-cifra" | "sin-evidencia" | "sin-fechas";
+type FilterKey = "all" | "sin-cifra" | "sin-evidencia" | "sin-fechas" | "posibles-duplicados";
 
 /* ── Vista unificada: la pintan los mismos helpers, venga de la demo o de la DB ─
    `id`/`data` cargan el profile_item REAL (null en la demo local) para que la
@@ -579,6 +585,7 @@ const FILTERS: { key: FilterKey; label: string }[] = [
   { key: "sin-cifra", label: "sin cifra" },
   { key: "sin-evidencia", label: "⚠ sin evidencia" },
   { key: "sin-fechas", label: "sin fechas" },
+  { key: "posibles-duplicados", label: "posibles duplicados" },
 ];
 
 /* Envuelve cada cifra visible en la voz mono `t-num`. */
@@ -859,6 +866,29 @@ export function MasterScreen() {
   const [openDate, setOpenDate] = useState<ReadonlySet<string>>(new Set());
   const [dateDraft, setDateDraft] = useState<Record<string, string>>({});
   const [dateError, setDateError] = useState<Record<string, "invalid" | "unreadable">>({});
+
+  /* A4 · limpieza retroactiva de duplicados. La sospecha NO se persiste: se pide
+     al servidor, que la calcula al vuelo sobre el master de ahora mismo. Resolver
+     un clúster muta el master, así que después de cada resolución se vuelve a
+     pedir todo — una marca cacheada quedaría rancia en ese mismo instante. */
+  const [dups, setDups] = useState<ClusterDuplicado[]>([]);
+  // id del item cuya tarjeta tiene el comparador abierto (no el del clúster: el
+  // panel se pinta bajo la tarjeta que el usuario pinchó, que es la que mira).
+  const [openDup, setOpenDup] = useState<string | null>(null);
+  // «${clusterId}:${campo}» → id del miembro elegido, o "ambas" en las listas.
+  const [dupPick, setDupPick] = useState<Record<string, string>>({});
+  const [dupVinetas, setDupVinetas] = useState<"reenganchar" | "descartar">("reenganchar");
+  const [dupBusy, setDupBusy] = useState(false);
+  // El RESTRICT de variantes. Guarda los argumentos EXACTOS de la llamada que se
+  // bloqueó: reintentar con force tiene que repetir la decisión del usuario, no
+  // una reconstruida (que podría no ser la que él vio).
+  const [dupBlocked, setDupBlocked] = useState<
+    {
+      variantsCount: number;
+      overridesCount: number;
+      args: { keepId: string; dropIds: string[]; data: Record<string, string> | null };
+    } | null
+  >(null);
 
   // A3 · estado de los chips de habilidades.
   const [chipInputs, setChipInputs] = useState<Record<string, string>>({});
@@ -1564,6 +1594,24 @@ export function MasterScreen() {
     basicsRef.current = view?.basics ?? null;
   }, [view?.basics]);
 
+  /* A4 · los posibles duplicados que YA están en el master. Se piden aparte del
+     registro porque su coste es otro (O(n²) comparaciones) y porque hay que
+     volver a pedirlos cada vez que el master cambia. Un fallo aquí NO puede
+     tumbar la pantalla: sin sospechas se sigue editando igual. */
+  const loadDups = useCallback(() => {
+    if (!supabaseEnabled) return;
+    void (async () => {
+      try {
+        const res = await fetch("/api/master/duplicados");
+        if (!res.ok) return;
+        const j = (await res.json()) as { clusters?: ClusterDuplicado[] };
+        setDups(j.clusters ?? []);
+      } catch {
+        setDups([]);
+      }
+    })();
+  }, []);
+
   // Carga real (modo Supabase).
   useEffect(() => {
     if (!supabaseEnabled) return;
@@ -1584,6 +1632,82 @@ export function MasterScreen() {
       active = false;
     };
   }, []);
+
+  useEffect(() => loadDups(), [loadDups]);
+
+  // item → clúster, para que la tarjeta sepa en O(1) si está sospechada (el
+  // registro roto trae 105 items: recorrer la lista por tarjeta sería cuadrático).
+  const dupIndex = useMemo(() => {
+    const m = new Map<string, ClusterDuplicado>();
+    for (const c of dups) for (const mi of c.miembros) m.set(mi.id, c);
+    return m;
+  }, [dups]);
+
+  /* Resolver MUTA el master (un item deja de existir y otro cambia de campos), así
+     que hay que releer las dos cosas: el registro y las sospechas. Recalcular las
+     sospechas sobre el master viejo dejaría marcas apuntando a items borrados. */
+  const refrescarMaster = useCallback(() => {
+    void (async () => {
+      try {
+        const res = await fetch("/api/master");
+        const data = await res.json();
+        setView(buildRealView((data.items ?? []) as ApiItem[]));
+      } catch {
+        /* si falla la relectura, la vista de antes sigue siendo la última buena */
+      }
+      loadDups();
+    })();
+  }, [loadDups]);
+
+  /* ── A4 · las TRES ACCIONES, que son una sola llamada ───────────────────────
+     «quedarme con esta» y «quedarme con la otra» son la misma con los papeles
+     cambiados; «fusionar» añade los campos elegidos. NUNCA se llama sin que el
+     usuario haya pulsado: no hay resolución automática ni en lote. */
+  const resolverDup = useCallback(
+    (keepId: string, dropIds: string[], data: Record<string, string> | null, force: boolean) => {
+      if (!supabaseEnabled || !keepId || dropIds.length === 0) return;
+      setDupBusy(true);
+      setDupBlocked(null);
+      void (async () => {
+        try {
+          const res = await fetch("/api/master/resolver", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ keepId, dropIds, data: data ?? undefined, vinetas: dupVinetas, force }),
+          });
+          if (res.status === 409) {
+            // Lo que se descarta lo usa alguna variante. Se AVISA con el dato real
+            // y se deja el panel abierto: el usuario decide si sigue.
+            const j = (await res.json()) as { usage?: { variantsCount: number; overridesCount: number } };
+            const u = j.usage ?? { variantsCount: 0, overridesCount: 0 };
+            setDupBlocked({
+              variantsCount: u.variantsCount,
+              overridesCount: u.overridesCount,
+              args: { keepId, dropIds, data },
+            });
+            return;
+          }
+          if (!res.ok) throw new Error();
+          const j = (await res.json()) as { descartados?: string[] };
+          noteSaved(t("master.dup.done").replace("{n}", String(j.descartados?.length ?? 0)));
+          setOpenDup(null);
+          refrescarMaster();
+        } catch {
+          noteSaved(t("master.dup.fail"));
+        } finally {
+          setDupBusy(false);
+        }
+      })();
+    },
+    [dupVinetas, noteSaved, refrescarMaster, t],
+  );
+
+  // Un panel abierto sobre una tarjeta que el filtro acaba de ocultar quedaría
+  // huérfano (el filtro trabaja sobre [data-item], y el panel vive dentro).
+  useEffect(() => {
+    setOpenDup(null);
+    setDupBlocked(null);
+  }, [filter, query]);
 
   const v = view;
   const totalBullets = v ? v.roles.reduce((a, e) => a + e.bullets.length, 0) : 0;
@@ -1685,6 +1809,18 @@ export function MasterScreen() {
       if (ok && filter === "sin-cifra") ok = it.dataset.num === "false";
       if (ok && filter === "sin-evidencia") ok = it.dataset.ver === "none";
       if (ok && filter === "sin-fechas") ok = !!it.querySelector('[data-warn="fechas"]');
+      /* A4 · «posibles duplicados». Dos diferencias deliberadas con los filtros de
+         arriba, que arrastran un defecto conocido:
+         · data-dup lo emiten TODOS los tipos que el detector puede marcar (rol,
+           grupo de habilidades y fila densa), no uno solo. data-num solo lo ponen
+           las viñetas y data-ver solo los grupos, así que esos filtros esconden
+           por omisión items que jamás podrían cumplir el criterio.
+         · el `closest` mantiene visibles las VIÑETAS de un rol sospechado: están
+           anidadas dentro de la tarjeta, y ocultarlas dejaría el rol sin el
+           contenido que hay que comparar justo cuando se va a comparar. */
+      if (ok && filter === "posibles-duplicados") {
+        ok = it.dataset.dup === "1" || !!it.closest('[data-dup="1"]');
+      }
       it.style.display = ok ? "" : "none";
     });
     groups.querySelectorAll<HTMLElement>(".ms-g").forEach((g) => {
@@ -1746,6 +1882,8 @@ export function MasterScreen() {
         return t("master.filter.noEvidence");
       case "sin-fechas":
         return t("master.filter.noDates");
+      case "posibles-duplicados":
+        return t("master.filter.dups");
       case "all":
       default:
         return t("master.filter.all");
@@ -1852,6 +1990,254 @@ export function MasterScreen() {
     );
   };
 
+  /* ══ A4 · LIMPIEZA RETROACTIVA DE DUPLICADOS ════════════════════════════════
+     La marca en la tarjeta y, al abrirla, LAS DOS VERSIONES LADO A LADO CAMPO POR
+     CAMPO con las tres acciones. Mismo vocabulario que la pantalla de staging
+     (docs/spec/duplicados.md): se aprende a resolver un duplicado UNA vez.       */
+
+  /** ¿Esta tarjeta está en algún clúster? Es lo que emite el atributo del filtro. */
+  const dupAttr = (id: string | null): string => (id && dupIndex.has(id) ? "1" : "0");
+
+  const tSignal = (s: string): string => {
+    switch (s) {
+      case "misma-empresa":
+        return t("master.dup.sig.company");
+      case "fechas-solapan":
+        return t("master.dup.sig.dates");
+      case "sin-fecha":
+        return t("master.dup.sig.noDate");
+      case "contenido":
+        return t("master.dup.sig.content");
+      case "misma-fuente":
+        return t("master.dup.sig.source");
+      default:
+        return s;
+    }
+  };
+
+  const dupNombre = (m: MiembroDuplicado): string => m.titulo.trim() || t("master.role.untitled");
+
+  /* Preselección de la fusión. NO es una decisión del sistema: no se escribe nada
+     hasta que el usuario pulsa «fusionar» con las dos versiones delante. Solo
+     evita arrancar con el campo VACÍO ganando, que es el caso típico («la fecha de
+     LinkedIn con el detalle narrativo del cuestionario»). */
+  const dupPickFor = (c: ClusterDuplicado, clave: string): string => {
+    const elegido = dupPick[`${c.id}:${clave}`];
+    if (elegido) return elegido;
+    if (c.kind === "skill" && clave === "items") return "ambas";
+    const conValor = c.miembros.find((m) => (m.campos.find((f) => f.clave === clave)?.valor ?? "").trim());
+    return (conValor ?? c.miembros[0]!).id;
+  };
+
+  /* Para un grupo de habilidades, quedarse con UNA de las dos listas pierde los
+     chips de la otra en silencio — «Lenguajes» duplicado tiene TypeScript en una y
+     JavaScript en la otra. Por eso la lista ofrece «las dos», y el usuario ve la
+     unión ya calculada antes de confirmarla. */
+  const dupUnion = (c: ClusterDuplicado, clave: string): string => {
+    let chips: string[] = [];
+    for (const m of c.miembros) {
+      chips = mergeChips(chips, chipsFromCsv(m.campos.find((f) => f.clave === clave)?.valor ?? "")).chips;
+    }
+    return chipsToCsv(chips);
+  };
+
+  const dupValor = (c: ClusterDuplicado, clave: string): string => {
+    const sel = dupPickFor(c, clave);
+    if (sel === "ambas") return dupUnion(c, clave);
+    return c.miembros.find((m) => m.id === sel)?.campos.find((f) => f.clave === clave)?.valor ?? "";
+  };
+
+  const dupDataFusion = (c: ClusterDuplicado): Record<string, string> => {
+    const out: Record<string, string> = {};
+    for (const campo of c.miembros[0]?.campos ?? []) out[campo.clave] = dupValor(c, campo.clave);
+    return out;
+  };
+
+  const setPick = (c: ClusterDuplicado, clave: string, valor: string) =>
+    setDupPick((p) => ({ ...p, [`${c.id}:${clave}`]: valor }));
+
+  /** «⚠ posible duplicado de: …» en la tarjeta. Abre el comparador. */
+  const dupMark = (id: string | null): ReactNode => {
+    const c = id ? dupIndex.get(id) : undefined;
+    if (!id || !c) return null;
+    const otros = c.miembros
+      .filter((m) => m.id !== id)
+      .map(dupNombre)
+      .join(", ");
+    return (
+      <button
+        type="button"
+        className="ms-dup__mark"
+        aria-expanded={openDup === id}
+        aria-label={t("master.dup.markAria")}
+        title={c.reason}
+        onClick={() => setOpenDup((p) => (p === id ? null : id))}
+      >
+        {t("master.dup.mark").replace("{item}", otros)}
+      </button>
+    );
+  };
+
+  /** El aviso del RESTRICT dentro del comparador (nunca un 500 crudo). */
+  const dupBlockedWarning = (): ReactNode => {
+    if (!dupBlocked) return null;
+    const msg =
+      (dupBlocked.variantsCount === 1 ? t("master.blocked.one") : t("master.blocked.many")).replace(
+        "{n}",
+        String(dupBlocked.variantsCount),
+      ) +
+      (dupBlocked.overridesCount > 0
+        ? " · " + t("master.blocked.overrides").replace("{n}", String(dupBlocked.overridesCount))
+        : "");
+    const a = dupBlocked.args;
+    return (
+      <div className="ms-blocked" role="alert">
+        <span>{msg}</span>
+        <span className="ms-blocked__act">
+          <button type="button" className="ms-blocked__go" onClick={() => resolverDup(a.keepId, a.dropIds, a.data, true)}>
+            {t("master.dup.forceGo")}
+          </button>
+          <button type="button" className="ms-blocked__no" onClick={() => setDupBlocked(null)}>
+            {t("common.cancel")}
+          </button>
+        </span>
+      </div>
+    );
+  };
+
+  /** Las dos versiones, campo por campo, con las tres acciones. */
+  const dupPanel = (id: string | null): ReactNode => {
+    if (!id || openDup !== id) return null;
+    const c = dupIndex.get(id);
+    if (!c) return null;
+    const campos = c.miembros[0]?.campos ?? [];
+    const hayVinetas = c.miembros.some((m) => m.vinetas.length > 0);
+    const otrosDe = (keepId: string) => c.miembros.filter((m) => m.id !== keepId).map((m) => m.id);
+    return (
+      <div className="ms-dup" role="group" aria-label={t("master.dup.title")}>
+        <div className="ms-dup__h">
+          <span className="t-overline">{t("master.dup.title")}</span>
+          <span className={`ms-dup__lvl ms-dup__lvl--${c.level}`}>{t(`master.dup.level.${c.level}`)}</span>
+          <button type="button" className="ms-dup__x" onClick={() => setOpenDup(null)}>
+            {t("master.dup.close")}
+          </button>
+        </div>
+        {/* El motivo viene del detector, con sus señales traducidas: el usuario
+            tiene que poder discrepar, y para eso hay que decirle POR QUÉ. */}
+        <p className="ms-dup__why">{c.signals.map(tSignal).join(" · ")}</p>
+        <p className="ms-dup__never">{t("master.dup.never")}</p>
+
+        <div
+          className="ms-dup__grid"
+          style={{ gridTemplateColumns: `minmax(8ch, 13ch) repeat(${c.miembros.length}, minmax(0, 1fr))` }}
+        >
+          <span />
+          {c.miembros.map((m) => (
+            <span key={m.id} className="ms-dup__hd">
+              {dupNombre(m)}
+              {m.subtitulo ? <em>{m.subtitulo}</em> : null}
+            </span>
+          ))}
+
+          {campos.map((campo) => {
+            const sel = dupPickFor(c, campo.clave);
+            const conUnion = c.kind === "skill" && campo.clave === "items";
+            return (
+              <Fragment key={campo.clave}>
+                <span className="ms-dup__lb">{t(campo.ph)}</span>
+                {c.miembros.map((m) => {
+                  const valor = m.campos.find((f) => f.clave === campo.clave)?.valor ?? "";
+                  return (
+                    <button
+                      key={m.id}
+                      type="button"
+                      className="ms-dup__cell"
+                      aria-pressed={sel === m.id}
+                      aria-label={t("master.dup.pickAria").replace("{campo}", t(campo.ph))}
+                      onClick={() => setPick(c, campo.clave, m.id)}
+                    >
+                      {valor || <i>{t("master.dup.empty")}</i>}
+                    </button>
+                  );
+                })}
+                {conUnion ? (
+                  <>
+                    <span className="ms-dup__lb" />
+                    <button
+                      type="button"
+                      className="ms-dup__cell ms-dup__cell--both"
+                      style={{ gridColumn: `span ${c.miembros.length}` }}
+                      aria-pressed={sel === "ambas"}
+                      aria-label={t("master.dup.bothAria")}
+                      onClick={() => setPick(c, campo.clave, "ambas")}
+                    >
+                      <b>{t("master.dup.both")}</b> {dupUnion(c, campo.clave)}
+                    </button>
+                  </>
+                ) : null}
+              </Fragment>
+            );
+          })}
+
+          {hayVinetas ? (
+            <>
+              <span className="ms-dup__lb">{t("master.dup.bulletsRow")}</span>
+              {c.miembros.map((m) => (
+                <span key={m.id} className="ms-dup__bl">
+                  {m.vinetas.length === 0 ? (
+                    <i>{t("master.dup.empty")}</i>
+                  ) : (
+                    m.vinetas.map((b) => <span key={b.id}>· {b.texto}</span>)
+                  )}
+                </span>
+              ))}
+            </>
+          ) : null}
+        </div>
+
+        {hayVinetas ? (
+          <div className="ms-dup__vin">
+            <span>{t("master.dup.bulletsKeep")}</span>
+            <label>
+              <input
+                type="checkbox"
+                checked={dupVinetas === "descartar"}
+                onChange={(e) => setDupVinetas(e.target.checked ? "descartar" : "reenganchar")}
+              />
+              {t("master.dup.bulletsDrop")}
+            </label>
+          </div>
+        ) : null}
+
+        <div className="ms-dup__acts">
+          {c.miembros.map((m) => (
+            <button
+              key={m.id}
+              type="button"
+              className="ms-dup__keep"
+              disabled={dupBusy}
+              aria-label={t("master.dup.keepAria").replace("{item}", dupNombre(m))}
+              onClick={() => resolverDup(m.id, otrosDe(m.id), null, false)}
+            >
+              {t("master.dup.keep")} <em>{dupNombre(m)}</em>
+            </button>
+          ))}
+          <button
+            type="button"
+            className="ms-dup__merge"
+            disabled={dupBusy}
+            title={t("master.dup.mergeHint")}
+            onClick={() => resolverDup(id, otrosDe(id), dupDataFusion(c), false)}
+          >
+            {t("master.dup.merge")}
+          </button>
+          {dupBusy ? <span className="ms-dup__busy">{t("master.dup.busy")}</span> : null}
+        </div>
+        {dupBlockedWarning()}
+      </div>
+    );
+  };
+
   // A4: la viñeta sin cifra que PARECE una etiqueta ⇒ sugerencia «esto parece una
   // habilidad» con acción de un clic; si no, el nudge «sin cifra» de siempre.
   const nudge = (b: VBullet): ReactNode => {
@@ -1935,7 +2321,7 @@ export function MasterScreen() {
     // A4: viñetas sin cifra que parecen etiqueta (para el «mover las N sugeridas»).
     const suggested = e.bullets.filter((b) => b.id && !b.num && looksLikeSkillTag(b.tx));
     return (
-      <article className="c-card ms-card" data-item key={e.id ?? headerId}>
+      <article className="c-card ms-card" data-item data-dup={dupAttr(e.id)} key={e.id ?? headerId}>
         {/* Toda la cabecera es editable en su sitio: cargo, empresa, ubicación y
             fecha. Antes solo lo era el título y los demás campos iban fusionados
             en un `org` de solo lectura — se recreaba el rol para cambiar una ciudad. */}
@@ -1991,6 +2377,8 @@ export function MasterScreen() {
           </span>
         </div>
         {fragBody(headerId, e.id, e.origin, e.evidence)}
+        {dupMark(e.id)}
+        {dupPanel(e.id)}
         {blockedWarning(e.id, "work", label)}
         {e.bullets.map((b, j) => {
           const bid = `it-exp-${i}-b-${j}`;
@@ -2050,7 +2438,7 @@ export function MasterScreen() {
     const label = str(r.data, fields[0]!.key).trim() || t("master.role.untitled");
     return (
       <Fragment key={key}>
-        <div className="ms-row" data-item>
+        <div className="ms-row" data-item data-dup={dupAttr(r.id)}>
           <span className="ms-row__fields">
             {fields.map((f, fi) => {
               const value = str(r.data, f.key);
@@ -2087,8 +2475,12 @@ export function MasterScreen() {
             ) : null}
           </span>
           <span className="m">{tOrigin(r.m)}</span>
+          {/* La marca va DENTRO de la fila: el filtro oculta el nodo [data-item],
+              y fuera se quedaría flotando sin su item. */}
+          {dupMark(r.id)}
           {delButton(r.kind, r.id, label)}
         </div>
+        {dupPanel(r.id)}
         {blockedWarning(r.id, r.kind, label)}
       </Fragment>
     );
@@ -2106,6 +2498,7 @@ export function MasterScreen() {
         className="ms-skgroup"
         data-item
         data-ver={s.verified ? "ok" : "none"}
+        data-dup={dupAttr(s.id)}
         key={s.id ?? groupKey}
         onDragOver={(ev) => ev.preventDefault()}
         onDrop={(ev) => {
@@ -2140,6 +2533,8 @@ export function MasterScreen() {
           </span>
         </div>
         {fragBody(groupKey, s.id, s.origin, s.evidence)}
+        {dupMark(s.id)}
+        {dupPanel(s.id)}
         {blockedWarning(s.id, "skill", s.group)}
         <div className="ms-chips">
           {s.chips.map((c, ci) => {
