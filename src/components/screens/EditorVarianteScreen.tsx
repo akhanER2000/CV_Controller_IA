@@ -90,6 +90,10 @@ interface VItem {
   visible: boolean;
   sort_order: number;
   override_data: Record<string, unknown> | null;
+  /** quién escribió este texto: 'manual' | 'ai_rephrased' | null (hereda del master) */
+  override_origin: string | null;
+  /** ¿el override pasó el control de hechos? (solo lo pone un override de IA) */
+  override_verified: boolean;
   data: Record<string, unknown>; // EFECTIVA (master + override)
   parent_id: string | null;
 }
@@ -101,6 +105,42 @@ interface VMeta {
   updated_at?: string;
   master_updated_at?: string;
 }
+
+/* ── Contrato de POST /api/variants/[id]/ajustar (src/lib/cv/ajuste.ts) ──────
+   Se redeclara aquí, como el resto de shapes de esta pantalla, para no arrastrar
+   zod ni verify.ts al bundle del cliente por un puñado de campos. Ojo: NO hay
+   ningún `score` ni ningún porcentaje, y no es un olvido — el único número del
+   panel es `sobran`, que sale de MEDIR el PDF. */
+interface FitQuitar { id: string; kind: string; texto: string; motivo: string }
+interface FitReordenar { id: string; kind: string; texto: string; parentId: string; desde: number; hasta: number }
+interface FitAcortar {
+  id: string; kind: string; campo: string;
+  original: string; propuesto: string; motivo: string; ahorro: number;
+}
+type FitTipoFalta = "sin-cifra" | "sin-fecha" | "sin-respaldo";
+interface FitFalta { id: string; kind: string; texto: string; tipo: FitTipoFalta; detalle: string }
+interface FitDescartado { tipo: string; id: string; propuesto: string; razon: string }
+interface Fit {
+  paginas: number;
+  paginasObjetivo: number;
+  /** líneas que sobran, MEDIDAS sobre el PDF. Negativo = sobra sitio. */
+  sobran: number;
+  quitar: FitQuitar[];
+  reordenar: FitReordenar[];
+  acortar: FitAcortar[];
+  falta: FitFalta[];
+  descartados: FitDescartado[];
+  notas: string;
+}
+/** decisión del usuario sobre UNA propuesta. No existe "todas". */
+type FitMark = "ok" | "no" | "undo";
+
+/** Etiqueta de cada hueco. El texto lo pone i18n; aquí solo el mapa. */
+const FIT_GAP_KEY: Record<FitTipoFalta, string> = {
+  "sin-cifra": "editor.fitGapNumber",
+  "sin-fecha": "editor.fitGapDate",
+  "sin-respaldo": "editor.fitGapEvidence",
+};
 
 // Campo de texto editable por kind (override "por campo").
 const EDIT_FIELD: Record<string, string> = { summary: "text", bullet: "text", project: "description" };
@@ -202,6 +242,8 @@ function normalizeIncoming(raw: unknown): VItem {
     visible: r.visible !== false,
     sort_order: Number(r.sort_order ?? 0),
     override_data: (r.override_data as Record<string, unknown> | null) ?? null,
+    override_origin: (r.override_origin as string | null) ?? null,
+    override_verified: Boolean(r.override_verified),
     data: (r.data as Record<string, unknown>) ?? {},
     parent_id: (r.parent_id as string | null) ?? null,
   };
@@ -383,6 +425,8 @@ function buildFallback(variantId: string): { master: MasterRow[]; items: VItem[]
       visible: true,
       sort_order: i,
       override_data: null,
+      override_origin: null,
+      override_verified: false,
       data: m.data,
       parent_id: m.parent_id,
     }));
@@ -613,7 +657,8 @@ export function EditorVarianteScreen({ variantId = "editor" }: { variantId?: str
         if (!p.basicsItemId) return prev;
         return [
           ...prev,
-          { id: p.basicsItemId, item_id: p.masterBasicsId ?? "", kind: "basics", visible: true, sort_order: -1, override_data: ov, data, parent_id: null },
+          { id: p.basicsItemId, item_id: p.masterBasicsId ?? "", kind: "basics", visible: true, sort_order: -1,
+            override_data: ov, override_origin: ov ? "manual" : null, override_verified: false, data, parent_id: null },
         ];
       });
     },
@@ -634,7 +679,8 @@ export function EditorVarianteScreen({ variantId = "editor" }: { variantId?: str
         if (existing) return prev.map((i) => (i.id === existing.id ? { ...i, override_data: nextOv, data: nextData } : i));
         const tmp: VItem = {
           id: "tmp-basics", item_id: basicsMaster?.id ?? "tmp-basics-master", kind: "basics", visible: true,
-          sort_order: -1, override_data: nextOv, data: nextData, parent_id: null,
+          sort_order: -1, override_data: nextOv, override_origin: "manual", override_verified: false,
+          data: nextData, parent_id: null,
         };
         return [...prev, tmp];
       });
@@ -1021,6 +1067,8 @@ export function EditorVarianteScreen({ variantId = "editor" }: { variantId?: str
         visible: true,
         sort_order: nextSortOrder(m.kind),
         override_data: null,
+        override_origin: null,
+        override_verified: false,
         data: m.data,
         parent_id: m.parent_id,
       };
@@ -1220,6 +1268,149 @@ export function EditorVarianteScreen({ variantId = "editor" }: { variantId?: str
       requestAnimationFrame(() => document.querySelector<HTMLButtonElement>(`[data-grip="${bullet.id}"]`)?.focus());
     },
     [bulletsForWork, reorder, flash, t],
+  );
+
+  /* ── «Ajustar a dos páginas» — una PROPUESTA, nunca una aplicación ─────────
+     MANUAL, SIEMPRE. El servidor mide el PDF real y devuelve qué quitar, qué
+     reordenar, qué acortar y qué falta. Aquí no se aplica NADA hasta que el
+     usuario pulsa Aceptar en UNA fila concreta. No hay «aceptar todo» y no es un
+     hueco del diseño: un CV que se reordena solo es un CV en el que se deja de
+     confiar.
+
+     Cada acción reutiliza el camino que ya existía y que ya estaba probado:
+     quitar → removeItem, reordenar → reorder (el mismo que el arrastre y las
+     flechas), acortar → la ruta, que VUELVE a pasar el candado antes de escribir.
+
+     Por qué vive DENTRO del editor y no en una pantalla propia: la propuesta solo
+     significa algo al lado del documento que la motiva. El número que la encabeza
+     («sobran ~14 líneas») sale de medir el PDF que está en la tercera columna, y
+     el efecto de aceptar se ve ahí mismo, en el preview, sin cambiar de pantalla y
+     sin volver a cargar nada. Una ruta aparte habría convertido una revisión en un
+     viaje de ida y vuelta — que es exactamente lo que le pasa a /tailor. */
+  const [fitOpen, setFitOpen] = useState(false);
+  const [fitBusy, setFitBusy] = useState(false);
+  const [fitErr, setFitErr] = useState("");
+  const [fit, setFit] = useState<Fit | null>(null);
+  /** decisión del usuario por propuesta ("q:id" | "r:id" | "a:id") */
+  const [fitDone, setFitDone] = useState<Record<string, FitMark>>({});
+  /** el override que había ANTES de aceptar un acortado — sin esto, Revertir miente */
+  const fitPrev = useRef<Record<string, Record<string, unknown> | null>>({});
+
+  const mark = useCallback((k: string, v: FitMark) => setFitDone((p) => ({ ...p, [k]: v })), []);
+
+  const runFit = useCallback(() => {
+    if (!supabaseEnabled) {
+      setFitErr(t("editor.fitLocal"));
+      return;
+    }
+    setFitBusy(true);
+    setFitErr("");
+    void (async () => {
+      try {
+        const res = await fetch(`/api/variants/${variantId}/ajustar`, {
+          method: "POST",
+          headers: JSON_HEADERS,
+          body: JSON.stringify({ accion: "analizar", paginas: 2 }),
+        });
+        if (!res.ok) throw new Error(await readApiError(res));
+        const { ajuste } = (await res.json()) as { ajuste?: Fit };
+        if (!ajuste) throw new Error("La respuesta no trae la propuesta.");
+        setFit(ajuste);
+        setFitDone({});
+        fitPrev.current = {};
+      } catch (e) {
+        console.error("[editor] no se pudo armar la propuesta de ajuste", e);
+        setFitErr(reason(e));
+        flash(t("editor.fitErr").replace("{r}", reason(e)));
+      } finally {
+        setFitBusy(false);
+      }
+    })();
+  }, [variantId, t, flash]);
+
+  const fitAcceptDrop = useCallback(
+    (p: FitQuitar) => {
+      removeItem(p.id);
+      mark(`q:${p.id}`, "ok");
+    },
+    [removeItem, mark],
+  );
+
+  const fitAcceptMove = useCallback(
+    (p: FitReordenar) => {
+      // parentId es el id del MASTER del rol; el reorder trabaja con el variant_item.
+      const work = items.find((i) => i.kind === "work" && i.item_id === p.parentId);
+      if (!work) return;
+      reorder(work, p.id, p.hasta, true);
+      mark(`r:${p.id}`, "ok");
+      flash(t("editor.stReordered"));
+    },
+    [items, reorder, mark, flash, t],
+  );
+
+  /**
+   * Aceptar UN acortado. El texto NO se escribe aquí y se avisa al servidor: se
+   * escribe EN el servidor, que vuelve a pasar el candado antes de guardar. Si lo
+   * rechaza, el motivo real sube a la barra de estado y el documento no se toca —
+   * el optimismo se aplica DESPUÉS de que el servidor diga que sí, precisamente
+   * porque este es el único cambio del editor que puede perder un hecho.
+   */
+  const fitAcceptShorten = useCallback(
+    (p: FitAcortar) => {
+      void (async () => {
+        try {
+          const res = await fetch(`/api/variants/${variantId}/ajustar`, {
+            method: "POST",
+            headers: JSON_HEADERS,
+            body: JSON.stringify({ accion: "acortar", id: p.id, propuesto: p.propuesto }),
+          });
+          if (!res.ok) throw new Error(await readApiError(res));
+          fitPrev.current[p.id] = items.find((i) => i.id === p.id)?.override_data ?? null;
+          setItems((prev) =>
+            prev.map((i) =>
+              i.id === p.id
+                ? {
+                    ...i,
+                    override_data: { ...(i.override_data ?? {}), [p.campo]: p.propuesto },
+                    override_origin: "ai_rephrased",
+                    override_verified: true,
+                    data: { ...i.data, [p.campo]: p.propuesto },
+                  }
+                : i,
+            ),
+          );
+          mark(`a:${p.id}`, "ok");
+          flash(t("editor.stOvrSaved"));
+        } catch (e) {
+          fail(`acortado del item ${p.id}`, e, "editor.fitErr");
+        }
+      })();
+    },
+    [variantId, items, mark, flash, t, fail],
+  );
+
+  /** Revertir: vuelve al override que HABÍA (o al master si no había ninguno). */
+  const fitRevertShorten = useCallback(
+    (p: FitAcortar) => {
+      const antes = fitPrev.current[p.id] ?? null;
+      patchItem(p.id, { override_data: antes });
+      setItems((prev) =>
+        prev.map((i) =>
+          i.id === p.id
+            ? {
+                ...i,
+                override_data: antes,
+                override_origin: antes ? "manual" : null,
+                override_verified: false,
+                data: { ...i.data, [p.campo]: p.original },
+              }
+            : i,
+        ),
+      );
+      mark(`a:${p.id}`, "undo");
+      flash(t("editor.fitReverted"));
+    },
+    [patchItem, mark, flash, t],
   );
 
   const onDragStart = useCallback(
@@ -1529,6 +1720,21 @@ export function EditorVarianteScreen({ variantId = "editor" }: { variantId?: str
                 {t("editor.deleteVariant")}
               </button>
             )}
+            <button
+              type="button"
+              className="c-btn c-btn--quiet ed-fit-open"
+              aria-expanded={fitOpen}
+              aria-controls="edFit"
+              onClick={() => {
+                const abrir = !fitOpen;
+                setFitOpen(abrir);
+                // Abrir NO analiza: analizar cuesta un render de PDF y una llamada al
+                // modelo, y nadie pidió nada todavía. Se analiza al pulsar Analizar.
+                if (abrir) setTab("mid");
+              }}
+            >
+              {t("editor.fitOpen")}
+            </button>
             <Link className="c-btn c-btn--quiet" href={`/app/variantes/${variantId}/tailor`}>
               {t("common.tailor")}
             </Link>
@@ -1633,6 +1839,209 @@ export function EditorVarianteScreen({ variantId = "editor" }: { variantId?: str
               {loading ? t("editor.reading") : midN}
             </span>
           </div>
+
+          {/* ── Propuesta de ajuste. Cada fila se acepta o se rechaza SOLA. ── */}
+          {fitOpen && (
+            <section className="c-card fit" id="edFit" aria-label={t("editor.fitAria")}>
+              <div className="fith">
+                <span className="t-overline">{t("editor.fitTitle").replace("{p}", "2")}</span>
+                <button type="button" className="c-btn c-btn--quiet fitx" onClick={() => setFitOpen(false)}>
+                  {t("editor.fitClose")}
+                </button>
+              </div>
+
+              {/* EL NÚMERO. Sale de contar las líneas del PDF real, y lo dice. */}
+              {fit && (
+                <div className="fitn">
+                  {fit.sobran > 0 ? (
+                    <>
+                      <b className="big">{t("editor.fitOver").replace("{n}", String(fit.sobran))}</b>
+                      <span className="sub">
+                        {t("editor.fitOverSub")
+                          .replace("{p}", String(fit.paginas))
+                          .replace("{o}", String(fit.paginasObjetivo))}
+                      </span>
+                    </>
+                  ) : (
+                    <>
+                      <b className="big ok">{t("editor.fitFits").replace("{o}", String(fit.paginasObjetivo))}</b>
+                      <span className="sub">{t("editor.fitFitsSub").replace("{n}", String(-fit.sobran))}</span>
+                    </>
+                  )}
+                </div>
+              )}
+
+              <div className="fitrun">
+                <button type="button" className="c-btn c-btn--patina" disabled={fitBusy} onClick={runFit}>
+                  {fitBusy ? t("editor.fitBusy") : fit ? t("editor.fitRerun") : t("editor.fitRun")}
+                </button>
+                {fit && <span className="fitmanual">{t("editor.fitManual")}</span>}
+              </div>
+
+              {fitErr && <p className="fiterr" role="status">{fitErr}</p>}
+
+              {fit && (
+                <>
+                  {/* 1 · QUÉ QUITAR */}
+                  <div className="fitsec">
+                    <div className="fitsech">
+                      <span className="t-overline">{t("editor.fitSecRemove")}</span>
+                      <span className="sub">
+                        {t("editor.fitSecRemoveSub").replace("{t}", targetTitle || t("editor.objPlaceholder"))}
+                      </span>
+                    </div>
+                    {fit.quitar.length === 0 && <p className="fitempty">{t("editor.fitEmpty")}</p>}
+                    {fit.quitar.map((p) => (
+                      <div className="fitrow" key={`q:${p.id}`}>
+                        <p className="txt">{p.texto}</p>
+                        {p.motivo && <p className="why">{p.motivo}</p>}
+                        {fitDone[`q:${p.id}`] === "ok" ? (
+                          <span className="fitok">{t("editor.fitAccepted")}</span>
+                        ) : fitDone[`q:${p.id}`] === "no" ? (
+                          <span className="fitno">{t("editor.fitRejected")}</span>
+                        ) : (
+                          <span className="fitacts">
+                            <button type="button" className="c-btn c-btn--quiet" onClick={() => mark(`q:${p.id}`, "no")}>
+                              {t("editor.fitReject")}
+                            </button>
+                            <button type="button" className="c-btn" onClick={() => fitAcceptDrop(p)}>
+                              {t("editor.fitAccept")}
+                            </button>
+                          </span>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* 2 · QUÉ REORDENAR */}
+                  <div className="fitsec">
+                    <div className="fitsech">
+                      <span className="t-overline">{t("editor.fitSecReorder")}</span>
+                      <span className="sub">{t("editor.fitSecReorderSub")}</span>
+                    </div>
+                    {fit.reordenar.length === 0 && <p className="fitempty">{t("editor.fitEmpty")}</p>}
+                    {fit.reordenar.map((p) => (
+                      <div className="fitrow" key={`r:${p.id}`}>
+                        <p className="txt">{p.texto}</p>
+                        <p className="why">
+                          {t(p.hasta < p.desde ? "editor.fitMoveUp" : "editor.fitMoveDown")
+                            .replace("{a}", String(p.desde + 1))
+                            .replace("{b}", String(p.hasta + 1))}
+                        </p>
+                        {fitDone[`r:${p.id}`] === "ok" ? (
+                          <span className="fitok">{t("editor.fitAccepted")}</span>
+                        ) : fitDone[`r:${p.id}`] === "no" ? (
+                          <span className="fitno">{t("editor.fitRejected")}</span>
+                        ) : (
+                          <span className="fitacts">
+                            <button type="button" className="c-btn c-btn--quiet" onClick={() => mark(`r:${p.id}`, "no")}>
+                              {t("editor.fitReject")}
+                            </button>
+                            <button type="button" className="c-btn" onClick={() => fitAcceptMove(p)}>
+                              {t("editor.fitAccept")}
+                            </button>
+                          </span>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* 3 · QUÉ ACORTAR — con el ORIGINAL al lado y REVERTIR.
+                      Todo lo que llega hasta aquí ya pasó el candado en el servidor:
+                      lo que no lo pasó no está en esta lista, está en el registro
+                      de descartados del final. */}
+                  <div className="fitsec">
+                    <div className="fitsech">
+                      <span className="t-overline">{t("editor.fitSecShorten")}</span>
+                      <span className="sub">{t("editor.fitSecShortenSub")}</span>
+                    </div>
+                    {fit.acortar.length === 0 && <p className="fitempty">{t("editor.fitEmpty")}</p>}
+                    {fit.acortar.map((p) => (
+                      <div className="fitrow fitcut" key={`a:${p.id}`}>
+                        <p className="lbl">{t("editor.fitOrigin")}</p>
+                        <p className="txt old">{p.original}</p>
+                        <p className="lbl">{t("editor.fitProposed")}</p>
+                        <p className="txt new">{p.propuesto}</p>
+                        <p className="why">
+                          {t("editor.fitSaved").replace("{n}", String(p.ahorro))}
+                          {p.motivo ? ` · ${p.motivo}` : ""}
+                        </p>
+                        {fitDone[`a:${p.id}`] === "ok" ? (
+                          <span className="fitacts">
+                            <span className="fitok">{t("editor.fitAccepted")}</span>
+                            <button type="button" className="c-btn c-btn--quiet" onClick={() => fitRevertShorten(p)}>
+                              {t("editor.fitRevert")}
+                            </button>
+                          </span>
+                        ) : fitDone[`a:${p.id}`] === "no" ? (
+                          <span className="fitno">{t("editor.fitRejected")}</span>
+                        ) : (
+                          <span className="fitacts">
+                            {fitDone[`a:${p.id}`] === "undo" && (
+                              <span className="fitno">{t("editor.fitReverted")}</span>
+                            )}
+                            <button type="button" className="c-btn c-btn--quiet" onClick={() => mark(`a:${p.id}`, "no")}>
+                              {t("editor.fitReject")}
+                            </button>
+                            <button type="button" className="c-btn" onClick={() => fitAcceptShorten(p)}>
+                              {t("editor.fitAccept")}
+                            </button>
+                          </span>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* 4 · QUÉ FALTA — sin botones: esto no lo arregla la IA. */}
+                  <div className="fitsec">
+                    <div className="fitsech">
+                      <span className="t-overline">{t("editor.fitSecGaps")}</span>
+                      <span className="sub">{t("editor.fitSecGapsSub")}</span>
+                    </div>
+                    {fit.falta.length === 0 && <p className="fitempty">{t("editor.fitEmpty")}</p>}
+                    {fit.falta.map((p) => (
+                      <div className="fitrow fitgap" key={`g:${p.id}:${p.tipo}`}>
+                        <span className="gaptag">{t(FIT_GAP_KEY[p.tipo])}</span>
+                        <p className="txt">{p.texto}</p>
+                        <p className="why">{p.detalle}</p>
+                      </div>
+                    ))}
+                    {fit.falta.length > 0 && <p className="fitempty">{t("editor.fitGapHint")}</p>}
+                  </div>
+
+                  {/* El registro de lo que NO se ofrece. Un descarte silencioso y
+                      «no había nada que proponer» se ven igual desde fuera. */}
+                  {fit.descartados.filter((d) => d.tipo === "acortar").length > 0 && (
+                    <div className="fitsec fitdrop">
+                      <p className="txt">
+                        {t("editor.fitDropped").replace(
+                          "{n}",
+                          String(fit.descartados.filter((d) => d.tipo === "acortar").length),
+                        )}
+                      </p>
+                      <p className="why">{t("editor.fitDroppedHint")}</p>
+                      <ul>
+                        {fit.descartados
+                          .filter((d) => d.tipo === "acortar")
+                          .map((d, i) => (
+                            <li key={`${d.id}:${i}`}>{d.razon}</li>
+                          ))}
+                      </ul>
+                    </div>
+                  )}
+
+                  {fit.notas && (
+                    <div className="fitsec">
+                      <div className="fitsech">
+                        <span className="t-overline">{t("editor.fitNotes")}</span>
+                      </div>
+                      <p className="why">{fit.notas}</p>
+                    </div>
+                  )}
+                </>
+              )}
+            </section>
+          )}
           <div className="c-card var-obj">
             <label htmlFor="objInput">
               {t("editor.objLabel")}{" "}

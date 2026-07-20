@@ -42,6 +42,18 @@ export interface VariantItemView {
   visible: boolean;
   sort_order: number;
   override_data: Record<string, unknown> | null;
+  /**
+   * QUIÉN escribió el texto que se está viendo: 'manual' (el humano), 'ai_rephrased'
+   * (la IA, y entonces pasó preservesFacts) o null (hereda del master, sin override).
+   *
+   * Sin esto el editor es CIEGO: enseña un override sin poder decir si lo redactó el
+   * usuario o un modelo. Y «Ajustar a dos páginas» necesita justo esa distinción —
+   * una viñeta que ya reescribió la IA no se vuelve a ofrecer como si fuera del
+   * usuario, y la procedencia es lo que se imprime al lado de la propuesta.
+   */
+  override_origin: string | null;
+  /** ¿el override pasó el control de hechos? Solo lo pone setAiOverride. */
+  override_verified: boolean;
   /** data EFECTIVA = master + override */
   data: Record<string, unknown>;
   parent_id: string | null;
@@ -417,7 +429,7 @@ export async function getVariant(
     masterUpdatedAt(sb, userId),
     sb
       .from("variant_items")
-      .select("id,item_id,visible,sort_order,override_data")
+      .select("id,item_id,visible,sort_order,override_data,override_origin,override_verified")
       .eq("variant_id", variantId)
       .eq("user_id", userId)
       .order("sort_order", { ascending: true }),
@@ -437,6 +449,8 @@ export async function getVariant(
       visible: Boolean(vi.visible),
       sort_order: (vi.sort_order as number) ?? 0,
       override_data: override,
+      override_origin: (vi.override_origin as string | null) ?? null,
+      override_verified: Boolean(vi.override_verified),
       data: effectiveData(base, override),
       parent_id: m?.parentId ?? null,
     };
@@ -531,6 +545,61 @@ export async function updateItem(
     .eq("id", variantItemId)
     .eq("user_id", userId);
   if (error) throw new Error(error.message);
+}
+
+export interface VariantItemDetail {
+  id: string;
+  variantId: string;
+  /** id del profile_item (master) — es el `source_item` de un override de IA */
+  itemId: string;
+  kind: string;
+  overrideData: Record<string, unknown> | null;
+  /** data EFECTIVA (master + override): el texto de AHORA */
+  data: Record<string, unknown>;
+}
+
+/**
+ * UN variant_item, con su data efectiva y su master detrás.
+ *
+ * Existe para el acortado: cuando el usuario acepta una propuesta, el servidor tiene
+ * que comparar el texto propuesto contra el original REAL, y el original real está
+ * aquí — no en el cuerpo de la petición. Un cliente que manda «original» y
+ * «propuesto» juntos puede mandar dos textos que se validan entre sí y no se
+ * parecen a nada de lo que hay en la base. El candado se aplica sobre lo guardado.
+ *
+ * Filtra por variant_id ADEMÁS de por user_id: sin eso, un id de otra variante del
+ * mismo usuario pasaría, y la ruta escribiría en un documento que no es el que se
+ * está mirando.
+ */
+export async function getVariantItem(
+  sb: SB,
+  userId: string,
+  variantId: string,
+  variantItemId: string,
+): Promise<VariantItemDetail | null> {
+  const { data: vi, error } = await sb
+    .from("variant_items")
+    .select("id,variant_id,item_id,override_data")
+    .eq("id", variantItemId)
+    .eq("variant_id", variantId)
+    .eq("user_id", userId)
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  if (!vi) return null;
+
+  const master = await getMasterItems(sb, userId);
+  const m = master.find((x) => x.id === (vi.item_id as string));
+  if (!m) return null;
+
+  const override = (vi.override_data as Record<string, unknown> | null) ?? null;
+  return {
+    id: vi.id as string,
+    variantId: vi.variant_id as string,
+    itemId: m.id,
+    kind: m.kind,
+    overrideData: override,
+    data: effectiveData(m.data, override),
+  };
 }
 
 /**

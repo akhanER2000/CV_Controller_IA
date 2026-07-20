@@ -254,6 +254,62 @@ export const editor = {
     "editor.deleteYes": "Eliminar",
     "editor.stDeleteLocal": "en modo local no se eliminan variantes",
     "editor.stDeleteErr": "no se pudo eliminar la variante — {r}",
+
+    // ── Ajustar a dos páginas ────────────────────────────────────────────────
+    // MANUAL, SIEMPRE. El copy no promete un ajuste: promete una PROPUESTA. Y el
+    // único número que aparece es el de líneas MEDIDAS sobre el PDF ({n}), nunca
+    // un porcentaje de nada.
+    "editor.fitOpen": "Ajustar a dos páginas",
+    "editor.fitTitle": "Ajustar a {p} páginas",
+    "editor.fitAria": "Propuesta para ajustar el documento",
+    "editor.fitClose": "Cerrar",
+    "editor.fitRun": "Analizar",
+    "editor.fitRerun": "Volver a analizar",
+    "editor.fitBusy": "midiendo el PDF y analizando…",
+    "editor.fitErr": "no se pudo analizar — {r}",
+    "editor.fitLocal": "en modo local no hay análisis: necesita tu master en el servidor",
+    // El número: MEDIDO, contando las líneas del PDF real. Verificable.
+    "editor.fitOver": "SOBRAN ~{n} LÍNEAS",
+    "editor.fitOverSub": "medidas sobre el PDF real ({p} páginas hoy · objetivo {o})",
+    "editor.fitFits": "CABE EN {o} PÁGINAS",
+    "editor.fitFitsSub": "y aún quedan ~{n} líneas libres, medidas sobre el PDF real",
+    "editor.fitManual": "Nada se aplica solo. Aceptas o rechazas cada cambio, uno a uno.",
+    "editor.fitNotes": "Notas",
+
+    "editor.fitSecRemove": "Qué quitar",
+    "editor.fitSecRemoveSub": "lo menos relevante para «{t}»",
+    "editor.fitSecReorder": "Qué reordenar",
+    "editor.fitSecReorderSub": "lo más fuerte, arriba",
+    "editor.fitSecShorten": "Qué acortar",
+    "editor.fitSecShortenSub": "mismo hecho, menos palabras",
+    "editor.fitSecGaps": "Qué falta",
+    "editor.fitSecGapsSub": "comprobado sobre tu documento, no opinado",
+    "editor.fitEmpty": "Nada que proponer aquí.",
+
+    "editor.fitAccept": "Aceptar",
+    "editor.fitReject": "Rechazar",
+    "editor.fitRevert": "Revertir",
+    "editor.fitAccepted": "aceptado ✓",
+    "editor.fitRejected": "rechazado",
+    "editor.fitReverted": "revertido — vuelve al texto anterior",
+    "editor.fitOrigin": "ahora",
+    "editor.fitProposed": "propuesto",
+    "editor.fitMoveUp": "sube del puesto {a} al {b}",
+    "editor.fitMoveDown": "baja del puesto {a} al {b}",
+    "editor.fitSaved": "{n} caracteres menos",
+    "editor.fitByAi": "redactado por IA · hechos preservados",
+    "editor.fitByHuman": "escrito por ti",
+
+    "editor.fitGapNumber": "sin cifra",
+    "editor.fitGapDate": "sin fecha",
+    "editor.fitGapEvidence": "sin respaldo en el documento",
+    "editor.fitGapHint": "Esto no se arregla desde aquí: lo escribes tú, que es quien lo sabe.",
+
+    // El registro de lo que NO se ofrece. Existe porque un descarte silencioso y
+    // «la IA no propuso nada» se ven igual desde fuera, y no son lo mismo.
+    "editor.fitDropped": "{n} propuestas descartadas por el control de hechos",
+    "editor.fitDroppedHint":
+      "No se ofrecen: una reescritura que pierde una cifra o cambia una magnitud no llega a la pantalla.",
   } as Record<string, string>,
   en: {
     // Variant top bar.
@@ -508,5 +564,60 @@ export const editor = {
     "editor.deleteYes": "Delete",
     "editor.stDeleteLocal": "variants aren't deleted in local mode",
     "editor.stDeleteErr": "couldn't delete the variant — {r}",
+
+    // ── Fit to two pages ─────────────────────────────────────────────────────
+    // ALWAYS MANUAL. The copy doesn't promise a fit: it promises a PROPOSAL. And
+    // the only number on screen is lines MEASURED off the real PDF ({n}), never a
+    // percentage of anything.
+    "editor.fitOpen": "Fit to two pages",
+    "editor.fitTitle": "Fit to {p} pages",
+    "editor.fitAria": "Proposal to fit the document",
+    "editor.fitClose": "Close",
+    "editor.fitRun": "Analyse",
+    "editor.fitRerun": "Analyse again",
+    "editor.fitBusy": "measuring the PDF and analysing…",
+    "editor.fitErr": "couldn't analyse — {r}",
+    "editor.fitLocal": "no analysis in local mode: it needs your master on the server",
+    "editor.fitOver": "~{n} LINES OVER",
+    "editor.fitOverSub": "measured on the real PDF ({p} pages today · target {o})",
+    "editor.fitFits": "FITS IN {o} PAGES",
+    "editor.fitFitsSub": "with ~{n} lines to spare, measured on the real PDF",
+    "editor.fitManual": "Nothing applies itself. You accept or reject each change, one by one.",
+    "editor.fitNotes": "Notes",
+
+    "editor.fitSecRemove": "What to drop",
+    "editor.fitSecRemoveSub": "least relevant to “{t}”",
+    "editor.fitSecReorder": "What to reorder",
+    "editor.fitSecReorderSub": "strongest first",
+    "editor.fitSecShorten": "What to shorten",
+    "editor.fitSecShortenSub": "same fact, fewer words",
+    "editor.fitSecGaps": "What's missing",
+    "editor.fitSecGapsSub": "checked against your document, not guessed",
+    "editor.fitEmpty": "Nothing to propose here.",
+
+    "editor.fitAccept": "Accept",
+    "editor.fitReject": "Reject",
+    "editor.fitRevert": "Revert",
+    "editor.fitAccepted": "accepted ✓",
+    "editor.fitRejected": "rejected",
+    "editor.fitReverted": "reverted — back to the previous text",
+    "editor.fitOrigin": "now",
+    "editor.fitProposed": "proposed",
+    "editor.fitMoveUp": "moves up from {a} to {b}",
+    "editor.fitMoveDown": "moves down from {a} to {b}",
+    "editor.fitSaved": "{n} characters shorter",
+    "editor.fitByAi": "written by AI · facts preserved",
+    "editor.fitByHuman": "written by you",
+
+    "editor.fitGapNumber": "no figure",
+    "editor.fitGapDate": "no dates",
+    "editor.fitGapEvidence": "nothing in the document backs it",
+    "editor.fitGapHint": "This isn't fixed from here: you write it, because you're the one who knows.",
+
+    // The record of what is NOT offered. It exists because a silent drop and “the
+    // AI proposed nothing” look identical from outside, and they aren't the same.
+    "editor.fitDropped": "{n} proposals dropped by the fact check",
+    "editor.fitDroppedHint":
+      "They aren't offered: a rewrite that loses a figure or changes a magnitude never reaches the screen.",
   } as Record<string, string>,
 } as const;

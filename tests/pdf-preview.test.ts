@@ -76,6 +76,15 @@ type VIt = {
   override_data: Record<string, unknown> | null;
   data: Record<string, unknown>;
   parent_id: string | null;
+  // Procedencia del override: quién escribió ESE texto y si pasó la verificación
+  // de hechos. El editor era ciego a esto hasta que el ajuste a dos páginas lo
+  // necesitó — un texto reescrito por la IA y uno tecleado por el usuario no
+  // pueden parecer lo mismo. Aquí van en el fixture porque buildEditorResumeData
+  // recibe el item entero, aunque el documento no los imprima.
+  override_origin: string | null;
+  // `not null default false` en el esquema (0001:160): un override o pasó la
+  // verificación o no; no hay tercer estado. El fixture respeta eso.
+  override_verified: boolean;
 };
 
 const master: Row[] = [
@@ -103,6 +112,8 @@ const BASICS: Record<string, unknown> = {
 const vi = (o: Partial<VIt> & Pick<VIt, "id" | "item_id" | "kind" | "sort_order" | "data">): VIt => ({
   visible: true,
   override_data: null,
+  override_origin: null,
+  override_verified: false,
   parent_id: masterById.get(o.item_id)?.parent_id ?? null,
   ...o,
 });

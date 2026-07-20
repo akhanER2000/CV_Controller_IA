@@ -207,3 +207,50 @@
    sin esto son inalcanzables al tabular con teclado. Revelarlas también con
    :focus-within cierra el hueco sin tocar el aspecto en reposo. */
 .var-b:focus-within .bacts{opacity:1}
+
+/* ── «Ajustar a dos páginas»: la PROPUESTA, dentro de la columna que compone ──
+   Misma caja que var-obj/var-pres (una tarjeta más de la columna central), no un
+   modal: la propuesta se lee CONTRA el documento, y un modal tapa justo lo que
+   hay que mirar. Vive en el flujo, se desplaza con la columna y deja el preview
+   a la vista mientras se aceptan cambios uno a uno. */
+.fit{margin:16px 18px 6px;padding:16px 18px}
+.fith{display:flex;align-items:baseline;gap:10px}
+.fith .t-overline{font-size:10px}
+.fith .fitx{margin-left:auto;height:26px;padding:0 10px;font-size:var(--fs-micro);color:var(--text-subtle)}
+/* EL NÚMERO. Es lo primero que se ve y es lo único que se afirma: líneas
+   MEDIDAS sobre el PDF. Por eso ocupa el sitio donde otros ponen un porcentaje. */
+.fitn{margin-top:12px;display:flex;flex-direction:column;gap:4px}
+.fitn .big{font:600 18px/1.1 var(--font-mono);letter-spacing:.02em;color:var(--accent-text)}
+.fitn .big.ok{color:var(--ver-ok)}
+.fitn .sub{font:400 var(--fs-micro)/1.5 var(--font-mono);color:var(--text-subtle)}
+.fitrun{margin-top:12px;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.fitmanual{font:400 var(--fs-micro)/1.5 var(--font-mono);color:var(--text-muted);flex:1;min-width:180px}
+.fiterr{margin-top:10px;font:400 var(--fs-micro)/1.6 var(--font-mono);color:var(--danger)}
+
+.fitsec{margin-top:18px;padding-top:14px;border-top:1px solid var(--border)}
+.fitsech{display:flex;align-items:baseline;gap:9px;flex-wrap:wrap}
+.fitsech .t-overline{font-size:10px}
+.fitsech .sub{font:400 10px/1 var(--font-mono);color:var(--text-subtle)}
+.fitempty{margin-top:9px;font:400 var(--fs-micro)/1.6 var(--font-mono);color:var(--text-subtle)}
+
+.fitrow{margin-top:11px;padding:11px 12px;border:1px solid var(--border);border-radius:7px;
+  background:var(--surface-sunken);display:flex;flex-direction:column;gap:6px}
+.fitrow .txt{font:400 13px/1.5 var(--font-sans);color:var(--text)}
+.fitrow .why{font:400 var(--fs-micro)/1.5 var(--font-mono);color:var(--text-subtle)}
+.fitrow .lbl{font:500 9px/1 var(--font-mono);letter-spacing:.1em;text-transform:uppercase;color:var(--text-subtle)}
+/* Acortar: el original y la propuesta, uno debajo del otro y DISTINGUIBLES sin
+   depender del color (el viejo va tachado; el nuevo lleva filete pátina). */
+.fitcut .txt.old{color:var(--text-muted);text-decoration:line-through;text-decoration-thickness:1px}
+.fitcut .txt.new{box-shadow:inset 2px 0 0 var(--patina-500);padding-left:9px}
+.fitacts{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.fitacts .c-btn{height:28px;padding:0 11px;font-size:var(--fs-micro)}
+/* Estado de la decisión: nunca SOLO color — glifo y palabra, como el resto. */
+.fitok{font:500 var(--fs-micro)/1 var(--font-mono);color:var(--ver-ok)}
+.fitno{font:500 var(--fs-micro)/1 var(--font-mono);color:var(--text-subtle)}
+/* Qué falta: sin botones. Lo escribe el usuario, que es quien lo sabe. */
+.fitgap .gaptag{align-self:flex-start;font:500 9px/1 var(--font-mono);letter-spacing:.08em;text-transform:uppercase;
+  color:var(--accent-text);border:1px solid var(--border-patina);border-radius:4px;padding:4px 7px}
+/* El registro de lo descartado: presente y discreto. Que exista es el punto. */
+.fitdrop .txt{font:500 var(--fs-micro)/1.5 var(--font-mono);color:var(--text-muted)}
+.fitdrop ul{margin-top:8px;padding-left:16px;display:flex;flex-direction:column;gap:4px}
+.fitdrop li{font:400 var(--fs-micro)/1.5 var(--font-mono);color:var(--text-subtle)}
