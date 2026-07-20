@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { extractText, getDocumentProxy } from "unpdf";
+import { extractText, getDocumentProxy, getResolvedPDFJS } from "unpdf";
 import * as QRCode from "qrcode";
 import { buildVCard, type ResumeData } from "../src/lib/cv/resume";
 import { renderResumeToBuffer } from "../src/lib/cv/ResumePDF";
@@ -33,9 +33,28 @@ async function textOf(buf: Buffer): Promise<string> {
  * mide bytes ni confía en el código que lo generó, lee el content stream.
  */
 async function imagesOnPage(buf: Buffer, pageNo: number): Promise<string[]> {
+  const { OPS } = await getResolvedPDFJS();
   const pdf = await getDocumentProxy(new Uint8Array(buf));
   const page = await pdf.getPage(pageNo);
   const ops = await page.getOperatorList();
+  // ★ CANDADO DEL LECTOR. getOperatorList() se traga sus propias excepciones
+  // (ignoreErrors) y devuelve la lista TRUNCADA. Cuando pdf.js reventaba
+  // compilando la info de fuente —Node 20 no tiene
+  // ArrayBuffer.prototype.transferToFixedLength, que unpdf da por hecha— la lista
+  // se cortaba ANTES del paintImageXObject del QR y esto devolvía []. Que es
+  // exactamente lo mismo que devuelve un PDF sin imagen: un lector ciego se
+  // disfrazaba de fallo del producto, y así estuvo la CI cuatro commits en rojo
+  // mientras el glifo SÍ viajaba en el PDF (idéntico byte a byte en 20 y en 24).
+  // Toda página de un CV lleva texto: si no hay ni una operación de texto, el
+  // que falló es el lector. Que lo diga en vez de fingir un array vacío.
+  const fns = Array.from(ops.fnArray as ArrayLike<number>);
+  if (!fns.includes(OPS.showText) && !fns.includes(OPS.showSpacedText)) {
+    throw new Error(
+      `Lector ciego en la página ${pageNo}: getOperatorList() devolvió ${fns.length} operaciones ` +
+        `y ninguna dibuja texto, así que pdf.js abortó la lista y se lo calló. ` +
+        `El PDF no tiene la culpa — revisa que el runtime traiga las APIs que unpdf necesita (Node ≥22).`,
+    );
+  }
   const names = (ops.argsArray as unknown[])
     .flat()
     .filter((a): a is string => typeof a === "string" && a.startsWith("img_"));

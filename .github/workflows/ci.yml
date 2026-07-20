@@ -12,7 +12,11 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          # 22 = la LTS y el runtime de Vercel (el proyecto está en 24.x, y 22 es
+          # el suelo que declara package.json). En 20 la CI probaba un runtime que
+          # NADIE usa: unpdf necesita ArrayBuffer.prototype.transferToFixedLength
+          # (Node ≥21) y sin él pdf.js aborta la lista de operadores en silencio.
+          node-version: 22
           cache: npm
       - run: npm ci
       - name: Typecheck

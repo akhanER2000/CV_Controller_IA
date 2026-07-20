@@ -3,6 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "description": "Corpus — el sistema de registro de tu carrera. Un master canónico; cada CV es una vista de él.",
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
     "dev": "next dev",
     "build": "next build",
