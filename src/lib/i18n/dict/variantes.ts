@@ -63,11 +63,13 @@ export const variantes = {
     "variantes.undoDeletedOverrides": "Variante «{nm}» eliminada · se pierden {n} ajuste{s} propio{s}",
 
     // Panel de diferencias (variante desactualizada).
+    // ⚠ Se retiraron variantes.diffUpdate y variantes.diffKeep: rotulaban dos
+    // botones que no guardaban nada. Ver el comentario largo en VariantesScreen.
     "variantes.diffOverline": "Qué cambió en el master",
     "variantes.diffBody":
-      "El master cambió después de la última vez que abriste esta variante. Revisa qué adoptar y qué mantener como override.",
-    "variantes.diffUpdate": "Actualizar esta variante",
-    "variantes.diffKeep": "Mantener como está (override)",
+      "El master cambió después de la última vez que esta variante lo miró. Tus overrides siguen intactos: una variante referencia el master, no lo copia.",
+    "variantes.diffPending":
+      "Todavía no se puede resolver desde aquí — la reconciliación (adoptar el master o fijar tu override) está sin construir, y este aviso seguirá visible hasta que exista.",
     "variantes.diffOpenEditor": "ver en el editor",
 
     // Estado vacío ({n} + {s} se componen con .replace).
@@ -83,8 +85,9 @@ export const variantes = {
     "variantes.emptyDumpCta": "Volcar lo que tengo →",
 
     // Anuncios aria-live ({nm} se compone con .replace).
-    "variantes.announceUpdated": "Variante «{nm}» actualizada con el master. Ahora está al día.",
-    "variantes.announceKept": "Variante «{nm}»: override mantenido. Ahora está al día.",
+    // ⚠ Se retiraron announceUpdated y announceKept: anunciaban «Ahora está al
+    // día» a los lectores de pantalla sin que nada se hubiera guardado. Un
+    // aria-live que miente es peor que uno que calla: nadie puede verificarlo.
     "variantes.announceAiCreated":
       "Variante «{nm}» creada con IA como punto de partida. Ábrela para revisarla.",
   } as Record<string, string>,
@@ -145,9 +148,9 @@ export const variantes = {
 
     "variantes.diffOverline": "What changed in the master",
     "variantes.diffBody":
-      "The master changed since the last time you opened this variant. Review what to adopt and what to keep as an override.",
-    "variantes.diffUpdate": "Update this variant",
-    "variantes.diffKeep": "Keep as is (override)",
+      "The master changed since the last time this variant looked at it. Your overrides are untouched: a variant references the master, it doesn't copy it.",
+    "variantes.diffPending":
+      "This can't be resolved from here yet — reconciliation (adopting the master or pinning your override) isn't built, and this notice will stay visible until it is.",
     "variantes.diffOpenEditor": "view in the editor",
 
     "variantes.emptyOverline": "No variants yet",
@@ -161,8 +164,6 @@ export const variantes = {
       "A variant references your master — it doesn't copy it. With no master, there's nothing to choose from.",
     "variantes.emptyDumpCta": "Dump what I have →",
 
-    "variantes.announceUpdated": "Variant «{nm}» updated from the master. It's up to date now.",
-    "variantes.announceKept": "Variant «{nm}»: override kept. It's up to date now.",
     "variantes.announceAiCreated":
       "Variant «{nm}» created with AI as a starting point. Open it to review.",
   } as Record<string, string>,

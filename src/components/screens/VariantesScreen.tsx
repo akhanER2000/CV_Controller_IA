@@ -1,12 +1,13 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { Suspense, useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useT, useLang } from "@/lib/i18n";
 import { supabaseEnabled } from "@/lib/supabase/config";
 import { AuroraTune, AURORA_HOJEO } from "@/components/Aurora";
 import { useUndoToast } from "@/components/UndoToast";
+import { Breadcrumb, ORIGIN_PARAM, isInternalAppPath } from "@/components/Breadcrumb";
 import "./variantes.css";
 
 /* ============================================================================
@@ -32,8 +33,10 @@ import "./variantes.css";
        Nada se aplica en silencio.
 
    Cada variante es una VISTA del master, no una copia. Las desactualizadas se
-   marcan con c-pulse-dot (master_seen_at < master.updated_at) y dejan decidir:
-   actualizar (adoptar el master) o mantener tu override.
+   marcan con c-pulse-dot (master_seen_at < master.updated_at) y el panel explica
+   qué pasó. Lo que NO hace todavía es resolverlo: «actualizar» y «mantener» eran
+   dos botones que solo cambiaban un booleano en React —ver el comentario largo
+   donde vivían—, así que se fueron. La señal se queda: el master sí cambió.
    ============================================================================ */
 
 type Variant = {
@@ -45,7 +48,6 @@ type Variant = {
   pg: string;
   touch: string;
   old: boolean;
-  kept?: boolean;
 };
 
 // Maqueta del MODO LOCAL (persona Diego Gatica). Nunca se usa con Supabase.
@@ -84,6 +86,77 @@ function rel(iso: string, t: T): string {
   return plur("dashboard.rel.year", Math.round(d / (365 * day)));
 }
 
+/* ── El «volver» que llegaba y nadie leía ─────────────────────────────────────
+   El remate de Staging enlaza a /app/variantes?from=%2Fapp%2Fstaging desde que se
+   construyó, pero esta pantalla no montaba <Breadcrumb>: el parámetro viajaba y
+   moría. El usuario terminaba de revisar su volcado, aterrizaba en Variantes y se
+   quedaba sin camino de vuelta a la cola que acababa de dejar a medias.
+
+   PERO VARIANTES ES UNA PESTAÑA RAÍZ (una de las cuatro de la barra), y ahí un
+   «volver» permanente sería una miga inventada: a quien entra por la pestaña no
+   le pasó nada antes de lo que volver, y un botón que apunta al Panel «porque
+   sí» es justo lo que la doctrina del Breadcrumb prohíbe (ver su cabecera). Por
+   eso la miga es CONDICIONAL: solo aparece cuando el viaje existe de verdad,
+   declarado en la URL y validado como ruta interna de /app.
+
+   El `fallback` sigue siendo obligatorio y sigue siendo real (/app): solo se usa
+   si el `from` es válido, y en ese caso nunca se llega a mirar. */
+export function debeMostrarMiga(from: string | null | undefined): boolean {
+  return isInternalAppPath(from);
+}
+
+/** La miga, solo si vienes de algún sitio. Suspense propio porque
+ *  useSearchParams() lo exige al prerenderizar (Next 15); durante el prerender
+ *  no hay miga —el estado correcto para el 99% de las entradas, que son por la
+ *  pestaña— y al hidratar aparece si el viaje existía. */
+function MigaSoloSiVienesDeAlgunSitio({ current }: { current: string }) {
+  const from = useSearchParams().get(ORIGIN_PARAM);
+  if (!debeMostrarMiga(from)) return null;
+  return <Breadcrumb className="vr-bc" fallback="/app" current={current} />;
+}
+
+/* ── Ejecutar N tareas con un techo de concurrencia ───────────────────────────
+   POR QUÉ EXISTE. El chip «borrador» necesita el conteo de items de las
+   variantes sin objetivo, y no hay forma de pedirlo en lote: GET /api/variants
+   no devuelve conteos y añadirlos vive en otra frontera. Lo que había era un
+   Promise.all sobre TODOS los candidatos: con 30 variantes en blanco, 30
+   peticiones simultáneas al abrir la lista — un N+1 que además compite consigo
+   mismo por las conexiones del navegador y retrasa todo lo demás de la pantalla.
+
+   Esto no elimina el N+1 (eso pide el conteo en el listado), pero le pone techo:
+   como mucho `limite` peticiones vivas a la vez, en vez de todas. El orden del
+   resultado se conserva —se escribe por índice, no por orden de llegada—, así
+   que el llamante puede seguir emparejando resultado con entrada.
+
+   `seguir()` corta en seco cuando el efecto se desmonta (cambio de idioma,
+   navegación): sin él, una lista larga seguiría pidiendo conteos para una
+   pantalla que ya no está. */
+export async function enLotes<T, R>(
+  items: readonly T[],
+  limite: number,
+  tarea: (item: T) => Promise<R>,
+  seguir: () => boolean = () => true,
+): Promise<(R | null)[]> {
+  const salida: (R | null)[] = new Array(items.length).fill(null);
+  // Un techo de 0 o negativo dejaría el trabajo sin hacer en silencio: mínimo 1.
+  const obreros = Math.max(1, Math.min(Math.floor(limite) || 1, items.length));
+  let siguiente = 0;
+  await Promise.all(
+    Array.from({ length: obreros }, async () => {
+      for (;;) {
+        const i = siguiente++;
+        if (i >= items.length || !seguir()) return;
+        salida[i] = await tarea(items[i]);
+      }
+    }),
+  );
+  return salida;
+}
+
+/** Techo de peticiones simultáneas de conteos. 4 es el orden de magnitud de
+ *  conexiones que un navegador da por host sin encolar; subirlo no acelera. */
+const CONCURRENCIA_CONTEOS = 4;
+
 export function VariantesScreen() {
   const t = useT();
   const { lang } = useLang();
@@ -92,7 +165,6 @@ export function VariantesScreen() {
   const [masterItems, setMasterItems] = useState<number>(supabaseEnabled ? 0 : DEMO_MASTER_ITEMS);
   const [loading, setLoading] = useState(supabaseEnabled);
   const [openRows, setOpenRows] = useState<Set<number>>(new Set());
-  const [gen, setGen] = useState(0);
   const [announce, setAnnounce] = useState("");
 
   // Gestión de filas: renombrado inline, chip «borrador» y toast de deshacer.
@@ -138,8 +210,13 @@ export function VariantesScreen() {
         // que no tienen objetivo (subconjunto), con un fetch ligero de conteos.
         const candidates = list.filter((v) => v.id && !(v.rawObj && v.rawObj.trim()));
         if (candidates.length) {
-          void Promise.all(
-            candidates.map(async (v) => {
+          // Con techo de concurrencia: ver enLotes(). Sin él, una cuenta con
+          // muchas variantes en blanco disparaba una petición por cada una, todas
+          // a la vez, solo para decidir un chip.
+          void enLotes(
+            candidates,
+            CONCURRENCIA_CONTEOS,
+            async (v) => {
               try {
                 const r = await fetch(`/api/variants/${v.id}?counts=1`);
                 if (!r.ok) return null;
@@ -148,7 +225,8 @@ export function VariantesScreen() {
               } catch {
                 return null;
               }
-            }),
+            },
+            () => active,
           ).then((ids) => {
             if (active) setDraftIds(new Set(ids.filter((x): x is string => !!x)));
           });
@@ -170,8 +248,11 @@ export function VariantesScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lang]);
 
-  // Movimiento del sistema: dibuja el c-divider y revela filas. Se re-ejecuta con
-  // `gen` (re-stagger tras actualizar/mantener) y cuando llegan los datos.
+  // Movimiento del sistema: dibuja el c-divider y revela filas. Se re-ejecuta
+  // cuando llegan los datos o cambia el nº de filas (duplicar / eliminar).
+  // Antes también dependía de un contador `gen` que solo incrementaban
+  // «Actualizar»/«Mantener»; con esos botones retirados, el contador era estado
+  // muerto y las filas ya no necesitan remontarse para re-escalonarse.
   useEffect(() => {
     if (empty || loading) return;
     let tries = 0;
@@ -185,7 +266,7 @@ export function VariantesScreen() {
       M.boot(mainRef.current ?? document);
     }, 30);
     return () => window.clearInterval(id);
-  }, [gen, empty, loading, variants.length]);
+  }, [empty, loading, variants.length]);
 
   // Estado vacío: entrada C2 (c-enter) cuando aparece.
   useEffect(() => {
@@ -204,20 +285,23 @@ export function VariantesScreen() {
     });
   }
 
-  // «Actualizar» / «Mantener»: la fila deja de estar desactualizada. Optimista y
-  // local (aún no hay endpoint de escritura de estas señales en esta fase).
-  function updateVariant(i: number) {
-    setVariants((prev) => prev.map((v, k) => (k === i ? { ...v, old: false } : v)));
-    setOpenRows(new Set());
-    setGen((g) => g + 1);
-    setAnnounce(t("variantes.announceUpdated").replace("{nm}", variants[i].nm));
-  }
-  function keepVariant(i: number) {
-    setVariants((prev) => prev.map((v, k) => (k === i ? { ...v, old: false, kept: true } : v)));
-    setOpenRows(new Set());
-    setGen((g) => g + 1);
-    setAnnounce(t("variantes.announceKept").replace("{nm}", variants[i].nm));
-  }
+  /* ── Aquí vivían «Actualizar esta variante» y «Mantener como está» ───────────
+     Los dos hacían lo mismo: poner old:false en el estado de React y anunciar
+     «Ahora está al día». Nada viajaba al servidor —el propio comentario lo
+     admitía— así que el usuario creía haber resuelto la desactualización, se iba
+     tranquilo, y al recargar el punto seguía ahí. Una interfaz que afirma haber
+     guardado lo que no guardó es la peor clase de mentira del producto: la que
+     solo se descubre tarde.
+
+     No se pueden arreglar cableándolos: `master_seen_at` (la marca de «esta
+     variante ya miró el master», src/lib/db/queries.ts) solo se escribe al CREAR
+     y al DUPLICAR. No hay endpoint que la actualice, y crearlo cae fuera de esta
+     frontera. Abrir el editor tampoco la toca — así que prometer «resuélvelo
+     abriéndola» habría sido cambiar una mentira por otra.
+
+     Se van los botones y se queda la verdad, en el panel de diferencias: qué
+     pasó, y que la señal seguirá encendida hasta que exista la reconciliación.
+     Lo que SÍ funciona —ver la variante en su editor— sigue ahí. */
 
   // ── Renombrar inline (input al clic, Enter guarda, Esc cancela). ────────────
   function startRename(i: number) {
@@ -491,6 +575,12 @@ export function VariantesScreen() {
           <Link className="c-logo" href="/app">
             Corpus
           </Link>
+          {/* Solo cuando el ?from= declara un viaje real (p. ej. desde Staging).
+              Ver debeMostrarMiga(): en una pestaña raíz, un «volver» permanente
+              sería una miga inventada. */}
+          <Suspense fallback={null}>
+            <MigaSoloSiVienesDeAlgunSitio current={t("nav.variantes")} />
+          </Suspense>
           <nav className="hd-nav">
             <Link href="/app">{t("nav.panel")}</Link>
             <Link href="/app/master">{t("nav.master")}</Link>
@@ -507,7 +597,10 @@ export function VariantesScreen() {
               <span data-on>ES</span>
               <span>EN</span>
             </div>
-            <div className="hd-av">DG</div>
+            {/* Aquí iba <div className="hd-av">DG</div>: las iniciales de la
+                persona inventada de la maqueta. Ocultas por UserMenu.css, pero
+                afirmaban una identidad que no es la del usuario. El avatar real
+                lo pinta UserMenu, montado por el layout de /app. */}
           </div>
         </div>
       </header>
@@ -554,7 +647,10 @@ export function VariantesScreen() {
                   <div
                     className={`vr-row${open ? " open" : ""}`}
                     data-i={i}
-                    key={`${gen}-${i}`}
+                    /* Clave por id real cuando lo hay: con el índice, eliminar una
+                       fila reciclaba el estado de la siguiente (el input de
+                       renombrar se quedaba con el nombre de la que ya no está). */
+                    key={v.id ?? `demo-${i}`}
                     data-reveal="soft"
                     style={{ "--d": `${Math.min(i, 24) * 40}ms` } as React.CSSProperties}
                   >
@@ -676,13 +772,11 @@ export function VariantesScreen() {
                             {t("variantes.diffBody")}
                           </span>
                         </div>
+                        {/* Lo que la interfaz NO puede prometer, dicho en su sitio:
+                            la señal no se apaga desde aquí. Sin esta línea, la
+                            ausencia de botones parecería un olvido. */}
+                        <div className="vr-dline vr-dpending">{t("variantes.diffPending")}</div>
                         <div className="vr-dacts">
-                          <button type="button" className="prim" onClick={() => updateVariant(i)}>
-                            {t("variantes.diffUpdate")}
-                          </button>
-                          <button type="button" onClick={() => keepVariant(i)}>
-                            {t("variantes.diffKeep")}
-                          </button>
                           <Link className="c-btn c-btn--quiet" style={{ height: "30px", fontSize: "10px" }} href={href}>
                             {t("variantes.diffOpenEditor")}
                           </Link>

@@ -1,150 +1,55 @@
 /* i18n · namespace "tailor". Claves planas con prefijo "tailor.". ES = referencia; EN = copy.md.
-   Este archivo lo llena el barrido i18n de la pantalla "tailor". */
+
+   ⚠ ESTE NAMESPACE SE VACIÓ EN LA COSTURA G. Las ~40 claves anteriores eran el
+   copy de una maqueta: el aviso de ejemplo, los tres grupos (HAVE/ADD/GAP), las
+   reformulaciones y sus cifras («52 items», «10,6× entrevistas», «~40.000 tx
+   diarias»). Todas describían el análisis de una persona inventada y se pintaban
+   como si fueran del usuario. No se «tradujeron»: se retiraron, con la pantalla
+   que las mostraba. Ver la cabecera de TailorScreen.tsx.
+
+   Las claves de aquí abajo NO afirman nada sobre el usuario: dicen qué falta,
+   qué hará cuando exista (en futuro) y a dónde ir mientras tanto. */
 export const tailor = {
   es: {
-    // toolbar
-    "tailor.toolbarNote": "sin score — tres respuestas honestas",
+    // Barra superior.
+    "tailor.toolbarNote": "todavía sin construir",
 
-    // el aviso (columna izquierda)
-    "tailor.jdLabel": "El aviso, tal cual",
-    "tailor.jdPlaceholder": "Pega aquí la descripción del cargo — completa, sin limpiar.",
-    "tailor.words": "{n} palabras",
-    "tailor.useSample": "usar aviso de ejemplo",
-    "tailor.compare": "Comparar con tu master",
+    // El hueco, dicho de frente.
+    "tailor.voidOverline": "Adaptar a un aviso · todavía sin construir",
+    "tailor.voidTitle": "Aquí no hay análisis que enseñarte.",
+    "tailor.voidBody":
+      "Contrastar un aviso contra tu master es la pieza que falta. Cuando exista, responderá con hechos en tres grupos —lo que ya está en esta variante, lo que está en tu master y no en ella, y lo que no está en ninguna parte— y nunca con un score ni un porcentaje de match.",
+    // La regla, no una disculpa.
+    "tailor.voidEthic":
+      "Hasta entonces esta pantalla no te enseña el análisis de nadie. Antes que un ejemplo con cifras inventadas rotulado como tuyo, nada.",
 
-    // log del análisis
-    "tailor.logReading": "Leyendo el aviso — {n} palabras, {r} exigencias detectadas",
-    "tailor.logComparing": "Comparando contra 52 items del master…",
-    "tailor.logSearching": "Buscando las exigencias en tus viñetas, skills y repos…",
-
-    // anuncio del resultado (live region)
-    "tailor.resultMsg":
-      "Comparación lista. {have} ya están en esta variante, {add} en tu master, {gap} sin evidencia en ninguna parte.",
-
-    // hint (nada que comparar todavía)
-    "tailor.hintOverline": "Todavía nada que comparar",
-    "tailor.hintBefore": "Pega el aviso y Corpus lo contrasta contra tus",
-    "tailor.hintItems": "52 items",
-    "tailor.hintAfter": "— los del master, no los de esta variante.",
-    "tailor.hintLine2": "La respuesta son hechos en tres grupos, no un porcentaje.",
-
-    // título alineado
-    "tailor.titlePre": "El aviso pide",
-    "tailor.titleMid": "tu variante dice",
-    "tailor.titleAlignedValue": "«Backend Engineer (Ingeniero de Software III)»",
-    "tailor.titleCurrent": "«Backend Developer»",
-    "tailor.titleWhy": "título alineado = 10,6× entrevistas [Jobscan]",
-    "tailor.titleDone": "✓ título alineado — honesto: tu cargo real queda al lado",
-    "tailor.titleUse": "Usar el del aviso",
-
-    // grupo 1 — ya está
-    "tailor.haveTitle": "Ya está en esta variante",
-
-    // grupo 2 — en el master, no en la variante
-    "tailor.addTitle": "Lo tienes en el master, no en esta variante",
-    "tailor.addWhy": "un clic y entra — es tuyo, es honesto",
-    "tailor.addBtn": "añadir a la variante",
-    "tailor.addDone": "✓ en la variante",
-
-    // grupo 3 — no está en ninguna parte
-    "tailor.gapTitle": "No está en ninguna parte",
-    "tailor.gapWhy": "y no vamos a inventarlo",
-    "tailor.gapReframeBtn": "reencuadrar con lo que sí tienes",
-    "tailor.gapNote":
-      "Aquí no hay botón de «añadir». Tres salidas reales: apréndelo, busca en tu master evidencia parcial que reencuadrar, o asume que este aviso no calza contigo — también está bien.",
-
-    // reformulaciones
-    "tailor.refTitle": "Reformulaciones propuestas",
-    "tailor.refCount": "{n} · una a una, nunca en bloque",
-    "tailor.propLabel": "Propuesta {n}",
-    "tailor.verSavedOrigin": "verificado · origen: tú",
-    "tailor.verOk": "verificado",
-    "tailor.verNone": "no verificado",
-    "tailor.colOriginal": "Original (master)",
-    "tailor.colProposed": "Propuesto para esta variante",
-
-    // pie de cada propuesta
-    "tailor.footAccepted": "✓ aplicada como override — el original sigue en el master, revertible en el editor",
-    "tailor.footRejected": "rechazada — no se guarda nada",
-    "tailor.footEditing": "edítala — al guardar queda como origen: tú",
-    "tailor.footSaveMine": "guardar como mía",
-    "tailor.footSaved": "✓ guardada con origen manual",
-    "tailor.footIdleNote": "si aceptas, queda como override — reversible, con el original a la vista",
-    "tailor.footAccept": "aceptar",
-    "tailor.footEditYou": "editarlo tú",
-    "tailor.footReject": "rechazar",
+    // Las salidas que sí funcionan.
+    "tailor.voidNextOverline": "Lo que sí puedes hacer ahora",
+    "tailor.voidFitNote":
+      "Vive dentro del editor de esta variante. Mide el PDF real —el mismo que se descarga— y propone qué quitar, qué reordenar y qué acortar. Se acepta propuesta a propuesta; no se aplica nada solo.",
+    "tailor.voidMasterCta": "Revisar tu master",
+    "tailor.voidMasterNote":
+      "De ahí sale todo lo que puede entrar en una variante. Cuanto más completo esté, menos huecos tendrás delante de un aviso.",
   } as Record<string, string>,
   en: {
-    // toolbar
-    "tailor.toolbarNote": "no score — three honest answers",
+    // Top bar.
+    "tailor.toolbarNote": "not built yet",
 
-    // the posting (left column)
-    "tailor.jdLabel": "The posting, as is",
-    "tailor.jdPlaceholder": "Paste the job description here — complete, uncleaned.",
-    "tailor.words": "{n} words",
-    "tailor.useSample": "use a sample posting",
-    "tailor.compare": "Compare with your master",
+    // The gap, stated plainly.
+    "tailor.voidOverline": "Tailor to a posting · not built yet",
+    "tailor.voidTitle": "There's no analysis to show you here.",
+    "tailor.voidBody":
+      "Checking a posting against your master is the missing piece. Once it exists, it will answer with facts in three groups —what's already in this variant, what's in your master but not in it, and what's nowhere at all— and never with a score or a match percentage.",
+    // The rule, not an apology.
+    "tailor.voidEthic":
+      "Until then this screen won't show you anybody's analysis. Rather than a sample with made-up numbers labelled as yours, nothing.",
 
-    // analysis log
-    "tailor.logReading": "Reading the posting — {n} words, {r} requirements detected",
-    "tailor.logComparing": "Comparing against your 52 master items…",
-    "tailor.logSearching": "Looking for the requirements in your bullets, skills and repos…",
-
-    // result announcement (live region)
-    "tailor.resultMsg":
-      "Comparison ready. {have} already in this variant, {add} in your master, {gap} with no evidence anywhere.",
-
-    // hint (nothing to compare yet)
-    "tailor.hintOverline": "Nothing to compare yet",
-    "tailor.hintBefore": "Paste the posting and Corpus compares it against your",
-    "tailor.hintItems": "52 items",
-    "tailor.hintAfter": "— the master's, not this variant's.",
-    "tailor.hintLine2": "The answer is facts in three groups, not a percentage.",
-
-    // aligned title
-    "tailor.titlePre": "The posting asks for",
-    "tailor.titleMid": "your variant says",
-    "tailor.titleAlignedValue": "«Backend Engineer (Software Engineer III)»",
-    "tailor.titleCurrent": "«Backend Developer»",
-    "tailor.titleWhy": "aligned title = 10.6× interviews [Jobscan]",
-    "tailor.titleDone": "✓ title aligned — honest: your real title stays beside it",
-    "tailor.titleUse": "Use the posting's",
-
-    // group 1 — already in
-    "tailor.haveTitle": "Already in this variant",
-
-    // group 2 — in the master, not in the variant
-    "tailor.addTitle": "In your master, not in this variant",
-    "tailor.addWhy": "one click and it's in — it's yours, it's honest",
-    "tailor.addBtn": "add to the variant",
-    "tailor.addDone": "✓ in the variant",
-
-    // group 3 — nowhere in your record
-    "tailor.gapTitle": "Nowhere in your record",
-    "tailor.gapWhy": "and we won't invent it",
-    "tailor.gapReframeBtn": "reframe with what you do have",
-    "tailor.gapNote":
-      "There's no «add» button here. Three real ways out: learn it, look in your master for partial evidence to reframe, or accept this posting isn't your fit — that's fine too.",
-
-    // rewrites
-    "tailor.refTitle": "Proposed rewrites",
-    "tailor.refCount": "{n} · one at a time, never in bulk",
-    "tailor.propLabel": "Proposal {n}",
-    "tailor.verSavedOrigin": "verified · origin: you",
-    "tailor.verOk": "verified",
-    "tailor.verNone": "unverified",
-    "tailor.colOriginal": "Original (master)",
-    "tailor.colProposed": "Proposed for this variant",
-
-    // footer of each proposal
-    "tailor.footAccepted": "✓ applied as an override — the original stays in your master, revertible in the editor",
-    "tailor.footRejected": "rejected — nothing is saved",
-    "tailor.footEditing": "edit it — on save it becomes origin: you",
-    "tailor.footSaveMine": "save as mine",
-    "tailor.footSaved": "✓ saved with manual origin",
-    "tailor.footIdleNote": "if you accept, it becomes an override — reversible, with the original in view",
-    "tailor.footAccept": "accept",
-    "tailor.footEditYou": "edit it yourself",
-    "tailor.footReject": "reject",
+    // The exits that do work.
+    "tailor.voidNextOverline": "What you can actually do now",
+    "tailor.voidFitNote":
+      "It lives inside this variant's editor. It measures the real PDF —the same one you download— and proposes what to drop, what to reorder and what to shorten. You accept one proposal at a time; nothing applies itself.",
+    "tailor.voidMasterCta": "Review your master",
+    "tailor.voidMasterNote":
+      "Everything a variant can draw from lives there. The fuller it is, the fewer gaps a posting will find.",
   } as Record<string, string>,
 } as const;

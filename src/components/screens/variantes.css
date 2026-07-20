@@ -37,10 +37,20 @@
 .vr-dline{display:flex;gap:14px;align-items:baseline;margin-top:10px;font:400 var(--fs-data)/1.6 var(--font-mono)}
 .vr-dline .was{color:var(--text-subtle);text-decoration:line-through;text-decoration-color:var(--border-strong)}
 .vr-dline .now{color:var(--text)}
+/* La confesión de que la señal no se apaga desde aquí. Va con el mismo cuerpo
+   que .vr-dline pero apagada: es una nota, no el titular del panel. */
+.vr-dpending{color:var(--text-subtle);max-width:70ch}
 .vr-dacts{display:flex;gap:8px;margin-top:12px}
+/* Las reglas de <button> se conservan aunque hoy .vr-dacts solo contenga un
+   <Link>: es el hueco donde vuelven «adoptar el master» / «fijar mi override»
+   cuando exista el endpoint que los sostenga. .prim se fue con ellos —marcaba
+   como acción primaria un botón que no guardaba nada. */
 .vr-dacts button{font:500 var(--fs-micro)/1 var(--font-mono);padding:8px 11px;border:1px solid var(--border-strong);border-radius:6px;color:var(--text-muted)}
 .vr-dacts button:hover{color:var(--text);border-color:var(--border-patina)}
-.vr-dacts .prim{color:var(--accent-text);border-color:var(--border-patina)}
+/* La miga condicional (solo con ?from= válido): separa del logo sin empujar la
+   nav principal, que sigue centrada por el grid del header. */
+.c-header .vr-bc{margin-left:14px}
+@media (max-width:768px){.c-header .vr-bc .bc-current,.c-header .vr-bc .bc-sep{display:none}}
 .vr-empty{max-width:560px;margin:90px auto 0;text-align:center;display:none}
 .vr-empty.show{display:block}
 .vr-empty p{margin-top:14px;color:var(--text-muted);line-height:1.7}
