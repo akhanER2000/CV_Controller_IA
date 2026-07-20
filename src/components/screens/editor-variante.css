@@ -99,7 +99,10 @@
 .var-design .dchip:hover{color:var(--text);border-color:var(--border-strong)}
 .var-design .dchip[aria-pressed="true"]{color:var(--accent-text);border-color:var(--border-patina);
   background:var(--surface-elevated)}
-.var-design .ddot{width:9px;height:9px;border-radius:2px;flex:none;border:1px solid rgba(0,0,0,.25)}
+/* El aro de la muestra de color usa --border-strong (negro al 16% en claro,
+   blanco al 16% en oscuro): un rgba(0,0,0,.25) fijo desaparece sobre grafito y
+   deja las muestras oscuras sin borde. */
+.var-design .ddot{width:9px;height:9px;border-radius:2px;flex:none;border:1px solid var(--border-strong)}
 /* ── Contacto por variante — misma caja que var-obj/var-pres ── */
 .var-contact{margin:6px 18px 6px;padding:16px 18px}
 .var-contact .presh{display:flex;align-items:baseline;gap:10px}
@@ -125,7 +128,10 @@
 .ed-delconfirm{display:flex;align-items:center;gap:8px}
 .ed-delconfirm .q{font:500 var(--fs-micro)/1 var(--font-mono);color:var(--text-muted)}
 .ed-del-yes{color:var(--danger);border-color:color-mix(in srgb,var(--danger) 45%,transparent)}
-.ed-del-yes:hover{color:var(--ink-on-patina);background:var(--danger);border-color:transparent}
+/* --text-on-danger, no --ink-on-patina: sobre el ladrillo del peligro en claro la
+   tinta da 3.26:1 y FALLA. El token nuevo vale tinta en grafito (5.46:1) y blanco
+   en porcelana (5.89:1) — ver la nota larga en globals.css sobre por qué invierte. */
+.ed-del-yes:hover{color:var(--text-on-danger);background:var(--danger);border-color:transparent}
 .ed-del-btn{color:var(--text-subtle)}
 .ed-del-btn:hover{color:var(--danger)}
 .var-g{margin:18px 18px 0}
@@ -174,8 +180,12 @@
 .pv-scroll{flex:1;overflow-y:auto;padding:18px;display:flex;min-height:0}
 .pv-fit{position:relative;margin:0 auto;flex:1;min-width:0;min-height:0;display:flex}
 .pv-doc{position:relative;flex:1;min-height:0;display:flex}
+/* El #FFFFFF NO se toca: es el PAPEL del CV, blanco en los dos temas por diseño
+   (mismo caso que .ls-paper en landing.css). Lo que sí es de grafito es la
+   sombra: negro al 50% sobre porcelana ensucia el papel en vez de levantarlo. */
 .pv-frame{flex:1;width:100%;min-height:520px;border:0;border-radius:var(--radius-md);
   background:#FFFFFF;box-shadow:0 2px 24px rgba(0,0,0,.5)}
+[data-theme="light"] .pv-frame{box-shadow:0 2px 18px rgba(20,24,26,.14)}
 /* Estado honesto cuando no hay PDF que mostrar (generando o error CON motivo). */
 .pv-fail{flex:1;display:flex;flex-direction:column;align-items:flex-start;gap:10px;
   padding:26px 24px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-md)}

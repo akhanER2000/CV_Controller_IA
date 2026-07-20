@@ -60,7 +60,9 @@ body:has(.tg-veil) .c-aurora{z-index:60}
   font:400 var(--fs-micro)/1 var(--font-mono);color:var(--text-muted)}
 .tg-sw:hover{border-color:var(--border-strong);color:var(--text)}
 .tg-sw[aria-pressed="true"]{color:var(--accent-text);border-color:var(--border-patina);background:var(--surface-elevated)}
-.tg-dot{width:9px;height:9px;border-radius:2px;flex:none;border:1px solid rgba(0,0,0,.25)}
+/* Mismo caso que .var-design .ddot: el aro de una muestra de color tiene que
+   invertirse con el tema, si no las muestras oscuras pierden el borde en grafito. */
+.tg-dot{width:9px;height:9px;border-radius:2px;flex:none;border:1px solid var(--border-strong)}
 
 /* ── Comparación: hasta dos, grandes, lado a lado ── */
 .tg-compare{display:flex;align-items:flex-start;gap:16px;padding:14px 20px;

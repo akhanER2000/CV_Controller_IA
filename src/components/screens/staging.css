@@ -69,7 +69,10 @@ body{background:var(--bg)}
   font:400 var(--fs-data)/1.7 var(--font-mono);color:var(--text-muted)}
 .stg-frag.open{display:block}
 .stg-frag .from{display:block;margin-bottom:6px;font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--text-subtle)}
+/* Gemelo de .ms-frag mark en master.css: mismo resaltado de procedencia, misma
+   corrección para porcelana. */
 .stg-frag mark{background:rgba(95,198,169,.16);color:var(--text);padding:0 3px;border-radius:2px}
+[data-theme="light"] .stg-frag mark{background:rgba(67,179,160,.30)}
 .stg-frag.miss{border-left-color:color-mix(in srgb,var(--danger) 50%,transparent)}
 .stg-frag.miss .from{color:var(--danger)}
 /* invitación (huecos) */
@@ -111,7 +114,12 @@ body{background:var(--bg)}
 .stg-merge{display:none;border-top:1px solid var(--border)}
 .stg-merge.open{display:block}
 .stg-mhead{display:grid;grid-template-columns:110px 1fr 1fr;gap:1px;background:var(--border)}
-.stg-mhead>div{background:var(--surface-elevated);padding:9px 14px;font:500 10px/1 var(--font-mono);letter-spacing:.1em;text-transform:uppercase;color:var(--text-subtle)}
+/* --text-muted, no --text-subtle: es el ÚNICO sitio del producto que pone
+   text-subtle sobre --surface-elevated, y ese par no llega a AA en NINGUNO de los
+   dos temas (4.48:1 en grafito, 4.35:1 en porcelana). Con muted pasa holgado en
+   ambos (8.01 / 7.99). Es una cabecera de columna de una tabla de fusión: si no
+   se lee, no se sabe qué columna se está eligiendo. */
+.stg-mhead>div{background:var(--surface-elevated);padding:9px 14px;font:500 10px/1 var(--font-mono);letter-spacing:.1em;text-transform:uppercase;color:var(--text-muted)}
 .stg-mrow{display:grid;grid-template-columns:110px 1fr 1fr;gap:1px;background:var(--border)}
 .stg-mrow>.k{background:var(--surface-glass);padding:12px 14px;font:500 10px/1.5 var(--font-mono);letter-spacing:.08em;text-transform:uppercase;color:var(--text-subtle)}
 .stg-mrow>button{background:var(--surface-glass);padding:12px 14px;text-align:left;font:400 13px/1.5 var(--font-sans);color:var(--text-muted);cursor:pointer;position:relative}

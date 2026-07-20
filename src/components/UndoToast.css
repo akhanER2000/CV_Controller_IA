@@ -4,6 +4,10 @@
   padding:10px 12px 10px 16px;background:var(--surface);border:1px solid var(--border-strong);
   border-radius:var(--radius-md);box-shadow:0 8px 30px rgba(0,0,0,.35);
   font:400 12.5px/1.4 var(--font-sans);color:var(--text)}
+/* El toast flota sobre cualquier pantalla, así que su sombra es lo único que lo
+   separa del contenido. En porcelana el negro al 35% lo rodea de un halo sucio;
+   con tinta a alfa baja sigue despegado y no mancha. */
+[data-theme="light"] .c-undo{box-shadow:0 8px 30px rgba(20,24,26,.14)}
 .c-undo__msg{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .c-undo__btn{flex:none;font:600 11px/1 var(--font-mono);letter-spacing:.08em;text-transform:uppercase;
   color:var(--accent-text);padding:8px 10px;border:1px solid var(--border-patina);border-radius:6px;cursor:pointer}

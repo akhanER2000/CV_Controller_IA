@@ -603,7 +603,7 @@ export function AjustesScreen() {
                       <button
                         className="c-btn"
                         disabled={!wipeReady || wiping}
-                        style={{ background: "var(--danger)", borderColor: "transparent", color: "#FFF" }}
+                        style={{ background: "var(--danger)", borderColor: "transparent", color: "var(--text-on-danger)" }}
                         onClick={confirmWipe}
                       >
                         {wiping ? t("ajustes.wipe.deleting") : t("ajustes.wipe.confirmButton")}
@@ -675,7 +675,7 @@ export function AjustesScreen() {
                       className="c-btn"
                       id="btnDel2"
                       disabled={!delReady || deleting}
-                      style={{ background: "var(--danger)", borderColor: "transparent", color: "#FFF" }}
+                      style={{ background: "var(--danger)", borderColor: "transparent", color: "var(--text-on-danger)" }}
                       onClick={confirmDelete}
                     >
                       {deleting ? t("ajustes.delete.deleting") : t("ajustes.delete.confirmButton")}
