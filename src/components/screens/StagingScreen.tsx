@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useT } from "@/lib/i18n";
 import { AuroraTune, AURORA_TRABAJO } from "@/components/Aurora";
-import { Breadcrumb } from "@/components/Breadcrumb";
+import { Breadcrumb, withOrigin } from "@/components/Breadcrumb";
 import { stagingProgress, ZERO_COUNTS, type StagingCounts } from "@/lib/db/staging-counts";
 import "./staging.css";
 
@@ -85,6 +85,48 @@ const withoutDoubt = (d: Record<string, unknown>): Record<string, unknown> => {
 /* Salida declarada cuando nadie dijo de dónde venías. */
 const FALLBACK = "/app";
 
+/* Origen que Staging declara HACIA ADELANTE. El remate manda a /app/variantes
+   llevando su procedencia, el mismo gesto que Importar→Staging
+   (ImportarScreen.tsx:816) y Fuentes→Importar (FuentesScreen.tsx:39-42).
+
+   ⚠ HOY EL ?from= LLEGA Y NADIE LO LEE: VariantesScreen no monta <Breadcrumb>,
+   así que esa pantalla no tiene botón volver que honrar. Se deja puesto igual
+   —el contrato de navegación es este y el parámetro es inerte, no mentiroso— para
+   que el día que Variantes monte su miga el volver funcione sin tocar aquí. Ese
+   fichero está fuera de esta frontera. */
+const ORIGEN = "/app/staging";
+export const HREF_VARIANTES = withOrigin("/app/variantes", ORIGEN);
+
+/** Lo que el servidor sabe del después: variantes que ya existen y tamaño del
+ *  master. `null` = no se sabe (consulta fallida, 401 en modo local, payload raro). */
+export type RemateInfo = { variantes: number; masterItems: number } | null;
+
+/** Rótulos del remate, ya decididos. Puro y exportado a propósito: esta es la
+ *  parte que puede MENTIR (prometer «la primera con IA» sin master del que
+ *  sacarla, o pintar un número que nadie confirmó), así que se ataca desde los
+ *  tests sin montar la pantalla.
+ *
+ *  · `cta`/`fine` — claves i18n, nunca texto.
+ *  · `master` — el número a pintar, o `null` si no hay número que se sostenga.
+ *    Un master de 0 items no se anuncia: no es un logro, es el caso en que todo
+ *    se descartó, y el destino ya lo explica por su cuenta.
+ *
+ *  La promesa de IA exige LAS DOS cosas y CONOCIDAS: cero variantes y un master
+ *  del que sacarla. Con el master vacío, POST /api/variants {mode:'ai'} contesta
+ *  422 «Tu master está vacío»: ofrecerlo sería vender una puerta tapiada. */
+export function rotuloRemate(r: RemateInfo): { cta: string; fine: string; master: number | null } {
+  const primeraConIA = r !== null && r.variantes === 0 && r.masterItems > 0;
+  return {
+    cta: primeraConIA ? "staging.remateCtaFirst" : "staging.remateCta",
+    fine: primeraConIA
+      ? "staging.remateFineFirst"
+      : r !== null && r.variantes > 0
+        ? "staging.remateFineMore"
+        : "staging.emptyFine",
+    master: r !== null && r.masterItems > 0 ? r.masterItems : null,
+  };
+}
+
 export function StagingScreen() {
   const t = useT();
   const [items, setItems] = useState<Item[]>([]);
@@ -105,6 +147,23 @@ export function StagingScreen() {
      `session` a cero: sumarlos nunca cuenta dos veces. */
   const [base, setBase] = useState<StagingCounts>(ZERO_COUNTS);
   const [session, setSession] = useState<StagingCounts>(ZERO_COUNTS);
+
+  /* EL REMATE — con qué se rotula la salida hacia el CV. Dos datos, los dos del
+     servidor (GET /api/variants: listVariants + countMasterItems, la misma
+     fuente que lee Variantes): cuántas variantes tiene ya y cuántos items tiene
+     el master. `null` = NO SE SABE (la consulta no llegó, falló o devolvió 401 en
+     modo local). Y lo que no se sabe no se pinta: sin esto el botón sigue
+     existiendo, pero sin número y sin prometer «la primera». */
+  const [remate, setRemate] = useState<RemateInfo>(null);
+
+  /* ?source=<id> — lo escribe Fuentes al mandarte a revisar UNA fuente concreta
+     (FuentesScreen.tsx:42). Ni esta pantalla ni GET /api/staging saben filtrar por
+     fuente: la API solo entiende ?doubts=1. Así que el parámetro no se obedece —
+     pero tampoco se ignora en silencio, que es lo que hacía creer al usuario que
+     estaba viendo solo esa fuente cuando tenía delante la cola entera. Se lee y se
+     DECLARA. Filtrar de verdad exige tocar la API (getStaging ni siquiera baja
+     source_id) — fuera de esta frontera. */
+  const [srcParam, setSrcParam] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -132,9 +191,47 @@ export function StagingScreen() {
     return () => window.clearTimeout(t);
   }, [items]);
 
+  /* Se lee de window y no con useSearchParams a propósito: ese hook obliga a un
+     límite de <Suspense> en toda la ruta (Next 15) y esta pantalla no lo tiene.
+     Aquí solo hace falta saber si el parámetro venía, y eso es cliente puro. */
+  useEffect(() => {
+    try {
+      setSrcParam(Boolean(new URLSearchParams(window.location.search).get("source")));
+    } catch {
+      setSrcParam(false);
+    }
+  }, []);
+
   const pend = items.length;
   const progress = stagingProgress(base, session, pend);
   const showEmpty = !loading && pend === 0;
+
+  /* Se pregunta SOLO cuando la cola queda vacía: hasta entonces no hay remate que
+     rotular y sería una consulta a ciegas. Si falla, silencio: no es un error de
+     la revisión —que ya terminó bien— y no se le escupe al usuario un aviso rojo
+     por algo que no le impide seguir. Se queda sin número, que es lo honesto. */
+  useEffect(() => {
+    if (!showEmpty) return;
+    let vivo = true;
+    (async () => {
+      try {
+        const res = await fetch("/api/variants");
+        if (!res.ok) return;
+        const d = (await res.json()) as { variants?: unknown; masterItems?: unknown };
+        if (!vivo) return;
+        // Si el payload no trae lo que promete, mejor no saber que estimar.
+        if (!Array.isArray(d.variants) || typeof d.masterItems !== "number") return;
+        setRemate({ variantes: d.variants.length, masterItems: d.masterItems });
+      } catch {
+        /* sin rótulo; el botón sigue llevando adelante */
+      }
+    })();
+    return () => {
+      vivo = false;
+    };
+  }, [showEmpty]);
+
+  const rotulo = rotuloRemate(remate);
 
   const counts = useMemo(() => {
     const c = { ok: 0, partial: 0, none: 0 };
@@ -461,6 +558,13 @@ export function StagingScreen() {
               {t("staging.lead1")}<b>{t("staging.leadOpen")}</b>{t("staging.lead2")}<b>{t("staging.leadVerified")}</b>
               {t("staging.lead3")}
             </p>
+            {/* Viniste de UNA fuente y estás viendo TODAS. Se dice; no se deja
+                creer lo contrario. Ver el comentario de `srcParam`. */}
+            {srcParam ? (
+              <p role="note" style={{ font: "400 var(--fs-micro)/1.7 var(--font-mono)", color: "var(--text-subtle)" }}>
+                {t("staging.sourceParamNote")}
+              </p>
+            ) : null}
             <button className="c-btn c-btn--patina" onClick={acceptVerified} disabled={busy.has("__batch__") || !counts.ok}>
               {busy.has("__batch__")
                 ? t("staging.batchAccepting")
@@ -538,18 +642,52 @@ export function StagingScreen() {
             )}
           </div>
 
+          {/* EL REMATE. Aquí se acaba «tengo los datos» y no empezaba nada: la
+              única salida era el master, que es el INVENTARIO, no el objetivo.
+              El objetivo es un CV. La promesa que ya estaba escrita en la línea
+              fina («crear tu primera variante para un aviso concreto») ahora
+              tiene botón.
+
+              Los dos números salen del servidor: los aceptados de GET /api/staging
+              (counts) y el tamaño del master de GET /api/variants. Si el segundo
+              no llegó, esa línea no se pinta — ningún número sin fuente. */}
           <div className={"stg-empty" + (showEmpty ? " show" : "")}>
             <div className="mark">✓</div>
             <h2>{t("staging.emptyTitle")}</h2>
             <p>
               <span className="t-num">{progress.accepted}</span> {t("staging.emptyBody")}
             </p>
+
+            {rotulo.master !== null ? (
+              <p>
+                {t("staging.remateMaster")
+                  .replace("{n}", String(rotulo.master))
+                  .replace("{s}", rotulo.master === 1 ? "" : "s")}
+              </p>
+            ) : null}
+
             <span className="c-forge">
-              <Link className="c-btn c-btn--forge c-btn--lg" href="/app/master">
-                {t("staging.emptyCta")}
+              <Link className="c-btn c-btn--forge c-btn--lg" href={HREF_VARIANTES}>
+                {t(rotulo.cta)}
               </Link>
             </span>
-            <p className="fine">{t("staging.emptyFine")}</p>
+
+            <p className="fine">
+              {remate && rotulo.fine === "staging.remateFineMore"
+                ? t(rotulo.fine)
+                    .replace("{n}", String(remate.variantes))
+                    .replace("{s}", remate.variantes === 1 ? "" : "s")
+                : t(rotulo.fine)}
+            </p>
+
+            {/* La salida que ya tenía no se le quita a nadie: baja a secundaria.
+                Va sin ?from= porque MasterScreen tampoco monta <Breadcrumb>: un
+                parámetro que nadie lee es exactamente el bug que arrastra ?source. */}
+            <p>
+              <Link className="c-btn" href="/app/master">
+                {t("staging.emptyCta")}
+              </Link>
+            </p>
           </div>
         </div>
       </main>

@@ -26,6 +26,8 @@ export const staging = {
     "staging.lead3": ": lo demás pasa por tus ojos, uno a uno.",
     "staging.batchAccepting": "Aceptando…",
     "staging.batchAccept": "Aceptar todo lo verificado ({n})",
+    "staging.sourceParamNote":
+      "Llegaste desde una fuente concreta, pero esta cola muestra TODO lo pendiente: filtrar por fuente todavía no existe. Cada item dice de dónde viene — ábrelo antes de aceptar.",
 
     // Encabezados de grupo
     "staging.groupProfile": "Perfil",
@@ -67,7 +69,21 @@ export const staging = {
     "staging.emptyBody":
       "items entraron a tu master, cada uno con su origen. Lo descartado no se borra: queda en la papelera de la ingesta.",
     "staging.emptyCta": "Ver el master →",
-    "staging.emptyFine": "Siguiente paso razonable: crear tu primera variante para un aviso concreto.",
+    // Línea fina genérica: la que se usa cuando NO se sabe cuántas variantes hay.
+    // No promete «la primera» porque no lo sabe.
+    "staging.emptyFine": "Una variante es la vista de tu master para un aviso concreto: nada se copia, se elige.",
+
+    // El remate — de «tengo los datos» a «tengo un CV»
+    // «tiene ya» (total), no «entraron» (este lote): la línea de arriba cuenta lo
+    // aceptado ahora y esta el tamaño del master. Sin esa palabra, 15 y 16 juntos
+    // parecen una contradicción en vez de dos hechos distintos.
+    "staging.remateMaster": "Listo — tu master tiene ya {n} item{s}.",
+    "staging.remateCta": "Crear mi CV →",
+    "staging.remateCtaFirst": "Crear mi primer CV con IA →",
+    "staging.remateFineFirst":
+      "Aún no tienes ninguna. En la pantalla siguiente describes el aviso y la IA arma la primera desde tu master — la revisas tú antes de que sea nada.",
+    "staging.remateFineMore":
+      "Ya tienes {n} variante{s}: la siguiente sale del mismo master, para el aviso que le digas.",
 
     // Errores
     "staging.errRead": "No se pudo leer el staging.",
@@ -99,6 +115,8 @@ export const staging = {
     "staging.lead3": " items: the rest goes through your eyes, one by one.",
     "staging.batchAccepting": "Accepting…",
     "staging.batchAccept": "Accept everything verified ({n})",
+    "staging.sourceParamNote":
+      "You came in from one specific source, but this queue shows EVERYTHING pending: filtering by source doesn't exist yet. Every item names where it came from — open it before accepting.",
 
     // Group headings
     "staging.groupProfile": "Profile",
@@ -140,7 +158,18 @@ export const staging = {
     "staging.emptyBody":
       "items entered your master, each with its origin. Discards aren't deleted: they sit in the intake trash.",
     "staging.emptyCta": "See your master →",
-    "staging.emptyFine": "Sensible next step: create your first variant for a specific posting.",
+    // Generic fine line: used when we DON'T know how many variants exist.
+    // It doesn't promise "your first" because it doesn't know.
+    "staging.emptyFine": "A variant is the view of your master for one specific posting: nothing is copied, it's chosen.",
+
+    // The finish — from "I have the data" to "I have a resume"
+    "staging.remateMaster": "Done — your master now holds {n} item{s}.",
+    "staging.remateCta": "Create my resume →",
+    "staging.remateCtaFirst": "Create my first resume with AI →",
+    "staging.remateFineFirst":
+      "You don't have one yet. On the next screen you describe the posting and the AI builds the first one from your master — you review it before it's anything.",
+    "staging.remateFineMore":
+      "You already have {n} variant{s}: the next one comes from the same master, for whatever posting you name.",
 
     // Errors
     "staging.errRead": "Couldn't read your staging.",
