@@ -5,6 +5,7 @@ import { makeGeminiExtractor, geminiApiKey } from "@/lib/extract/llm";
 import { fetchGithubUser } from "@/lib/extract/github";
 import { fetchViaJina } from "@/lib/extract/web";
 import { ensureMaster, persistImport } from "@/lib/db/queries";
+import { registrarIngesta } from "@/lib/db/telemetria";
 import { extractFile, extractDepsFor, type FileKind } from "@/lib/extract/files";
 import { sourceKindFor } from "@/lib/db/sources";
 import { getUserLlmKey } from "@/lib/account/byok";
@@ -164,6 +165,18 @@ export async function POST(req: Request) {
       if (fsErr) warnings.push(`No se pudieron registrar las fuentes de archivo: ${fsErr.message}`);
     }
 
+    // ── 4 · Telemetría: el consumo, que es un hecho, se guarda y se muestra ──
+    // Se escribe AQUÍ y no antes porque `ingestion_events.source_id` es NOT NULL
+    // y la fuente acaba de nacer en persistImport (ver telemetria.ts). Si falla,
+    // sube como aviso: la contabilidad no puede tumbar una ingesta buena.
+    if (result.consumo) {
+      const err = await registrarIngesta(sb, user.id, sourceId, {
+        consumo: result.consumo,
+        contexto: result.lectura?.contexto ?? [],
+      });
+      if (err) warnings.push(err);
+    }
+
     return NextResponse.json({
       sourceId,
       staged,
@@ -171,6 +184,11 @@ export async function POST(req: Request) {
       sources: result.sources,
       linkedin: result.linkedin,
       warnings,
+      // El consumo y el reparto viajan a la UI. `lectura.contexto` lleva las
+      // secciones que NO se mandaron al modelo, con su nombre y sus caracteres:
+      // la pantalla las enseña. Ninguna sección desaparece en silencio.
+      consumo: result.consumo ?? null,
+      lectura: result.lectura ?? null,
     });
   } catch (e) {
     return NextResponse.json({ error: e instanceof Error ? e.message : "Error al importar" }, { status: 500 });

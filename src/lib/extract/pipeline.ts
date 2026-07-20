@@ -3,7 +3,8 @@ import { detectAndClassify } from "./urls";
 import { detectDuplicates, type DedupItem } from "./dedup";
 import { classifyBulletText, classifyProjectShape, linkedInSkillLines, normalizeLine } from "./classify";
 import { normalizeDateRange } from "./dates";
-import type { Extractor } from "./llm";
+import type { Extractor, ResumenLectura } from "./llm";
+import type { ConsumoIA } from "../db/telemetria";
 import type { GithubFetcher } from "./github";
 import type { StagedRow, ImportResult, EvidenceLevel } from "./types";
 
@@ -40,6 +41,16 @@ export interface ImportDeps {
  */
 export interface ImportOutcome extends ImportResult {
   warnings: string[];
+  /**
+   * Consumo real de IA de esta ingesta (tokens leídos de `usage`), si el
+   * extractor lo mide. Un extractor falso (los tests) no mide y esto es
+   * undefined: opcional para no romper el contrato inyectable, que es lo que
+   * permite probar el pipeline entero sin LLM.
+   */
+  consumo?: ConsumoIA;
+  /** Cómo se repartió el documento, incluidas las secciones tratadas como
+   *  contexto CON SU NOMBRE. La ruta las sube a la UI: nada se calla. */
+  lectura?: ResumenLectura;
 }
 
 let seq = 0;
@@ -301,5 +312,10 @@ export async function runImport(input: ImportInput, deps: ImportDeps): Promise<I
     total: staged.length,
   };
 
-  return { rawText: raw, sources, staged, linkedin, counts, warnings: ex.warnings ?? [] };
+  return {
+    rawText: raw, sources, staged, linkedin, counts,
+    warnings: ex.warnings ?? [],
+    consumo: ex.consumo,
+    lectura: ex.lectura,
+  };
 }

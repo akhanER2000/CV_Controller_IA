@@ -1,9 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { generateText } from "ai";
-import { createGoogleGenerativeAI } from "@ai-sdk/google";
 import { createClient } from "@/lib/supabase/server";
 import { getUserLlmKey } from "@/lib/account/byok";
-import { geminiApiKey } from "@/lib/extract/llm";
+import { claveGemini, nombreVarClave, modeloDe, pingProveedor } from "@/lib/ai/modelos";
 import { encryptionAvailable } from "@/lib/crypto";
 
 export const runtime = "nodejs";
@@ -53,12 +51,9 @@ async function run(id: string, ms: number, fn: () => Promise<Service>): Promise<
 /** Gemini: llamada real. Reporta el modelo, la envVar efectiva y si la clave que
  *  se USARÍA es la BYOK del usuario o la del servidor. NUNCA devuelve la clave. */
 async function checkGemini(sb: SupabaseClient, uid: string): Promise<Service> {
-  const serverKey = geminiApiKey();
-  const envVar = process.env.GEMINI_API_KEY
-    ? "GEMINI_API_KEY"
-    : process.env.GOOGLE_GENERATIVE_AI_API_KEY
-      ? "GOOGLE_GENERATIVE_AI_API_KEY"
-      : null;
+  const serverKey = claveGemini();
+  const envVar = nombreVarClave();
+  const modelo = modeloDe("ping-salud");
 
   // ¿Hay una BYOK guardada (cifrada) para este usuario? Se detecta la PRESENCIA
   // del blob "v1:…" sin devolverlo. getUserLlmKey la descifra (null si no puede).
@@ -77,23 +72,34 @@ async function checkGemini(sb: SupabaseClient, uid: string): Promise<Service> {
       ok: false,
       status: "fail",
       detail: "Sin clave efectiva: define GEMINI_API_KEY en el servidor o guarda tu propia clave (BYOK).",
-      meta: { model: "gemini-flash-latest", envVar, keySource, parked },
+      meta: { model: modelo, envVar, keySource, parked },
     };
   }
 
-  const t0 = Date.now();
-  const { text } = await generateText({
-    model: createGoogleGenerativeAI({ apiKey: effective })("gemini-flash-latest"),
-    prompt: "Responde exactamente con la palabra: OK",
-  });
+  // ★ El MISMO chequeo real que /api/health/ai, compartido desde el registro de
+  //   modelos. Antes cada ruta llamaba por su cuenta con el mismo prompt: una
+  //   visita al panel de salud pagaba DOS veces. Sigue siendo una llamada real;
+  //   `cached`/`checkedAgoMs` dicen si esta respuesta se hizo ahora o hace unos
+  //   segundos. Un check optimista sería peor que ninguno.
+  const ping = await pingProveedor(effective);
   const meta = {
-    model: "gemini-flash-latest",
+    model: ping.modelo,
     envVar,
     keySource,
     parked,
-    latencyMs: Date.now() - t0,
-    sample: text.trim().slice(0, 24),
+    latencyMs: ping.latenciaMs,
+    sample: ping.muestra,
+    cached: ping.reutilizado,
+    checkedAgoMs: ping.edadMs,
   };
+
+  if (!ping.ok) {
+    return {
+      id: "gemini", ok: false, status: "fail",
+      detail: ping.error ?? "El proveedor no respondió.",
+      meta,
+    };
+  }
 
   if (parked) {
     return {

@@ -1,9 +1,17 @@
 import "server-only";
+import { createHash } from "node:crypto";
 import { generateObject, generateText } from "ai";
-import { createGoogleGenerativeAI } from "@ai-sdk/google";
 import { normalize } from "../verify";
+import { claveGemini, modeloPara } from "../ai/modelos";
+import {
+  anotarLlamada, consumoCero, type ConsumoIA, type SeccionContexto,
+} from "../db/telemetria";
 import { signalsOf, compareSignals, similarityVerdict, type SignalBag } from "./similar";
 import { titlesClearlyDifferent } from "./dedup";
+import {
+  repartir, textoPara, conserva, EXTRACTORES_5,
+  type Extractor5, type Reparto,
+} from "./segmentar";
 import {
   BasicsSchema, WorkSchema, EducationSchema, SkillsSchema, ProjectsSchema,
   type Extraction,
@@ -14,33 +22,46 @@ import {
  * cobra los tokens del texto nativo extraído). Se expone como un `Extractor`
  * inyectable → el pipeline se prueba con un extractor falso, sin LLM en vivo.
  *
- * Modelo: gemini-flash-latest (la key del usuario no habilita 2.5/2.0-flash).
+ * El nombre del modelo ya NO vive aquí: está en el registro único
+ * (`lib/ai/modelos.ts`), porque estaba copiado en seis ficheros.
  * Clave: GEMINI_API_KEY (el provider por defecto busca GOOGLE_GENERATIVE_AI_API_KEY,
  * por eso se pasa explícita).
  */
 
-/** Lo que devuelve un extractor: la extracción + avisos honestos sobre la LECTURA. */
-export type ExtractionResult = Extraction & { warnings?: string[] };
-export type Extractor = (rawText: string) => Promise<ExtractionResult>;
-
-const MODEL = "gemini-flash-latest";
-
-/** La clave que se usa DE VERDAD. Se pasa explícita al provider (si no, el
- *  provider de Google leería GOOGLE_GENERATIVE_AI_API_KEY por defecto y la
- *  GEMINI_API_KEY quedaría sin usar). Se acepta cualquiera de las dos. */
-export function geminiApiKey(): string | undefined {
-  return process.env.GEMINI_API_KEY || process.env.GOOGLE_GENERATIVE_AI_API_KEY;
+/** Lo que la ingesta puede contar sobre CÓMO se leyó el documento. */
+export interface ResumenLectura {
+  /** caracteres del documento */
+  longitud: number;
+  /** caracteres por cubo: dirigido + difuso + contexto === longitud */
+  totales: { dirigido: number; difuso: number; contexto: number };
+  /** las secciones NO mandadas al modelo, CON NOMBRE (regla del producto) */
+  contexto: SeccionContexto[];
+  /** true si se pidió releer entero (los cinco extractores sobre todo el texto) */
+  forzado: boolean;
+  /** secciones totales en que se cortó */
+  secciones: number;
 }
 
-/**
- * El modelo Gemini con la clave EFECTIVA: la BYOK del usuario (ya descifrada, se
- * pasa explícita) o, si no hay, la del servidor (GEMINI_API_KEY). La clave BYOK se
- * descifra solo en el servidor (getUserLlmKey) y nunca se guarda en claro.
- */
+/** Lo que devuelve un extractor: la extracción + avisos honestos sobre la LECTURA. */
+export type ExtractionResult = Extraction & {
+  warnings?: string[];
+  /** consumo real de IA (tokens leídos de `usage`), si el extractor lo mide */
+  consumo?: ConsumoIA;
+  /** cómo se repartió el documento, para que la UI lo pueda enseñar */
+  lectura?: ResumenLectura;
+};
+export type Extractor = (rawText: string) => Promise<ExtractionResult>;
+
+/** La clave que se usa DE VERDAD. Delega en el registro único: aquí se conserva
+ *  el nombre por compatibilidad con las rutas que ya la importaban. */
+export function geminiApiKey(): string | undefined {
+  return claveGemini();
+}
+
+/** El modelo de extracción con la clave EFECTIVA: la BYOK del usuario (ya
+ *  descifrada, se pasa explícita) o, si no hay, la del servidor. */
 function googleModel(apiKey?: string) {
-  const key = apiKey || geminiApiKey();
-  if (!key) throw new Error("Falta GEMINI_API_KEY");
-  return createGoogleGenerativeAI({ apiKey: key })(MODEL);
+  return modeloPara("extraccion-estructurada", apiKey);
 }
 
 const BASE =
@@ -305,45 +326,240 @@ export function truncationWarning(seg: Segmentation): string | null {
   );
 }
 
-/** Las 5 llamadas troceadas (§4.3) sobre UNA ventana, en paralelo. */
-async function extractWindow(model: ReturnType<typeof googleModel>, text: string): Promise<Extraction> {
-  const p = (focus: string) => `${BASE}${text}\n\n(Extrae: ${focus})`;
-  const [basics, work, education, skills, projects] = await Promise.all([
-    generateObject({ model, schema: BasicsSchema, prompt: p("datos básicos, contacto y resumen"), temperature: 0.1 }),
-    generateObject({ model, schema: WorkSchema, prompt: p("experiencia laboral, con viñetas"), temperature: 0.1 }),
-    generateObject({ model, schema: EducationSchema, prompt: p("formación académica"), temperature: 0.1 }),
-    generateObject({ model, schema: SkillsSchema, prompt: p("aptitudes técnicas agrupadas"), temperature: 0.1 }),
-    generateObject({ model, schema: ProjectsSchema, prompt: p("proyectos personales/open source"), temperature: 0.1 }),
-  ]);
-  return {
-    basics: basics.object,
-    work: work.object.items,
-    education: education.object.items,
-    skills: skills.object.items,
-    projects: projects.object.items,
-  };
+/* ============================================================================
+   ★ EL GASTO MULTIPLICADO POR CINCO — qué era y qué es ahora.
+
+   ANTES (medido sobre el dossier real, 103.744 caracteres):
+     `extractWindow` interpolaba el texto COMPLETO de la ventana en las CINCO
+     llamadas. Lo único distinto entre ellas eran ~30 caracteres de sufijo y el
+     schema. 4 ventanas × 5 = 20 llamadas y 563.720 caracteres de prompt. A la
+     sección «EDUCACIÓN» se le pasaba entera al extractor de proyectos, que no
+     puede sacar nada de ahí. Pagado, y a cero de rendimiento.
+
+   AHORA:
+     `repartir` (segmentar.ts) decide, por el TÍTULO de cada sección, qué
+     extractores tienen algo que hacer con ella. Cada extractor recibe SOLO su
+     corpus, ventaneado aparte. Un extractor cuyo corpus queda vacío NO SE LLAMA:
+     cero llamadas, decidido en código, sin preguntarle al modelo.
+
+   Lo que NO cambia, y es deliberado:
+     · Los cinco schemas siguen ahí. Existen por el límite de 24 parámetros
+       opcionales de los structured outputs, y ese motivo sigue en pie.
+     · `segmentText` sigue ventaneando: una sección grande puede pasarse de 30k
+       (la mayor del dossier real son 14.327 caracteres, pero eso no se asume).
+     · `mergeExtractions` sigue fusionando y deduplicando, ahora entre ventanas
+       Y entre extractores.
+   ============================================================================ */
+
+/** Qué se le pide a cada extractor. El sufijo es lo único que cambiaba antes. */
+const FOCO: Record<Extractor5, string> = {
+  basics: "datos básicos, contacto y resumen",
+  work: "experiencia laboral, con viñetas",
+  education: "formación académica",
+  skills: "aptitudes técnicas agrupadas",
+  projects: "proyectos personales/open source",
+};
+
+const SCHEMA_DE = {
+  basics: BasicsSchema,
+  work: WorkSchema,
+  education: EducationSchema,
+  skills: SkillsSchema,
+  projects: ProjectsSchema,
+} as const;
+
+/** Una extracción vacía, para que cada llamada aporte solo SU parte a la fusión. */
+const extraccionVacia = (): Extraction => ({
+  basics: { name: "", label: "", email: "", phone: "", location: "", links: [], summary: "", summaryEvidence: "" },
+  work: [], education: [], skills: [], projects: [],
+});
+
+/** El prompt exacto que se manda. Aislado para poder MEDIRLO sin llamar a nadie. */
+export function promptDeExtraccion(extractor: Extractor5, texto: string): string {
+  return `${BASE}${texto}\n\n(Extrae: ${FOCO[extractor]})`;
+}
+
+/* ── CACHÉ POR CONTENIDO ──────────────────────────────────────────────────────
+   No había NINGUNA caché en el repo. Volcar dos veces el mismo archivo —que es
+   lo que hace cualquiera que se equivoca de botón o recarga la página— costaba
+   dos veces.
+
+   La clave es hash(raw_text) + versión de los schemas + modo de reparto. El
+   contenido manda: da igual el nombre del archivo, la fuente o el usuario; si el
+   texto es idéntico, la extracción es idéntica (temperature 0.1 y prompts
+   deterministas).
+
+   DÓNDE VIVE: en memoria del proceso. Es honesto decir lo que eso significa en
+   serverless: sirve mientras la lambda esté caliente, y un despliegue nuevo la
+   vacía. Cubre el caso que motiva la caché (reintentos y dobles clics en
+   minutos) sin inventarse una tabla ni una migración —`supabase/` está fuera de
+   esta frontera— y sin guardar en disco el CV de nadie.
+
+   CÓMO SE FUERZA: `ignorarCache: true`. «Releer» una fuente lo pasa siempre —
+   pedir releer es literalmente pedir que no se reutilice lo anterior—, y
+   `forzarCompleto` genera otra clave, así que tampoco puede devolver lo cacheado
+   de un reparto distinto. */
+
+/** Súbelo a mano si cambian los schemas o los prompts: invalida todo lo cacheado. */
+export const VERSION_EXTRACCION = "v1";
+const TTL_CACHE_MS = 30 * 60_000;
+const MAX_CACHE = 20;
+
+interface EntradaCache { valor: ExtractionResult; en: number }
+const cacheExtraccion = new Map<string, EntradaCache>();
+
+function claveCache(rawText: string, forzado: boolean): string {
+  const h = createHash("sha256").update(rawText).digest("hex");
+  return `${VERSION_EXTRACCION}:${forzado ? "full" : "seg"}:${h}`;
+}
+
+function leerCache(k: string): ExtractionResult | null {
+  const e = cacheExtraccion.get(k);
+  if (!e) return null;
+  if (Date.now() - e.en > TTL_CACHE_MS) { cacheExtraccion.delete(k); return null; }
+  return e.valor;
+}
+
+function guardarCache(k: string, valor: ExtractionResult): void {
+  // LRU pobre pero suficiente: se tira la entrada más vieja por inserción.
+  if (cacheExtraccion.size >= MAX_CACHE) {
+    const primera = cacheExtraccion.keys().next();
+    if (!primera.done) cacheExtraccion.delete(primera.value);
+  }
+  cacheExtraccion.set(k, { valor, en: Date.now() });
+}
+
+/** Solo para los tests. */
+export function _resetCacheExtraccion(): void {
+  cacheExtraccion.clear();
+}
+
+export interface OpcionesExtractor {
+  /** Manda TODO el documento a los cinco extractores (la vía de escape del reparto). */
+  forzarCompleto?: boolean;
+  /** Salta la caché por contenido: la usa «releer», que es una petición explícita. */
+  ignorarCache?: boolean;
+}
+
+/* ── EL PLAN, SEPARADO DE LA EJECUCIÓN ────────────────────────────────────────
+   Decidir QUÉ llamadas se harían es puro y no cuesta nada; hacerlas cuesta
+   dinero. Al separarlos, `tests/coste.test.ts` mide EL PLAN REAL —el mismo que
+   ejecuta `makeGeminiExtractor`— en vez de una copia del bucle que podría
+   quedarse desfasada y hacer que la medición dijera un número bonito mientras
+   el código gasta otro. La medición que se puede desincronizar de lo medido no
+   es una medición. */
+
+export interface LlamadaPlanificada {
+  extractor: Extractor5;
+  /** el prompt EXACTO que se mandaría (BASE + texto + foco) */
+  prompt: string;
+}
+
+export interface PlanExtraccion {
+  llamadas: LlamadaPlanificada[];
+  reparto: Reparto;
+  warnings: string[];
 }
 
 /**
- * El extractor real: el texto ENTERO en ventanas solapadas, 5 llamadas troceadas
- * por ventana (§4.3), y fusión con deduplicación. La clave se inyecta (BYOK del
- * usuario o, si no, la del servidor). `geminiExtractor` es el atajo con la clave
- * del servidor (compat con el pipeline y sus tests).
- *
- * Las ventanas van EN SERIE a propósito: dentro de cada una ya hay 5 llamadas en
- * paralelo, y disparar 5×N de golpe es la forma más rápida de comerse el límite
- * de peticiones del proveedor y perder el documento entero por un 429.
+ * Qué llamadas haría una extracción, sin hacer ninguna. PURO: sin red, sin LLM.
  */
-export function makeGeminiExtractor(apiKey?: string): Extractor {
+export function planificarExtraccion(rawText: string, opts: OpcionesExtractor = {}): PlanExtraccion {
+  let reparto = repartir(rawText, { forzarCompleto: opts.forzarCompleto });
+  const warnings: string[] = [];
+
+  /* ── La invariante, comprobada en RUNTIME y no solo en el test ──────────────
+     Si el reparto no conserva el documento carácter por carácter, hay texto
+     evaporándose. No se sigue adelante «a ver si cuela»: se cae al reparto
+     completo (los cinco sobre todo el texto, el comportamiento de antes) y se
+     AVISA. Perder dinero es recuperable; perder la carrera de alguien no.     */
+  if (!conserva(rawText, reparto)) {
+    reparto = repartir(rawText, { forzarCompleto: true });
+    warnings.push(
+      "El reparto por secciones no cuadraba con el documento, así que se leyó ENTERO con los cinco extractores. " +
+      "No se perdió nada; solo costó más.",
+    );
+  }
+
+  const llamadas: LlamadaPlanificada[] = [];
+  for (const extractor of EXTRACTORES_5) {
+    const texto = textoPara(rawText, reparto, extractor);
+    // Corpus vacío (o solo espacios) ⇒ CERO llamadas. Determinista, sin
+    // preguntarle al modelo si hay algo que extraer de un texto que no existe.
+    if (!texto.trim()) continue;
+
+    const seg = segmentText(texto);
+    if (seg.truncated) {
+      warnings.push(
+        `La parte del documento que alimenta «${FOCO[extractor]}» era muy larga: se leyeron ` +
+        `${seg.windows.length} de ${seg.total} partes. Lo que quedó fuera NO se extrajo.`,
+      );
+    }
+    for (const ventana of seg.windows) {
+      llamadas.push({ extractor, prompt: promptDeExtraccion(extractor, ventana) });
+    }
+  }
+
+  return { llamadas, reparto, warnings };
+}
+
+const resumenDe = (r: Reparto): ResumenLectura => ({
+  longitud: r.longitud,
+  totales: r.totales,
+  contexto: r.contexto,
+  forzado: r.forzado,
+  secciones: r.secciones.length,
+});
+
+/**
+ * El extractor real. La clave se inyecta (BYOK del usuario o, si no, la del
+ * servidor). `geminiExtractor` es el atajo con la clave del servidor (compat con
+ * el pipeline y sus tests).
+ *
+ * Las llamadas van EN SERIE a propósito: disparar todas de golpe es la forma más
+ * rápida de comerse el límite de peticiones del proveedor y perder el documento
+ * entero por un 429.
+ */
+export function makeGeminiExtractor(apiKey?: string, opts: OpcionesExtractor = {}): Extractor {
   return async (rawText) => {
-    const seg = segmentText(rawText);
+    const clave = claveCache(rawText, !!opts.forzarCompleto);
+    if (!opts.ignorarCache) {
+      const previo = leerCache(clave);
+      // Se devuelve el MISMO contenido, pero con el consumo a cero y marcado como
+      // servido por caché: cobrarle al usuario unos tokens que no se gastaron
+      // sería un número sin fuente, y aquí no se muestran números sin fuente.
+      if (previo) return { ...previo, consumo: { ...consumoCero(), caracteresDocumento: rawText.length, desdeCache: true } };
+    }
+
+    const plan = planificarExtraccion(rawText, opts);
     const model = googleModel(apiKey);
+    const consumo = consumoCero();
+    consumo.caracteresDocumento = rawText.length;
+    const partes: Extraction[] = [];
 
-    const parts: Extraction[] = [];
-    for (const w of seg.windows) parts.push(await extractWindow(model, w));
+    for (const ll of plan.llamadas) {
+      const r = await generateObject({
+        model,
+        schema: SCHEMA_DE[ll.extractor],
+        prompt: ll.prompt,
+        temperature: 0.1,
+      });
+      anotarLlamada(consumo, ll.prompt.length, r.usage);
 
-    const warn = truncationWarning(seg);
-    return { ...mergeExtractions(parts), warnings: warn ? [warn] : [] };
+      const parte = extraccionVacia();
+      if (ll.extractor === "basics") parte.basics = r.object as Extraction["basics"];
+      else parte[ll.extractor] = (r.object as { items: unknown[] }).items as never;
+      partes.push(parte);
+    }
+
+    const resultado: ExtractionResult = {
+      ...mergeExtractions(partes),
+      warnings: plan.warnings,
+      consumo,
+      lectura: resumenDe(plan.reparto),
+    };
+    guardarCache(clave, resultado);
+    return resultado;
   };
 }
 export const geminiExtractor: Extractor = makeGeminiExtractor();
@@ -356,7 +572,7 @@ export const geminiExtractor: Extractor = makeGeminiExtractor();
  */
 export async function transcribeImage(dataUrl: string, apiKey?: string): Promise<string> {
   const { text } = await generateText({
-    model: googleModel(apiKey),
+    model: modeloPara("transcripcion-vision", apiKey),
     messages: [
       {
         role: "user",
@@ -389,7 +605,7 @@ export async function transcribeImage(dataUrl: string, apiKey?: string): Promise
  */
 export async function transcribePdf(bytes: Uint8Array, apiKey?: string): Promise<string> {
   const { text } = await generateText({
-    model: googleModel(apiKey),
+    model: modeloPara("transcripcion-vision", apiKey),
     messages: [
       {
         role: "user",

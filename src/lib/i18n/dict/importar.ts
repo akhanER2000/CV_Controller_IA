@@ -109,6 +109,31 @@ export const importar = {
     "importar.fin.warnings": "Avisos de la ingesta",
     "importar.fin.reviewCta": "Revisar en staging →",
     "importar.fin.sub": "Nada entra al master sin tu confirmación.",
+
+    // ── Consumo de IA (hecho verificable, no estimación) ──────────────────
+    // Sin precio: el plan de cada uno es distinto e inventar pesos sería un
+    // número sin fuente. Lo que SÍ es un hecho es cuánto se leyó y cuánto costó
+    // en llamadas y tokens, y eso se enseña.
+    "importar.fin.consumo.overline": "Lo que costó leer esto",
+    "importar.fin.consumo.leido": "{kb} KB leídos",
+    "importar.fin.consumo.llamadas": "{n} llamadas al modelo",
+    "importar.fin.consumo.llamadasUna": "1 llamada al modelo",
+    "importar.fin.consumo.tokens": "~{n} tokens de entrada",
+    // Cuando el proveedor no reportó `usage` en alguna llamada, el total es un
+    // SUELO. Se dice con «≥», no se redondea a un número que aparenta exactitud.
+    "importar.fin.consumo.tokensSuelo": "≥{n} tokens de entrada ({sin} llamadas sin dato del proveedor)",
+    "importar.fin.consumo.cache": "Sin coste: ya habíamos leído este mismo contenido.",
+    "importar.fin.consumo.nota":
+      "No mostramos un precio porque depende de tu plan. El consumo sí es un hecho y queda registrado.",
+
+    // ── Secciones leídas como contexto (NUNCA en silencio) ────────────────
+    "importar.fin.contexto.overline": "Secciones leídas como contexto",
+    "importar.fin.contexto.body":
+      "Estas {n} secciones ({kb} KB) no se mandaron a extraer porque no producen items de CV. No se han borrado: siguen en la fuente y puedes volver a leerlas enteras.",
+    "importar.fin.contexto.bodyUna":
+      "Esta sección ({kb} KB) no se mandó a extraer porque no produce items de CV. No se ha borrado: sigue en la fuente y puedes volver a leerla entera.",
+    "importar.fin.contexto.chars": "{n} caracteres",
+    "importar.fin.contexto.releer": "¿Crees que ahí hay datos tuyos? Vuelve a Fuentes y pulsa «Releer» con la lectura completa.",
   } as Record<string, string>,
   en: {
     // ── Header (dynamic step) ─────────────────────────────────────────────
@@ -218,5 +243,25 @@ export const importar = {
     "importar.fin.warnings": "Intake warnings",
     "importar.fin.reviewCta": "Review in staging →",
     "importar.fin.sub": "Nothing enters your master without your sign-off.",
+
+    // ── AI consumption (a verifiable fact, not an estimate) ────────────────
+    "importar.fin.consumo.overline": "What reading this cost",
+    "importar.fin.consumo.leido": "{kb} KB read",
+    "importar.fin.consumo.llamadas": "{n} model calls",
+    "importar.fin.consumo.llamadasUna": "1 model call",
+    "importar.fin.consumo.tokens": "~{n} input tokens",
+    "importar.fin.consumo.tokensSuelo": "≥{n} input tokens ({sin} calls with no provider figure)",
+    "importar.fin.consumo.cache": "No cost: we had already read this exact content.",
+    "importar.fin.consumo.nota":
+      "We don't show a price because it depends on your plan. The usage is a fact, and it's on the record.",
+
+    // ── Sections read as context (NEVER silently) ─────────────────────────
+    "importar.fin.contexto.overline": "Sections read as context",
+    "importar.fin.contexto.body":
+      "These {n} sections ({kb} KB) weren't sent for extraction because they don't produce CV items. Nothing was deleted: they're still in the source and you can re-read them in full.",
+    "importar.fin.contexto.bodyUna":
+      "This section ({kb} KB) wasn't sent for extraction because it doesn't produce CV items. Nothing was deleted: it's still in the source and you can re-read it in full.",
+    "importar.fin.contexto.chars": "{n} characters",
+    "importar.fin.contexto.releer": "Think your data is in there? Go back to Sources and hit \"Re-read\" with full reading.",
   } as Record<string, string>,
 } as const;

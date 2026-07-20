@@ -7,6 +7,21 @@ import { fetchViaJina } from "@/lib/extract/web";
 import { extractFile, extractDepsFor } from "@/lib/extract/files";
 import { getUserLlmKey } from "@/lib/account/byok";
 import { getSource, restageSource, parseGithubHandle, fileKindFromName, type FileKind } from "@/lib/db/sources";
+import { registrarIngesta } from "@/lib/db/telemetria";
+import type { ResumenLectura } from "@/lib/extract/llm";
+
+/** Las secciones tratadas como contexto, NOMBRADAS. Igual que en /api/sources:
+ *  lo que no se mandó al modelo se dice, no se omite. */
+function avisoContexto(lectura: ResumenLectura | undefined): string[] {
+  const secciones = lectura?.contexto ?? [];
+  if (!secciones.length) return [];
+  const kb = Math.round(secciones.reduce((n, s) => n + s.caracteres, 0) / 1024);
+  return [
+    `${secciones.length} ${secciones.length === 1 ? "sección se leyó" : "secciones se leyeron"} como contexto ` +
+    `(${kb} KB) y no se mandaron a extraer: ${secciones.map((s) => `«${s.titulo}»`).join(", ")}. ` +
+    `Vuelve a pulsar «Releer» con la opción de lectura completa si ahí hay datos tuyos.`,
+  ];
+}
 
 // Llama al LLM (salvo GitHub) → timeout generoso barato, igual que /api/sources.
 export const runtime = "nodejs";
@@ -23,8 +38,19 @@ export const maxDuration = 300;
  *   · pdf/docx/image → re-extrae desde storage_path.
  *   · paste/manual   → NO aplica (no hay origen externo): 400 con motivo.
  */
-export async function POST(_req: Request, { params }: { params: Promise<{ id: string }> }) {
+export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
+  // `{ completo: true }` fuerza la lectura ENTERA (los cinco extractores sobre
+  // todo el texto, sin reparto por secciones). Es la vía de escape exigida: si
+  // el usuario sospecha que una sección tratada como contexto tenía datos suyos,
+  // esto la vuelve a mandar a extraer. El cuerpo es opcional: releer sin cuerpo
+  // sigue funcionando exactamente igual que antes.
+  let completo = false;
+  try {
+    const b = (await req.json()) as { completo?: boolean } | null;
+    completo = b?.completo === true;
+  } catch { /* sin cuerpo: releer normal */ }
+
   const sb = await createClient();
   const { data: { user } } = await sb.auth.getUser();
   if (!user) return NextResponse.json({ error: "Sesión requerida." }, { status: 401 });
@@ -39,7 +65,16 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
       { error: "Falta configurar la clave de IA (BYOK o GEMINI_API_KEY del servidor)." },
       { status: 503 },
     );
-  const deps = { extract: makeGeminiExtractor(byok), fetchGithubUser, fetchWeb: fetchViaJina };
+  // ★ `ignorarCache: true` SIEMPRE en releer. Pedir releer es exactamente pedir
+  //   que no se reutilice la lectura anterior; devolver lo cacheado convertiría
+  //   el botón en un adorno que no hace nada y el usuario no tendría forma de
+  //   saberlo. La caché ahorra en los dobles clics, no en las peticiones
+  //   explícitas.
+  const deps = {
+    extract: makeGeminiExtractor(byok, { forzarCompleto: completo, ignorarCache: true }),
+    fetchGithubUser,
+    fetchWeb: fetchViaJina,
+  };
 
   try {
     switch (source.kind) {
@@ -83,7 +118,14 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
           status: "extracted",
           error: null,
         });
-        return NextResponse.json({ sourceId: id, staged: n, counts: result.counts, warnings: result.warnings });
+        const avisos = [...result.warnings, ...avisoContexto(result.lectura)];
+        if (result.consumo) {
+          const err = await registrarIngesta(sb, user.id, id, {
+            consumo: result.consumo, contexto: result.lectura?.contexto ?? [],
+          });
+          if (err) avisos.push(err);
+        }
+        return NextResponse.json({ sourceId: id, staged: n, counts: result.counts, warnings: avisos, consumo: result.consumo ?? null });
       }
 
       case "github": {
@@ -111,11 +153,22 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
         if (!hasLlm) return noKey();
         const result = await runImport({ pastedText: source.sourceUrl }, deps);
         const n = await restageSource(sb, user.id, id, result.staged, { raw_text: result.rawText, status: "extracted", error: null });
+        const avisos = [
+          ...(n ? [] : ["No pudimos leer contenido nuevo de ese enlace."]),
+          ...avisoContexto(result.lectura),
+        ];
+        if (result.consumo) {
+          const err = await registrarIngesta(sb, user.id, id, {
+            consumo: result.consumo, contexto: result.lectura?.contexto ?? [],
+          });
+          if (err) avisos.push(err);
+        }
         return NextResponse.json({
           sourceId: id,
           staged: n,
           counts: result.counts,
-          warnings: n ? [] : ["No pudimos leer contenido nuevo de ese enlace."],
+          warnings: avisos,
+          consumo: result.consumo ?? null,
         });
       }
 

@@ -7,6 +7,8 @@ import { fetchGithubUser } from "@/lib/extract/github";
 import { fetchViaJina } from "@/lib/extract/web";
 import { extractFile, extractDepsFor, type FileKind } from "@/lib/extract/files";
 import { getUserLlmKey } from "@/lib/account/byok";
+import { registrarIngesta, consumoCero, sumarConsumo, type ConsumoIA } from "@/lib/db/telemetria";
+import type { ResumenLectura } from "@/lib/extract/llm";
 import {
   persistSource,
   fileKindFromName,
@@ -59,6 +61,29 @@ interface PostBody {
   url?: string;
   handle?: string;
   files?: FileRef[];
+  /** ★ La vía de escape del reparto por secciones: manda TODO el documento a los
+   *  cinco extractores. Existe porque una optimización que no se puede desactivar
+   *  es una decisión que se le impone al usuario sobre SUS datos. */
+  completo?: boolean;
+}
+
+/**
+ * Las secciones que la ingesta trató como CONTEXTO, dichas por su nombre.
+ * Esta ruta no tiene un hueco estructurado en la UI como sí lo tiene el volcado,
+ * así que van por `warnings`, que la pantalla de fuentes ya muestra. Es la regla
+ * capital del producto: una sección que no se mandó al modelo se NOMBRA, no se
+ * omite. Nunca devuelve un aviso vacío si no hubo secciones de contexto.
+ */
+function avisoContexto(lectura: ResumenLectura | undefined, etiqueta: string): string[] {
+  const secciones = lectura?.contexto ?? [];
+  if (!secciones.length) return [];
+  const kb = Math.round(secciones.reduce((n, s) => n + s.caracteres, 0) / 1024);
+  const nombres = secciones.map((s) => `«${s.titulo}»`).join(", ");
+  return [
+    `«${etiqueta}»: ${secciones.length} ${secciones.length === 1 ? "sección se leyó" : "secciones se leyeron"} como contexto ` +
+    `(${kb} KB) y no se mandaron a extraer porque no producen items de CV: ${nombres}. ` +
+    `Si crees que ahí hay datos tuyos, vuelve a subirla con «leer entero» o pulsa «Releer».`,
+  ];
 }
 
 type Counts = { verified: number; partial: number; none: number; api: number; total: number };
@@ -92,7 +117,13 @@ export async function POST(req: Request) {
       { error: "Falta configurar la clave de IA (BYOK o GEMINI_API_KEY del servidor)." },
       { status: 503 },
     );
-  const deps = { extract: makeGeminiExtractor(byok), fetchGithubUser, fetchWeb: fetchViaJina };
+  // `completo` desactiva el reparto por secciones para esta ingesta concreta.
+  const completo = body.completo === true;
+  const deps = {
+    extract: makeGeminiExtractor(byok, { forzarCompleto: completo }),
+    fetchGithubUser,
+    fetchWeb: fetchViaJina,
+  };
 
   const kind = typeof body.kind === "string" ? body.kind : "";
   const files = Array.isArray(body.files) ? body.files : [];
@@ -143,6 +174,9 @@ export async function POST(req: Request) {
       let staged = 0;
       let counts = zero();
       const warnings: string[] = [];
+      // El consumo de VARIOS archivos se acumula y se devuelve sumado; cada
+      // fuente registra además el suyo propio en ingestion_events.
+      let consumo: ConsumoIA = consumoCero();
 
       for (const ref of files) {
         const path = typeof ref.path === "string" ? ref.path : "";
@@ -188,6 +222,15 @@ export async function POST(req: Request) {
           staged += n;
           counts = addCounts(counts, result.counts);
           warnings.push(...result.warnings);
+          warnings.push(...avisoContexto(result.lectura, name));
+          if (result.consumo) {
+            consumo = sumarConsumo(consumo, result.consumo);
+            const err = await registrarIngesta(sb, user.id, sourceId, {
+              consumo: result.consumo,
+              contexto: result.lectura?.contexto ?? [],
+            });
+            if (err) warnings.push(err);
+          }
         } catch (e) {
           warnings.push(`«${name}»: no se pudo procesar (${msg(e)}).`);
         }
@@ -199,7 +242,7 @@ export async function POST(req: Request) {
           { status: 422 },
         );
       }
-      return NextResponse.json({ sourceId: sourceIds[0], sourceIds, staged, counts, warnings });
+      return NextResponse.json({ sourceId: sourceIds[0], sourceIds, staged, counts, warnings, consumo });
     }
 
     // ── GITHUB (usuario) ──────────────────────────────────────────────────────
@@ -244,7 +287,14 @@ export async function POST(req: Request) {
         { kind: "url", sourceUrl: url, rawText: result.rawText, status: "extracted" },
         result.staged,
       );
-      return NextResponse.json({ sourceId, sourceIds: [sourceId], staged, counts: result.counts, sources: result.sources, warnings: result.warnings });
+      const avisos = [...result.warnings, ...avisoContexto(result.lectura, url)];
+      if (result.consumo) {
+        const err = await registrarIngesta(sb, user.id, sourceId, {
+          consumo: result.consumo, contexto: result.lectura?.contexto ?? [],
+        });
+        if (err) avisos.push(err);
+      }
+      return NextResponse.json({ sourceId, sourceIds: [sourceId], staged, counts: result.counts, sources: result.sources, warnings: avisos, consumo: result.consumo ?? null });
     }
 
     // ── TEXTO PEGADO ──────────────────────────────────────────────────────────
@@ -261,6 +311,14 @@ export async function POST(req: Request) {
         { kind: "paste", originalName: (typeof body.name === "string" && body.name.trim()) || null, rawText: result.rawText, status: "extracted" },
         result.staged,
       );
+      const etiqueta = (typeof body.name === "string" && body.name.trim()) || "texto pegado";
+      const avisos = [...result.warnings, ...avisoContexto(result.lectura, etiqueta)];
+      if (result.consumo) {
+        const err = await registrarIngesta(sb, user.id, sourceId, {
+          consumo: result.consumo, contexto: result.lectura?.contexto ?? [],
+        });
+        if (err) avisos.push(err);
+      }
       return NextResponse.json({
         sourceId,
         sourceIds: [sourceId],
@@ -268,7 +326,8 @@ export async function POST(req: Request) {
         counts: result.counts,
         sources: result.sources,
         linkedin: result.linkedin,
-        warnings: result.warnings,
+        warnings: avisos,
+        consumo: result.consumo ?? null,
       });
     }
 

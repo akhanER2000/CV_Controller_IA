@@ -7,7 +7,7 @@ import { DropZone } from "@/components/DropZone";
 import { Breadcrumb, readOrigin, withOrigin } from "@/components/Breadcrumb";
 import { createClient } from "@/lib/supabase/client";
 import { fileKindFromName, FILE_ACCEPT, type FileKind } from "@/lib/db/sources";
-import { useT } from "@/lib/i18n";
+import { useT, useLang } from "@/lib/i18n";
 import "./importar.css";
 
 /* ============================================================================
@@ -94,6 +94,28 @@ interface ImportResponse {
   counts: { verified: number; partial: number; none: number; api: number; total: number };
   sources: string[];
   linkedin: { url: string; slug?: string }[];
+  /* ★ El consumo real de IA de esta ingesta. Viene del campo `usage` que
+     devuelve el proveedor en cada llamada, no de una estimación nuestra.
+     `llamadasSinUso` > 0 significa que el proveedor no reportó tokens en alguna
+     llamada: entonces el total es un SUELO y se muestra con «≥». */
+  consumo: {
+    llamadas: number;
+    tokensEntrada: number;
+    tokensSalida: number;
+    caracteresPrompt: number;
+    caracteresDocumento: number;
+    llamadasSinUso: number;
+    desdeCache: boolean;
+  } | null;
+  /* Cómo se repartió el documento. `contexto` son las secciones que NO se
+     mandaron al modelo, CON SU NOMBRE: la pantalla las lista una a una. */
+  lectura: {
+    longitud: number;
+    totales: { dirigido: number; difuso: number; contexto: number };
+    contexto: { titulo: string; caracteres: number }[];
+    forzado: boolean;
+    secciones: number;
+  } | null;
 }
 
 /* Detección de links en vivo — misma regex y clasificación del diseño. */
@@ -168,6 +190,9 @@ const FALLBACK = "/app";
 
 export function ImportarScreen() {
   const t = useT();
+  // El idioma, para formatear los miles del consumo con la convención correcta
+  // (31.245 en ES, 31,245 en EN). Un número mal agrupado se lee como otro número.
+  const { lang } = useLang();
   const [text, setText] = useState("");
   const [files, setFiles] = useState<FileItem[]>([]);
   const [isDrag, setIsDrag] = useState(false);
@@ -795,6 +820,85 @@ export function ImportarScreen() {
               <span>{t("importar.fin.flagged")}</span>
             </div>
           </div>
+
+          {/* ★ EL CONSUMO, A LA VISTA. Antes no se leía el `usage` que devuelve el
+              proveedor en NINGUNA de las llamadas del repo, así que el gasto era
+              invisible: se podía multiplicar por cinco sin que apareciera en
+              ninguna pantalla — y lo estaba. Sin precio en pesos (el plan de cada
+              uno es distinto e inventarlo sería un número sin fuente); con los
+              hechos, que sí son verificables. */}
+          {result?.consumo ? (
+            <div className="c-card" style={{ width: "100%", marginTop: 14, textAlign: "left", padding: "16px 20px" }}>
+              <span className="t-overline">{t("importar.fin.consumo.overline")}</span>
+              <p style={{ margin: "10px 0 0", color: "var(--text-muted)", fontSize: "var(--fs-ui)" }}>
+                {result.consumo.desdeCache
+                  ? t("importar.fin.consumo.cache")
+                  : [
+                      t("importar.fin.consumo.leido").replace(
+                        "{kb}",
+                        String(Math.max(1, Math.round(result.consumo.caracteresDocumento / 1024))),
+                      ),
+                      result.consumo.llamadas === 1
+                        ? t("importar.fin.consumo.llamadasUna")
+                        : t("importar.fin.consumo.llamadas").replace("{n}", String(result.consumo.llamadas)),
+                      // Con alguna llamada sin `usage`, el total NO se presenta
+                      // como exacto: se dice «≥» y cuántas faltan.
+                      result.consumo.llamadasSinUso > 0
+                        ? t("importar.fin.consumo.tokensSuelo")
+                            .replace("{n}", result.consumo.tokensEntrada.toLocaleString(lang === "en" ? "en-US" : "es-CL"))
+                            .replace("{sin}", String(result.consumo.llamadasSinUso))
+                        : t("importar.fin.consumo.tokens").replace(
+                            "{n}",
+                            result.consumo.tokensEntrada.toLocaleString(lang === "en" ? "en-US" : "es-CL"),
+                          ),
+                    ].join(" · ")}
+              </p>
+              {result.consumo.desdeCache ? null : (
+                <p style={{ margin: "8px 0 0", color: "var(--text-muted)", fontSize: "var(--fs-micro, 12px)" }}>
+                  {t("importar.fin.consumo.nota")}
+                </p>
+              )}
+            </div>
+          ) : null}
+
+          {/* ★★ LAS SECCIONES QUE NO SE MANDARON AL MODELO, UNA A UNA Y POR SU
+              NOMBRE. Esta es la regla capital del producto: ningún dato del
+              usuario se descarta en silencio. El reparto por secciones ahorra
+              justo porque no manda a extraer el relato del cuestionario — y
+              precisamente por eso el usuario tiene que VER exactamente qué se
+              quedó fuera y poder pedir que se lea entero. */}
+          {result?.lectura && result.lectura.contexto.length > 0 ? (
+            <div className="c-card" style={{ width: "100%", marginTop: 14, textAlign: "left", padding: "16px 20px" }}>
+              <span className="t-overline">{t("importar.fin.contexto.overline")}</span>
+              <p style={{ margin: "10px 0 0", color: "var(--text-muted)", fontSize: "var(--fs-ui)" }}>
+                {(result.lectura.contexto.length === 1
+                  ? t("importar.fin.contexto.bodyUna")
+                  : t("importar.fin.contexto.body").replace("{n}", String(result.lectura.contexto.length))
+                ).replace(
+                  "{kb}",
+                  String(
+                    Math.max(
+                      1,
+                      Math.round(result.lectura.contexto.reduce((n, s) => n + s.caracteres, 0) / 1024),
+                    ),
+                  ),
+                )}
+              </p>
+              <ul style={{ margin: "10px 0 0", paddingLeft: 18, color: "var(--text-muted)", fontSize: "var(--fs-ui)" }}>
+                {result.lectura.contexto.map((s, i) => (
+                  <li key={i} style={{ marginBottom: 4 }}>
+                    {s.titulo}{" "}
+                    <span style={{ opacity: 0.7 }}>
+                      · {t("importar.fin.contexto.chars").replace("{n}", s.caracteres.toLocaleString(lang === "en" ? "en-US" : "es-CL"))}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+              <p style={{ margin: "8px 0 0", color: "var(--text-muted)", fontSize: "var(--fs-micro, 12px)" }}>
+                {t("importar.fin.contexto.releer")}
+              </p>
+            </div>
+          ) : null}
 
           {/* Avisos honestos por archivo (PDF escaneado sin capa, imagen ilegible…):
               nunca se inventa lo que no se pudo leer. */}
