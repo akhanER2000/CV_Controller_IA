@@ -348,6 +348,32 @@ const ESQ = {
   retratoColgante: { skeleton: "hanging", hangingWidth: "26%", pageMarginH: "22mm", photoSlot: "header-right" },
   /** Sin ornamento ninguno: ni filete, ni marcador de viñeta, ni etiquetas. */
   taller: { headingRule: false, contactLabels: false, skillStyle: "inline" },
+  /**
+   * CABECERA CORRIDA. El nombre y el título objetivo comparten línea y el contacto
+   * va debajo: donde la clásica gasta CUATRO líneas, esta gasta TRES. La ganancia
+   * sale de la COMPOSICIÓN, no de apretar el cuerpo — el ritmo se queda dentro del
+   * núcleo y `ats-compacta` sigue siendo estrictamente la más densa del catálogo.
+   *
+   * No son dos líneas, que es lo que se pedía, porque la tercera no depende de la
+   * composición sino de los datos: el contacto entero (email, teléfono, ciudad y
+   * enlaces) son ~140 caracteres, y el techo de la gama son 110 por línea. Se queda
+   * en dos líneas de contacto, que es el mínimo que permite la medida de línea.
+   *
+   * Los tres números de cabecera (nombre 17, título 10,5, contacto 9) bajan porque
+   * un nombre de 21 pt al lado de un título de 11 pt es una fila desequilibrada:
+   * en vertical el nombre grande se sostenía solo, en horizontal compite. El
+   * `headingSize` se deja en el 10,5 por defecto a propósito, para que el ahorro
+   * medido sea atribuible a la cabecera y no a un rótulo más pequeño.
+   */
+  dosLineas: {
+    headerInline: true,
+    nameSize: 17,
+    nameLeading: 1.1,
+    labelSize: 10.5,
+    contactSize: 9,
+    contactStyle: "inline",
+    headingSize: 10.5,
+  },
 } satisfies Record<string, Partial<TemplateMetrics>>;
 
 /** Una métrica = base + ritmo + esqueleto + las decisiones propias de la plantilla. */
@@ -583,6 +609,31 @@ export const TEMPLATES: CvTemplate[] = [
     "ats-compacta", "Compacta",
     "La métrica más apretada que permite el núcleo de legibilidad: cuerpo de 10 pt, interlineado de 1,15 y márgenes anchos para que la línea siga siendo corta.",
     "tinta", "compacta", M("compacto", "plana"),
+    ["minimal", "1pagina", "general"],
+  ),
+  /**
+   * COMPACTA MÁXIMA — la que gana sitio por arriba, no por dentro.
+   *
+   * `ats-compacta` aprieta el CUERPO hasta el límite del núcleo y ahí se acaba el
+   * camino: por debajo de 10 pt de cuerpo o de 20 mm de margen ya no es un estilo,
+   * es publicar un documento que se lee peor. Esta ataca lo otro, que nadie miraba:
+   * la CABECERA. La clásica gasta 74,95 pt —un 11 % de la primera página— en cuatro
+   * líneas apiladas; esta las compone en tres (nombre y título objetivo en la misma
+   * línea, contacto debajo) y las deja en 51,70 pt. Son 23,25 pt devueltos al
+   * contenido, un 31,0 % de la cabecera, con el cuerpo INTACTO dentro del núcleo.
+   * Los dos números están medidos sobre el PDF renderizado y cruzados contra la
+   * aritmética de la métrica en tests/cabecera-compacta.test.ts — no son estimación.
+   *
+   * ⚠ El margen superior NO se toca: 20 mm es el suelo del núcleo de legibilidad y
+   * ese suelo no se baja para que quepa una línea más.
+   */
+  ats(
+    "ats-compacta-maxima", "Compacta máxima",
+    "Nombre y título objetivo en la misma línea y contacto corrido debajo: la cabecera ocupa un tercio menos sin apretar el cuerpo. Para cuando el contenido no cabe y comprimir el texto no es una opción.",
+    "granate", "compacta",
+    M("denso", "dosLineas", {
+      sectionGap: 12.5, headingRuleStyle: "partial", bulletMarker: "dash", skillStyle: "paired",
+    }),
     ["minimal", "1pagina", "general"],
   ),
   ats(

@@ -125,6 +125,17 @@ Font.register({
 Font.registerHyphenationCallback((word) => [word]);
 
 /**
+ * El aire entre el nombre y el título objetivo cuando comparten línea
+ * (`headerInline`). Son ESPACIOS, y son la única separación posible: dentro de un
+ * run de texto anidado no hay padding que valga, y un separador con glifo (" · ",
+ * " — ") tendría que emitirlo también toPlainText —que está fuera de este módulo—
+ * o el documento y su rayos-X dejarían de decir lo mismo. El espacio no es un
+ * carácter que el rayos-X no tenga: es el salto de línea que allí sí hay, y tanto
+ * el reconstructor de líneas como el round-trip normalizan los blancos.
+ */
+const HUECO_CABECERA = "   ";
+
+/**
  * La hoja de estilos DEL DOCUMENTO, derivada de la plantilla. Los valores por
  * defecto NO están aquí: los pone resolveMetrics/resolveTypography (templates.ts),
  * y son los del documento clásico. Consecuencia buscada: una plantilla que declare
@@ -209,6 +220,30 @@ function stylesFor(tpl: CvTemplate) {
     contact2: { fontSize: m.contactSize, lineHeight: 1.5, color: p.muted, marginTop: 1, ...alinearContacto },
     /** Filete bajo TODA la cabecera (opt-in): separa identidad de contenido. */
     headRule: { paddingBottom: 7, borderBottomWidth: m.headingRuleWidth, borderBottomColor: p.hair },
+    // ── CABECERA EN LÍNEA (headerInline) ─────────────────────────────────────
+    // El título objetivo va DENTRO del <Text> del nombre, como run anidado — el
+    // mismo mecanismo que `dInline` usa para las fechas.
+    //
+    // ⚠ POR QUÉ NO ES UNA FILA FLEX, que era lo primero que se probó. Con
+    // `flexDirection: "row"` + `alignItems: "baseline"` los dos textos SALEN A
+    // ALTURAS DISTINTAS: medido sobre el PDF, el título quedaba 1,48 pt por encima
+    // de la línea base del nombre (718,22 contra 719,70). Yoga no conoce la línea
+    // base de un nodo de texto de @react-pdf y alinea por la caja, así que
+    // "baseline" acaba comportándose como "flex-end". Y no hay número mágico que lo
+    // arregle: la corrección depende del ascendente de la familia y de la razón
+    // entre los dos cuerpos, que la hoja de estilos no puede consultar. Anidado, el
+    // run comparte línea por construcción — y, de paso, el reconstructor de líneas
+    // (medir.ts, que agrupa por coordenada Y) los ve como UNA línea, que es
+    // justamente lo que la plantilla promete.
+    labelInline: {
+      // El aire entre nombre y título lo pone un espacio de texto, no un padding:
+      // dentro de un run anidado el padding no existe. Aquí solo se neutraliza lo
+      // que el nombre heredaría al título — caja alta y tracking son ejes del
+      // NOMBRE, y aplicárselos al título sería un efecto colateral, no un diseño.
+      textTransform: "none",
+      letterSpacing: 0,
+      marginTop: 0,
+    },
     // ⚠ SIN letterSpacing: el tracking de imprenta (.h del diseño usa .1em) hace
     // que pdf.js extraiga el encabezado como letras separadas ("R E S U M E N") —
     // el patrón anti-ATS que el documento prohíbe (ESPECIFICACION §8). En el
@@ -427,8 +462,20 @@ export function ResumePDF({
   const sangrar = (nodo: ReactNode) =>
     m.skeleton === "hanging" ? <View style={s.hangIndent}>{nodo}</View> : nodo;
 
-  /* Cabecera — contacto EN EL CUERPO (no header/footer), con prefijos de texto */
-  const nameBlock = (
+  /* Cabecera — contacto EN EL CUERPO (no header/footer), con prefijos de texto.
+     Con `headerInline` el nombre y el título objetivo comparten LÍNEA en lugar de
+     apilarse. Son los MISMOS dos runs de texto y entre ellos solo hay blancos: ni un
+     glifo de unión, porque el texto plano los emite como dos líneas y no es este
+     módulo quien lo escribe. Cambia dónde caen, no qué dicen — el mismo trato de la
+     columna colgante, y por eso el round-trip (que exige cada línea del rayos-X
+     dentro del PDF, en orden de lectura) sigue pasando. */
+  const nameBlock = m.headerInline ? (
+    <Text style={s.name}>
+      {nameText(b.name, m)}
+      {HUECO_CABECERA}
+      <Text style={[s.label, s.labelInline]}>{tt(b.label)}</Text>
+    </Text>
+  ) : (
     <>
       <Text style={s.name}>{nameText(b.name, m)}</Text>
       <Text style={s.label}>{tt(b.label)}</Text>

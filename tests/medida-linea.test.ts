@@ -2,8 +2,8 @@ import { describe, it, expect, beforeAll } from "vitest";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
-import { getDocumentProxy } from "unpdf";
 import { renderResumeToBuffer } from "../src/lib/cv/ResumePDF";
+import { lineasDe } from "../src/lib/cv/medir";
 import { listTemplates, resolveMetrics } from "../src/lib/cv/templates";
 import type { ResumeData } from "../src/lib/cv/resume";
 
@@ -20,6 +20,11 @@ import type { ResumeData } from "../src/lib/cv/resume";
  * salieron del render, agrupando los items de texto del PDF por su coordenada Y y
  * ordenándolos por X. Es la misma técnica con la que se descubrió el problema, y
  * mide lo único que importa: lo que el ojo recorre de margen a margen.
+ *
+ * El reconstructor ya NO vive aquí: es src/lib/cv/medir.ts, código de producción.
+ * La app también tiene que poder decir "sobran catorce líneas", y dos copias de la
+ * misma función serían dos documentos midiéndose distinto el mismo día — este test
+ * seguiría verde mientras la pantalla del usuario miente.
  *
  * QUÉ CUENTA COMO "LÍNEA DE CUERPO". Las de 30 caracteres o más. Por debajo están
  * los rótulos, las fechas sueltas, la ubicación y los nombres de empresa: texto que
@@ -51,30 +56,6 @@ interface Medida {
   max: number;
   sobre90: number;
   sobre80: number;
-}
-
-/** Las líneas REALES de un PDF: items de texto agrupados por coordenada Y. */
-async function lineasDe(buf: Uint8Array): Promise<string[]> {
-  const pdf = await getDocumentProxy(buf);
-  const out: string[] = [];
-  for (let p = 1; p <= pdf.numPages; p++) {
-    const page = await pdf.getPage(p);
-    const tc = await page.getTextContent();
-    const porY = new Map<number, { x: number; s: string }[]>();
-    for (const it of tc.items as { str: string; transform: number[] }[]) {
-      if (!it.str) continue;
-      const y = Math.round(it.transform[5]! * 2) / 2; // media unidad de tolerancia
-      const x = it.transform[4]!;
-      if (!porY.has(y)) porY.set(y, []);
-      porY.get(y)!.push({ x, s: it.str });
-    }
-    for (const [, items] of porY) {
-      items.sort((a, b) => a.x - b.x);
-      const texto = items.map((i) => i.s).join("").replace(/\s+/g, " ").trim();
-      if (texto) out.push(texto);
-    }
-  }
-  return out;
 }
 
 const pct = (arr: number[], p: number) => {

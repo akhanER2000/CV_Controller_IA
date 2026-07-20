@@ -245,6 +245,27 @@ export interface TemplateMetrics {
   /** Filete bajo el bloque de cabecera. Defecto false. */
   nameRule?: boolean;
 
+  /**
+   * CABECERA EN LÍNEA: el nombre y el título objetivo comparten fila en vez de
+   * apilarse. Defecto false (el bloque de siempre, uno debajo del otro).
+   *
+   * POR QUÉ ES UN EJE Y NO UN ADORNO. La cabecera clásica consume 74,95 pt de los
+   * 678,6 pt de caja útil de una LETTER con 20 mm de margen: un 11 % de la primera
+   * página gastado en cuatro líneas que dicen quién eres. Juntar nombre y título en
+   * una fila devuelve ~16 pt sin tocar el cuerpo — que es la única compresión que
+   * este catálogo admite, porque comprimir el cuerpo es amontonar y hay un núcleo de
+   * legibilidad que lo impide.
+   *
+   * ⚠ NO AÑADE NI UN GLIFO. Son los DOS MISMOS runs de texto que había apilados,
+   * ahora en la misma línea y separados por espacios — nada más. Poner un " · " o
+   * un " — " entre nombre y título habría obligado a que toPlainText lo emitiera
+   * también, y ese es el único modo de que el round-trip siga significando algo: el
+   * rayos-X tiene que decir lo que dice el documento. Es el mismo trato que ya tiene
+   * la columna colgante (`skeleton: "hanging"`), donde fechas, organización y cargo
+   * comparten fila y `entryLines` los emite como tres líneas.
+   */
+  headerInline?: boolean;
+
   /** Tracking del encabezado de sección en pt. Defecto 0 (misma advertencia). */
   headingTracking?: number;
   /** Alineación del encabezado de sección. Defecto "left". */
@@ -432,6 +453,7 @@ export function resolveMetrics(m: TemplateMetrics): ResolvedMetrics {
     nameAlign: m.nameAlign ?? "left",
     nameTracking: m.nameTracking ?? 0,
     nameRule: m.nameRule ?? false,
+    headerInline: m.headerInline ?? false,
     headingTracking: m.headingTracking ?? 0,
     headingAlign: m.headingAlign ?? "left",
     headingRulePosition: m.headingRulePosition ?? "below",

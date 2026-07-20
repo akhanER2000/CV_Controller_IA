@@ -169,7 +169,7 @@ describe("catálogo de plantillas · qué hay dentro", () => {
         m.upperHeadings, m.headingSize, m.headingNumbered,
         `${m.headingRule}/${m.headingRuleStyle}/${m.headingRulePosition}`,
         // composición
-        m.nameCase, m.nameAlign, m.nameRule, m.contactStyle, m.contactLabels, m.contactAlign,
+        m.nameCase, m.nameAlign, m.nameRule, m.headerInline, m.contactStyle, m.contactLabels, m.contactAlign,
         m.dateStyle, m.bulletMarker, m.skillStyle, m.sectionOrder.join(">"),
         // esqueleto y hueco de foto
         `${m.skeleton}/${m.hangingWidth}`, m.photoSlot, m.headingBand,
@@ -196,7 +196,8 @@ describe("catálogo de plantillas · qué hay dentro", () => {
       return JSON.stringify([
         m.bodySize, m.bodyLeading, m.sectionGap, m.entryGap, m.pageMarginV, m.pageMarginH,
         m.upperHeadings, m.headingNumbered, m.headingRule, m.headingRuleStyle, m.headingRulePosition,
-        m.headingBand, m.nameCase, m.nameAlign, m.nameRule, m.contactStyle, m.contactLabels, m.contactAlign,
+        m.headingBand, m.nameCase, m.nameAlign, m.nameRule, m.headerInline,
+        m.contactStyle, m.contactLabels, m.contactAlign,
         m.dateStyle, m.bulletMarker, m.skillStyle, m.sectionOrder.join(">"),
         m.skeleton, m.hangingWidth, m.photoSlot,
         m.accentName, m.accentHeadings,
@@ -236,6 +237,7 @@ describe("catálogo de plantillas · qué hay dentro", () => {
       ["nameCase", (m: (typeof ms)[number]) => m.nameCase === "upper"],
       ["nameAlign", (m: (typeof ms)[number]) => m.nameAlign === "center"],
       ["nameRule", (m: (typeof ms)[number]) => m.nameRule],
+      ["headerInline", (m: (typeof ms)[number]) => m.headerInline],
       ["nameTracking", (m: (typeof ms)[number]) => m.nameTracking > 0],
       ["headingTracking", (m: (typeof ms)[number]) => m.headingTracking > 0],
       ["headingNumbered", (m: (typeof ms)[number]) => m.headingNumbered],
