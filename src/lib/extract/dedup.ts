@@ -25,6 +25,7 @@
  *   tal cual — Greenhouse la necesita y el chequeo de salud la exige.
  */
 
+import { normalize } from "../verify";
 import { normalizeDateRange } from "./dates";
 import { signalsOf, compareSignals, similarityVerdict, type SignalBag } from "./similar";
 
@@ -149,7 +150,13 @@ export function looksLikeDuplicate(a: WorkLike, b: WorkLike, currentYear = new D
    ============================================================================ */
 
 export type SuspicionLevel = "baja" | "media" | "alta";
-export type DuplicateSignal = "misma-empresa" | "fechas-solapan" | "sin-fecha" | "contenido" | "misma-fuente";
+export type DuplicateSignal =
+  | "misma-empresa"
+  | "fechas-solapan"
+  | "sin-fecha"
+  | "contenido"
+  | "misma-fuente"
+  | "mismo-nombre";
 
 const ORDER: SuspicionLevel[] = ["baja", "media", "alta"];
 const rank = (l: SuspicionLevel): number => ORDER.indexOf(l);
@@ -230,6 +237,39 @@ function level1(a: DedupItem, b: DedupItem, currentYear: number, score: number):
   };
 }
 
+/**
+ * n1-bis · IDENTIDAD POR NOMBRE, para los kinds donde el nombre ES la identidad.
+ *
+ * Encontrado usando la app, no escribiendo tests: en un master real había DOS
+ * grupos llamados «Lenguajes» —uno traía Dockerfile de GitHub, el otro Go, Python
+ * y SQL del texto pegado— y NINGUNO se marcaba. n1 no podía verlos porque exige
+ * empresa a los dos lados y un grupo de aptitudes no tiene empresa; y n2 tampoco,
+ * porque sus contenidos NO se parecen: son justamente las dos mitades del mismo
+ * grupo. Cuanto mejor se reparte un duplicado, más invisible se volvía.
+ *
+ * Y sin embargo un CV no puede tener dos secciones tituladas «Lenguajes». Para un
+ * grupo de aptitudes y para un proyecto, el nombre es el identificador: repetirlo
+ * es el duplicado, con independencia de lo que haya dentro.
+ *
+ * ⚠ Para 'work' NO se aplica, y la diferencia es real: «Ingeniero de software» en
+ * dos empresas distintas son dos trabajos distintos. Ahí la identidad es
+ * cargo+empresa, y de eso ya se ocupa n1.
+ */
+const IDENTIDAD_POR_NOMBRE = new Set(["skill", "project"]);
+
+function level1bis(a: DedupItem, b: DedupItem): Parcial | null {
+  if (!IDENTIDAD_POR_NOMBRE.has(a.kind ?? "")) return null;
+  const na = normalize(a.title ?? "");
+  const nb = normalize(b.title ?? "");
+  // Un nombre vacío no identifica nada: dos items sin título no son «el mismo».
+  if (!na || !nb || na !== nb) return null;
+  return {
+    level: "alta",
+    signals: ["mismo-nombre"],
+    reasons: [`se llaman igual («${a.title}»), y ese nombre no puede aparecer dos veces`],
+  };
+}
+
 /** n2 · SEMÁNTICO. Decide por contenido cuando la empresa o la fecha no sirven. */
 function level2(sa: SignalBag, sb: SignalBag): { parcial: Parcial | null; score: number } {
   const r = compareSignals(sa, sb);
@@ -281,11 +321,13 @@ export function detectDuplicates(items: DedupItem[], opts: DetectOptions = {}): 
 
       const { parcial: p2, score } = level2(bags[i]!, bags[j]!);
       const p1 = level1(a, b, currentYear, score);
-      if (!p1 && !p2) continue;
+      const p1b = level1bis(a, b);
+      if (!p1 && !p1b && !p2) continue;
 
-      let level = p1 && p2 ? maxLevel(p1.level, p2.level) : (p1 ?? p2)!.level;
-      const signals = [...(p1?.signals ?? []), ...(p2?.signals ?? [])];
-      const reasons = [...(p1?.reasons ?? []), ...(p2?.reasons ?? [])];
+      const partes = [p1, p1b, p2].filter((p): p is Parcial => !!p);
+      let level = partes.map((p) => p.level).reduce(maxLevel);
+      const signals = partes.flatMap((p) => p.signals);
+      const reasons = partes.flatMap((p) => p.reasons);
 
       // n3 · misma fuente. Nunca dispara solo: aquí ya hay sospecha de n1 o n2.
       if (a.sourceId && b.sourceId && a.sourceId === b.sourceId) {

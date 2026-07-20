@@ -304,3 +304,65 @@ describe("★ runImport · la sospecha llega al staging y NADA se fusiona", () =
     expect(real.data._classDoubt).toBeUndefined();
   });
 });
+
+/* ============================================================================
+   n1-bis · IDENTIDAD POR NOMBRE.
+
+   Este bloque no salió de pensar casos: salió de ABRIR LA APP. En un master real
+   había dos grupos llamados «Lenguajes» —uno con Dockerfile leído de GitHub, otro
+   con Go, Python y SQL del texto pegado— y ninguno de los dos estaba marcado,
+   mientras que dos proyectos del mismo master sí lo estaban.
+
+   El motivo es incómodo y por eso vale la pena escribirlo: cuanto MEJOR repartido
+   está un duplicado, más invisible se volvía. n1 no podía verlos (exige empresa a
+   los dos lados, y un grupo de aptitudes no tiene empresa) y n2 tampoco, porque
+   sus contenidos no se parecen — son las dos mitades del mismo grupo.
+   ============================================================================ */
+describe("n1-bis · dos cosas que se llaman igual", () => {
+  const skill = (key: string, title: string, text: string): DedupItem => ({ key, kind: "skill", title, text });
+
+  it("★ el caso REAL: dos «Lenguajes» sin un solo item en común se marcan igual", () => {
+    const pares = detectDuplicates([
+      skill("s1", "Lenguajes", "Dockerfile"),
+      skill("s2", "Lenguajes", "Go, Python, SQL"),
+    ]);
+    expect(pares).toHaveLength(1);
+    expect(pares[0]!.level).toBe("alta");
+    expect(pares[0]!.signals).toContain("mismo-nombre");
+    // Y NO por contenido: no comparten ni una tecnología. Si algún día esto
+    // trajera «contenido», sería que el comparador está viendo humo.
+    expect(pares[0]!.signals).not.toContain("contenido");
+  });
+
+  it("dos grupos con nombres DISTINTOS siguen decidiéndose por contenido, no por el nombre", () => {
+    const pares = detectDuplicates([
+      skill("s1", "Lenguajes", "Go, Python"),
+      skill("s2", "Plataformas", "Kubernetes"),
+    ]);
+    expect(pares).toHaveLength(0);
+  });
+
+  it("también vale para proyectos: el nombre de un proyecto es su identificador", () => {
+    const pares = detectDuplicates([
+      { key: "p1", kind: "project", title: "Portfolio", text: "Mi portfolio" },
+      { key: "p2", kind: "project", title: "portfolio", text: "sitio personal en Astro" },
+    ]);
+    expect(pares[0]?.signals).toContain("mismo-nombre");
+  });
+
+  it("★ pero NO para roles: el mismo cargo en dos empresas son dos trabajos", () => {
+    // Es la diferencia que justifica que la regla sea por kind y no global. Si se
+    // aplicara a 'work', una carrera normal —el mismo cargo al cambiar de empresa—
+    // se marcaría entera como duplicada.
+    const pares = detectDuplicates([
+      { key: "w1", kind: "work", title: "Ingeniero de software", company: "Altiplano Pagos", dates: "2019 – 2021", text: "pagos" },
+      { key: "w2", kind: "work", title: "Ingeniero de software", company: "Rayén Retail", dates: "2022 – 2024", text: "checkout" },
+    ]);
+    expect(pares).toHaveLength(0);
+  });
+
+  it("un título vacío no identifica nada: dos items sin nombre no son «el mismo»", () => {
+    const pares = detectDuplicates([skill("s1", "", "Go"), skill("s2", "  ", "Rust")]);
+    expect(pares).toHaveLength(0);
+  });
+});
