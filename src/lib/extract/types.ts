@@ -1,5 +1,7 @@
 /** Formas de datos de la ingesta. StagedRow mapea 1:1 a la tabla staged_items. */
 
+import type { SuspicionLevel, DuplicateSignal } from "./dedup";
+
 export type ItemKind =
   | "basics" | "summary" | "work" | "bullet" | "education"
   | "skill" | "project" | "certification" | "language" | "link";
@@ -26,8 +28,25 @@ export interface StagedRow {
   evidenceLevel: EvidenceLevel;
   /** ¿el snippet aparece literal en raw_text? (staged_items.evidence_verified) */
   evidenceVerified: boolean;
-  /** clave de otro staged que quizá duplica a este (el usuario decide la fusión) */
-  duplicateOfKey?: string;
+  /** sospecha de que este item repite a otro. El usuario decide SIEMPRE. */
+  duplicate?: DuplicateHint;
+}
+
+/**
+ * La sospecha de duplicado tal cual viaja al staging. Antes era `duplicateOfKey`:
+ * una clave suelta, sin nivel ni motivo, que obligaba a la UI a decir «posible
+ * duplicado» sin poder explicar por qué. Un aviso que no se puede justificar no
+ * ayuda a decidir — y aquí decidir es del usuario, así que la explicación es
+ * parte del dato, no un adorno.
+ */
+export interface DuplicateHint {
+  /** clave del otro staged (el que aparece ANTES: el candidato a canónico) */
+  otherKey: string;
+  level: SuspicionLevel;
+  /** qué disparó la sospecha: "misma-empresa", "contenido", "misma-fuente"… */
+  signals: DuplicateSignal[];
+  /** motivo en español legible, para pintar en la tarjeta */
+  reason: string;
 }
 
 export interface ImportResult {

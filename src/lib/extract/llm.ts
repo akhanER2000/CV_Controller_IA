@@ -2,6 +2,8 @@ import "server-only";
 import { generateObject, generateText } from "ai";
 import { createGoogleGenerativeAI } from "@ai-sdk/google";
 import { normalize } from "../verify";
+import { signalsOf, compareSignals, similarityVerdict, type SignalBag } from "./similar";
+import { titlesClearlyDifferent } from "./dedup";
 import {
   BasicsSchema, WorkSchema, EducationSchema, SkillsSchema, ProjectsSchema,
   type Extraction,
@@ -151,6 +153,54 @@ function mergeBy<T>(items: T[], keyOf: (x: T) => string, combine: (a: T, b: T) =
   return [...out.values()];
 }
 
+/* ── La clave exacta no basta (§A1) ───────────────────────────────────────────
+   `idKey` casa normalize(title)|normalize(company). Con ventanas de 30k que se
+   solapan y un dossier que cuenta el mismo trabajo tres veces, el modelo redacta
+   el MISMO cargo distinto en dos ventanas («Software Engineering Intern ·
+   Tesseract Softwares» y «Becario · TesseractSoftwares») y salen DOS roles de UN
+   solo import, antes incluso de llegar al staging. Esta es la primera línea de
+   defensa y no existía.
+
+   ⚠ Aquí SÍ se fusiona, y eso solo es legítimo bajo dos condiciones estrictas,
+     porque `combine` se queda con el primer valor no vacío de cada campo:
+       1. el contenido tiene que ser casi idéntico (veredicto "fuerte"), no
+          «parecido»; y
+       2. los títulos no pueden ser claramente distintos, que es justo cuando
+          `firstNonEmpty` perdería la otra redacción.
+     Todo lo que no cumpla las dos cosas NO se toca aquí: sigue como dos items y
+     llega al staging con su sospecha de duplicado, para que decida el usuario.
+     La regla del producto —ninguna fusión automática— se respeta porque esto no
+     resuelve un duplicado entre fuentes, sino el artefacto de haber leído dos
+     veces el mismo trozo de UN documento.                                       */
+
+/** Como `mergeBy`, pero además une los que el detector da por casi idénticos. */
+function mergeBySimilar<T>(
+  items: T[],
+  keyOf: (x: T) => string,
+  contentOf: (x: T) => string[],
+  titleOf: (x: T) => string,
+  combine: (a: T, b: T) => T,
+): T[] {
+  const buckets: { key: string; bag: SignalBag; title: string; value: T }[] = [];
+  for (const it of items) {
+    const k = keyOf(it);
+    const exact = buckets.find((b) => b.key === k);
+    if (exact) { exact.value = combine(exact.value, it); continue; }
+
+    const bag = signalsOf(...contentOf(it));
+    const title = titleOf(it);
+    const fuzzy = buckets.find(
+      (b) =>
+        similarityVerdict(compareSignals(b.bag, bag)) === "fuerte" &&
+        !titlesClearlyDifferent(b.title, title),
+    );
+    if (fuzzy) { fuzzy.value = combine(fuzzy.value, it); continue; }
+
+    buckets.push({ key: k, bag, title, value: it });
+  }
+  return buckets.map((b) => b.value);
+}
+
 /**
  * Fusiona las extracciones de todas las ventanas en UNA sola, sin duplicados.
  * Puro y determinista (se prueba sin LLM). Un item que aparece en dos ventanas
@@ -181,9 +231,12 @@ export function mergeExtractions(parts: Extraction[]): Extraction {
     }));
   basics.links = [...new Map(basics.links.filter(Boolean).map((l) => [norm(l), l])).values()];
 
-  const work = mergeBy(
+  const work = mergeBySimilar(
     parts.flatMap((p) => p.work),
     (w) => idKey([w.title, w.company], w.evidence),
+    // sin la empresa, igual que en dedup.ts: aquí se compara CONTENIDO
+    (w) => [w.title, w.evidence, w.bullets.map((x) => x.text).join(" · ")],
+    (w) => w.title,
     (a, b) => ({
       title: firstNonEmpty(a.title, b.title),
       company: firstNonEmpty(a.company, b.company),
@@ -224,9 +277,11 @@ export function mergeExtractions(parts: Extraction[]): Extraction {
     },
   );
 
-  const projects = mergeBy(
+  const projects = mergeBySimilar(
     parts.flatMap((p) => p.projects),
     (p) => idKey([p.name, p.url], p.evidence),
+    (p) => [p.name, p.description, p.evidence],
+    (p) => p.name,
     (a, b) => ({
       name: firstNonEmpty(a.name, b.name),
       url: firstNonEmpty(a.url, b.url),

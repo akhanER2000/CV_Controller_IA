@@ -1,7 +1,7 @@
 import { verifyEvidence, normalize } from "../verify";
 import { detectAndClassify } from "./urls";
-import { looksLikeDuplicate } from "./dedup";
-import { classifyBulletText, linkedInSkillLines, normalizeLine } from "./classify";
+import { detectDuplicates, type DedupItem } from "./dedup";
+import { classifyBulletText, classifyProjectShape, linkedInSkillLines, normalizeLine } from "./classify";
 import { normalizeDateRange } from "./dates";
 import type { Extractor } from "./llm";
 import type { GithubFetcher } from "./github";
@@ -219,6 +219,15 @@ export async function runImport(input: ImportInput, deps: ImportDeps): Promise<I
     const level = check(p.evidence);
     const projData: Record<string, unknown> = { name: p.name, url: p.url, description: p.description, dates: p.dates };
     applyDates(projData, p.dates);
+    // §A1 · doce GRUPOS DE APTITUDES se colaron como proyectos en el volcado real
+    // («Desarrollo Web y Backend: Next.js, React, …»). Se marca la duda y punto:
+    // MISMO patrón que `_classDoubt` de las viñetas — el sistema no reclasifica
+    // solo, lo resuelve el usuario. `_` = metadato de staging, no viaja al master.
+    const forma = classifyProjectShape(p.name, p.description);
+    if (forma.kind === "skill-group") {
+      projData._classDoubt = "skill";
+      projData._classReason = forma.reason;
+    }
     staged.push({
       key: key("proj"), kind: "project", data: projData,
       lang: "es", origin: "extracted", sourceLabel: "texto pegado",
@@ -226,16 +235,62 @@ export async function runImport(input: ImportInput, deps: ImportDeps): Promise<I
     });
   }
 
-  // Dedup determinista entre roles de distintas fuentes (§4.5): se PROPONE, no se
-  // fusiona. El usuario decide. Se marca el segundo como posible duplicado.
-  const works = staged.filter((r) => r.kind === "work");
-  for (let i = 0; i < works.length; i++) {
-    for (let j = i + 1; j < works.length; j++) {
-      const a = works[i]!.data, c = works[j]!.data;
-      const wa = { company: String(a.company ?? ""), start: String(a.dates ?? ""), end: null };
-      const wc = { company: String(c.company ?? ""), start: String(c.dates ?? ""), end: null };
-      if (looksLikeDuplicate(wa, wc) && !works[j]!.duplicateOfKey) works[j]!.duplicateOfKey = works[i]!.key;
-    }
+  /* ── Sospecha de duplicado (§4.5 · §A1) ─────────────────────────────────────
+     Se PROPONE, jamás se fusiona: el segundo item queda marcado apuntando al
+     primero, con nivel, señales y motivo, y decide el usuario.
+
+     Se compara work, project Y skill: los tres tenían duplicados reales en el
+     volcado. El texto que se le pasa al detector es TODO el contenido del item
+     (incluidas las viñetas de un rol): es ahí donde vive la identidad del hecho
+     cuando el título y la empresa no coinciden.
+
+     `sourceId` (n3) solo se rellena si el import trae MÁS DE UNA fuente. Con una
+     sola, «vienen del mismo documento» es cierto para todos los pares y por tanto
+     no distingue nada: subir la sospecha con eso sería inflarla a ciegas.        */
+  const multiFuente = new Set(sources).size > 1;
+  // las viñetas se indexan por rol UNA vez: un dossier de 104 KB trae 150 items y
+  // volver a barrer `staged` por cada rol es trabajo cuadrático justo en el caso
+  // que motivó todo esto.
+  const bulletsPorRol = new Map<string, string[]>();
+  for (const r of staged) {
+    if (r.kind !== "bullet" || !r.parentKey) continue;
+    const lista = bulletsPorRol.get(r.parentKey);
+    const texto = String(r.data.text ?? "");
+    if (lista) lista.push(texto);
+    else bulletsPorRol.set(r.parentKey, [texto]);
+  }
+  const bulletsDe = (parentKey: string) => (bulletsPorRol.get(parentKey) ?? []).join(" · ");
+
+  const candidatos: DedupItem[] = staged
+    .filter((r) => r.kind === "work" || r.kind === "project" || r.kind === "skill")
+    .map((r) => {
+      const d = r.data;
+      const base = { key: r.key, kind: r.kind, sourceId: multiFuente ? r.sourceLabel : undefined };
+      if (r.kind === "work") {
+        return {
+          ...base,
+          title: String(d.title ?? ""),
+          company: String(d.company ?? ""),
+          dates: String(d.dates ?? ""),
+          text: [r.evidenceSnippet ?? "", bulletsDe(r.key)].filter(Boolean).join(" · "),
+        };
+      }
+      if (r.kind === "project") {
+        return {
+          ...base,
+          title: String(d.name ?? ""),
+          dates: String(d.dates ?? ""),
+          text: [String(d.description ?? ""), r.evidenceSnippet ?? ""].filter(Boolean).join(" · "),
+        };
+      }
+      return { ...base, title: String(d.group ?? ""), text: String(d.items ?? "") };
+    });
+
+  const porKey = new Map(staged.map((r) => [r.key, r] as const));
+  for (const s of detectDuplicates(candidatos)) {
+    const row = porKey.get(s.bKey);
+    if (!row || row.duplicate) continue; // ya tiene una sospecha más fuerte (van ordenadas)
+    row.duplicate = { otherKey: s.aKey, level: s.level, signals: s.signals, reason: s.reason };
   }
 
   const counts = {
