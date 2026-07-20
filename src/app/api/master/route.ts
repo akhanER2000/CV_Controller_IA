@@ -5,10 +5,19 @@ import { createItem, reclassifyToSkill, usageForItems } from "@/lib/db/master";
 
 export const runtime = "nodejs";
 
-// Kinds válidos (enum item_kind del esquema 0001). El POST manual solo acepta estos.
+/* Kinds válidos (enum item_kind del esquema 0001 + 'reference' de la 0004). El POST
+   manual solo acepta estos.
+
+   ⚠ 'reference' está aquí porque el enum lo tiene, pero la puerta CANÓNICA de una
+   referencia es POST /api/references: esa ruta valida su vocabulario propio
+   (name·role·org·relation·email·phone), guarda los VÍNCULOS en el mismo gesto y es
+   donde vive el aviso de que hay que pedirle permiso a la persona. Ojo con editar
+   una referencia creada por aquí: PATCH /api/master/[id] valida contra DATA_KEYS,
+   que no conoce `role`, `org` ni `relation`, y la rechazaría — usa
+   PATCH /api/references/[id]. */
 const ITEM_KINDS = new Set([
   "basics", "summary", "work", "education", "project", "skill",
-  "certification", "language", "publication", "link", "bullet",
+  "certification", "language", "publication", "link", "bullet", "reference",
 ]);
 
 /**

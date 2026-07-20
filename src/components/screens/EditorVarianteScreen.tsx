@@ -11,13 +11,20 @@ import {
   linkUrl,
   linkLabel,
   mergePresentationOverride,
+  referenceLine,
+  referencesOptIn,
   type PresentationPatch,
   type ResumeData,
+  type ReferenceFields,
   type I18n,
 } from "@/lib/cv/resume";
 // El catálogo se auto-registra al importarse y no toca APIs de servidor: el selector
 // del editor lee las MISMAS plantillas que usa el render, no una copia.
 import { listTemplates, listPalettes, listTypographies, getTemplate } from "@/lib/cv/templates";
+// Solo la función PURA de sugerencia y su tipo. db/references.ts importa
+// SupabaseClient con `import type`, así que esto no arrastra nada de servidor al
+// bundle del navegador — y la regla de qué se sugiere queda escrita UNA vez.
+import { suggestReferences, type ReferenceView } from "@/lib/db/references";
 import { recommendTemplates, type MasterSummary } from "@/lib/cv/recommend";
 import { TemplateGallery, TemplateThumb, docHashFromSig } from "@/components/TemplateGallery";
 import { AuroraTune, AURORA_TRABAJO } from "@/components/Aurora";
@@ -337,12 +344,26 @@ export function buildEditorResumeData({
       dates: i18nBoth(S(e.data, "dates")),
       p1: true,
     })),
+    // ⚠⚠ REFERENCIAS — el MISMO interruptor y la MISMA composición que el servidor
+    // (referencesOptIn + referenceLine, los dos de resume.ts). Es lo que impide que
+    // el preview y el PDF descargado discrepen justo en los datos de terceros: si
+    // aquí se decidiera «encendido» por otro criterio, el usuario vería en pantalla
+    // un CV con el teléfono de su jefe que el PDF real no lleva, o al revés.
+    references: referencesOptIn(basicsData)
+      ? by("reference")
+          .map((r) => {
+            const linea = referenceLine(r.data as ReferenceFields);
+            return { p1: true, es: linea, en: linea };
+          })
+          .filter((r) => r.es.trim() !== "")
+      : [],
     headings: {
       summary: i18nBoth("Resumen"),
       skills: i18nBoth("Habilidades"),
       work: i18nBoth("Experiencia"),
       projects: i18nBoth("Proyectos"),
       education: i18nBoth("Educación"),
+      references: i18nBoth("Referencias"),
     },
   };
 }
@@ -459,6 +480,10 @@ export function EditorVarianteScreen({ variantId = "editor" }: { variantId?: str
 
   // Presentación opt-in (foto/QR). qrCustom = el usuario eligió "otra URL".
   const [qrCustom, setQrCustom] = useState(false);
+  /* Las REFERENCIAS del master con sus VÍNCULOS. Se piden aparte de la variante
+     porque los vínculos viven en su propia tabla (reference_links) y GET
+     /api/variants/[id] no los trae. Solo sirven para SUGERIR: nada se añade solo. */
+  const [refs, setRefs] = useState<ReferenceView[]>([]);
   // Galería de plantillas (el selector con miniaturas reales). Cerrarla no pierde
   // nada: cada elección se persiste en el momento, como cualquier otro ajuste.
   const [galleryOpen, setGalleryOpen] = useState(false);
@@ -547,6 +572,30 @@ export function EditorVarianteScreen({ variantId = "editor" }: { variantId?: str
       active = false;
     };
   }, [variantId, fail]);
+
+  /* Los VÍNCULOS de las referencias. Efecto aparte del de la variante: si las
+     migraciones 0004/0005 aún no están aplicadas, esto devuelve lista vacía y el
+     editor sigue funcionando entero — lo único que se pierde es la SUGERENCIA, que
+     es una ayuda, no un dato del documento. */
+  useEffect(() => {
+    if (!supabaseEnabled) return;
+    let active = true;
+    (async () => {
+      try {
+        const res = await fetch("/api/references");
+        if (!res.ok) throw new Error(await readApiError(res));
+        const j = (await res.json()) as { references?: ReferenceView[] };
+        if (active) setRefs(j.references ?? []);
+      } catch (e) {
+        // No se calla: sin esto, «¿por qué no me sugiere a mi jefe?» no se depura.
+        console.error("[editor] no se pudieron leer las referencias", e);
+        if (active) setRefs([]);
+      }
+    })();
+    return () => {
+      active = false;
+    };
+  }, []);
 
   // ── Índices derivados ──
   const masterById = useMemo(() => {
@@ -1585,6 +1634,11 @@ export function EditorVarianteScreen({ variantId = "editor" }: { variantId?: str
         return [S(m.data, "name"), S(m.data, "description")].filter(Boolean).join(" — ");
       case "education":
         return [S(m.data, "degree"), S(m.data, "institution")].filter(Boolean).join(" · ");
+      case "reference":
+        // La MISMA composición que imprime el documento (referenceLine): lo que se
+        // ve en la biblioteca es exactamente lo que saldría en el PDF si se
+        // encendiera el interruptor. Nada de una versión "resumida" que engañe.
+        return referenceLine(m.data as ReferenceFields);
       default:
         return "";
     }
@@ -1617,12 +1671,14 @@ export function EditorVarianteScreen({ variantId = "editor" }: { variantId?: str
   const mSkills = master.filter((m) => m.kind === "skill");
   const mProjects = master.filter((m) => m.kind === "project");
   const mEducation = master.filter((m) => m.kind === "education");
+  const mReferences = master.filter((m) => m.kind === "reference");
   const libCount =
     mSummary.length +
     mWorks.reduce((n, w) => n + 1 + mBulletsOf(w.id).length, 0) +
     mSkills.length +
     mProjects.length +
-    mEducation.length;
+    mEducation.length +
+    mReferences.length;
 
   // ── Grupos de la variante (centro) ──
   const summaryItems = items.filter((i) => i.kind === "summary");
@@ -1630,6 +1686,29 @@ export function EditorVarianteScreen({ variantId = "editor" }: { variantId?: str
   const skillItems = items.filter((i) => i.kind === "skill").sort(bySort);
   const projectItems = items.filter((i) => i.kind === "project").sort(bySort);
   const eduItems = items.filter((i) => i.kind === "education").sort(bySort);
+  const refItems = items.filter((i) => i.kind === "reference").sort(bySort);
+
+  /* ── B · EL INTERRUPTOR Y LA SUGERENCIA ─────────────────────────────────────
+     `refsOn` sale del MISMO helper que usa el servidor (referencesOptIn): si aquí
+     se leyera el flag "a mano", el preview podría decir que sí y el PDF que no.
+
+     La sugerencia es literalmente eso: aparece cuando una referencia está anclada a
+     algo que YA está en la variante y ella todavía no. Se PROPONE con su motivo
+     («trabajasteis juntos en X») y un botón. Nada se añade solo — meter datos de
+     una tercera persona en un CV sin que nadie lo pulse sería exactamente lo que
+     este producto promete no hacer. */
+  const refsOn = referencesOptIn(basicsData);
+  const itemIdsEnVariante = items.filter((i) => i.visible).map((i) => i.item_id);
+  const refsSugeridas = suggestReferences(
+    refs,
+    itemIdsEnVariante,
+    refItems.map((r) => r.item_id),
+  );
+  const masterLabel = (id: string): string => {
+    const m = masterById.get(id);
+    return m ? libText(m) : id;
+  };
+
   // basics es IDENTIDAD (portador de foto/QR), no una referencia que el usuario
   // compuso: se excluye de los conteos y del "¿variante vacía?".
   const contentItems = items.filter((i) => i.kind !== "basics");
@@ -1822,6 +1901,16 @@ export function EditorVarianteScreen({ variantId = "editor" }: { variantId?: str
               <div className="lib-g">
                 <span className="t-overline">{t("editor.groupEducation")}</span>
                 {mEducation.map((d) => libRow(d))}
+              </div>
+            )}
+            {/* Referencias: añadirlas a la variante NO las imprime. Para eso hace
+                falta además el interruptor de la tarjeta de presentación, y el
+                aviso lo dice aquí para que nadie lo descubra al abrir el PDF. */}
+            {mReferences.length > 0 && (
+              <div className="lib-g">
+                <span className="t-overline">{t("editor.groupReferences")}</span>
+                <p className="lib-note">{t("editor.refsWhenOn")}</p>
+                {mReferences.map((r) => libRow(r))}
               </div>
             )}
           </div>
@@ -2366,6 +2455,65 @@ export function EditorVarianteScreen({ variantId = "editor" }: { variantId?: str
                     qué caso ayuda —el papel en la mano— y en cuál estorba. */}
                 <p className="note">{t("editor.qrHonest")}</p>
               </div>
+
+              {/* ⚠⚠ REFERENCIAS EN EL DOCUMENTO — opt-in POR VARIANTE, apagado por
+                  defecto y CONTRA LA COSTUMBRE LOCAL. Los dos motivos van a la
+                  vista, no en un tooltip: la convención internacional (no se
+                  imprimen, y tampoco se gasta una línea en «disponibles a
+                  solicitud») y el permiso de la persona, porque encenderlo saca su
+                  nombre, su correo y su teléfono impresos en el PDF. */}
+              <div className="prow">
+                <label className="ptog">
+                  <input
+                    type="checkbox"
+                    checked={refsOn}
+                    aria-label={t("editor.refsOnAria")}
+                    onChange={(e) => savePresentation({ showReferences: e.target.checked })}
+                  />
+                  {t("editor.refsLabel")}
+                </label>
+                <p className="note">{t("editor.refsWhyOff")}</p>
+                <p className="note warn">{t("editor.refsConsent")}</p>
+                {refsOn && (
+                  <div className="pbody">
+                    <p className="note">{t("editor.refsWhenOn")}</p>
+                    {/* Encendido y sin ninguna referencia añadida: el documento no
+                        imprimirá la sección. Decirlo es la diferencia entre un
+                        interruptor honesto y uno que parece roto. */}
+                    {refItems.length === 0 && <p className="note warn">{t("editor.refsNoneInVariant")}</p>}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* La SUGERENCIA vive fuera de la tarjeta de presentación porque no es un
+              ajuste: es una propuesta sobre el contenido. Aparece esté el
+              interruptor como esté — tener la referencia a mano en el master es
+              útil aunque esta candidatura no la imprima. */}
+          {refsSugeridas.length > 0 && (
+            <div className="c-card var-refsug" data-screen-label="editor-refs-sugeridas">
+              <span className="t-overline">{t("editor.refsSuggestTitle")}</span>
+              {refsSugeridas.map((s) => {
+                const ref = refs.find((r) => r.id === s.referenceId);
+                if (!ref) return null;
+                return (
+                  <div className="refsug-row" key={s.referenceId}>
+                    <span className="tx">
+                      <b>{referenceLine(ref.data as ReferenceFields)}</b>
+                      <em>
+                        {t("editor.refsSuggestBody").replace(
+                          "{items}",
+                          s.becauseOf.map(masterLabel).join(" · "),
+                        )}
+                      </em>
+                    </span>
+                    <button type="button" className="c-btn c-btn--quiet" onClick={() => void toggleFromLib(s.referenceId)}>
+                      {t("editor.refsSuggestAdd")}
+                    </button>
+                  </div>
+                );
+              })}
             </div>
           )}
 
@@ -2464,6 +2612,39 @@ export function EditorVarianteScreen({ variantId = "editor" }: { variantId?: str
                             data-a="out"
                             title={t("editor.removeFromVariant")}
                             onClick={() => removeItem(d.id)}
+                          >
+                            ×
+                          </button>
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Referencias AÑADIDAS a esta variante. Estar aquí no basta para que
+                  se impriman: el interruptor de la tarjeta de presentación manda, y
+                  si está apagado se dice aquí mismo en vez de dejar al usuario
+                  creyendo que el PDF las lleva. */}
+              {refItems.length > 0 && (
+                <div className="var-g">
+                  <div className="gh">
+                    <span className="t-overline">{t("editor.groupReferences")}</span>
+                    <span className="n">{refsOn ? t("editor.refsWhenOn") : t("editor.refsWhyOff")}</span>
+                  </div>
+                  <div className="var-exp">
+                    {refItems.map((r) => (
+                      <div className="var-b" data-b={r.id} key={r.id}>
+                        <span className="grip" aria-hidden="true">
+                          ⠿
+                        </span>
+                        <span className="tx">{referenceLine(r.data as ReferenceFields)}</span>
+                        <span className="bacts">
+                          <button
+                            type="button"
+                            data-a="out"
+                            title={t("editor.removeFromVariant")}
+                            onClick={() => removeItem(r.id)}
                           >
                             ×
                           </button>

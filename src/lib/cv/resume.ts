@@ -52,6 +52,54 @@ export interface ResumeEducation {
 }
 
 /**
+ * Una REFERENCIA ya compuesta en una línea. Misma forma que ResumeProject y por la
+ * misma razón: el documento imprime UNA línea por referencia, sin fechas ni
+ * entrada, así que aquí solo llega el texto ya montado (lo monta `referenceLine`,
+ * que es puro y lo comparten las tres capas que construyen el ResumeData).
+ *
+ * ⚠ DATOS DE TERCEROS. Que exista este campo NO significa que se imprima: es
+ * OPT-IN POR VARIANTE y nace apagado (ver `ResumeData.references`).
+ */
+export interface ResumeReference {
+  p1: boolean;
+  es: string;
+  en: string;
+}
+
+/** Los campos crudos de una referencia, tal y como viven en profile_items.data. */
+export interface ReferenceFields {
+  /** nombre de la persona */
+  name?: string;
+  /** su cargo */
+  role?: string;
+  /** su organización */
+  org?: string;
+  /** cómo se conocieron: jefe, cliente, profesor, stakeholder (texto libre) */
+  relation?: string;
+  email?: string;
+  phone?: string;
+}
+
+/**
+ * La línea que se IMPRIME de una referencia. PURA y compartida por los tres sitios
+ * que arman un ResumeData (queries.ts, variants.ts y el espejo del editor): si cada
+ * uno la compusiera por su cuenta, el PDF del servidor y el preview del editor
+ * dirían cosas distintas del mismo dato.
+ *
+ * Forma: «Nombre — Cargo · Organización · relación · email · teléfono», saltándose
+ * lo que no esté. Se usan los conectores de siempre (CX) porque el texto plano
+ * («cómo lo lee el ATS») emite EXACTAMENTE esta misma cadena.
+ */
+export function referenceLine(r: ReferenceFields): string {
+  const limpio = (v: string | undefined) => (v ?? "").trim();
+  const nombre = limpio(r.name);
+  const cargo = limpio(r.role);
+  const cabeza = nombre && cargo ? `${nombre}${CX.titleCompany}${cargo}` : nombre || cargo;
+  const cola = [r.org, r.relation, r.email, r.phone].map(limpio).filter(Boolean);
+  return [cabeza, ...cola].filter(Boolean).join(CX.mid);
+}
+
+/**
  * Un enlace del CV. La `url` es LO QUE IMPORTA (el ATS lee la URL como texto);
  * `label` es solo para el humano y nunca reemplaza a la URL en el documento.
  * Retrocompatible: un string suelto = una URL sin etiqueta (el fixture golden).
@@ -77,12 +125,28 @@ export interface ResumeData {
   work: ResumeWork[];
   projects: ResumeProject[];
   education: ResumeEducation[];
+  /**
+   * REFERENCIAS — OPT-IN POR VARIANTE, APAGADAS POR DEFECTO. Opcional a propósito:
+   * `undefined` (o lista vacía) ⇒ la sección no existe en el documento, que es el
+   * caso normal y el que mantiene el golden intacto.
+   *
+   * ⚠⚠ POR QUÉ NACE APAGADA Y NO ES UN DESCUIDO. Son datos de PERSONAS QUE NO SON
+   * EL USUARIO y que no han consentido nada de esto. Además, la convención
+   * internacional es no imprimir referencias en el CV ni gastar una línea en
+   * «disponibles a solicitud»: ocupa espacio y no aporta. Quien construye el
+   * ResumeData solo rellena esta lista si el usuario lo pidió EN ESA VARIANTE.
+   */
+  references?: ResumeReference[];
   headings: {
     summary: I18n;
     skills: I18n;
     work: I18n;
     projects: I18n;
     education: I18n;
+    /** Rótulo de la sección de referencias. Obligatorio aunque la sección casi
+     *  nunca se imprima: si fuera opcional, el día que alguien la encienda el
+     *  documento saldría con un rótulo vacío y nadie se enteraría hasta verlo. */
+    references: I18n;
   };
   /**
    * Foto — OPT-IN explícito (versión "visual"). El CV estándar (y el golden) va
@@ -137,6 +201,31 @@ export interface PresentationPatch {
   templateId?: string | null;
   paletteId?: string | null;
   typographyId?: string | null;
+  /**
+   * ¿Esta variante IMPRIME sus referencias? `undefined` no toca, `false`/`null`
+   * apagan. Es booleano y no texto porque el valor por defecto (apagado) tiene que
+   * seguir siéndolo aunque el dato venga de un JSON viejo o a medio migrar.
+   */
+  showReferences?: boolean | null;
+}
+
+/**
+ * La clave del interruptor de referencias dentro del override de basics. Vive con
+ * la foto, el QR y la plantilla porque es lo mismo: una decisión de PRESENTACIÓN
+ * de esta variante, no un dato del master.
+ */
+export const REFERENCES_OPT_IN_FIELD = "showReferences";
+
+/**
+ * ¿Esta variante enciende las referencias? PURA y compartida por el servidor
+ * (buildVariantResumeData) y el cliente (el espejo del editor), que es la única
+ * forma de que el preview y el PDF descargado tomen la MISMA decisión.
+ *
+ * Exige `=== true`: cualquier otra cosa deja la sección apagada. Con datos de
+ * terceros, «no sé» tiene que significar «no».
+ */
+export function referencesOptIn(basics: Record<string, unknown> | null | undefined): boolean {
+  return basics?.[REFERENCES_OPT_IN_FIELD] === true;
 }
 
 /** Campos de contacto (identidad) que la variante puede sobrescribir en su basics. */
@@ -180,6 +269,14 @@ export function mergePresentationOverride(
     if (v === undefined) continue;
     if (v === null || v === "") delete next[f]; // volver a la plantilla por defecto
     else next[f] = v;
+  }
+  // Referencias: apagar BORRA la clave en vez de guardar `false`. Así el estado por
+  // defecto y el estado «apagado a mano» son el mismo objeto, y no hay dos formas
+  // de estar apagado que puedan divergir. Encender guarda `true` literal, que es lo
+  // único que referencesOptIn acepta.
+  if (patch.showReferences !== undefined) {
+    if (patch.showReferences === true) next[REFERENCES_OPT_IN_FIELD] = true;
+    else delete next[REFERENCES_OPT_IN_FIELD];
   }
   return next;
 }
@@ -280,7 +377,10 @@ export function selectContent(data: ResumeData, onePage: boolean) {
     }));
   const projects = data.projects.filter((p) => !onePage || p.p1);
   const education = data.education.filter((e) => !onePage || e.p1);
-  return { work, projects, education };
+  // `references` puede no venir (el caso normal: apagadas). `?? []` y no un
+  // `data.references!`: un documento sin referencias no es un error, es lo esperado.
+  const references = (data.references ?? []).filter((r) => !onePage || r.p1);
+  return { work, projects, education, references };
 }
 
 // ── Composición: lo que comparten el PDF y el texto plano ────────────────────
@@ -309,13 +409,17 @@ export function metricsOf(data: ResumeData): ResolvedMetrics {
  * queda: cambiarlo movería el golden).
  */
 export function documentSections(data: ResumeData, onePage: boolean, m: ResolvedMetrics): SectionId[] {
-  const { work, projects, education } = selectContent(data, onePage);
+  const { work, projects, education, references } = selectContent(data, onePage);
   const hay: Record<SectionId, boolean> = {
     summary: true,
     skills: true,
     work: work.length > 0,
     projects: projects.length > 0,
     education: education.length > 0,
+    // Referencias: NUNCA por excepción histórica. Solo si el usuario las encendió
+    // en esta variante Y hay al menos una. Sin lista, la sección no existe: no se
+    // rotula, no gasta una línea, no queda un «disponibles a solicitud» flotando.
+    references: references.length > 0,
   };
   return m.sectionOrder.filter((id) => hay[id]);
 }
@@ -429,7 +533,7 @@ export interface PlainTextOpts {
 export function toPlainText(data: ResumeData, opts: PlainTextOpts = {}): string {
   const loc: Locale = opts.locale ?? "es";
   const onePage = opts.onePage ?? false;
-  const { work, projects, education } = selectContent(data, onePage);
+  const { work, projects, education, references } = selectContent(data, onePage);
   const b = data.basics;
   const m = metricsOf(data);
   const secciones = documentSections(data, onePage, m);
@@ -486,6 +590,14 @@ export function toPlainText(data: ResumeData, opts: PlainTextOpts = {}): string 
     education: () => {
       abrir("education");
       for (const e of education) lines.push(...entryLines(t(e.title, loc), t(e.dates, loc), e.org, m));
+    },
+    // Referencias — cada una es UNA viñeta, como los proyectos: sin entrada y sin
+    // fechas. El ResumePDF emite exactamente estas mismas líneas con el mismo
+    // marcador; por eso el round-trip sigue significando algo cuando alguien las
+    // enciende. Con la lista vacía este bloque no se llama (documentSections).
+    references: () => {
+      abrir("references");
+      for (const r of references) lines.push(`${vineta}${t(r, loc)}`);
     },
   };
 

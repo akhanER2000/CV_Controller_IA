@@ -396,24 +396,32 @@ const M = (
  * rehacer la maqueta, que es justo lo que piden las guías chilenas —ponen la
  * formación delante incluso para perfiles con trayectoria— y lo que hace la
  * plantilla oficial de Harvard para egresados.
+ *
+ * ⚠ «references» VA AL FINAL DE LOS SEIS, SIEMPRE. `sectionOrder` es
+ * `readonly SectionId[]`: NO exige exhaustividad, así que una sección que falte en
+ * uno de estos arrays desaparece del documento SIN ERROR DE COMPILACIÓN — solo en
+ * las plantillas que usan ese orden. Con 15 plantillas repartidas entre los seis,
+ * olvidarse de uno significa que un usuario que activó sus referencias no las ve y
+ * no hay nada que se lo diga. Lo vigila tests/referencias.test.ts, que compara cada
+ * orden contra DEFAULT_SECTION_ORDER como CONJUNTO.
  */
 const ORDEN = {
   /** El de siempre: te vende lo que sabes hacer. */
-  habilidades: ["summary", "skills", "work", "projects", "education"],
+  habilidades: ["summary", "skills", "work", "projects", "education", "references"],
   /** Te vende dónde has estado: perfiles con recorrido. */
-  experiencia: ["summary", "work", "projects", "skills", "education"],
+  experiencia: ["summary", "work", "projects", "skills", "education", "references"],
   /** Te vende lo que has construido: portafolio por delante del cargo. */
-  proyectos: ["summary", "projects", "work", "skills", "education"],
+  proyectos: ["summary", "projects", "work", "skills", "education", "references"],
   /** Te vende el título: academia, egresados y primer empleo. */
-  formacion: ["summary", "education", "skills", "work", "projects"],
+  formacion: ["summary", "education", "skills", "work", "projects", "references"],
   /** Formación delante, experiencia detrás y habilidades al final: la costumbre chilena. */
-  chile: ["summary", "education", "work", "skills", "projects"],
+  chile: ["summary", "education", "work", "skills", "projects", "references"],
   /**
    * Cambio de carrera: el resumen hace de PUENTE y detrás van las habilidades y lo
    * que has construido por tu cuenta, antes del empleo previo. Nunca un funcional
    * puro (sin fechas ni empleador): los reclutadores lo leen como ocultamiento.
    */
-  transicion: ["summary", "skills", "projects", "work", "education"],
+  transicion: ["summary", "skills", "projects", "work", "education", "references"],
 } satisfies Record<string, readonly SectionId[]>;
 
 // ── PLANTILLAS ────────────────────────────────────────────────────────────────

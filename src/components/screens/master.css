@@ -266,3 +266,36 @@
      horizontal ANTES que apilada: comparar campo a campo exige verlos alineados. */
   .ms-dup__grid{min-width:520px}
   .ms-dup{overflow-x:auto}}
+
+/* ══ B · REFERENCIAS ════════════════════════════════════════════════════════
+   Datos de TERCEROS. El aviso del permiso (.ms-ref__consent) NO es letra pequeña:
+   va en el color de acento, encima de la lista y otra vez dentro del formulario de
+   alta. Si se quiere quitar de en medio, se equivocó de sitio quien lo quitó.       */
+.ms-ref__consent{margin:0 0 10px;padding:8px 10px;border-left:2px solid var(--border-patina);
+  font:500 var(--fs-micro)/1.6 var(--font-sans);color:var(--accent-text);
+  background:color-mix(in srgb,var(--accent-text) 6%,transparent);border-radius:0 4px 4px 0;
+  max-width:78ch}
+.ms-ref__note{margin:0 0 10px;font:400 var(--fs-micro)/1.6 var(--font-sans);
+  color:var(--text-subtle);max-width:78ch}
+
+.ms-ref{padding:14px 16px}
+.ms-ref__fields{display:flex;flex-wrap:wrap;align-items:baseline;gap:6px 14px}
+/* El nombre manda: es la persona. El resto son atributos suyos. */
+.ms-ref__name{font:600 var(--fs-body)/1.4 var(--font-sans);color:var(--text)}
+.ms-ref__fields .meta{margin-left:auto;display:inline-flex;align-items:center;gap:8px}
+.ms-ref__fields .m{font:400 var(--fs-micro)/1 var(--font-mono);color:var(--text-subtle)}
+
+/* Los vínculos: qué rol o proyecto respalda esta referencia. Encendido = acento,
+   apagado = un contorno discreto. Es el dato que hace útil la referencia, así que
+   se ve siempre, no detrás de un desplegable. */
+.ms-ref__links{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-top:12px;
+  padding-top:10px;border-top:1px solid var(--border)}
+.ms-ref__linksh{font:400 var(--fs-micro)/1 var(--font-mono);color:var(--text-subtle);margin-right:4px}
+.ms-ref__link{font:400 var(--fs-micro)/1 var(--font-sans);padding:5px 9px;border-radius:99px;
+  border:1px solid var(--border-strong);color:var(--text-muted);background:transparent}
+.ms-ref__link:hover{color:var(--text);border-color:var(--border-patina)}
+.ms-ref__link.on{color:var(--accent-text);border-color:var(--border-patina);
+  background:color-mix(in srgb,var(--accent-text) 8%,var(--surface))}
+
+.ms-ref--draft .ms-draft{margin-top:12px}
+@media (max-width:768px){.ms-ref__fields .meta{margin-left:0;width:100%}}

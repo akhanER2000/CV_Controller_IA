@@ -2,9 +2,17 @@
 
 import type { SuspicionLevel, DuplicateSignal } from "./dedup";
 
+/**
+ * Los kinds del enum item_kind. 'reference' lo añade la migración 0004.
+ *
+ * ⚠ La INGESTA nunca produce 'reference': una referencia son datos de otra persona
+ * y la escribe el usuario a mano (origin 'manual'), después de haberle pedido
+ * permiso. Está en el union porque el enum de la base lo tiene y porque el master
+ * las lee, no porque el extractor pueda inventarlas.
+ */
 export type ItemKind =
   | "basics" | "summary" | "work" | "bullet" | "education"
-  | "skill" | "project" | "certification" | "language" | "link";
+  | "skill" | "project" | "certification" | "language" | "link" | "reference";
 
 export type Origin = "extracted" | "manual" | "ai_rephrased" | "ai_translated" | "api";
 

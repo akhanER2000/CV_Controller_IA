@@ -254,3 +254,20 @@
 .fitdrop .txt{font:500 var(--fs-micro)/1.5 var(--font-mono);color:var(--text-muted)}
 .fitdrop ul{margin-top:8px;padding-left:16px;display:flex;flex-direction:column;gap:4px}
 .fitdrop li{font:400 var(--fs-micro)/1.5 var(--font-mono);color:var(--text-subtle)}
+
+/* ══ B · REFERENCIAS ════════════════════════════════════════════════════════
+   El aviso de la biblioteca: añadirlas a la variante NO las imprime. Se lee antes
+   de pulsar «+», que es cuando importa. */
+.lib-g .lib-note{margin:0 18px 8px;font:400 var(--fs-micro)/1.55 var(--font-sans);
+  color:var(--text-subtle)}
+
+/* La SUGERENCIA. No es un ajuste ni una acción hecha: es una propuesta con su
+   motivo delante y un botón que hay que pulsar. Contorno de acento, nunca relleno:
+   no debe parecer que ya está aplicada. */
+.var-refsug{margin:6px 18px;padding:14px 16px;border-color:var(--border-patina)}
+.var-refsug .t-overline{display:block;font-size:10px;margin-bottom:4px}
+.refsug-row{display:flex;align-items:center;gap:12px;padding:9px 0;flex-wrap:wrap}
+.refsug-row+.refsug-row{border-top:1px solid var(--border)}
+.refsug-row .tx{flex:1 1 240px;display:flex;flex-direction:column;gap:3px;min-width:0}
+.refsug-row .tx b{font:500 var(--fs-ui)/1.45 var(--font-sans);color:var(--text);overflow-wrap:anywhere}
+.refsug-row .tx em{font:400 var(--fs-micro)/1.5 var(--font-sans);font-style:normal;color:var(--text-subtle)}

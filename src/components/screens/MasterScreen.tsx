@@ -130,6 +130,19 @@ interface VBasics {
   location: string;
   links: VLink[];
 }
+/* ⚠⚠ UNA REFERENCIA SON DATOS DE OTRA PERSONA. No es un item más del registro: el
+   nombre, el correo y el teléfono que hay aquí dentro pertenecen a alguien que no
+   es el usuario y que no ha consentido nada de este sistema. De ahí tres cosas que
+   se ven en el render y no en un comentario: el aviso de pedir permiso está donde
+   se añade, la sección dice que en el CV van APAGADAS, y `links` no es decoración
+   —es lo único que convierte «un señor con un teléfono» en «mi jefe en Tesseract».
+   `links` NO viene de /api/master (esa ruta solo trae profile_items): lo trae
+   /api/references y vive en su propio estado, ver `refLinks`. */
+interface VReference {
+  id: string | null;
+  data: Record<string, unknown>;
+  origin: string;
+}
 interface MasterView {
   basics: VBasics | null;
   summary: VSummary | null;
@@ -137,6 +150,7 @@ interface MasterView {
   skills: VSkill[];
   projects: VRow[];
   education: VRow[];
+  references: VReference[];
   /* Las certificaciones tienen kind propio en el enum y NADIE las pintaba: entraban
      al master (alta manual) y desaparecían de la pantalla. Se listan junto a
      educación, que es donde el usuario las busca ("Educación y certificaciones"). */
@@ -205,8 +219,12 @@ export const ROW_HAS_DATES: Record<RowKind, boolean> = {
   certification: true,
 };
 
-/** Lo que se puede borrar del master (kind del profile_item). */
-type DelKind = "work" | "bullet" | "skill" | RowKind;
+/** Lo que se puede borrar del master (kind del profile_item). `reference` está aquí
+ *  porque si no, el borrado de una referencia se saldría por el `else` (que asume
+ *  «es una viñeta, quítala de su rol»): la tarjeta no desaparecería, el aviso de
+ *  «lo usan N variantes» no se pintaría, y el DELETE chocaría con el RESTRICT
+ *  devolviendo un error crudo de Postgres. */
+type DelKind = "work" | "bullet" | "skill" | "reference" | RowKind;
 
 /** En qué lista de la vista vive cada kind de fila. */
 type RowSec = "projects" | "education" | "certifications";
@@ -497,6 +515,11 @@ function buildDemoView(): MasterView {
     projects: DEMO_PJ.map((p, i) => ({ id: `demo-pj-${i}`, kind: "project" as RowKind, data: p.data, m: p.m, warn: rowWarn("project", p.data) })),
     education: DEMO_ED.map((d, i) => ({ id: `demo-ed-${i}`, kind: "education" as RowKind, data: d.data, m: d.m, warn: rowWarn("education", d.data) })),
     certifications: DEMO_CE.map((c, i) => ({ id: `demo-ce-${i}`, kind: "certification" as RowKind, data: c.data, m: c.m, warn: rowWarn("certification", c.data) })),
+    // La maqueta NO trae referencias, y es una decisión: inventar un «jefe de
+    // Diego» con su correo sería enseñar datos de una persona ficticia como si
+    // fueran los contactos reales de alguien. La sección se abre vacía y con su
+    // aviso, que es exactamente lo que verá una cuenta nueva.
+    references: [],
   };
 }
 
@@ -577,6 +600,11 @@ function buildRealView(items: ApiItem[]): MasterView {
     projects: by("project").map(row("project")),
     education: by("education").map(row("education")),
     certifications: by("certification").map(row("certification")),
+    // Sin esta línea las referencias entrarían al master y NO SE PINTARÍAN: este
+    // `by(kind)` es una lista explícita, y un kind que no se nombre desaparece de
+    // la pantalla sin error. Con datos de terceros, «guardado pero invisible» es el
+    // peor estado posible — el usuario no puede ni revisarlo ni borrarlo.
+    references: by("reference").map((r) => ({ id: r.id, data: r.data, origin: originLabel(r.origin) })),
   };
 }
 
@@ -889,6 +917,22 @@ export function MasterScreen() {
       args: { keepId: string; dropIds: string[]; data: Record<string, string> | null };
     } | null
   >(null);
+
+  /* ── B · REFERENCIAS ────────────────────────────────────────────────────────
+     Los ITEMS viven en `view.references` (salen de /api/master como cualquier otro
+     profile_item). Los VÍNCULOS no: son una tabla aparte y los trae /api/references,
+     así que van en su propio estado indexado por id de referencia. Dos fetches y no
+     uno porque son dos consultas que fallan por motivos distintos — y la de los
+     vínculos puede fallar SOLA si el usuario aplicó la 0004 y todavía no la 0005.
+
+     `refsMigration` es esa honestidad: en vez de una sección muda o un error crudo
+     de Postgres, la pantalla dice qué migración falta y qué hacer. */
+  const [refLinks, setRefLinks] = useState<Record<string, { itemId: string; relation: string | null }[]>>({});
+  const [refsMigration, setRefsMigration] = useState(false);
+  // Borrador del alta: no reutiliza `Draft` porque una referencia tiene seis campos,
+  // el aviso de permiso encima y un selector de vínculos — no es una fila más.
+  const [refDraft, setRefDraft] = useState<Record<string, string> | null>(null);
+  const [refError, setRefError] = useState<string>("");
 
   // A3 · estado de los chips de habilidades.
   const [chipInputs, setChipInputs] = useState<Record<string, string>>({});
@@ -1219,6 +1263,7 @@ export function MasterScreen() {
         if (!prev) return prev;
         if (kind === "work") return { ...prev, roles: prev.roles.filter((r) => r.id !== id) };
         if (kind === "skill") return { ...prev, skills: prev.skills.filter((s) => s.id !== id) };
+        if (kind === "reference") return { ...prev, references: prev.references.filter((r) => r.id !== id) };
         if (kind === "project" || kind === "education" || kind === "certification") {
           const sec = ROW_SECTION[kind];
           return { ...prev, [sec]: prev[sec].filter((r) => r.id !== id) };
@@ -1623,7 +1668,7 @@ export function MasterScreen() {
         if (!active) return;
         setView(buildRealView((data.items ?? []) as ApiItem[]));
       } catch {
-        if (active) setView({ basics: null, summary: null, roles: [], skills: [], projects: [], education: [], certifications: [] });
+        if (active) setView({ basics: null, summary: null, roles: [], skills: [], projects: [], education: [], certifications: [], references: [] });
       } finally {
         if (active) setLoading(false);
       }
@@ -1632,6 +1677,33 @@ export function MasterScreen() {
       active = false;
     };
   }, []);
+
+  /* Los VÍNCULOS de las referencias (tabla reference_links). Va aparte de la carga
+     del master a propósito: si las migraciones 0004/0005 no están aplicadas, esto
+     falla y el resto del registro tiene que seguir cargando igual. El aviso que se
+     pinta entonces dice qué falta, no «error». */
+  const loadRefLinks = useCallback(() => {
+    if (!supabaseEnabled) return;
+    void (async () => {
+      try {
+        const res = await fetch("/api/references");
+        if (!res.ok) throw new Error(String(res.status));
+        const j = (await res.json()) as {
+          references?: { id: string; links?: { itemId: string; relation: string | null }[] }[];
+          migracionPendiente?: boolean;
+        };
+        const mapa: Record<string, { itemId: string; relation: string | null }[]> = {};
+        for (const r of j.references ?? []) mapa[r.id] = r.links ?? [];
+        setRefLinks(mapa);
+        setRefsMigration(Boolean(j.migracionPendiente));
+      } catch {
+        // No se sabe si es la migración o la red: no se afirma ninguna de las dos.
+        // Los items siguen visibles; lo que se pierde es el detalle del vínculo.
+        setRefLinks({});
+      }
+    })();
+  }, []);
+  useEffect(() => loadRefLinks(), [loadRefLinks]);
 
   useEffect(() => loadDups(), [loadDups]);
 
@@ -1709,11 +1781,136 @@ export function MasterScreen() {
     setDupBlocked(null);
   }, [filter, query]);
 
+  /* ── B · las tres escrituras de una referencia ──────────────────────────────
+     Todas pasan por /api/references, NUNCA por /api/master/[id]: esa ruta valida
+     el `data` contra un vocabulario cerrado que no conoce `role`, `org` ni
+     `relation`, y rechazaría la edición con un mensaje que no explica nada.       */
+
+  /** Los items del master a los que se puede anclar una referencia: roles y
+   *  proyectos. Ni viñetas ni skills — el vínculo es «el trabajo que compartimos». */
+  const linkables = useMemo(() => {
+    const out: { id: string; label: string }[] = [];
+    for (const r of view?.roles ?? []) {
+      if (!r.id || isLocalId(r.id)) continue;
+      out.push({ id: r.id, label: [r.tt, r.company].filter(Boolean).join(" · ") || t("master.role.untitled") });
+    }
+    for (const p of view?.projects ?? []) {
+      if (!p.id || isLocalId(p.id)) continue;
+      out.push({ id: p.id, label: str(p.data, "name") || t("master.role.untitled") });
+    }
+    return out;
+  }, [view, t]);
+
+  /** Crea la referencia (POST /api/references) con sus vínculos en el MISMO gesto:
+   *  una referencia guardada sin vínculo es medio dato y nadie vuelve a por él. */
+  const createReference = useCallback(
+    (values: Record<string, string>, links: { itemId: string; relation: string | null }[]) => {
+      const data: Record<string, string> = {};
+      for (const [k, val] of Object.entries(values)) {
+        const clean = (val ?? "").trim();
+        if (clean) data[k] = clean;
+      }
+      if (!data.name) {
+        setRefError(t("master.ref.needName"));
+        return;
+      }
+      if (!supabaseEnabled) {
+        // Sin Supabase no se persiste nada, y no se finge que sí.
+        noteSaved(t("master.saved.localAdd"));
+        setRefDraft(null);
+        setRefError("");
+        return;
+      }
+      void (async () => {
+        try {
+          const res = await fetch("/api/references", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ data, links }),
+          });
+          const j = (await res.json()) as { reference?: { id: string; data: Record<string, unknown> }; error?: string };
+          if (!res.ok || !j.reference) throw new Error(j.error ?? `HTTP ${res.status}`);
+          const nueva = j.reference;
+          setView((prev) =>
+            prev ? { ...prev, references: [...prev.references, { id: nueva.id, data: nueva.data, origin: MANUAL_LABEL }] } : prev,
+          );
+          setRefLinks((prev) => ({ ...prev, [nueva.id]: links }));
+          setRefDraft(null);
+          setRefError("");
+          noteSaved(t("common.saved"));
+        } catch (e) {
+          setRefError(t("master.ref.saveFail").replace("{r}", e instanceof Error ? e.message : "error"));
+        }
+      })();
+    },
+    [noteSaved, t],
+  );
+
+  /** Edición en su sitio de un campo. `data` viaja COMPLETO (la ruta reemplaza la
+   *  columna, igual que el resto del master): se parte del spread de la previa. */
+  const saveReferenceField = useCallback(
+    (ref: VReference, field: string, value: string) => {
+      const nextData = mergeField(ref.data, field, value);
+      setView((prev) =>
+        prev ? { ...prev, references: prev.references.map((r) => (r.id === ref.id ? { ...r, data: nextData } : r)) } : prev,
+      );
+      if (!supabaseEnabled || !ref.id || isLocalId(ref.id)) {
+        noteSaved(t("master.saved.localEdit"));
+        return;
+      }
+      void (async () => {
+        try {
+          const res = await fetch(`/api/references/${ref.id}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ data: nextData }),
+          });
+          if (!res.ok) throw new Error();
+          noteSaved(t("common.saved"));
+        } catch {
+          noteSaved(t("master.saved.fail"));
+        }
+      })();
+    },
+    [noteSaved, t],
+  );
+
+  /** Enciende o apaga UN vínculo. El cuerpo manda el conjunto DESEADO completo (la
+   *  capa de datos hace la diferencia), no «añade este»: así dos clics seguidos no
+   *  se pisan dejando un vínculo fantasma. */
+  const toggleReferenceLink = useCallback(
+    (refId: string | null, itemId: string) => {
+      if (!refId) return;
+      const actuales = refLinks[refId] ?? [];
+      const dentro = actuales.some((l) => l.itemId === itemId);
+      const next = dentro ? actuales.filter((l) => l.itemId !== itemId) : [...actuales, { itemId, relation: null }];
+      setRefLinks((prev) => ({ ...prev, [refId]: next }));
+      if (!supabaseEnabled || isLocalId(refId)) return;
+      void (async () => {
+        try {
+          const res = await fetch(`/api/references/${refId}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ links: next }),
+          });
+          if (!res.ok) throw new Error();
+          noteSaved(t("common.saved"));
+        } catch {
+          // Se devuelve el estado anterior: dejar el chip encendido sería decir que
+          // el vínculo existe cuando la base dice que no.
+          setRefLinks((prev) => ({ ...prev, [refId]: actuales }));
+          noteSaved(t("master.saved.fail"));
+        }
+      })();
+    },
+    [refLinks, noteSaved, t],
+  );
+
   const v = view;
   const totalBullets = v ? v.roles.reduce((a, e) => a + e.bullets.length, 0) : 0;
   const total = v
     ? (v.basics ? 1 : 0) + (v.summary ? 1 : 0) + v.roles.length + totalBullets + v.skills.length +
-      v.projects.length + v.education.length + v.certifications.length
+      v.projects.length + v.education.length + v.certifications.length + v.references.length
     : 0;
 
   // «fuentes» = orígenes externos distintos (el manual no cuenta: es la ausencia
@@ -2486,6 +2683,81 @@ export function MasterScreen() {
     );
   };
 
+  /* ── B · UNA REFERENCIA ─────────────────────────────────────────────────────
+     Seis campos editables en su sitio (mismo gesto que el resto de la pantalla) y,
+     debajo, LOS VÍNCULOS: con qué rol o proyecto se relaciona esta persona. El
+     vínculo se pinta como una lista de conmutadores y no como un desplegable
+     porque una referencia puede anclarse a VARIAS cosas —el jefe que además fue
+     stakeholder del proyecto— y un select de uno solo lo escondería. */
+  const REF_FIELDS: { key: string; ph: string }[] = [
+    { key: "name", ph: "master.ref.field.name" },
+    { key: "role", ph: "master.ref.field.role" },
+    { key: "org", ph: "master.ref.field.org" },
+    { key: "relation", ph: "master.ref.field.relation" },
+    { key: "email", ph: "master.ref.field.email" },
+    { key: "phone", ph: "master.ref.field.phone" },
+  ];
+
+  const referenceLinkPicker = (refId: string | null, refLabel: string): ReactNode => {
+    const puestos = new Set((refId ? refLinks[refId] ?? [] : []).map((l) => l.itemId));
+    if (linkables.length === 0) return <p className="ms-ref__note">{t("master.ref.linkEmpty")}</p>;
+    return (
+      <div className="ms-ref__links">
+        <span className="ms-ref__linksh">{puestos.size ? t("master.ref.linkedTo") : t("master.ref.linkNone")}</span>
+        {linkables.map((li) => {
+          const on = puestos.has(li.id);
+          return (
+            <button
+              key={li.id}
+              type="button"
+              className={`ms-ref__link${on ? " on" : ""}`}
+              aria-pressed={on}
+              aria-label={t("master.ref.linkAria").replace("{ref}", refLabel).replace("{item}", li.label)}
+              onClick={() => toggleReferenceLink(refId, li.id)}
+            >
+              {li.label}
+            </button>
+          );
+        })}
+      </div>
+    );
+  };
+
+  const referenceCard = (r: VReference, i: number): ReactNode => {
+    const key = `ref-${i}`;
+    const label = str(r.data, "name").trim() || t("master.role.untitled");
+    return (
+      <Fragment key={r.id ?? key}>
+        <div className="c-card ms-card ms-ref" data-item>
+          <div className="ms-ref__fields">
+            {REF_FIELDS.map((f) => {
+              const value = str(r.data, f.key);
+              return (
+                <EditableField
+                  key={f.key}
+                  className={f.key === "name" ? "ms-ref__name" : undefined}
+                  value={value}
+                  ph={t(f.ph)}
+                  aria={`${t("master.aria.editPrefix")}${t(f.ph)}`}
+                  onCommit={(text) => {
+                    if (text === value.trim()) return;
+                    saveReferenceField(r, f.key, text);
+                  }}
+                />
+              );
+            })}
+            <span className="meta">
+              <span className="m">{tOrigin(r.origin)}</span>
+              {delButton("reference", r.id, label)}
+            </span>
+          </div>
+          {referenceLinkPicker(r.id, label)}
+        </div>
+        {blockedWarning(r.id, "reference", label)}
+      </Fragment>
+    );
+  };
+
   // ── A3 · un grupo de habilidades como chips ────────────────────────────────
   // El title/hover de cada chip muestra la procedencia del GRUPO (no por chip: el
   // modelo guarda un CSV por grupo, los chips son una capa de UI sobre ese CSV).
@@ -2876,6 +3148,19 @@ export function MasterScreen() {
                   <button type="button" role="menuitem" onClick={() => openDraft("certification", null)}>
                     {t("master.add.certification")}
                   </button>
+                  {/* Referencia: no pasa por openDraft (no es una fila de un campo,
+                      es un formulario con su aviso de permiso). */}
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => {
+                      setRefDraft({});
+                      setRefError("");
+                      setAddMenu(false);
+                    }}
+                  >
+                    {t("master.add.reference")}
+                  </button>
                   <button
                     type="button"
                     role="menuitem"
@@ -3036,6 +3321,92 @@ export function MasterScreen() {
                       <button type="button" className="ms-add" onClick={() => openDraft("certification", null)}>
                         {t("master.addCertification")}
                       </button>
+                    </>,
+                  )}
+
+                {/* ⚠⚠ REFERENCIAS — datos de TERCEROS. Dos avisos y los dos VISIBLES,
+                    no en un tooltip: (1) hay que pedirle permiso a la persona antes
+                    de guardar sus datos, (2) en el CV no se imprimen salvo que la
+                    variante lo pida. Se pintan arriba de la lista y otra vez en el
+                    formulario de alta, que es donde se toma la decisión. */}
+                {(v.references.length > 0 || refDraft) &&
+                  groupSection(
+                    "referencias",
+                    t("master.group.references"),
+                    t("master.ref.count").replace("{n}", String(v.references.length)),
+                    <>
+                      <p className="ms-ref__consent">{t("master.ref.consent")}</p>
+                      <p className="ms-ref__note">{t("master.ref.convention")}</p>
+                      <p className="ms-ref__note">{t("master.ref.linkHint")}</p>
+                      {refsMigration ? (
+                        <p className="ms-ref__consent" role="alert">
+                          {t("master.ref.migration")}
+                        </p>
+                      ) : null}
+                      {v.references.map((r, i) => referenceCard(r, i))}
+                      {refDraft ? (
+                        <div className="c-card ms-card ms-ref ms-ref--draft">
+                          <p className="ms-ref__consent">{t("master.ref.consent")}</p>
+                          <div className="ms-ref__fields">
+                            {REF_FIELDS.map((f, idx) => (
+                              <input
+                                key={f.key}
+                                className="c-input ms-draft__in"
+                                autoFocus={idx === 0}
+                                placeholder={t(f.ph)}
+                                aria-label={t(f.ph)}
+                                value={refDraft[f.key] ?? ""}
+                                onChange={(ev) =>
+                                  setRefDraft((p) => ({ ...(p ?? {}), [f.key]: ev.target.value }))
+                                }
+                                onKeyDown={(ev) => {
+                                  if (ev.key === "Enter") {
+                                    ev.preventDefault();
+                                    createReference(refDraft, []);
+                                  } else if (ev.key === "Escape") {
+                                    ev.preventDefault();
+                                    setRefDraft(null);
+                                    setRefError("");
+                                  }
+                                }}
+                              />
+                            ))}
+                          </div>
+                          {/* El vínculo se elige DESPUÉS de guardar: hasta que la
+                              persona no existe no hay a qué anclar nada, y pedirlo
+                              antes obligaría a mantener un id fantasma. */}
+                          <p className="ms-ref__note">{t("master.ref.linkHint")}</p>
+                          {refError ? (
+                            <p className="ms-ref__consent" role="alert">
+                              {refError}
+                            </p>
+                          ) : null}
+                          <div className="ms-draft">
+                            <button
+                              type="button"
+                              className="ms-draft__save"
+                              onClick={() => createReference(refDraft, [])}
+                            >
+                              {t("master.draft.save")}
+                            </button>
+                            <button
+                              type="button"
+                              className="ms-draft__cancel"
+                              aria-label={t("common.cancel")}
+                              onClick={() => {
+                                setRefDraft(null);
+                                setRefError("");
+                              }}
+                            >
+                              ✕
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <button type="button" className="ms-add" onClick={() => setRefDraft({})}>
+                          {t("master.ref.add")}
+                        </button>
+                      )}
                     </>,
                   )}
               </>

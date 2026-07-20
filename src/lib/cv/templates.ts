@@ -66,11 +66,21 @@ export interface TemplateTypography {
  * Las secciones del documento, por su id. El ORDEN en que se listan es el orden de
  * lectura: el del PDF y el del texto plano, que son el mismo (eso es el candado).
  */
-export type SectionId = "summary" | "skills" | "work" | "projects" | "education";
+export type SectionId = "summary" | "skills" | "work" | "projects" | "education" | "references";
 
-/** El orden de siempre. Sin declarar `sectionOrder`, el documento sale por aquí. */
+/**
+ * El orden de siempre. Sin declarar `sectionOrder`, el documento sale por aquí.
+ *
+ * ⚠ REFERENCIAS VA LA ÚLTIMA, Y CASI NUNCA SALE. La convención internacional es NO
+ * imprimir las referencias en el CV (ni gastar una línea en «disponibles a
+ * solicitud»), así que la sección es OPT-IN POR VARIANTE y nace apagada: quien
+ * construye el ResumeData solo rellena `references` si el usuario lo pidió en ESA
+ * variante. Con la lista vacía, documentSections la descarta y el documento sale
+ * exactamente igual que antes de que esta sección existiera — eso es lo que
+ * mantiene el golden intacto byte a byte.
+ */
 export const DEFAULT_SECTION_ORDER: readonly SectionId[] = [
-  "summary", "skills", "work", "projects", "education",
+  "summary", "skills", "work", "projects", "education", "references",
 ] as const;
 
 /** Caja del nombre. Las versalitas de imprenta no existen en las .ttf del repo: lo

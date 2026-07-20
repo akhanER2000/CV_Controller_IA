@@ -226,6 +226,33 @@ export const master = {
     "master.dup.sig.noDate": "a una le falta la fecha",
     "master.dup.sig.content": "mismo contenido",
     "master.dup.sig.source": "el mismo documento",
+
+    /* ── B · REFERENCIAS ──────────────────────────────────────────────────────
+       Datos de TERCEROS: personas que no son el usuario y que no han consentido
+       nada de este sistema. Por eso el aviso del permiso no es letra pequeña ni
+       vive en un tooltip — se ve al añadirla y encima de la lista. Y por eso el
+       copy de la sección dice, sin rodeos, que en el CV van apagadas. */
+    "master.add.reference": "Referencia",
+    "master.group.references": "Referencias",
+    "master.ref.count": "{n} referencias — no salen en el CV salvo que lo pidas por variante",
+    "master.ref.consent": "Son datos de otra persona: pídele permiso antes de guardar su nombre, su correo o su teléfono.",
+    "master.ref.convention": "No se imprimen en el CV. La convención internacional es no incluirlas, y tampoco gastar una línea en «disponibles a solicitud»: en cada variante decides si esta candidatura concreta las lleva.",
+    "master.ref.add": "+ añadir referencia",
+    "master.ref.field.name": "nombre de la persona",
+    "master.ref.field.role": "su cargo",
+    "master.ref.field.org": "su organización",
+    "master.ref.field.relation": "relación (jefe, cliente, profesor, stakeholder…)",
+    "master.ref.field.email": "email",
+    "master.ref.field.phone": "teléfono",
+    "master.ref.linkedTo": "vinculada a:",
+    "master.ref.linkNone": "sin vincular — elige el rol o el proyecto en el que trabajasteis juntos",
+    "master.ref.linkHint": "El vínculo es lo que hace útil una referencia: al incluir ese proyecto en una variante, el editor te la sugiere.",
+    "master.ref.linkPick": "Vincular con…",
+    "master.ref.linkAria": "Vincular {ref} con {item}",
+    "master.ref.linkEmpty": "Añade antes un rol o un proyecto al master: una referencia se ancla a algo.",
+    "master.ref.migration": "Falta aplicar las migraciones de referencias en Supabase (0004 y 0005). Hasta entonces esta sección no puede guardar nada.",
+    "master.ref.saveFail": "no se pudo guardar la referencia: {r}",
+    "master.ref.needName": "Escribe al menos el nombre de la persona.",
   } as Record<string, string>,
   en: {
     // Toolbar
@@ -451,5 +478,29 @@ export const master = {
     "master.dup.sig.noDate": "one of them has no date",
     "master.dup.sig.content": "same content",
     "master.dup.sig.source": "the same document",
+
+    // B · REFERENCES — third-party data. The permission notice is visible where
+    // you add them, never buried in a tooltip.
+    "master.add.reference": "Reference",
+    "master.group.references": "References",
+    "master.ref.count": "{n} references — they stay out of the CV unless you ask for them per variant",
+    "master.ref.consent": "This is someone else's data: ask them for permission before you store their name, email or phone.",
+    "master.ref.convention": "They are not printed on the CV. The international convention is to leave them out, and not to waste a line on “references available upon request” either: each variant decides whether that particular application carries them.",
+    "master.ref.add": "+ add reference",
+    "master.ref.field.name": "person's name",
+    "master.ref.field.role": "their title",
+    "master.ref.field.org": "their organisation",
+    "master.ref.field.relation": "relationship (manager, client, professor, stakeholder…)",
+    "master.ref.field.email": "email",
+    "master.ref.field.phone": "phone",
+    "master.ref.linkedTo": "linked to:",
+    "master.ref.linkNone": "not linked yet — pick the role or project you worked on together",
+    "master.ref.linkHint": "The link is what makes a reference useful: include that project in a variant and the editor suggests it.",
+    "master.ref.linkPick": "Link with…",
+    "master.ref.linkAria": "Link {ref} with {item}",
+    "master.ref.linkEmpty": "Add a role or a project to your master first: a reference is anchored to something.",
+    "master.ref.migration": "The reference migrations (0004 and 0005) still need to be applied in Supabase. Until then this section cannot save anything.",
+    "master.ref.saveFail": "couldn't save the reference: {r}",
+    "master.ref.needName": "Type at least the person's name.",
   } as Record<string, string>,
 } as const;

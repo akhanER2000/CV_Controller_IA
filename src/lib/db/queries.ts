@@ -585,9 +585,18 @@ export async function buildResumeData(sb: SB, userId: string): Promise<ResumeDat
       dates: i18n(str(e.data, "dates")),
       p1: true,
     })),
+    // ⚠⚠ REFERENCIAS: NUNCA en el render del MASTER, y no es un olvido.
+    // El opt-in de referencias es POR VARIANTE (es ahí donde el usuario decide, con
+    // el aviso delante, si esta candidatura concreta las lleva). El master no es una
+    // variante: no tiene dónde guardar esa decisión, así que la respuesta honesta es
+    // que no las imprime. Y así, además, unos datos de terceros no pueden acabar en
+    // un PDF por el camino que nadie miró. Se deja explícito —y no omitido— para que
+    // se lea como una decisión y no como un hueco: buildVariantResumeData sí las trae.
+    references: [],
     headings: {
       summary: i18n("Resumen"), skills: i18n("Habilidades"), work: i18n("Experiencia"),
       projects: i18n("Proyectos"), education: i18n("Educación"),
+      references: i18n("Referencias"),
     },
   };
 }

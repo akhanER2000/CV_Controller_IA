@@ -2,9 +2,12 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import {
   normalizeLinks,
   mergePresentationOverride,
+  referenceLine,
+  referencesOptIn,
   CONTACT_OVERRIDE_FIELDS,
   type ResumeData,
   type PresentationPatch,
+  type ReferenceFields,
 } from "@/lib/cv/resume";
 import { ensureMaster, getMasterItems, createMasterItem, type MasterItem } from "@/lib/db/queries";
 
@@ -745,6 +748,29 @@ export async function buildVariantResumeData(
   // el glifo sale de la vCard de los basics efectivos).
   const qrOn = qrMode === "vcard" || qrUrl !== "";
 
+  // ⚠⚠ REFERENCIAS — OPT-IN POR VARIANTE Y APAGADAS POR DEFECTO.
+  //
+  // El interruptor vive en el override de basics (`showReferences`), en el mismo
+  // sitio que la foto, el QR y la plantilla: son las decisiones de PRESENTACIÓN de
+  // ESTA variante, no del master. Se exige `=== true` a propósito: cualquier otra
+  // cosa —undefined, "", "false", 0— deja la sección apagada. Con datos de terceros
+  // el valor por defecto no puede depender de cómo se serializó un booleano.
+  //
+  // Y aunque esté encendido, solo salen las referencias que el usuario METIÓ en la
+  // variante (`by("reference")` son variant_items visibles). El interruptor no
+  // arrastra el master entero: enciende lo que ya se compuso a mano.
+  //
+  // Por qué no se imprime «referencias disponibles a solicitud» cuando está
+  // apagado: porque no aporta nada y gasta una línea de las que faltan. Si no hay
+  // sección, no hay sección.
+  const referenciasOn = referencesOptIn(basicsItem);
+  const references = referenciasOn
+    ? by("reference").map((r) => {
+        const linea = referenceLine(r.data as ReferenceFields);
+        return { p1: true, es: linea, en: linea };
+      }).filter((r) => r.es.trim() !== "")
+    : [];
+
   return {
     meta: { variant: owned.name },
     basics: {
@@ -763,6 +789,7 @@ export async function buildVariantResumeData(
     templateId: str(basicsItem, "templateId").trim() || undefined,
     paletteId: str(basicsItem, "paletteId").trim() || undefined,
     typographyId: str(basicsItem, "typographyId").trim() || undefined,
+    references,
     skills: by("skill").map((s) => ({ group: i18n(str(s.data, "group")), items: i18n(str(s.data, "items")) })),
     work,
     projects: by("project").map((p) => ({
@@ -782,6 +809,7 @@ export async function buildVariantResumeData(
       work: i18n("Experiencia"),
       projects: i18n("Proyectos"),
       education: i18n("Educación"),
+      references: i18n("Referencias"),
     },
   };
 }

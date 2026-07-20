@@ -128,6 +128,9 @@ export const demoCv: ResumeData = {
     work: { es: "Experiencia", en: "Experience" },
     projects: { es: "Proyectos", en: "Projects" },
     education: { es: "Educación", en: "Education" },
+    // El rótulo existe porque `ResumeData.headings` lo exige; la landing NUNCA
+    // imprime referencias (la demo no las trae y son opt-in por variante).
+    references: { es: "Referencias", en: "References" },
   },
 };
 

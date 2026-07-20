@@ -142,6 +142,21 @@ export const editor = {
     "editor.qrModeVcard": "vCard (guarda tu contacto)",
     "editor.qrVcardNote": "El QR guarda tu contacto de un toque (nombre, email, teléfono, enlaces). Tu contacto YA está como texto en el cuerpo; esto es un ademÁs.",
 
+    /* ── B · REFERENCIAS EN EL DOCUMENTO ──────────────────────────────────────
+       Opt-in POR VARIANTE y apagado por defecto. El copy explica el PORQUÉ (la
+       convención internacional) y recuerda el permiso de la persona: no es letra
+       pequeña, es la línea que está debajo del propio interruptor. */
+    "editor.groupReferences": "Referencias",
+    "editor.refsLabel": "Imprimir mis referencias en este CV",
+    "editor.refsOnAria": "Incluir las referencias en esta variante",
+    "editor.refsWhyOff": "Apagado a propósito: la convención internacional es no imprimir referencias en el CV, y tampoco gastar una línea en «referencias disponibles a solicitud». Se guardan en tu master y las envías cuando te las pidan.",
+    "editor.refsConsent": "Si las enciendes, el nombre, el correo y el teléfono de esas personas salen impresos en el PDF. Pídeles permiso antes.",
+    "editor.refsWhenOn": "Solo se imprimen las referencias que hayas añadido a esta variante desde la biblioteca.",
+    "editor.refsNoneInVariant": "Está encendido, pero esta variante no tiene ninguna referencia añadida: el documento no imprimirá la sección.",
+    "editor.refsSuggestTitle": "Referencias vinculadas a lo que ya incluiste",
+    "editor.refsSuggestBody": "Trabajasteis juntos en {items}. Se sugiere, no se añade: decides tú.",
+    "editor.refsSuggestAdd": "añadir a la variante",
+
     // Contacto por variante (identidad). Se imprime en el CUERPO; hereda del master.
     "editor.contactOverline": "Contacto",
     "editor.contactHint": "Se imprime en el cuerpo · hereda del master",
@@ -451,6 +466,18 @@ export const editor = {
     "editor.qrModeUrl": "A URL (opens the link)",
     "editor.qrModeVcard": "vCard (saves your contact)",
     "editor.qrVcardNote": "The QR saves your contact in one tap (name, email, phone, links). Your contact is ALREADY in the body as text; this is an extra.",
+
+    // B · REFERENCES IN THE DOCUMENT — opt-in per variant, off by default.
+    "editor.groupReferences": "References",
+    "editor.refsLabel": "Print my references on this CV",
+    "editor.refsOnAria": "Include references in this variant",
+    "editor.refsWhyOff": "Off on purpose: the international convention is not to print references on the CV, and not to waste a line on “references available upon request” either. They live in your master and you send them when asked.",
+    "editor.refsConsent": "If you turn this on, those people's names, emails and phone numbers are printed on the PDF. Ask them first.",
+    "editor.refsWhenOn": "Only the references you added to this variant from the library get printed.",
+    "editor.refsNoneInVariant": "It's on, but this variant has no reference added: the document won't print the section.",
+    "editor.refsSuggestTitle": "References linked to what you already included",
+    "editor.refsSuggestBody": "You worked together on {items}. It's a suggestion, not an addition: you decide.",
+    "editor.refsSuggestAdd": "add to the variant",
 
     // Per-variant contact (identity). Prints in the BODY; inherits from the master.
     "editor.contactOverline": "Contact",

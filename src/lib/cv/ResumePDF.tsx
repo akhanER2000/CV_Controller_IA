@@ -415,7 +415,7 @@ export function ResumePDF({
   const loc: Locale = opts.locale ?? "es";
   const onePage = opts.onePage ?? false;
   const tt = <T extends { es: string; en: string }>(v: T) => v[loc];
-  const { work, projects, education } = selectContent(data, onePage);
+  const { work, projects, education, references } = selectContent(data, onePage);
   const b = data.basics;
 
   // La plantilla EFECTIVA: lo que pida el render gana sobre lo que traiga el
@@ -678,6 +678,19 @@ export function ResumePDF({
     </>
   );
 
+  /* REFERENCIAS — opt-in por variante, apagadas por defecto (ver ResumeData.
+     references). Se dibujan como VIÑETAS, exactamente igual que los proyectos y con
+     el mismo marcador: `toPlainText` emite estas mismas líneas en este mismo orden,
+     que es la única forma de que el rayos-X siga describiendo este documento.
+     Con la lista vacía este bloque es `false` y `documentSections` ni siquiera lo
+     coloca — el documento por defecto no cambia ni un byte. */
+  const referencesBlock = references.length > 0 && (
+    <>
+      {heading("references")}
+      {sangrar(references.map((r, i) => bullet(tt(r), i)))}
+    </>
+  );
+
   /** Los bloques por id, para que el ORDEN lo decida la plantilla y no el JSX. */
   const bloques: Record<SectionId, ReactNode> = {
     summary: summaryBlock,
@@ -685,6 +698,7 @@ export function ResumePDF({
     work: workBlock,
     projects: projectsBlock,
     education: educationBlock,
+    references: referencesBlock,
   };
   const cuerpoOrdenado = secciones.map((id) => <Fragment key={id}>{bloques[id]}</Fragment>);
 
@@ -739,6 +753,12 @@ export function ResumePDF({
               {summaryBlock}
               {workBlock}
               {projectsBlock}
+              {/* Las referencias van en la COLUMNA PRINCIPAL también en la gama
+                  visual. Esta rama no usa `sectionOrder`, así que una sección que
+                  no se nombre aquí desaparece en silencio — y una referencia que
+                  el usuario encendió a propósito y no sale es exactamente el fallo
+                  que no puede pasar con datos de terceros. */}
+              {referencesBlock}
               {qrBlock}
             </View>
           </View>
