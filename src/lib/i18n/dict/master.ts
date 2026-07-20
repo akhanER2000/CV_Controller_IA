@@ -159,6 +159,32 @@ export const master = {
     "master.skill.newGroupPlaceholder": "Nombre del grupo (p. ej. Herramientas)",
     "master.skill.groupRemoved": "Grupo eliminado: «{label}»",
 
+    // Edición de campos en su sitio (F) — cada campo se guarda por su clave real
+    "master.role.untitled": "(rol sin título)",
+    "master.field.company": "Empresa",
+    "master.field.location": "Ciudad · modalidad (remoto, híbrido…)",
+    "master.field.url": "url (opcional)",
+    "master.draft.certName": "Nombre de la certificación",
+    "master.draft.issuer": "Quién la emite",
+    "master.add.certification": "Certificación",
+    "master.addCertification": "+ añadir certificación",
+
+    // Fechas accionables (F) — el aviso es un botón, no un cartel
+    "master.date.add": "añadir fecha",
+    "master.date.fix": "corregir",
+    "master.date.placeholder": "mar 2025 – dic 2025 · también vale «2019 – hoy»",
+    "master.date.save": "guardar fecha",
+    "master.date.clear": "quitar la fecha",
+    "master.date.current": "sigue abierto",
+    "master.date.currentHint": "Deja el inicio y marca el término como actualidad.",
+    "master.date.currentLabel": "actualidad",
+    "master.date.presentWord": "hoy",
+    "master.date.ariaEdit": "Editar fechas de ",
+    "master.date.ariaInput": "Fechas (mes y año)",
+    "master.date.understood": "se entiende: {range}",
+    "master.date.invalid": "⚠ rango imposible: el término es anterior al inicio. Así no se guarda.",
+    "master.date.unreadable": "⚠ no se entiende esa fecha. Escribe mes y año, p. ej. «mar 2025 – dic 2025».",
+
     // Reclasificar viñeta → habilidad (A4)
     "master.skillTag.move": "esto parece una habilidad → mover",
     "master.skillTag.moveBatch": "mover las {n} sugeridas a Habilidades",
@@ -323,6 +349,32 @@ export const master = {
     "master.skill.newGroup": "Group name",
     "master.skill.newGroupPlaceholder": "Group name (e.g. Tools)",
     "master.skill.groupRemoved": "Group removed: “{label}”",
+
+    // In-place field editing (F) — every field saves under its own real key
+    "master.role.untitled": "(untitled role)",
+    "master.field.company": "Company",
+    "master.field.location": "City · setup (remote, hybrid…)",
+    "master.field.url": "url (optional)",
+    "master.draft.certName": "Certification name",
+    "master.draft.issuer": "Issued by",
+    "master.add.certification": "Certification",
+    "master.addCertification": "+ add certification",
+
+    // Actionable dates (F) — the warning is a button, not a sign
+    "master.date.add": "add date",
+    "master.date.fix": "fix",
+    "master.date.placeholder": "Mar 2025 – Dec 2025 · “2019 – present” works too",
+    "master.date.save": "save date",
+    "master.date.clear": "clear the date",
+    "master.date.current": "still open",
+    "master.date.currentHint": "Keeps the start and marks the end as present.",
+    "master.date.currentLabel": "present",
+    "master.date.presentWord": "present",
+    "master.date.ariaEdit": "Edit dates for ",
+    "master.date.ariaInput": "Dates (month and year)",
+    "master.date.understood": "reads as: {range}",
+    "master.date.invalid": "⚠ impossible range: the end comes before the start. It won't be saved like this.",
+    "master.date.unreadable": "⚠ that date isn't readable. Write month and year, e.g. “Mar 2025 – Dec 2025”.",
 
     // Reclassify bullet → skill (A4)
     "master.skillTag.move": "this looks like a skill → move",

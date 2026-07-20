@@ -161,4 +161,46 @@
 .ms-merge button{font:600 var(--fs-micro)/1 var(--font-mono);color:var(--accent-text)}
 .ms-merge button:hover{text-decoration:underline}
 .ms-newgroup{margin-top:12px}
-@media (max-width:768px){.ms-draft{flex-wrap:wrap}.ms-draft__in{flex:1 1 100%}}
+
+/* ── F · campos editables en su sitio y fecha accionable ─────────────────────
+   Un campo VACÍO tiene que verse y poder pincharse: un contenteditable sin texto
+   mide 0 px y es imposible de enfocar con el ratón, así que el placeholder lo
+   pinta el CSS (:empty::before con data-ph) y el campo reserva ancho mínimo.
+   Misma caja de foco que .ms-b .tx: se edita igual en todas partes. */
+.ms-ed{display:inline-block;min-width:3ch;border-radius:4px}
+.ms-ed:empty::before{content:attr(data-ph);color:var(--text-subtle);opacity:.7}
+.ms-ed:hover{background:var(--surface-elevated);box-shadow:0 0 0 4px var(--surface-elevated);cursor:text}
+.ms-ed:focus{outline:none;background:var(--surface-sunken);
+  box-shadow:0 0 0 4px var(--surface-sunken),0 0 0 5px var(--border-patina)}
+.ms-eh .tt.ms-ed{font:600 15px/1.3 var(--font-sans)}
+.ms-sep{color:var(--text-subtle);user-select:none}
+
+/* La fecha: cerrada es un botón (el aviso ⚠ es ACCIÓN, no cartel); abierta, su
+   editor. data-warn="fechas" va en el envoltorio, así el filtro «sin fechas» no
+   pierde el item mientras se está editando. */
+.ms-date{display:inline-flex;align-items:baseline;gap:8px;flex-wrap:wrap}
+.ms-date__btn{display:inline-flex;align-items:baseline;gap:8px;text-align:left;padding:1px 5px;
+  border:1px solid transparent;border-radius:5px;
+  font:400 var(--fs-data)/1.3 var(--font-mono);color:var(--text-muted)}
+.ms-date__btn:hover{color:var(--text);border-color:var(--border-strong);cursor:pointer}
+.ms-date__btn:focus-visible{outline:2px solid var(--border-patina);outline-offset:1px}
+.ms-date__btn .warn{font:400 var(--fs-micro)/1 var(--font-mono);color:var(--danger)}
+.ms-date__addtx{font:400 var(--fs-micro)/1 var(--font-mono);color:var(--text-subtle)}
+.ms-date__btn:hover .ms-date__addtx{color:var(--accent-text)}
+.ms-date--open{flex:1 1 260px;min-width:220px;gap:6px;align-items:center}
+.ms-date__in{flex:1;min-width:130px;height:30px;padding:0 10px;font:400 var(--fs-data)/1 var(--font-mono)}
+.ms-date__now,.ms-date__save,.ms-date__cancel{flex:none;font:500 var(--fs-micro)/1 var(--font-mono);
+  padding:7px 10px;border:1px solid var(--border-strong);border-radius:5px;color:var(--text-muted)}
+.ms-date__now:hover{color:var(--accent-text);border-color:var(--border-patina)}
+.ms-date__save{border-color:var(--border-patina);color:var(--accent-text)}
+.ms-date__save:disabled{opacity:.45;cursor:default;border-color:var(--border-strong);color:var(--text-subtle)}
+.ms-date__cancel{border-color:transparent;padding:0 6px;font-size:13px}
+.ms-date__cancel:hover{color:var(--danger)}
+.ms-date__hint{flex:1 1 100%;font:400 var(--fs-micro)/1.5 var(--font-mono);color:var(--text-subtle)}
+.ms-date__hint[data-bad="1"]{color:var(--danger)}
+
+/* Fila densa: los campos van uno al lado del otro, cada uno el suyo. */
+.ms-row__fields{flex:1;min-width:0;display:flex;flex-wrap:wrap;gap:4px 10px;align-items:baseline}
+
+@media (max-width:768px){.ms-draft{flex-wrap:wrap}.ms-draft__in{flex:1 1 100%}
+  .ms-date--open{flex:1 1 100%}}

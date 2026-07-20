@@ -5,6 +5,7 @@ import type { ReactNode } from "react";
 import Link from "next/link";
 import { useT } from "@/lib/i18n";
 import { supabaseEnabled } from "@/lib/supabase/config";
+import { normalizeDateRange, type DateRange } from "@/lib/extract/dates";
 import { AuroraTune, AURORA_HOJEO, AURORA_TRABAJO } from "@/components/Aurora";
 import { useUndoToast } from "@/components/UndoToast";
 import {
@@ -61,11 +62,15 @@ interface VBullet {
   evidence: string | null;
   nudge?: string;
 }
+/* Los campos del rol van SEPARADOS, cada uno con su clave real en `data`. Antes
+   company+location viajaban fusionados en un `org` de solo lectura: la cabecera no
+   se podía editar y el único camino para corregir una empresa era recrear el rol. */
 interface VRole {
   id: string | null;
   data: Record<string, unknown>;
   tt: string;
-  org: string;
+  company: string;
+  location: string;
   dates: string;
   origin: string;
   evidence: string | null;
@@ -84,12 +89,17 @@ interface VSkill {
   evidence: string | null;
   verified: boolean;
 }
+/* Una fila densa (proyecto, educación, certificación). Guarda su `data` cruda: los
+   campos que se pintan y se editan salen de ROW_FIELDS, NO de un string fusionado.
+   El `tx` de antes era "cabeza — cola" y al guardar se volvía a partir por el primer
+   " — ": un nombre que contuviera ese separador repartía los campos mal y perdía
+   texto. `m` es solo la meta de la derecha (procedencia), nunca dato editable. */
 interface VRow {
   id: string | null;
-  kind: string;
+  kind: RowKind;
   data: Record<string, unknown>;
-  tx: string;
   m: string;
+  warn?: string;
 }
 interface VSummary {
   id: string | null;
@@ -121,6 +131,10 @@ interface MasterView {
   skills: VSkill[];
   projects: VRow[];
   education: VRow[];
+  /* Las certificaciones tienen kind propio en el enum y NADIE las pintaba: entraban
+     al master (alta manual) y desaparecían de la pantalla. Se listan junto a
+     educación, que es donde el usuario las busca ("Educación y certificaciones"). */
+  certifications: VRow[];
 }
 
 const MANUAL_LABEL = "escrito por ti";
@@ -143,6 +157,161 @@ function originLabel(origin: string): string {
 
 const hasDigit = (s: string) => /\d/.test(s);
 const str = (o: Record<string, unknown>, k: string) => String(o[k] ?? "");
+
+/* ============================================================================
+   F · CAMPOS DE VERDAD (no strings fusionados) + FECHAS ACCIONABLES
+
+   Todo lo de aquí abajo es PURO y está exportado a propósito: es la lógica que
+   decide qué se guarda, y guardar mal en el master es pérdida de dato silenciosa.
+   ⚠ patchMasterItem (lib/db/variants.ts) hace .update({ data }): REEMPLAZA la
+   columna entera. Mandar «solo la fecha» borraría title, company y location del
+   rol sin un error. Por eso NADA construye un `data` desde cero: todo parte del
+   spread de la data previa, y eso se prueba en tests/master-inline.test.ts.
+   ============================================================================ */
+
+/** Filas densas con campos propios. El kind es el de profile_items. */
+export type RowKind = "project" | "education" | "certification";
+
+/** Campos editables de cada fila densa. `key` es la clave REAL en data. */
+export const ROW_FIELDS: Record<RowKind, { key: string; ph: string }[]> = {
+  project: [
+    { key: "name", ph: "master.draft.projectName" },
+    { key: "description", ph: "master.draft.projectDesc" },
+    { key: "url", ph: "master.field.url" },
+  ],
+  education: [
+    { key: "degree", ph: "master.draft.degree" },
+    { key: "institution", ph: "master.draft.institution" },
+  ],
+  certification: [
+    { key: "name", ph: "master.draft.certName" },
+    { key: "issuer", ph: "master.draft.issuer" },
+  ],
+};
+
+/* Qué filas llevan fecha (y por tanto editor de fechas y aviso «falta fecha»).
+   Los proyectos NO: en este modelo un proyecto se imprime como «nombre —
+   descripción» (queries.ts · buildResumeData), así que un editor de fechas ahí
+   editaría un campo que nunca llega al PDF. El preview ES el PDF. */
+export const ROW_HAS_DATES: Record<RowKind, boolean> = {
+  project: false,
+  education: true,
+  certification: true,
+};
+
+/** Lo que se puede borrar del master (kind del profile_item). */
+type DelKind = "work" | "bullet" | "skill" | RowKind;
+
+/** En qué lista de la vista vive cada kind de fila. */
+type RowSec = "projects" | "education" | "certifications";
+const ROW_SECTION: Record<RowKind, RowSec> = {
+  project: "projects",
+  education: "education",
+  certification: "certifications",
+};
+
+/** ¿Falta la fecha de esta fila? Sentinela en ES; `tWarn` lo traduce al pintar. */
+export function rowWarn(kind: RowKind, data: Record<string, unknown>): string | undefined {
+  if (!ROW_HAS_DATES[kind]) return undefined;
+  return str(data, "dates").trim() ? undefined : "falta fecha";
+}
+
+/** work.data → los campos que pinta la tarjeta. Es la ÚNICA derivación: la usan la
+    carga, el alta manual y cada edición, así que el aviso de fecha no puede quedar
+    desfasado del dato (antes había un gemelo en createdToRole que se olvidaba). */
+export function roleFieldsFromData(data: Record<string, unknown>): {
+  tt: string;
+  company: string;
+  location: string;
+  dates: string;
+  warn?: string;
+} {
+  const dates = str(data, "dates");
+  return {
+    tt: str(data, "title"),
+    company: str(data, "company"),
+    location: str(data, "location"),
+    dates,
+    warn: dates.trim() ? undefined : "falta fecha",
+  };
+}
+
+/**
+ * Fusiona UN campo sobre la data existente y devuelve la data COMPLETA.
+ * Vacío borra la clave (no se guarda "" fingiendo que hay dato), pero todo lo
+ * demás viaja intacto — que es justo lo que el PATCH necesita para no vaciar el item.
+ */
+export function mergeField(
+  data: Record<string, unknown>,
+  field: string,
+  value: string,
+): Record<string, unknown> {
+  const next = { ...data };
+  const clean = value.trim();
+  if (clean) next[field] = clean;
+  else delete next[field];
+  return next;
+}
+
+/* Claves de procedencia de la fecha. Se recalculan ENTERAS en cada guardado: si no,
+   un `dateInvalid` viejo se quedaría contradiciendo la fecha nueva. */
+const DATE_META = ["dateStart", "dateEnd", "dateCurrent", "dateMissing", "dateInvalid", "dateByHuman"];
+
+export type DateSave =
+  | { ok: true; data: Record<string, unknown> }
+  | { ok: false; reason: "invalid" | "unreadable" };
+
+/**
+ * data + la fecha que escribió el humano. Espeja PATCH /api/staging (§C2): se
+ * NORMALIZA con normalizeDateRange y, si el rango es imposible o no se entiende,
+ * NO se guarda — se devuelve el motivo para decirlo en pantalla. Nunca se guarda
+ * fingiendo que está bien. Vacío = quitar la fecha (queda `dateMissing`, honesto).
+ */
+export function mergeDates(data: Record<string, unknown>, raw: string): DateSave {
+  const text = (raw ?? "").trim();
+  const next: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(data)) if (!DATE_META.includes(k)) next[k] = v;
+
+  if (!text) {
+    delete next.dates;
+    next.dateMissing = true;
+    return { ok: true, data: next };
+  }
+  const dr = normalizeDateRange(text);
+  if (dr.invalid) return { ok: false, reason: "invalid" };
+  if (!dr.start && !dr.end && !dr.current) return { ok: false, reason: "unreadable" };
+
+  next.dates = text;
+  next.dateByHuman = true; // la fecha la puso una persona, no la IA
+  if (dr.start) next.dateStart = dr.start;
+  if (dr.end) next.dateEnd = dr.end;
+  if (dr.current) next.dateCurrent = true;
+  return { ok: true, data: next };
+}
+
+export type DateHint =
+  | { kind: "empty" }
+  | { kind: "invalid" }
+  | { kind: "unreadable" }
+  | { kind: "ok"; range: DateRange };
+
+/** Qué se ENTIENDE de lo que se está escribiendo. Se pinta bajo el input mientras
+    se teclea: nadie debe guardar una fecha creyendo que dice otra cosa. */
+export function describeDate(raw: string): DateHint {
+  const text = (raw ?? "").trim();
+  if (!text) return { kind: "empty" };
+  const dr = normalizeDateRange(text);
+  if (dr.invalid) return { kind: "invalid" };
+  if (!dr.start && !dr.end && !dr.current) return { kind: "unreadable" };
+  return { kind: "ok", range: dr };
+}
+
+/** «sigue abierto»: conserva el inicio y marca el término como actualidad. Solo
+    parte por un guion CON espacios alrededor, para no destrozar «03-2022». */
+export function withPresent(raw: string, presentWord: string): string {
+  const start = (raw ?? "").trim().replace(/\s+[–—-]\s+.*$/, "").trim();
+  return start ? `${start} – ${presentWord}` : "";
+}
 
 /* Links crudos de la DB (string[] | {label,url}[]) → lista editable de VLink. */
 function toVLinks(raw: unknown): VLink[] {
@@ -194,11 +363,13 @@ const SRC: Record<SrcKey, string> = {
   man: MANUAL_LABEL,
 };
 interface DemoBullet { tx: string; src: SrcKey; num: boolean; nudge?: string }
-interface DemoRole { tt: string; org: string; dates: string; src: SrcKey; warn?: string; ev: string; bullets: DemoBullet[] }
+// company y location van por separado, igual que en la DB: la maqueta no puede
+// enseñar una forma de dato que la pantalla real no sepa editar.
+interface DemoRole { tt: string; co: string; loc: string; dates: string; src: SrcKey; warn?: string; ev: string; bullets: DemoBullet[] }
 
 const DEMO_EXP: DemoRole[] = [
   {
-    tt: "Backend Developer", org: "Altiplano Pagos SpA · Santiago", dates: "mar 2022 – hoy", src: "tx",
+    tt: "Backend Developer", co: "Altiplano Pagos SpA", loc: "Santiago", dates: "mar 2022 – hoy", src: "tx",
     ev: "«Los últimos tres años trabajé en Altiplano Pagos como backend developer…»",
     bullets: [
       { tx: "A cargo del servicio de conciliación de pagos en Go (~40.000 transacciones diarias).", src: "tx", num: true },
@@ -210,7 +381,7 @@ const DEMO_EXP: DemoRole[] = [
     ],
   },
   {
-    tt: "Backend Developer — equipo Checkout", org: "Rayén Retail S.A. · Santiago", dates: "ene 2020 – feb 2022", src: "cv",
+    tt: "Backend Developer — equipo Checkout", co: "Rayén Retail S.A.", loc: "Santiago", dates: "ene 2020 – feb 2022", src: "cv",
     ev: "Fusionado por ti desde CV_2023.pdf y texto pegado (staging, 12 jul).",
     bullets: [
       { tx: "Desarrollé y mantuve APIs del checkout (Node.js, PostgreSQL).", src: "cv", num: false, nudge: "¿qué volumen movían?" },
@@ -220,7 +391,7 @@ const DEMO_EXP: DemoRole[] = [
     ],
   },
   {
-    tt: "Desarrollador freelance", org: "Independiente · Santiago", dates: "2019 – …", warn: "falta fecha de término", src: "q",
+    tt: "Desarrollador freelance", co: "Independiente", loc: "Santiago", dates: "2019 – …", warn: "falta fecha de término", src: "q",
     ev: "«Antes de Rayén trabajé por mi cuenta un año…» — el año de término no quedó registrado.",
     bullets: [
       { tx: "Construí sitios y APIs para 4 pymes chilenas.", src: "q", num: true },
@@ -229,7 +400,7 @@ const DEMO_EXP: DemoRole[] = [
     ],
   },
   {
-    tt: "Práctica profesional — Área TI", org: "Universidad Andrés Bello · Santiago", dates: "2018 – 2019", src: "cv",
+    tt: "Práctica profesional — Área TI", co: "Universidad Andrés Bello", loc: "Santiago", dates: "2018 – 2019", src: "cv",
     ev: "«Práctica profesional, Dirección de TI UNAB, soporte a sistemas académicos.»",
     bullets: [
       { tx: "Soporte a la plataforma de matrícula en periodos peak.", src: "cv", num: false },
@@ -256,17 +427,24 @@ const DEMO_SK_GROUPS: { group: string; items: string; src: SrcKey; ev: string | 
   },
 ];
 
-const DEMO_PJ: VRow[] = [
-  { id: null, kind: "project", data: {}, tx: "idempotency-go — librería open source de idempotencia en Go", m: "github · 214 KB · 41 commits" },
-  { id: null, kind: "project", data: {}, tx: "reservas-club — sistema de reservas en Django", m: "dgatica.cl · en producción" },
-  { id: null, kind: "project", data: {}, tx: "scraper-sii — CLI de series de tipo de cambio", m: "github · Python · 67 KB" },
-  { id: null, kind: "project", data: {}, tx: "dgatica.cl — portfolio con 6 casos documentados", m: "Next.js" },
+// La maqueta guarda CAMPOS, igual que la DB. Antes era un `tx` fusionado y por eso
+// la edición tenía que volver a partirlo por " — " (y lo repartía mal).
+const DEMO_PJ: { data: Record<string, unknown>; m: string }[] = [
+  { data: { name: "idempotency-go", description: "librería open source de idempotencia en Go", url: "github.com/dgatica/idempotency-go" }, m: "github · 214 KB · 41 commits" },
+  { data: { name: "reservas-club", description: "sistema de reservas en Django" }, m: "dgatica.cl · en producción" },
+  { data: { name: "scraper-sii", description: "CLI de series de tipo de cambio" }, m: "github · Python · 67 KB" },
+  { data: { name: "dgatica.cl", description: "portfolio con 6 casos documentados" }, m: "Next.js" },
 ];
 
-const DEMO_ED: VRow[] = [
-  { id: null, kind: "education", data: {}, tx: "Ingeniería Civil en Computación e Informática — Universidad Andrés Bello", m: "2014 – 2019" },
-  { id: null, kind: "education", data: {}, tx: "Diplomado en Ingeniería de Datos — Pontificia Universidad Católica", m: "2022" },
-  { id: null, kind: "education", data: {}, tx: "Inglés B2 — autoevaluación", m: "sin certificado" },
+const DEMO_ED: { data: Record<string, unknown>; m: string }[] = [
+  { data: { degree: "Ingeniería Civil en Computación e Informática", institution: "Universidad Andrés Bello", dates: "2014 – 2019" }, m: "CV_2023.pdf" },
+  { data: { degree: "Diplomado en Ingeniería de Datos", institution: "Pontificia Universidad Católica", dates: "2022" }, m: "CV_2023.pdf" },
+  // Sin fecha a propósito: es el caso que el filtro «sin fechas» tiene que pescar.
+  { data: { degree: "Inglés B2", institution: "autoevaluación" }, m: "cuestionario" },
+];
+
+const DEMO_CE: { data: Record<string, unknown>; m: string }[] = [
+  { data: { name: "AWS Certified Solutions Architect — Associate", issuer: "Amazon Web Services", dates: "2023" }, m: "CV_2023.pdf" },
 ];
 
 function buildDemoView(): MasterView {
@@ -294,17 +472,25 @@ function buildDemoView(): MasterView {
     },
     // Ids sintéticos "demo-*": el prefijo local hace que borrar/reclasificar
     // operen SOBRE LA VISTA sin llamar a la API (modo local sin Supabase).
-    roles: DEMO_EXP.map((e, ei) => ({
-      id: `demo-work-${ei}`, data: {},
-      tt: e.tt, org: e.org, dates: e.dates, origin: SRC[e.src], evidence: e.ev, warn: e.warn,
-      bullets: e.bullets.map((b, bi) => ({ id: `demo-b-${ei}-${bi}`, data: { text: b.tx }, tx: b.tx, num: b.num, origin: SRC[b.src], evidence: null, nudge: b.nudge })),
-    })),
+    roles: DEMO_EXP.map((e, ei) => {
+      const data = { title: e.tt, company: e.co, location: e.loc, dates: e.dates };
+      return {
+        id: `demo-work-${ei}`, data,
+        ...roleFieldsFromData(data),
+        // El aviso explícito de la maqueta manda sobre el derivado (hay un rol CON
+        // fecha de inicio al que le falta el TÉRMINO: eso no lo ve `dates.trim()`).
+        warn: e.warn ?? roleFieldsFromData(data).warn,
+        origin: SRC[e.src], evidence: e.ev,
+        bullets: e.bullets.map((b, bi) => ({ id: `demo-b-${ei}-${bi}`, data: { text: b.tx }, tx: b.tx, num: b.num, origin: SRC[b.src], evidence: null, nudge: b.nudge })),
+      };
+    }),
     skills: DEMO_SK_GROUPS.map((g, gi) => ({
       id: `demo-sk-${gi}`, data: {}, group: g.group, chips: chipsFromCsv(g.items),
       origin: SRC[g.src], evidence: g.ev, verified: !!g.ev,
     })),
-    projects: DEMO_PJ.map((p, i) => ({ ...p, id: `demo-pj-${i}` })),
-    education: DEMO_ED.map((d, i) => ({ ...d, id: `demo-ed-${i}` })),
+    projects: DEMO_PJ.map((p, i) => ({ id: `demo-pj-${i}`, kind: "project" as RowKind, data: p.data, m: p.m, warn: rowWarn("project", p.data) })),
+    education: DEMO_ED.map((d, i) => ({ id: `demo-ed-${i}`, kind: "education" as RowKind, data: d.data, m: d.m, warn: rowWarn("education", d.data) })),
+    certifications: DEMO_CE.map((c, i) => ({ id: `demo-ce-${i}`, kind: "certification" as RowKind, data: c.data, m: c.m, warn: rowWarn("certification", c.data) })),
   };
 }
 
@@ -342,16 +528,12 @@ function buildRealView(items: ApiItem[]): MasterView {
     : null;
 
   const roles: VRole[] = by("work").map((w) => {
-    const dates = str(w.data, "dates");
     return {
       id: w.id,
       data: w.data,
-      tt: str(w.data, "title") || "(rol sin título)",
-      org: [str(w.data, "company"), str(w.data, "location")].filter(Boolean).join(" · "),
-      dates,
+      ...roleFieldsFromData(w.data),
       origin: originLabel(w.origin),
       evidence: w.evidenceSnippet,
-      warn: dates.trim() ? undefined : "falta fecha",
       bullets: items
         .filter((b) => b.kind === "bullet" && b.parentId === w.id)
         .map((b) => {
@@ -371,23 +553,25 @@ function buildRealView(items: ApiItem[]): MasterView {
     verified: s.evidenceVerified,
   }));
 
-  const projects: VRow[] = by("project").map((p) => ({
-    id: p.id,
-    kind: "project",
-    data: p.data,
-    tx: [str(p.data, "name"), str(p.data, "description")].filter(Boolean).join(" — "),
-    m: [originLabel(p.origin), str(p.data, "url")].filter(Boolean).join(" · "),
-  }));
+  // La meta de la derecha es SOLO procedencia. Antes arrastraba dato editable
+  // (la url del proyecto, las fechas de educación) a un sitio de solo lectura.
+  const row = (kind: RowKind) => (r: ApiItem): VRow => ({
+    id: r.id,
+    kind,
+    data: r.data,
+    m: originLabel(r.origin),
+    warn: rowWarn(kind, r.data),
+  });
 
-  const education: VRow[] = by("education").map((e) => ({
-    id: e.id,
-    kind: "education",
-    data: e.data,
-    tx: [str(e.data, "degree"), str(e.data, "institution")].filter(Boolean).join(" — "),
-    m: str(e.data, "dates") || originLabel(e.origin),
-  }));
-
-  return { basics, summary, roles, skills, projects, education };
+  return {
+    basics,
+    summary,
+    roles,
+    skills,
+    projects: by("project").map(row("project")),
+    education: by("education").map(row("education")),
+    certifications: by("certification").map(row("certification")),
+  };
 }
 
 const FILTERS: { key: FilterKey; label: string }[] = [
@@ -414,33 +598,32 @@ function wrapNums(text: string): ReactNode[] {
    Cada sección tiene su forma; el kind del profile_item y los campos van aquí.
    La primera clave es la OBLIGATORIA (título/texto/nombre/carrera): sin ella no
    se guarda. Enter guarda y abre otra fila; Esc cancela; Tab pasa de campo. */
-type DraftSection = "work" | "bullet" | "project" | "education";
+type DraftSection = "work" | "bullet" | "project" | "education" | "certification";
 interface DraftField {
   key: string;
   ph: string; // clave i18n del placeholder
 }
+const DATES_FIELD: DraftField = { key: "dates", ph: "master.draft.dates" };
 const DRAFT_FIELDS: Record<DraftSection, DraftField[]> = {
   work: [
     { key: "title", ph: "master.draft.title" },
-    { key: "company", ph: "master.draft.company" },
-    { key: "dates", ph: "master.draft.dates" },
+    { key: "company", ph: "master.field.company" },
+    { key: "location", ph: "master.field.location" },
+    DATES_FIELD,
   ],
   bullet: [{ key: "text", ph: "master.draft.bullet" }],
-  project: [
-    { key: "name", ph: "master.draft.projectName" },
-    { key: "description", ph: "master.draft.projectDesc" },
-  ],
-  education: [
-    { key: "degree", ph: "master.draft.degree" },
-    { key: "institution", ph: "master.draft.institution" },
-    { key: "dates", ph: "master.draft.dates" },
-  ],
+  // Las filas densas usan LOS MISMOS campos que luego se editan en su sitio: dar
+  // de alta y corregir escriben exactamente las mismas claves.
+  project: ROW_FIELDS.project,
+  education: [...ROW_FIELDS.education, DATES_FIELD],
+  certification: [...ROW_FIELDS.certification, DATES_FIELD],
 };
 const DRAFT_KIND: Record<DraftSection, string> = {
   work: "work",
   bullet: "bullet",
   project: "project",
   education: "education",
+  certification: "certification",
 };
 interface Draft {
   tempId: string;
@@ -473,28 +656,15 @@ function createdToBullet(it: CreatedItem): VBullet {
   return { id: it.id, data: it.data, tx, num: hasDigit(tx), origin: MANUAL_LABEL, evidence: it.evidenceSnippet ?? null };
 }
 function createdToRole(it: CreatedItem): VRole {
-  const dates = String(it.data.dates ?? "");
+  // Misma derivación que la carga (roleFieldsFromData): no hay gemelo que se olvide.
   return {
     id: it.id, data: it.data,
-    tt: String(it.data.title ?? "") || "(rol sin título)",
-    org: [String(it.data.company ?? ""), String(it.data.location ?? "")].filter(Boolean).join(" · "),
-    dates, origin: MANUAL_LABEL, evidence: it.evidenceSnippet ?? null,
-    warn: dates.trim() ? undefined : "falta fecha", bullets: [],
+    ...roleFieldsFromData(it.data),
+    origin: MANUAL_LABEL, evidence: it.evidenceSnippet ?? null, bullets: [],
   };
 }
-function createdToProject(it: CreatedItem): VRow {
-  return {
-    id: it.id, kind: "project", data: it.data,
-    tx: [String(it.data.name ?? ""), String(it.data.description ?? "")].filter(Boolean).join(" — "),
-    m: MANUAL_LABEL,
-  };
-}
-function createdToEducation(it: CreatedItem): VRow {
-  return {
-    id: it.id, kind: "education", data: it.data,
-    tx: [String(it.data.degree ?? ""), String(it.data.institution ?? "")].filter(Boolean).join(" — "),
-    m: String(it.data.dates ?? "") || MANUAL_LABEL,
-  };
+function createdToRow(kind: RowKind, it: CreatedItem): VRow {
+  return { id: it.id, kind, data: it.data, m: MANUAL_LABEL, warn: rowWarn(kind, it.data) };
 }
 function createdToSkill(it: CreatedItem): VSkill {
   return {
@@ -503,6 +673,162 @@ function createdToSkill(it: CreatedItem): VSkill {
     chips: chipsFromCsv(String(it.data.items ?? "")),
     origin: MANUAL_LABEL, evidence: it.evidenceSnippet ?? null, verified: false,
   };
+}
+
+/* ── Un campo editable EN SU SITIO ───────────────────────────────────────────
+   contenteditable como el resto de la pantalla, pero con placeholder pintado por
+   CSS (:empty::before con data-ph): un campo vacío tiene que VERSE y poder
+   pincharse, si no un rol sin empresa deja un hueco de 0 px imposible de enfocar.
+   `onCommit` recibe el texto ya recortado; comparar con el valor previo es cosa
+   del llamante (el blur salta también cuando no se tocó nada). */
+export function EditableField({
+  value,
+  ph,
+  aria,
+  className,
+  onCommit,
+}: {
+  value: string;
+  ph: string;
+  aria: string;
+  className?: string;
+  onCommit: (text: string) => void;
+}) {
+  return (
+    <span
+      className={`ms-ed${className ? ` ${className}` : ""}`}
+      contentEditable
+      suppressContentEditableWarning
+      spellCheck={false}
+      role="textbox"
+      aria-label={aria}
+      data-ph={ph}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") {
+          e.preventDefault();
+          e.currentTarget.blur();
+        }
+      }}
+      onBlur={(e) => onCommit((e.currentTarget.textContent ?? "").trim())}
+    >
+      {value}
+    </span>
+  );
+}
+
+/* ── La fecha, accionable ────────────────────────────────────────────────────
+   Cerrada: el valor (o el aviso «⚠ falta fecha», que es un BOTÓN, no un cartel).
+   Abierta: un input que se valida con normalizeDateRange ANTES de guardar y que
+   dice en voz alta qué entendió.
+
+   ⚠ data-warn="fechas" vive en el envoltorio, no en el aviso: así el atributo
+   sigue presente mientras el editor está abierto y el filtro «sin fechas» no
+   pierde el item a media edición. Es lo que lee el useLayoutEffect del filtro. */
+export function DateCell({
+  dates,
+  warn,
+  warnLabel,
+  label,
+  open,
+  draft,
+  error,
+  t,
+  onOpen,
+  onDraft,
+  onSave,
+  onCancel,
+}: {
+  dates: string;
+  warn?: string;
+  warnLabel: string;
+  label: string;
+  open: boolean;
+  draft: string;
+  error?: "invalid" | "unreadable" | null;
+  t: (k: string) => string;
+  onOpen: () => void;
+  onDraft: (v: string) => void;
+  onSave: (raw: string) => void;
+  onCancel: () => void;
+}) {
+  const hasDate = !!dates.trim();
+  const warnAttr = warn ? { "data-warn": "fechas" } : {};
+
+  if (!open) {
+    return (
+      <span className="ms-date" {...warnAttr}>
+        <button
+          type="button"
+          className={`ms-date__btn${warn ? " ms-date__btn--warn" : ""}`}
+          aria-label={`${t("master.date.ariaEdit")}${label}`}
+          onClick={onOpen}
+        >
+          {hasDate ? <span className="ms-date__val">{dates}</span> : null}
+          {warn ? (
+            <span className="warn">
+              ⚠ {warnLabel} · {hasDate ? t("master.date.fix") : t("master.date.add")}
+            </span>
+          ) : null}
+          {!hasDate && !warn ? <span className="ms-date__addtx">{t("master.date.add")}</span> : null}
+        </button>
+      </span>
+    );
+  }
+
+  const hint = describeDate(draft);
+  const shown = error ?? (hint.kind === "invalid" || hint.kind === "unreadable" ? hint.kind : null);
+  // Vacío solo se puede guardar si HABÍA fecha: es «quitarla», una acción explícita.
+  const canSave = hint.kind === "ok" || (hint.kind === "empty" && hasDate);
+  let hintText = "";
+  if (shown === "invalid") hintText = t("master.date.invalid");
+  else if (shown === "unreadable") hintText = t("master.date.unreadable");
+  else if (hint.kind === "ok") {
+    const a = hint.range.start ?? "?";
+    const b = hint.range.current ? t("master.date.currentLabel") : hint.range.end;
+    hintText = t("master.date.understood").replace("{range}", b ? `${a} – ${b}` : a);
+  }
+
+  return (
+    <span className="ms-date ms-date--open" {...warnAttr}>
+      <input
+        className="c-input ms-date__in"
+        autoFocus
+        value={draft}
+        placeholder={t("master.date.placeholder")}
+        aria-label={`${t("master.date.ariaInput")} — ${label}`}
+        aria-invalid={shown ? true : undefined}
+        onChange={(e) => onDraft(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            if (canSave) onSave(draft);
+          } else if (e.key === "Escape") {
+            e.preventDefault();
+            onCancel();
+          }
+        }}
+      />
+      <button
+        type="button"
+        className="ms-date__now"
+        title={t("master.date.currentHint")}
+        onClick={() => onDraft(withPresent(draft, t("master.date.presentWord")))}
+      >
+        {t("master.date.current")}
+      </button>
+      <button type="button" className="ms-date__save" disabled={!canSave} onClick={() => onSave(draft)}>
+        {hint.kind === "empty" && hasDate ? t("master.date.clear") : t("master.date.save")}
+      </button>
+      <button type="button" className="ms-date__cancel" aria-label={t("common.cancel")} onClick={onCancel}>
+        ✕
+      </button>
+      {hintText ? (
+        <span className="ms-date__hint" data-bad={shown ? "1" : undefined} role="status">
+          {hintText}
+        </span>
+      ) : null}
+    </span>
+  );
 }
 
 export function MasterScreen() {
@@ -527,6 +853,13 @@ export function MasterScreen() {
   // Menú de alta global.
   const [addMenu, setAddMenu] = useState(false);
 
+  // F · edición de fechas en su sitio. Clave = el displayId del item (sirve igual
+  // para los ids de la maqueta). El error es el que devolvió mergeDates al intentar
+  // guardar: se queda visible hasta que el texto cambia.
+  const [openDate, setOpenDate] = useState<ReadonlySet<string>>(new Set());
+  const [dateDraft, setDateDraft] = useState<Record<string, string>>({});
+  const [dateError, setDateError] = useState<Record<string, "invalid" | "unreadable">>({});
+
   // A3 · estado de los chips de habilidades.
   const [chipInputs, setChipInputs] = useState<Record<string, string>>({});
   const [mergeOffer, setMergeOffer] = useState<{ groupKey: string; chip: string; existingGroup: string } | null>(null);
@@ -545,6 +878,10 @@ export function MasterScreen() {
   // campos, así que cada edición debe fusionar sobre el último estado, no sobre el
   // del render (o un PATCH pisaría al anterior). El ref siempre trae lo más nuevo.
   const basicsRef = useRef<VBasics | null>(null);
+  // Misma razón para el resto de la vista: dos ediciones seguidas del MISMO item
+  // (empresa y acto seguido la fecha) tienen que fusionar sobre el último dato, no
+  // sobre el del render — o el segundo PATCH pisa al primero.
+  const viewRef = useRef<MasterView | null>(view);
 
   const noteSaved = useCallback((msg: string) => {
     setSavedNote(msg);
@@ -604,6 +941,123 @@ export function MasterScreen() {
     }
   }, []);
 
+  // viewRef al día con CUALQUIER setView (carga, borrado, chips, alta…).
+  useEffect(() => {
+    viewRef.current = view;
+  }, [view]);
+
+  /* Escribe sobre la vista partiendo del ÚLTIMO estado (viewRef), no del render. */
+  const mutateView = useCallback((fn: (v: MasterView) => MasterView) => {
+    const cur = viewRef.current;
+    if (!cur) return;
+    const next = fn(cur);
+    viewRef.current = next;
+    setView(next);
+  }, []);
+
+  /* ── F · guardar UN campo de un item ────────────────────────────────────────
+     ⚠⚠ patchMasterItem (lib/db/variants.ts) hace .update({ data }): REEMPLAZA la
+     columna entera. Por eso `nextData` sale SIEMPRE de mergeField/mergeDates sobre
+     la data previa y se manda completa. Mandar {dates} a secas borraría title,
+     company y location del rol sin un solo error. */
+  const saveRoleData = useCallback(
+    (i: number, displayId: string, nextData: Record<string, unknown>) => {
+      const role = viewRef.current?.roles[i];
+      if (!role) return;
+      mutateView((v) => ({
+        ...v,
+        roles: v.roles.map((r, idx) => {
+          if (idx !== i) return r;
+          const f = roleFieldsFromData(nextData);
+          // Mientras el texto de la fecha no cambie, se respeta el aviso que ya
+          // tuviera (p. ej. «falta fecha de término», que `dates.trim()` no ve).
+          return { ...r, data: nextData, ...f, warn: f.dates === r.dates ? r.warn : f.warn };
+        }),
+      }));
+      setTouched((prev) => (prev.has(displayId) ? prev : new Set(prev).add(displayId)));
+      saveEdit(role.id, nextData);
+    },
+    [mutateView, saveEdit],
+  );
+
+  const saveRowData = useCallback(
+    (sec: RowSec, i: number, displayId: string, nextData: Record<string, unknown>) => {
+      const cur = viewRef.current?.[sec][i];
+      if (!cur) return;
+      mutateView((v) => ({
+        ...v,
+        [sec]: v[sec].map((r, idx) => (idx === i ? { ...r, data: nextData, warn: rowWarn(r.kind, nextData) } : r)),
+      }));
+      setTouched((prev) => (prev.has(displayId) ? prev : new Set(prev).add(displayId)));
+      saveEdit(cur.id, nextData);
+    },
+    [mutateView, saveEdit],
+  );
+
+  /* ── F · el editor de fechas en su sitio ────────────────────────────────────
+     El aviso «⚠ falta fecha» abre ESTO, no un modal. Guardar pasa por mergeDates:
+     si el rango es imposible o no se entiende, NO se guarda y se dice por qué. */
+  const openDateEditor = useCallback((displayId: string, current: string) => {
+    setDateDraft((p) => ({ ...p, [displayId]: current }));
+    setDateError((p) => {
+      const { [displayId]: _drop, ...rest } = p;
+      return rest;
+    });
+    setOpenDate((p) => new Set(p).add(displayId));
+  }, []);
+
+  const closeDateEditor = useCallback((displayId: string) => {
+    setOpenDate((p) => {
+      const n = new Set(p);
+      n.delete(displayId);
+      return n;
+    });
+    setDateError((p) => {
+      const { [displayId]: _drop, ...rest } = p;
+      return rest;
+    });
+  }, []);
+
+  // Al teclear se retira el error del intento anterior: ya no habla de este texto.
+  const setDateDraftFor = useCallback((displayId: string, value: string) => {
+    setDateDraft((p) => ({ ...p, [displayId]: value }));
+    setDateError((p) => {
+      if (!p[displayId]) return p;
+      const { [displayId]: _drop, ...rest } = p;
+      return rest;
+    });
+  }, []);
+
+  const saveRoleDate = useCallback(
+    (i: number, displayId: string, raw: string) => {
+      const role = viewRef.current?.roles[i];
+      if (!role) return;
+      const res = mergeDates(role.data, raw);
+      if (!res.ok) {
+        setDateError((p) => ({ ...p, [displayId]: res.reason }));
+        return;
+      }
+      saveRoleData(i, displayId, res.data);
+      closeDateEditor(displayId);
+    },
+    [saveRoleData, closeDateEditor],
+  );
+
+  const saveRowDate = useCallback(
+    (sec: RowSec, i: number, displayId: string, raw: string) => {
+      const row = viewRef.current?.[sec][i];
+      if (!row) return;
+      const res = mergeDates(row.data, raw);
+      if (!res.ok) {
+        setDateError((p) => ({ ...p, [displayId]: res.reason }));
+        return;
+      }
+      saveRowData(sec, i, displayId, res.data);
+      closeDateEditor(displayId);
+    },
+    [saveRowData, closeDateEditor],
+  );
+
   /* ── A1 · alta manual (filas nuevas editables) ──────────────────────────────
      openDraft abre una fila vacía en su sección con el foco; Enter la guarda
      (POST /api/master → createItem, origin manual) y abre OTRA debajo; Esc la
@@ -630,8 +1084,10 @@ export function MasterScreen() {
     setView((prev) => {
       if (!prev) return prev;
       if (section === "work") return { ...prev, roles: [...prev.roles, createdToRole(it)] };
-      if (section === "project") return { ...prev, projects: [...prev.projects, createdToProject(it)] };
-      if (section === "education") return { ...prev, education: [...prev.education, createdToEducation(it)] };
+      if (section === "project" || section === "education" || section === "certification") {
+        const sec = ROW_SECTION[section];
+        return { ...prev, [sec]: [...prev[sec], createdToRow(section, it)] };
+      }
       // bullet: cuelga de su rol
       return {
         ...prev,
@@ -728,13 +1184,15 @@ export function MasterScreen() {
   /* ── A2 · borrar de verdad (con deshacer diferido y aviso del RESTRICT) ────── */
   // Quita el item de la vista (optimista) y devuelve el snapshot previo para deshacer.
   const removeFromView = useCallback(
-    (kind: "work" | "bullet" | "project" | "education" | "skill", id: string, parentId?: string | null) => {
+    (kind: DelKind, id: string, parentId?: string | null) => {
       setView((prev) => {
         if (!prev) return prev;
         if (kind === "work") return { ...prev, roles: prev.roles.filter((r) => r.id !== id) };
-        if (kind === "project") return { ...prev, projects: prev.projects.filter((p) => p.id !== id) };
-        if (kind === "education") return { ...prev, education: prev.education.filter((e) => e.id !== id) };
         if (kind === "skill") return { ...prev, skills: prev.skills.filter((s) => s.id !== id) };
+        if (kind === "project" || kind === "education" || kind === "certification") {
+          const sec = ROW_SECTION[kind];
+          return { ...prev, [sec]: prev[sec].filter((r) => r.id !== id) };
+        }
         return {
           ...prev,
           roles: prev.roles.map((r) => (r.id === parentId ? { ...r, bullets: r.bullets.filter((b) => b.id !== id) } : r)),
@@ -756,7 +1214,7 @@ export function MasterScreen() {
   // Borra con toast de deshacer. `label` para el mensaje; `children` viñetas arrastradas.
   const deleteWithUndo = useCallback(
     (
-      kind: "work" | "bullet" | "project" | "education" | "skill",
+      kind: DelKind,
       id: string,
       label: string,
       children: number,
@@ -784,7 +1242,7 @@ export function MasterScreen() {
   // Punto de entrada del borrado: consulta uso; si nadie lo referencia, borra con
   // deshacer; si una variante lo usa, muestra el aviso inline (no modal de sistema).
   const requestDelete = useCallback(
-    (kind: "work" | "bullet" | "project" | "education" | "skill", id: string, label: string, parentId?: string | null) => {
+    (kind: DelKind, id: string, label: string, parentId?: string | null) => {
       if (isLocalId(id) || !supabaseEnabled) {
         removeFromView(kind, id, parentId);
         return;
@@ -1117,7 +1575,7 @@ export function MasterScreen() {
         if (!active) return;
         setView(buildRealView((data.items ?? []) as ApiItem[]));
       } catch {
-        if (active) setView({ basics: null, summary: null, roles: [], skills: [], projects: [], education: [] });
+        if (active) setView({ basics: null, summary: null, roles: [], skills: [], projects: [], education: [], certifications: [] });
       } finally {
         if (active) setLoading(false);
       }
@@ -1130,7 +1588,8 @@ export function MasterScreen() {
   const v = view;
   const totalBullets = v ? v.roles.reduce((a, e) => a + e.bullets.length, 0) : 0;
   const total = v
-    ? (v.basics ? 1 : 0) + (v.summary ? 1 : 0) + v.roles.length + totalBullets + v.skills.length + v.projects.length + v.education.length
+    ? (v.basics ? 1 : 0) + (v.summary ? 1 : 0) + v.roles.length + totalBullets + v.skills.length +
+      v.projects.length + v.education.length + v.certifications.length
     : 0;
 
   // «fuentes» = orígenes externos distintos (el manual no cuenta: es la ausencia
@@ -1345,7 +1804,7 @@ export function MasterScreen() {
 
   // Botón eliminar (✕) — arranca el flujo A2 (consulta uso → deshacer o aviso inline).
   const delButton = (
-    kind: "work" | "bullet" | "project" | "education" | "skill",
+    kind: DelKind,
     id: string | null,
     label: string,
     parentId?: string | null,
@@ -1368,7 +1827,7 @@ export function MasterScreen() {
   // variantes (no es un modal de sistema). Muestra el dato real y «eliminar igualmente».
   const blockedWarning = (
     id: string | null,
-    kind: "work" | "bullet" | "project" | "education" | "skill",
+    kind: DelKind,
     label: string,
     parentId?: string | null,
   ): ReactNode => {
@@ -1470,39 +1929,69 @@ export function MasterScreen() {
 
   const roleCard = (e: VRole, i: number): ReactNode => {
     const headerId = `it-exp-${i}`;
+    // El rol puede no tener título todavía (se edita en su sitio); para las
+    // etiquetas accesibles hace falta un nombre, no una cadena vacía.
+    const label = e.tt.trim() || t("master.role.untitled");
     // A4: viñetas sin cifra que parecen etiqueta (para el «mover las N sugeridas»).
     const suggested = e.bullets.filter((b) => b.id && !b.num && looksLikeSkillTag(b.tx));
     return (
       <article className="c-card ms-card" data-item key={e.id ?? headerId}>
+        {/* Toda la cabecera es editable en su sitio: cargo, empresa, ubicación y
+            fecha. Antes solo lo era el título y los demás campos iban fusionados
+            en un `org` de solo lectura — se recreaba el rol para cambiar una ciudad. */}
         <div className="ms-eh">
-          <span
+          <EditableField
             className="tt"
-            contentEditable
-            suppressContentEditableWarning
-            spellCheck={false}
-            role="textbox"
-            aria-label={`${t("master.aria.editRoleTitle")}${e.tt}`}
-            onKeyDown={editKeyDown}
-            onBlur={commitEdit(headerId, e.id, e.tt, (text) => ({ ...e.data, title: text }))}
-          >
-            {e.tt}
-          </span>
+            value={e.tt}
+            ph={t("master.draft.title")}
+            aria={`${t("master.aria.editRoleTitle")}${label}`}
+            onCommit={(text) => {
+              if (text === e.tt.trim()) return;
+              saveRoleData(i, headerId, mergeField(e.data, "title", text));
+            }}
+          />
           <span className="org">
-            {e.org}
-            {e.dates ? ` · ${e.dates}` : ""}
+            <EditableField
+              value={e.company}
+              ph={t("master.field.company")}
+              aria={`${t("master.aria.editPrefix")}${t("master.field.company")}`}
+              onCommit={(text) => {
+                if (text === e.company.trim()) return;
+                saveRoleData(i, headerId, mergeField(e.data, "company", text));
+              }}
+            />
+            <span className="ms-sep"> · </span>
+            <EditableField
+              value={e.location}
+              ph={t("master.field.location")}
+              aria={`${t("master.aria.editPrefix")}${t("master.field.location")}`}
+              onCommit={(text) => {
+                if (text === e.location.trim()) return;
+                saveRoleData(i, headerId, mergeField(e.data, "location", text));
+              }}
+            />
           </span>
-          {e.warn ? (
-            <span className="warn" data-warn="fechas">
-              ⚠ {tWarn(e.warn)}
-            </span>
-          ) : null}
+          <DateCell
+            dates={e.dates}
+            warn={e.warn}
+            warnLabel={e.warn ? tWarn(e.warn) : ""}
+            label={label}
+            t={t}
+            open={openDate.has(headerId)}
+            draft={dateDraft[headerId] ?? ""}
+            error={dateError[headerId] ?? null}
+            onOpen={() => openDateEditor(headerId, e.dates)}
+            onDraft={(val) => setDateDraftFor(headerId, val)}
+            onSave={(raw) => saveRoleDate(i, headerId, raw)}
+            onCancel={() => closeDateEditor(headerId)}
+          />
           <span className="meta">
             {srcButton(headerId, e.origin, e.id)}
-            {delButton("work", e.id, e.tt)}
+            {delButton("work", e.id, label)}
           </span>
         </div>
         {fragBody(headerId, e.id, e.origin, e.evidence)}
-        {blockedWarning(e.id, "work", e.tt)}
+        {blockedWarning(e.id, "work", label)}
         {e.bullets.map((b, j) => {
           const bid = `it-exp-${i}-b-${j}`;
           return (
@@ -1550,36 +2039,57 @@ export function MasterScreen() {
     );
   };
 
-  const denseRow = (r: VRow, key: string): ReactNode => {
-    // El texto denso es "cabeza — cola" (name — description / degree — institution).
-    // Se reparte por el PRIMER " — " (el mismo separador con que se compuso).
-    const build = (text: string): Record<string, unknown> => {
-      const idx = text.indexOf(" — ");
-      const head = (idx >= 0 ? text.slice(0, idx) : text).trim();
-      const tail = idx >= 0 ? text.slice(idx + 3).trim() : "";
-      return r.kind === "project"
-        ? { ...r.data, name: head, description: tail }
-        : { ...r.data, degree: head, institution: tail };
-    };
-    const kind = r.kind === "project" ? "project" : "education";
+  /* Una fila densa (proyecto, educación, certificación) con sus campos SEPARADOS.
+     Antes era un solo texto "cabeza — cola" que al guardar se volvía a partir por
+     el primer " — ": «Ingeniería Civil — mención Software — UNAB» se guardaba con
+     el título recortado y la institución equivocada, sin aviso. Ahora cada campo
+     se edita y se guarda por su clave real. */
+  const denseRow = (r: VRow, i: number, key: string): ReactNode => {
+    const sec = ROW_SECTION[r.kind];
+    const fields = ROW_FIELDS[r.kind];
+    const label = str(r.data, fields[0]!.key).trim() || t("master.role.untitled");
     return (
       <Fragment key={key}>
         <div className="ms-row" data-item>
-          <span
-            contentEditable
-            suppressContentEditableWarning
-            spellCheck={false}
-            role="textbox"
-            aria-label={t("master.aria.editItem")}
-            onKeyDown={editKeyDown}
-            onBlur={commitEdit(key, r.id, r.tx, build)}
-          >
-            {r.tx}
+          <span className="ms-row__fields">
+            {fields.map((f, fi) => {
+              const value = str(r.data, f.key);
+              return (
+                <Fragment key={f.key}>
+                  {fi > 0 ? <span className="ms-sep">·</span> : null}
+                  <EditableField
+                    value={value}
+                    ph={t(f.ph)}
+                    aria={`${t("master.aria.editPrefix")}${t(f.ph)}`}
+                    onCommit={(text) => {
+                      if (text === value.trim()) return;
+                      saveRowData(sec, i, key, mergeField(r.data, f.key, text));
+                    }}
+                  />
+                </Fragment>
+              );
+            })}
+            {ROW_HAS_DATES[r.kind] ? (
+              <DateCell
+                dates={str(r.data, "dates")}
+                warn={r.warn}
+                warnLabel={r.warn ? tWarn(r.warn) : ""}
+                label={label}
+                t={t}
+                open={openDate.has(key)}
+                draft={dateDraft[key] ?? ""}
+                error={dateError[key] ?? null}
+                onOpen={() => openDateEditor(key, str(r.data, "dates"))}
+                onDraft={(val) => setDateDraftFor(key, val)}
+                onSave={(raw) => saveRowDate(sec, i, key, raw)}
+                onCancel={() => closeDateEditor(key)}
+              />
+            ) : null}
           </span>
-          <span className="m">{r.m}</span>
-          {delButton(kind, r.id, r.tx)}
+          <span className="m">{tOrigin(r.m)}</span>
+          {delButton(r.kind, r.id, label)}
         </div>
-        {blockedWarning(r.id, kind, r.tx)}
+        {blockedWarning(r.id, r.kind, label)}
       </Fragment>
     );
   };
@@ -1968,6 +2478,9 @@ export function MasterScreen() {
                   <button type="button" role="menuitem" onClick={() => openDraft("education", null)}>
                     {t("master.add.education")}
                   </button>
+                  <button type="button" role="menuitem" onClick={() => openDraft("certification", null)}>
+                    {t("master.add.certification")}
+                  </button>
                   <button
                     type="button"
                     role="menuitem"
@@ -2097,7 +2610,7 @@ export function MasterScreen() {
                     t("master.group.projects"),
                     `${v.projects.length} ${t("master.items")} — ${t("master.eachVariantPicks")}`,
                     <>
-                      <div className="ms-rows">{v.projects.map((p, i) => denseRow(p, `pj-${i}`))}</div>
+                      <div className="ms-rows">{v.projects.map((p, i) => denseRow(p, i, `pj-${i}`))}</div>
                       {draftsFor("project", null).map((d) => draftRow(d))}
                       <button type="button" className="ms-add" onClick={() => openDraft("project", null)}>
                         {t("master.addProject")}
@@ -2105,16 +2618,28 @@ export function MasterScreen() {
                     </>,
                   )}
 
-                {(v.education.length > 0 || draftsFor("education", null).length > 0) &&
+                {/* Educación y certificaciones comparten sección (es donde el usuario
+                    las busca) pero NO tipo: cada fila guarda con su kind y sus claves. */}
+                {(v.education.length > 0 ||
+                  v.certifications.length > 0 ||
+                  draftsFor("education", null).length > 0 ||
+                  draftsFor("certification", null).length > 0) &&
                   groupSection(
                     "educacion",
                     t("master.group.education"),
-                    `${v.education.length} ${t("master.items")}`,
+                    `${v.education.length + v.certifications.length} ${t("master.items")}`,
                     <>
-                      <div className="ms-rows">{v.education.map((d, i) => denseRow(d, `ed-${i}`))}</div>
+                      <div className="ms-rows">
+                        {v.education.map((d, i) => denseRow(d, i, `ed-${i}`))}
+                        {v.certifications.map((c, i) => denseRow(c, i, `ce-${i}`))}
+                      </div>
                       {draftsFor("education", null).map((d) => draftRow(d))}
+                      {draftsFor("certification", null).map((d) => draftRow(d))}
                       <button type="button" className="ms-add" onClick={() => openDraft("education", null)}>
                         {t("master.addEducation")}
+                      </button>
+                      <button type="button" className="ms-add" onClick={() => openDraft("certification", null)}>
+                        {t("master.addCertification")}
                       </button>
                     </>,
                   )}
