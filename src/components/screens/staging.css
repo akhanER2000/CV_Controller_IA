@@ -137,6 +137,56 @@ body{background:var(--bg)}
 .stg-empty .fine{margin-top:22px;font:400 var(--fs-micro)/1.7 var(--font-mono);color:var(--text-subtle)}
 /* §C3 · de qué rol/proyecto salió una habilidad reclasificada */
 .stg-ctx{margin:-4px 20px 10px;font:400 var(--fs-micro)/1.4 var(--font-mono);color:var(--text-subtle)}
+/* §A2 · POSIBLE DUPLICADO — el SEGUNDO EJE del estado de un item.
+   Se pinta en --danger, junto a la insignia de verificación y sin sustituirla:
+   un duplicado está perfectamente verificado (su evidencia aparece literal en el
+   raw_text — dos veces), así que la tarjeta enseña «⚠ posible duplicado» y
+   «verificado» a la vez. Ver las dos etiquetas juntas ES la explicación de por
+   qué el lote lo deja fuera. No se inventa color: --danger es el mismo token que
+   ya marca «sin evidencia» (--ver-none), la otra cosa que frena una aceptación. */
+.stg-dupchip{border-color:color-mix(in srgb,var(--danger) 45%,transparent);
+  color:var(--danger);white-space:nowrap}
+.stg-dup{margin:0 20px 12px;padding:8px 12px;
+  border-left:2px solid color-mix(in srgb,var(--danger) 55%,transparent);
+  background:color-mix(in srgb,var(--danger) 4%,var(--surface));border-radius:0 6px 6px 0}
+.stg-duphead{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.stg-duphead .q{font:500 var(--fs-micro)/1 var(--font-mono);letter-spacing:.04em;
+  color:var(--danger);white-space:nowrap}
+.stg-duphead .other{flex:1;min-width:140px;font:500 var(--fs-data)/1.4 var(--font-sans);color:var(--text)}
+.stg-duphead .lvl{font:400 var(--fs-micro)/1 var(--font-mono);color:var(--text-subtle);white-space:nowrap}
+.stg-duphead button{font:500 var(--fs-micro)/1 var(--font-mono);padding:6px 10px;border:1px solid var(--border-strong);
+  border-radius:5px;color:var(--text-muted);white-space:nowrap}
+.stg-duphead button:hover{color:var(--text);border-color:var(--border-patina)}
+.stg-dup .why{margin-top:6px;font:400 var(--fs-data)/1.5 var(--font-sans);color:var(--text-muted)}
+/* La resolución campo por campo: las dos versiones LADO A LADO. Es una rejilla de
+   tres columnas (campo · esta · la otra) para que comparar sea leer una fila. */
+.stg-dupdiff{margin-top:12px;border-top:1px solid var(--border);padding-top:10px}
+.stg-dupdiff .hint{font:400 var(--fs-micro)/1.6 var(--font-mono);color:var(--text-subtle)}
+.stg-dupdiff .cols{display:grid;grid-template-columns:minmax(72px,auto) 1fr 1fr;gap:6px 10px;margin-top:10px;align-items:start}
+.stg-dupdiff .hd{font:500 var(--fs-micro)/1 var(--font-mono);letter-spacing:.06em;text-transform:uppercase;
+  color:var(--text-subtle);padding-bottom:4px;border-bottom:1px solid var(--border)}
+.stg-dupdiff .k{font:400 var(--fs-micro)/1.5 var(--font-mono);color:var(--text-subtle);padding-top:7px}
+.stg-dupdiff .v{display:flex;gap:7px;align-items:flex-start;padding:6px 8px;border:1px solid var(--border);
+  border-radius:5px;cursor:pointer;font:400 var(--fs-data)/1.45 var(--font-sans);color:var(--text-muted);
+  overflow-wrap:anywhere}
+.stg-dupdiff .v:hover{border-color:var(--border-strong)}
+.stg-dupdiff .v.on{border-color:var(--border-patina);color:var(--text);
+  background:color-mix(in srgb,var(--patina-500) 6%,transparent)}
+/* Campos idénticos: no hay nada que elegir, así que no se pide atención. */
+.stg-dupdiff .v.same{opacity:.72}
+.stg-dupdiff .v input{margin-top:3px;accent-color:var(--accent-text)}
+.stg-dupdiff .acts{display:flex;gap:6px;margin-top:12px;flex-wrap:wrap}
+.stg-dupdiff .acts button{font:500 var(--fs-micro)/1 var(--font-mono);padding:7px 12px;border:1px solid var(--border-strong);
+  border-radius:5px;color:var(--text-muted)}
+.stg-dupdiff .acts button:hover{color:var(--text);border-color:var(--border-patina)}
+.stg-dupdiff .acts button.ok{border-color:var(--border-patina);color:var(--accent-text)}
+.stg-dupdiff .acts button:disabled{opacity:.5;cursor:default}
+/* El lote deja fuera por motivo, y lo dice con su número real. */
+.stg-batchout{margin-top:8px;font:400 var(--fs-micro)/1.7 var(--font-mono);color:var(--danger)}
+/* «esto parece un grupo de habilidades → moverlo a Skills», en lote. */
+.stg-skillall{margin-left:auto;font:500 var(--fs-micro)/1 var(--font-mono);padding:6px 10px;
+  border:1px solid var(--border-patina);border-radius:5px;color:var(--accent-text)}
+.stg-skillall:disabled{opacity:.5;cursor:default}
 /* §C1 · duda de clasificación: ¿viñeta o habilidad? (no se adivina en silencio) */
 .stg-classq{display:flex;align-items:center;gap:10px;margin:0 20px 12px;padding:8px 12px;flex-wrap:wrap;
   border-left:2px solid var(--border-patina);background:color-mix(in srgb,var(--patina-500) 5%,var(--surface));border-radius:0 6px 6px 0}

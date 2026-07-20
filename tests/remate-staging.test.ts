@@ -30,7 +30,8 @@ import { withOrigin } from "../src/components/Breadcrumb";
 import { staging } from "../src/lib/i18n/dict/staging";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
-const fuente = readFileSync(path.join(here, "../src/components/screens/StagingScreen.tsx"), "utf8");
+const leer = (rel: string) => readFileSync(path.join(here, rel), "utf8");
+const fuente = leer("../src/components/screens/StagingScreen.tsx");
 
 /* ── 1 · Ningún número sin fuente ─────────────────────────────────────────── */
 
@@ -198,19 +199,42 @@ describe("remate · a dónde lleva y qué no se rompe por el camino", () => {
   });
 });
 
-/* ── 5 · El parámetro ?source= muerto: no se obedece, pero se declara ─────── */
+/* ── 5 · El parámetro ?source=, que pasó de muerto a vivo ─────────────────── */
 
-describe("staging · ?source= no filtra nada y no se finge que sí", () => {
-  it("el parámetro se lee y se avisa de que la cola es entera", () => {
-    // Fuentes manda /app/staging?source=<id> (FuentesScreen.tsx:42) y ni esta
-    // pantalla ni GET /api/staging saben filtrar por fuente. Callarlo hace creer
-    // al usuario que revisa solo esa fuente teniendo delante todo lo pendiente.
-    expect(fuente).toContain('get("source")');
-    expect(fuente).toContain('t("staging.sourceParamNote")');
+/* Fuentes enlaza a /app/staging?source=<id> desde siempre (FuentesScreen.tsx:42)
+   y durante meses NADIE lo leía: ni la pantalla ni GET /api/staging. El usuario
+   creía revisar UNA fuente y tenía delante la cola entera. Este bloque decía eso
+   y exigía que el copy lo confesara.
+   Ahora el filtro EXISTE de verdad, así que el bloque cambia de bando: en vez de
+   vigilar que se confiese el hueco, vigila que el filtro siga cableado por los
+   TRES sitios que tienen que estar de acuerdo. Si alguien quita cualquiera de
+   los tres, el usuario vuelve a ver una cosa y a aceptar otra — que es peor que
+   el bug original, porque el botón contaría una fuente y promovería la cola. */
+describe("staging · ?source= filtra de verdad, y por los tres sitios a la vez", () => {
+  const queries = leer("../src/lib/db/queries.ts");
+  const rutaGet = leer("../src/app/api/staging/route.ts");
+  const rutaAccept = leer("../src/app/api/staging/accept/route.ts");
+
+  it("1 · la consulta filtra por la columna, no por una etiqueta de texto", () => {
+    // data._source es una ETIQUETA humana («texto pegado»), no un id: filtrar por
+    // ella habría parecido funcionar y habría mezclado fuentes con el mismo rótulo.
+    expect(queries).toMatch(/\.eq\(\s*["']source_id["']/);
+    expect(queries).toMatch(/getStaging\([^)]*sourceId\??\s*:\s*string/);
   });
 
-  it("el aviso dice que se ve TODO, no que se esté filtrando", () => {
-    expect(staging.es["staging.sourceParamNote"].toUpperCase()).toContain("TODO");
-    expect(staging.en["staging.sourceParamNote"].toUpperCase()).toContain("EVERYTHING");
+  it("2 · el GET lee el parámetro y se lo pasa a la consulta", () => {
+    expect(rutaGet).toContain('params.get("source")');
+    expect(rutaGet).toMatch(/getStaging\(sb,\s*user\.id,\s*source\)/);
+  });
+
+  it("3 ★ el LOTE honra el mismo filtro: contar una fuente y promover otra sería mentir", () => {
+    // Este es el que de verdad importa. Si el GET filtra y el accept no, el botón
+    // dice «aceptar 8» y promueve los 119 de la cola entera. Un fallo silencioso
+    // e irreversible: los items ya están en el master.
+    expect(rutaAccept).toMatch(/getStaging\(sb,\s*user\.id,\s*source\)/);
+  });
+
+  it("4 · la pantalla lee el parámetro y lo manda al aceptar", () => {
+    expect(fuente).toContain('get("source")');
   });
 });

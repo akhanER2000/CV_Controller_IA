@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import type { ImportResult, StagedRow } from "@/lib/extract/types";
+import type { ImportResult } from "@/lib/extract/types";
 import { normalizeLinks, type ResumeData } from "@/lib/cv/resume";
+import { insertStagedTwoPhase, readMergeProposal, type MergeProposal } from "@/lib/db/sources";
 
 /**
  * Capa de datos del servidor (contra el esquema 0001). Recibe el cliente de
@@ -28,11 +29,14 @@ export async function ensureMaster(sb: SB, userId: string): Promise<string> {
   return data.id as string;
 }
 
-const META = (r: StagedRow) => ({ _origin: r.origin, _level: r.evidenceLevel, _source: r.sourceLabel });
-
 /**
- * Persiste el resultado de la ingesta: una fuente + los staged_items. Dos fases
- * para enlazar las viñetas a su rol (parent_staged_id). Devuelve el nº insertado.
+ * Persiste el resultado de la ingesta: una fuente + los staged_items. El armado
+ * de las filas (dos fases, ids propios y la sospecha de duplicado resuelta a ids
+ * reales) vive en db/sources.ts y es EL MISMO que usa el alta desde Fuentes.
+ *
+ * Antes cada writer construía su fila a mano, idénticas pero separadas: por eso
+ * todo lo que se añadía en un camino se olvidaba en el otro. Ahora hay una sola
+ * definición de «cómo es una fila de staging».
  */
 export async function persistImport(sb: SB, userId: string, result: ImportResult): Promise<{ sourceId: string; staged: number }> {
   const { data: source, error: srcErr } = await sb
@@ -43,41 +47,8 @@ export async function persistImport(sb: SB, userId: string, result: ImportResult
   if (srcErr) throw new Error(`Fuente: ${srcErr.message}`);
   const sourceId = source.id as string;
 
-  const rows = result.staged;
-  const parents = rows.filter((r) => r.kind !== "bullet");
-  const bullets = rows.filter((r) => r.kind === "bullet");
-
-  // Fase 1 — items padre. Mapear key local → id de staged.
-  const keyToId = new Map<string, string>();
-  if (parents.length) {
-    const { data, error } = await sb
-      .from("staged_items")
-      .insert(
-        parents.map((r) => ({
-          user_id: userId, source_id: sourceId, kind: r.kind,
-          data: { ...r.data, ...META(r) }, lang: r.lang,
-          evidence_snippet: r.evidenceSnippet, evidence_verified: r.evidenceVerified, status: "pending",
-        })),
-      )
-      .select("id");
-    if (error) throw new Error(`Staged: ${error.message}`);
-    data.forEach((row, i) => keyToId.set(parents[i]!.key, row.id as string));
-  }
-
-  // Fase 2 — viñetas, apuntando a su rol.
-  if (bullets.length) {
-    const { error } = await sb.from("staged_items").insert(
-      bullets.map((r) => ({
-        user_id: userId, source_id: sourceId, kind: r.kind,
-        data: { ...r.data, ...META(r) }, lang: r.lang,
-        evidence_snippet: r.evidenceSnippet, evidence_verified: r.evidenceVerified, status: "pending",
-        parent_staged_id: r.parentKey ? keyToId.get(r.parentKey) ?? null : null,
-      })),
-    );
-    if (error) throw new Error(`Viñetas: ${error.message}`);
-  }
-
-  return { sourceId, staged: rows.length };
+  const staged = await insertStagedTwoPhase(sb, userId, sourceId, result.staged);
+  return { sourceId, staged };
 }
 
 export interface StagedItemRow {
@@ -90,18 +61,76 @@ export interface StagedItemRow {
   status: string;
   parent_staged_id: string | null;
   promoted_to: string | null;
+  /** de qué documento salió. Lo necesita el n3 del detector y el filtro ?source=. */
+  source_id: string | null;
+  /** la sospecha de duplicado, cruda. Se lee con readMergeProposal (defensivo). */
+  merge_proposal: unknown;
 }
 
-/** Lee el staging pendiente del usuario. */
-export async function getStaging(sb: SB, userId: string): Promise<StagedItemRow[]> {
-  const { data, error } = await sb
+/**
+ * Lee el staging pendiente del usuario. Baja merge_proposal y source_id: sin el
+ * primero la cola no puede pintar la marca de duplicado (que es todo el punto de
+ * persistirla) y sin el segundo ni el filtro por fuente ni el n3 del detector
+ * tienen con qué trabajar.
+ */
+export async function getStaging(sb: SB, userId: string, sourceId?: string): Promise<StagedItemRow[]> {
+  let q = sb
     .from("staged_items")
-    .select("id,kind,data,lang,evidence_snippet,evidence_verified,status,parent_staged_id,promoted_to")
+    .select("id,kind,data,lang,evidence_snippet,evidence_verified,status,parent_staged_id,promoted_to,source_id,merge_proposal")
     .eq("user_id", userId)
-    .eq("status", "pending")
-    .order("created_at", { ascending: true });
+    .eq("status", "pending");
+  if (sourceId) q = q.eq("source_id", sourceId);
+  const { data, error } = await q.order("created_at", { ascending: true });
   if (error) throw new Error(error.message);
   return (data ?? []) as StagedItemRow[];
+}
+
+/* ============================================================================
+   EL LOTE, CON SUS DOS EJES (§A2 · doctrina de duplicados)
+   ============================================================================
+   «Aceptar todo lo verificado» era el camino por el que pasaban TODOS los
+   duplicados: un duplicado está perfectamente verificado — su evidencia aparece
+   literal en el raw_text, aparece dos veces. Verificado y único son propiedades
+   INDEPENDIENTES, y el lote tiene que respetar las dos.
+
+   Lo mismo con la duda de clasificación: aceptar en lote una viñeta que en
+   realidad es una aptitud es el mismo fallo con otro disfraz.
+
+   PURA a propósito: los conteos que la pantalla enseña ANTES de pulsar y los que
+   devuelve el endpoint DESPUÉS salen de esta misma función. Si la UI los
+   calculara por su cuenta, serían dos verdades que se separan.                 */
+
+export interface BatchPlan {
+  /** los que el lote SÍ promueve, roles antes que sus viñetas */
+  eligible: StagedItemRow[];
+  /** verificados que se quedan fuera por sospecha de duplicado */
+  excludedDuplicates: number;
+  /** verificados que se quedan fuera por duda de clasificación (_classDoubt) */
+  excludedDoubts: number;
+}
+
+/** ¿Este item pendiente trae una sospecha de duplicado legible? */
+export function suspicionOf(row: StagedItemRow): MergeProposal | null {
+  return readMergeProposal(row.merge_proposal);
+}
+
+export function batchPlan(pending: StagedItemRow[]): BatchPlan {
+  const verified = pending.filter((r) => r.evidence_verified);
+  let excludedDuplicates = 0;
+  let excludedDoubts = 0;
+  const eligible: StagedItemRow[] = [];
+  for (const r of verified) {
+    // Los dos ejes se cuentan por separado aunque un item caiga en los dos: cada
+    // frase de la pantalla nombra un motivo real y el usuario revisa por motivo.
+    const dup = suspicionOf(r) !== null;
+    const doubt = Boolean((r.data as Record<string, unknown>)?._classDoubt);
+    if (dup) excludedDuplicates++;
+    if (doubt) excludedDoubts++;
+    if (!dup && !doubt) eligible.push(r);
+  }
+  // promover roles antes que sus viñetas (la viñeta necesita el parent promovido)
+  eligible.sort((a, b) => (a.kind === "bullet" ? 1 : 0) - (b.kind === "bullet" ? 1 : 0));
+  return { eligible, excludedDuplicates, excludedDoubts };
 }
 
 function clean(data: Record<string, unknown>) {
@@ -141,8 +170,160 @@ export async function promoteStaged(sb: SB, userId: string, stagedId: string): P
     .single();
   if (insErr) throw new Error(`Promover: ${insErr.message}`);
 
+  // ⚠ merge_proposal NO viaja al master. Al aceptar, el usuario ya decidió; una
+  // marca guardada en profile_items quedaría rancia al instante (y el master
+  // calcula sus duplicados al vuelo, ver docs/spec/duplicados.md).
   await sb.from("staged_items").update({ status: "accepted", promoted_to: item.id }).eq("id", stagedId);
   return item.id as string;
+}
+
+/* ============================================================================
+   RESOLVER UN DUPLICADO — las tres acciones del usuario (§A2)
+   ============================================================================
+   NINGUNA fusión ni descarte automático: esta función solo EJECUTA lo que el
+   usuario acaba de pulsar con las dos versiones delante.
+
+     · 'quedarme-con-esta'  → la otra se descarta; esta pierde la marca.
+     · 'quedarme-con-la-otra' → esta se descarta; la otra pierde la marca.
+     · 'fusionar'           → esta se queda con los campos ELEGIDOS uno a uno, se
+       queda además con las viñetas de la otra (la fecha de LinkedIn con el
+       detalle narrativo del cuestionario es literalmente el caso de uso), y la
+       otra se descarta.
+
+   ⚠ EL CANDADO: en 'fusionar', cada valor tiene que venir de UNA DE LAS DOS
+     versiones. No es paranoia de tipos — es la regla de producto: la fusión
+     ELIGE, no redacta. Un campo que no case con ninguno de los dos lados es
+     texto inventado entrando al master por la puerta de atrás, y aquí se para.  */
+
+export type DuplicateAction = "keep-this" | "keep-other" | "merge";
+
+export interface ResolveResult {
+  action: DuplicateAction;
+  /** el staged que sobrevive en la cola */
+  kept: string;
+  /** el staged que queda descartado (status 'rejected'), o null si no había pareja */
+  rejected: string | null;
+  /** viñetas reparentadas al superviviente (solo en 'fusionar') */
+  movedBullets: number;
+}
+
+/** La otra versión del par, tal como se lee para comparar y resolver. */
+interface OtraVersion {
+  id: string;
+  data: Record<string, unknown>;
+  merge_proposal: unknown;
+}
+
+const mismo = (a: unknown, b: unknown): boolean => JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
+
+/** Descarta un staged pendiente y arrastra sus viñetas (una viñeta huérfana no se acepta sola). */
+async function rejectWithBullets(sb: SB, userId: string, id: string): Promise<void> {
+  const base = () => sb.from("staged_items").update({ status: "rejected" }).eq("user_id", userId).eq("status", "pending");
+  const { error } = await base().eq("id", id);
+  if (error) throw new Error(error.message);
+  const { error: bErr } = await base().eq("parent_staged_id", id);
+  if (bErr) throw new Error(bErr.message);
+}
+
+export async function resolveDuplicate(
+  sb: SB,
+  userId: string,
+  stagedId: string,
+  action: DuplicateAction,
+  fields?: Record<string, unknown>,
+): Promise<ResolveResult> {
+  const { data: esta, error } = await sb
+    .from("staged_items")
+    .select("id,kind,data,merge_proposal,status")
+    .eq("id", stagedId)
+    .eq("user_id", userId)
+    .eq("status", "pending")
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  if (!esta) throw new Error("Item no encontrado o ya procesado.");
+
+  const sospecha = readMergeProposal(esta.merge_proposal);
+  const otroId = sospecha?.duplicateOf ?? null;
+
+  let otra: OtraVersion | null = null;
+  if (otroId) {
+    const { data } = await sb
+      .from("staged_items")
+      .select("id,data,merge_proposal")
+      .eq("id", otroId)
+      .eq("user_id", userId)
+      .eq("status", "pending")
+      .maybeSingle();
+    otra = (data as OtraVersion | null) ?? null;
+  }
+
+  const datosEsta = (esta.data as Record<string, unknown>) ?? {};
+  const datosOtra = otra?.data ?? {};
+
+  // Quitar la marca es parte de resolver: si se quedara, la cola seguiría
+  // avisando de un duplicado que el usuario ya zanjó.
+  const limpiaEsta = () =>
+    sb.from("staged_items").update({ merge_proposal: null }).eq("id", stagedId).eq("user_id", userId);
+  /** solo se limpia la marca de la otra si apuntaba A ESTA (podría apuntar a una tercera). */
+  const limpiaOtra = async () => {
+    if (!otra) return;
+    if (readMergeProposal(otra.merge_proposal)?.duplicateOf !== stagedId) return;
+    await sb.from("staged_items").update({ merge_proposal: null }).eq("id", otra.id).eq("user_id", userId);
+  };
+
+  if (action === "keep-other") {
+    if (!otra) throw new Error("La otra versión ya no está en la cola.");
+    await limpiaOtra();
+    await rejectWithBullets(sb, userId, stagedId);
+    return { action, kept: otra.id, rejected: stagedId, movedBullets: 0 };
+  }
+
+  if (action === "keep-this") {
+    const { error: uErr } = await limpiaEsta();
+    if (uErr) throw new Error(uErr.message);
+    if (otra) await rejectWithBullets(sb, userId, otra.id);
+    return { action, kept: stagedId, rejected: otra?.id ?? null, movedBullets: 0 };
+  }
+
+  // fusionar
+  if (!otra) throw new Error("La otra versión ya no está en la cola.");
+  const elegidos = fields ?? {};
+  const fusion: Record<string, unknown> = { ...datosEsta };
+  for (const [k, v] of Object.entries(elegidos)) {
+    if (k.startsWith("_")) continue; // la procedencia no se elige: se conserva
+    if (!mismo(v, datosEsta[k]) && !mismo(v, datosOtra[k])) {
+      throw new Error(`El campo «${k}» no coincide con ninguna de las dos versiones: la fusión elige, no redacta.`);
+    }
+    fusion[k] = v;
+  }
+
+  const { error: fErr } = await sb
+    .from("staged_items")
+    .update({ data: fusion, merge_proposal: null })
+    .eq("id", stagedId)
+    .eq("user_id", userId);
+  if (fErr) throw new Error(fErr.message);
+
+  // Las viñetas de la descartada pasan al superviviente ANTES de descartarla:
+  // fusionar es quedarse con lo de las dos, y el detalle narrativo vive ahí.
+  const { data: hijas } = await sb
+    .from("staged_items")
+    .select("id")
+    .eq("parent_staged_id", otra.id)
+    .eq("user_id", userId)
+    .eq("status", "pending");
+  const movedBullets = (hijas ?? []).length;
+  if (movedBullets) {
+    const { error: mErr } = await sb
+      .from("staged_items")
+      .update({ parent_staged_id: stagedId })
+      .eq("parent_staged_id", otra.id)
+      .eq("user_id", userId)
+      .eq("status", "pending");
+    if (mErr) throw new Error(mErr.message);
+  }
+  await rejectWithBullets(sb, userId, otra.id);
+  return { action, kept: stagedId, rejected: otra.id, movedBullets };
 }
 
 interface ProfileItemRow {

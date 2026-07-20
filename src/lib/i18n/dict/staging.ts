@@ -27,7 +27,42 @@ export const staging = {
     "staging.batchAccepting": "Aceptando…",
     "staging.batchAccept": "Aceptar todo lo verificado ({n})",
     "staging.sourceParamNote":
-      "Llegaste desde una fuente concreta, pero esta cola muestra TODO lo pendiente: filtrar por fuente todavía no existe. Cada item dice de dónde viene — ábrelo antes de aceptar.",
+      "Estás viendo solo los items de la fuente desde la que llegaste. Cada uno dice de dónde viene — ábrelo antes de aceptar.",
+    "staging.sourceParamAll": "Ver toda la cola",
+
+    // El lote deja fuera por DOS motivos, y dice cuántos por cada uno. Verificado
+    // detecta invención, no repetición: un duplicado está perfectamente verificado.
+    "staging.batchOutDup": "{n} item{s} quedan fuera por posible duplicado — revísalos.",
+    "staging.batchOutDoubt": "{n} item{s} quedan fuera por duda de clasificación — revísalos.",
+    "staging.batchPartial":
+      "Entraron {n} al master antes de que algo fallara; el resto sigue en la cola.",
+
+    // Posible duplicado (§A2) — se marca y se explica; lo resuelve el usuario
+    "staging.dupChip": "⚠ posible duplicado",
+    "staging.dupOf": "⚠ posible duplicado de:",
+    "staging.dupLevel_baja": "sospecha baja",
+    "staging.dupLevel_media": "sospecha media",
+    "staging.dupLevel_alta": "sospecha alta",
+    "staging.dupReview": "comparar las dos",
+    "staging.dupClose": "cerrar la comparación",
+    "staging.dupGone":
+      "La otra versión ya no está en la cola: la aceptaste o la descartaste. Decide esta por su cuenta.",
+    "staging.dupThis": "esta versión",
+    "staging.dupOther": "la otra versión",
+    "staging.dupEmpty": "— vacío —",
+    "staging.dupPick": "Elige campo a campo con qué te quedas. Nada se decide solo.",
+    "staging.dupKeepThis": "quedarme con esta",
+    "staging.dupKeepOther": "quedarme con la otra",
+    "staging.dupMerge": "fusionar lo elegido",
+    "staging.dupBusy": "resolviendo…",
+    "staging.errDup": "No se pudo resolver el duplicado.",
+
+    // Grupo de habilidades disfrazado de proyecto (§A1)
+    "staging.skillGroupChip": "¿grupo de habilidades?",
+    "staging.skillGroupMove": "moverlo a Skills",
+    "staging.skillGroupKeep": "es un proyecto",
+    "staging.skillGroupAll": "Mover los {n} a Skills",
+    "staging.skillGroupAllBusy": "Moviendo…",
 
     // Encabezados de grupo
     "staging.groupProfile": "Perfil",
@@ -116,7 +151,42 @@ export const staging = {
     "staging.batchAccepting": "Accepting…",
     "staging.batchAccept": "Accept everything verified ({n})",
     "staging.sourceParamNote":
-      "You came in from one specific source, but this queue shows EVERYTHING pending: filtering by source doesn't exist yet. Every item names where it came from — open it before accepting.",
+      "You're seeing only the items from the source you came in from. Each one names where it came from — open it before accepting.",
+    "staging.sourceParamAll": "See the whole queue",
+
+    // The batch leaves items out for TWO reasons, and says how many for each.
+    // Verified detects invention, not repetition: a duplicate is perfectly verified.
+    "staging.batchOutDup": "{n} item{s} left out as possible duplicates — review them.",
+    "staging.batchOutDoubt": "{n} item{s} left out over a classification doubt — review them.",
+    "staging.batchPartial":
+      "{n} made it into your master before something failed; the rest is still in the queue.",
+
+    // Possible duplicate (§A2) — marked and explained; the user resolves it
+    "staging.dupChip": "⚠ possible duplicate",
+    "staging.dupOf": "⚠ possible duplicate of:",
+    "staging.dupLevel_baja": "low suspicion",
+    "staging.dupLevel_media": "medium suspicion",
+    "staging.dupLevel_alta": "high suspicion",
+    "staging.dupReview": "compare the two",
+    "staging.dupClose": "close the comparison",
+    "staging.dupGone":
+      "The other version is no longer in the queue: you accepted or discarded it. Decide this one on its own.",
+    "staging.dupThis": "this version",
+    "staging.dupOther": "the other version",
+    "staging.dupEmpty": "— empty —",
+    "staging.dupPick": "Pick field by field what you keep. Nothing is decided for you.",
+    "staging.dupKeepThis": "keep this one",
+    "staging.dupKeepOther": "keep the other one",
+    "staging.dupMerge": "merge what I picked",
+    "staging.dupBusy": "resolving…",
+    "staging.errDup": "Couldn't resolve the duplicate.",
+
+    // Skill group disguised as a project (§A1)
+    "staging.skillGroupChip": "a skill group?",
+    "staging.skillGroupMove": "move it to Skills",
+    "staging.skillGroupKeep": "it's a project",
+    "staging.skillGroupAll": "Move all {n} to Skills",
+    "staging.skillGroupAllBusy": "Moving…",
 
     // Group headings
     "staging.groupProfile": "Profile",

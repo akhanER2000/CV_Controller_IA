@@ -1,11 +1,12 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useT } from "@/lib/i18n";
 import { AuroraTune, AURORA_TRABAJO } from "@/components/Aurora";
 import { Breadcrumb, withOrigin } from "@/components/Breadcrumb";
 import { stagingProgress, ZERO_COUNTS, type StagingCounts } from "@/lib/db/staging-counts";
+import { readMergeProposal, type MergeProposal } from "@/lib/db/sources";
 import "./staging.css";
 
 /* ============================================================================
@@ -35,7 +36,17 @@ interface Item {
   evidence_snippet: string | null;
   evidence_verified: boolean;
   parent_staged_id: string | null;
+  /** la sospecha de duplicado, cruda como vino de la base (puede faltar) */
+  merge_proposal?: unknown;
 }
+
+/** Lo que el LOTE haría ahora mismo, según el servidor. La pantalla NO lo calcula:
+ *  el mismo batchPlan que ejecuta el lote es el que produce estos números. */
+interface BatchInfo {
+  eligible: number;
+  excluded: { duplicates: number; doubts: number };
+}
+const BATCH_CERO: BatchInfo = { eligible: 0, excluded: { duplicates: 0, doubts: 0 } };
 
 const VER: Record<Ver, string> = {
   ok: "c-ver--ok",
@@ -72,6 +83,48 @@ const sourceOf = (it: Item) => s(it.data, "_source");
 
 // §C1/§C2/§C3 — señales que la UI hace visibles (nunca se adivina en silencio).
 const doubtOf = (it: Item) => s(it.data, "_classDoubt");
+
+/* §A2 · la sospecha de duplicado. Se lee DEFENSIVAMENTE (readMergeProposal): hay
+   staged_items en la base del usuario escritos antes de que esta columna se usara
+   —null, o con otra forma— y una cola que revienta por una fila vieja es peor que
+   una cola sin marca. */
+const dupOf = (it: Item): MergeProposal | null => readMergeProposal(it.merge_proposal);
+
+/* Los campos REALES de cada tipo, en orden de lectura, para la comparación campo
+   a campo. Se completan con lo que traiga cualquiera de las dos versiones: si una
+   trae un campo que este mapa no conoce, se enseña igual — perderlo de vista al
+   comparar es exactamente cómo se pierde un dato al fusionar. */
+const CAMPOS: Record<string, string[]> = {
+  work: ["title", "company", "dates", "location"],
+  project: ["name", "description", "dates"],
+  skill: ["group", "items"],
+  education: ["degree", "institution", "dates"],
+  bullet: ["text"],
+  summary: ["text"],
+  basics: ["name", "label", "email", "phone", "location"],
+};
+
+/** Unión ordenada de campos visibles de las dos versiones (sin la procedencia `_*`). */
+export function camposComparables(kind: string, a: Record<string, unknown>, b: Record<string, unknown>): string[] {
+  const vistos = new Set<string>();
+  const out: string[] = [];
+  const add = (k: string) => {
+    if (k.startsWith("_") || vistos.has(k)) return;
+    vistos.add(k);
+    out.push(k);
+  };
+  for (const k of CAMPOS[kind] ?? []) if (k in a || k in b) add(k);
+  for (const k of Object.keys(a)) add(k);
+  for (const k of Object.keys(b)) add(k);
+  return out;
+}
+
+/** Un valor de campo tal cual se pinta. Los objetos (links…) se serializan; no se pierden. */
+export const valorCampo = (d: Record<string, unknown>, k: string): string => {
+  const v = d[k];
+  if (v == null || v === "") return "";
+  return typeof v === "object" ? JSON.stringify(v) : String(v);
+};
 const ctxOf = (it: Item) => s(it.data, "sourceContext");
 const dateInvalidOf = (it: Item) => s(it.data, "dateInvalid");
 const dateMissingOf = (it: Item) => Boolean(it.data.dateMissing);
@@ -138,6 +191,16 @@ export function StagingScreen() {
   const [dateDraft, setDateDraft] = useState<Record<string, string>>({});
   const [filter, setFilter] = useState<"all" | Ver>("all");
 
+  /* La comparación abierta (id del item marcado) y, dentro, de qué lado se queda
+     cada campo. Empieza toda en «esta»: un valor por defecto que el usuario ve y
+     puede cambiar, no una decisión tomada a su espalda. */
+  const [openDup, setOpenDup] = useState<string | null>(null);
+  const [pick, setPick] = useState<Record<string, "this" | "other">>({});
+
+  /* Lo que el lote haría, tal como lo dice el servidor. Si el GET no lo trae
+     (payload viejo), se queda en cero y la pantalla no promete conteos. */
+  const [batch, setBatch] = useState<BatchInfo>(BATCH_CERO);
+
   /* PROGRESO — la fuente de verdad es el servidor, no el remontaje.
      `base` es la foto que devolvió el último GET (cuántos staged_items del
      usuario están ya aceptados/rechazados en la base). `session` es lo hecho a
@@ -157,23 +220,22 @@ export function StagingScreen() {
   const [remate, setRemate] = useState<RemateInfo>(null);
 
   /* ?source=<id> — lo escribe Fuentes al mandarte a revisar UNA fuente concreta
-     (FuentesScreen.tsx:42). Ni esta pantalla ni GET /api/staging saben filtrar por
-     fuente: la API solo entiende ?doubts=1. Así que el parámetro no se obedece —
-     pero tampoco se ignora en silencio, que es lo que hacía creer al usuario que
-     estaba viendo solo esa fuente cuando tenía delante la cola entera. Se lee y se
-     DECLARA. Filtrar de verdad exige tocar la API (getStaging ni siquiera baja
-     source_id) — fuera de esta frontera. */
-  const [srcParam, setSrcParam] = useState(false);
+     (FuentesScreen.tsx:42). Antes ni esta pantalla ni la API sabían filtrar por
+     fuente, así que el parámetro se leía solo para pedir perdón por escrito. Ahora
+     getStaging baja source_id y el GET lo obedece: se pasa tal cual y la cola trae
+     únicamente esa fuente. Se sigue DICIENDO, con una salida a la cola entera. */
+  const [srcParam, setSrcParam] = useState<string | null>(null);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (source?: string | null) => {
     setLoading(true);
     setErr(null);
     try {
-      const res = await fetch("/api/staging");
+      const res = await fetch("/api/staging" + (source ? `?source=${encodeURIComponent(source)}` : ""));
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || t("staging.errRead"));
       setItems(data.items as Item[]);
       setBase((data.counts as StagingCounts | undefined) ?? ZERO_COUNTS);
+      setBatch((data.batch as BatchInfo | undefined) ?? BATCH_CERO);
       setSession(ZERO_COUNTS);
     } catch (e) {
       setErr(e instanceof Error ? e.message : t("staging.errGeneric"));
@@ -182,25 +244,25 @@ export function StagingScreen() {
     }
   }, []);
 
+  /* Se lee de window y no con useSearchParams a propósito: ese hook obliga a un
+     límite de <Suspense> en toda la ruta (Next 15) y esta pantalla no lo tiene.
+     El parámetro se resuelve ANTES de la primera carga: pedir la cola entera y
+     volver a pedirla filtrada haría parpadear items que no son de esta fuente. */
   useEffect(() => {
-    void load();
+    let src: string | null = null;
+    try {
+      src = new URLSearchParams(window.location.search).get("source");
+    } catch {
+      src = null;
+    }
+    setSrcParam(src);
+    void load(src);
   }, [load]);
 
   useEffect(() => {
     const t = window.setTimeout(() => window.CorpusMotion?.boot(), 0);
     return () => window.clearTimeout(t);
   }, [items]);
-
-  /* Se lee de window y no con useSearchParams a propósito: ese hook obliga a un
-     límite de <Suspense> en toda la ruta (Next 15) y esta pantalla no lo tiene.
-     Aquí solo hace falta saber si el parámetro venía, y eso es cliente puro. */
-  useEffect(() => {
-    try {
-      setSrcParam(Boolean(new URLSearchParams(window.location.search).get("source")));
-    } catch {
-      setSrcParam(false);
-    }
-  }, []);
 
   const pend = items.length;
   const progress = stagingProgress(base, session, pend);
@@ -241,6 +303,22 @@ export function StagingScreen() {
 
   const remove = (id: string) => setItems((p) => p.filter((x) => x.id !== id && x.parent_staged_id !== id));
 
+  /* Los conteos del lote los DICE el servidor, así que en cuanto una acción suelta
+     cambia la cola hay que volver a preguntárselos. Solo toca `batch`: no pone
+     `loading` ni reemplaza `items`, para no hacer parpadear la lista a media
+     revisión. Un conteo viejo aquí no es un detalle: es la frase «12 items quedan
+     fuera» mintiendo justo después de que el usuario resolviera tres. */
+  const refreshBatch = useCallback(async (source?: string | null) => {
+    try {
+      const res = await fetch("/api/staging" + (source ? `?source=${encodeURIComponent(source)}` : ""));
+      if (!res.ok) return;
+      const d = await res.json();
+      if (d?.batch) setBatch(d.batch as BatchInfo);
+    } catch {
+      /* el número anterior sigue siendo el último que el servidor confirmó */
+    }
+  }, []);
+
   async function act(id: string, reject = false) {
     setBusy((p) => new Set(p).add(id));
     try {
@@ -257,6 +335,7 @@ export function StagingScreen() {
           ? { ...s, rejected: s.rejected + (data.rejected ?? 1) }
           : { ...s, accepted: s.accepted + (data.promoted ?? 1) },
       );
+      void refreshBatch(srcParam);
     } catch (e) {
       setErr(e instanceof Error ? e.message : t("staging.errGeneric"));
     } finally {
@@ -274,14 +353,25 @@ export function StagingScreen() {
       const res = await fetch("/api/staging/accept", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ verifiedOnly: true }),
+        // el lote acepta lo que hay EN PANTALLA: si la cola está filtrada por
+        // fuente, el lote también (si no, el número del botón sería de una cosa
+        // y el efecto de otra).
+        body: JSON.stringify({ verifiedOnly: true, ...(srcParam ? { source: srcParam } : {}) }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || t("staging.errAccept"));
       // Bump optimista para que la barra no espere al GET; load() lo reconcilia
       // contra el servidor (base fresca + sesión a cero), así que no se duplica.
       setSession((s) => ({ ...s, accepted: s.accepted + (data.promoted ?? 0) }));
-      await load();
+      // El lote va en serie y sin transacción: si reventó a mitad, lo que entró
+      // ENTRÓ. Se dice el parcial con su número real en vez de un 500 mudo que
+      // dejaba al usuario mirando una cola más corta sin explicación.
+      if (data.partial) {
+        setErr(
+          `${t("staging.batchPartial").replace("{n}", String(data.promoted ?? 0))} ${String(data.error ?? "")}`.trim(),
+        );
+      }
+      await load(srcParam);
     } catch (e) {
       setErr(e instanceof Error ? e.message : t("staging.errGeneric"));
     } finally {
@@ -324,12 +414,21 @@ export function StagingScreen() {
     }
   }
 
-  // «es habilidad»: la viñeta pasa a la sección de habilidades (kind skill).
+  // «es habilidad»: el item pasa a la sección de habilidades (kind skill).
+  // Vale para los dos disfraces: la viñeta de LinkedIn que era una aptitud (§C1)
+  // y el `project` que era un grupo de habilidades (§A1). Un proyecto guarda su
+  // contenido en {name, description}, así que su grupo es el NOMBRE y sus items
+  // la descripción — el servidor decide lo mismo; esto solo lo refleja sin esperar.
   async function reclassSkill(it: Item) {
-    const ok = await patch(it.id, { kind: "skill", group: "Herramientas" });
+    const esProyecto = it.kind === "project";
+    const grupo = esProyecto ? s(it.data, "name") || "Herramientas" : "Herramientas";
+    const ok = await patch(it.id, { kind: "skill", ...(esProyecto ? { group: grupo } : {}) });
     if (!ok) return;
     const parent = items.find((x) => x.id === it.parent_staged_id);
     const ctx = ctxOf(it) || (parent ? s(parent.data, "title") || s(parent.data, "company") : "");
+    const contenido = esProyecto
+      ? s(it.data, "description") || s(it.data, "items")
+      : s(it.data, "text") || s(it.data, "items");
     setItems((p) =>
       p.map((x) =>
         x.id === it.id
@@ -337,11 +436,77 @@ export function StagingScreen() {
               ...x,
               kind: "skill",
               parent_staged_id: null,
-              data: { ...withoutDoubt(x.data), group: "Herramientas", items: s(x.data, "text") || s(x.data, "items"), sourceContext: ctx },
+              data: { ...withoutDoubt(x.data), group: grupo, items: contenido, sourceContext: ctx },
             }
           : x,
       ),
     );
+    void refreshBatch(srcParam);
+  }
+
+  /* EN LOTE: doce grupos de habilidades disfrazados de proyecto no se arreglan a
+     doce clics. Un solo PATCH con los ids; el servidor aplica la MISMA
+     transformación item a item y devuelve cuántos entraron de verdad. */
+  async function reclassSkillAll(lista: Item[]) {
+    if (!lista.length) return;
+    setBusy((p) => new Set(p).add("__skills__"));
+    try {
+      const res = await fetch("/api/staging", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids: lista.map((x) => x.id), kind: "skill" }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || t("staging.errGeneric"));
+      await load(srcParam);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : t("staging.errGeneric"));
+    } finally {
+      setBusy((p) => {
+        const n = new Set(p);
+        n.delete("__skills__");
+        return n;
+      });
+    }
+  }
+
+  /* RESOLVER UN DUPLICADO. Las tres acciones las pulsa el usuario con las dos
+     versiones delante; aquí solo se mandan. En «fusionar» se envían los campos
+     ELEGIDOS uno a uno — y el servidor rechaza cualquier valor que no venga de
+     una de las dos versiones: la fusión elige, no redacta. */
+  async function resolveDup(it: Item, action: "keep-this" | "keep-other" | "merge", otra?: Item) {
+    const fields =
+      action === "merge" && otra
+        ? Object.fromEntries(
+            camposComparables(it.kind, it.data, otra.data).map((k) => [
+              k,
+              (pick[`${it.id}:${k}`] ?? "this") === "other" ? otra.data[k] : it.data[k],
+            ]),
+          )
+        : undefined;
+    setBusy((p) => new Set(p).add(it.id));
+    try {
+      const res = await fetch("/api/staging", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: it.id, duplicate: { action, fields } }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || t("staging.errDup"));
+      setOpenDup(null);
+      // Lo descartado no se pinta más; lo que sobrevive puede haber cambiado de
+      // datos y de viñetas. Se recarga en vez de adivinar el resultado.
+      setSession((sn) => ({ ...sn, rejected: sn.rejected + (data.rejected ? 1 : 0) }));
+      await load(srcParam);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : t("staging.errDup"));
+    } finally {
+      setBusy((p) => {
+        const n = new Set(p);
+        n.delete(it.id);
+        return n;
+      });
+    }
   }
 
   // «es viñeta»: solo se limpia la duda; sigue siendo viñeta.
@@ -349,6 +514,7 @@ export function StagingScreen() {
     const ok = await patch(it.id, { clearDoubt: true });
     if (!ok) return;
     setItems((p) => p.map((x) => (x.id === it.id ? { ...x, data: withoutDoubt(x.data) } : x)));
+    void refreshBatch(srcParam);
   }
 
   // «falta fecha» → el humano la escribe; el origen de la fecha es el humano.
@@ -377,6 +543,9 @@ export function StagingScreen() {
 
   const parents = items.filter((it) => it.kind !== "bullet");
   const group = (kind: string) => parents.filter((it) => it.kind === kind);
+  /* Los proyectos que classifyProjectShape marcó como grupo de habilidades. No es
+     una estimación: es la marca que el pipeline escribió antes de stagear. */
+  const gruposDeSkills = parents.filter((it) => it.kind === "project" && doubtOf(it) === "skill");
   const bulletsOf = (workId: string) => items.filter((it) => it.kind === "bullet" && it.parent_staged_id === workId);
 
   function Acts({ id }: { id: string }) {
@@ -418,10 +587,83 @@ export function StagingScreen() {
     );
   }
 
+  /* LA MARCA Y LA RESOLUCIÓN. La tarjeta dice «⚠ posible duplicado de: <item>» con
+     el motivo que calculó el detector (nunca un aviso que no se puede justificar).
+     Al abrirla, las dos versiones LADO A LADO campo por campo y tres acciones.
+     Nada se fusiona ni se descarta solo: las tres las pulsa el usuario. */
+  function DupMark({ it }: { it: Item }) {
+    const sos = dupOf(it);
+    if (!sos) return null;
+    const otra = sos.duplicateOf ? items.find((x) => x.id === sos.duplicateOf) : undefined;
+    const abierta = openDup === it.id;
+    const b = busy.has(it.id);
+    const campos = otra ? camposComparables(it.kind, it.data, otra.data) : [];
+    return (
+      <div className={"stg-dup" + (abierta ? " open" : "")} data-level={sos.level}>
+        <div className="stg-duphead">
+          <span className="q">{t("staging.dupOf")}</span>
+          <span className="other">{otra ? textOf(otra) : t("staging.dupGone")}</span>
+          <span className="lvl">{t(`staging.dupLevel_${sos.level}`)}</span>
+          {otra ? (
+            <button onClick={() => setOpenDup(abierta ? null : it.id)}>
+              {abierta ? t("staging.dupClose") : t("staging.dupReview")}
+            </button>
+          ) : null}
+        </div>
+        {sos.reason ? <p className="why">{sos.reason}</p> : null}
+
+        {abierta && otra ? (
+          <div className="stg-dupdiff">
+            <p className="hint">{t("staging.dupPick")}</p>
+            <div className="cols">
+              <span className="hd" />
+              <span className="hd">{t("staging.dupThis")}</span>
+              <span className="hd">{t("staging.dupOther")}</span>
+              {campos.map((k) => {
+                const lado = pick[`${it.id}:${k}`] ?? "this";
+                const va = valorCampo(it.data, k);
+                const vb = valorCampo(otra.data, k);
+                const igual = va === vb;
+                return (
+                  <Fragment key={k}>
+                    <span className="k">{k}</span>
+                    {(["this", "other"] as const).map((side) => (
+                      <label key={side} className={"v" + (lado === side ? " on" : "") + (igual ? " same" : "")}>
+                        <input
+                          type="radio"
+                          name={`${it.id}:${k}`}
+                          checked={lado === side}
+                          onChange={() => setPick((p) => ({ ...p, [`${it.id}:${k}`]: side }))}
+                        />
+                        <span>{(side === "this" ? va : vb) || t("staging.dupEmpty")}</span>
+                      </label>
+                    ))}
+                  </Fragment>
+                );
+              })}
+            </div>
+            <div className="acts">
+              <button disabled={b} onClick={() => resolveDup(it, "keep-this", otra)}>
+                {b ? t("staging.dupBusy") : t("staging.dupKeepThis")}
+              </button>
+              <button disabled={b} onClick={() => resolveDup(it, "keep-other", otra)}>
+                {t("staging.dupKeepOther")}
+              </button>
+              <button className="ok" disabled={b} onClick={() => resolveDup(it, "merge", otra)}>
+                {t("staging.dupMerge")}
+              </button>
+            </div>
+          </div>
+        ) : null}
+      </div>
+    );
+  }
+
   function Unit({ it, cls }: { it: Item; cls: string }) {
     if (!shown(it)) return null;
     const v = verOf(it);
     const doubt = doubtOf(it);
+    const esProyecto = it.kind === "project";
     const badDate = dateInvalidOf(it);
     const noDate = isDated(it) && !badDate && dateMissingOf(it);
     const ctx = it.kind === "skill" ? ctxOf(it) : "";
@@ -429,6 +671,7 @@ export function StagingScreen() {
       <>
         <div className={`${cls} stg-unit`} data-id={it.id} data-ver={v}>
           <span className="tx">{textOf(it)}</span>
+          {dupOf(it) ? <span className="c-ver stg-dupchip">{t("staging.dupChip")}</span> : null}
           <span className={"c-ver " + VER[v]}>{t(`staging.ver_${v}`)}</span>
           <button className="stg-orig" onClick={() => toggleFrag(it.id)}>
             {openFrag.has(it.id) ? `${t("staging.source")} ▴` : `${t("staging.source")} ▾`}
@@ -446,16 +689,22 @@ export function StagingScreen() {
           </div>
         )}
 
+        <DupMark it={it} />
+
         {doubt && (
           <div className="stg-classq">
-            <span className="q">{t("staging.doubtChip")}</span>
+            {/* El mismo fallo tiene dos disfraces: la aptitud colada como viñeta y
+                el grupo de habilidades colado como proyecto. Los rótulos nombran
+                el cajón REAL de cada uno — «es viñeta» sobre un proyecto sería
+                ofrecerle al usuario una salida que no existe. */}
+            <span className="q">{t(esProyecto ? "staging.skillGroupChip" : "staging.doubtChip")}</span>
             <span className="why">{s(it.data, "_classReason") || t("staging.doubtWhy")}</span>
             <span className="acts">
               <button className="ok" disabled={busy.has(it.id)} onClick={() => reclassSkill(it)}>
-                {t("staging.doubtIsSkill")}
+                {t(esProyecto ? "staging.skillGroupMove" : "staging.doubtIsSkill")}
               </button>
               <button disabled={busy.has(it.id)} onClick={() => clearDoubt(it)}>
-                {t("staging.doubtIsBullet")}
+                {t(esProyecto ? "staging.skillGroupKeep" : "staging.doubtIsBullet")}
               </button>
             </span>
           </div>
@@ -562,13 +811,39 @@ export function StagingScreen() {
                 creer lo contrario. Ver el comentario de `srcParam`. */}
             {srcParam ? (
               <p role="note" style={{ font: "400 var(--fs-micro)/1.7 var(--font-mono)", color: "var(--text-subtle)" }}>
-                {t("staging.sourceParamNote")}
+                {t("staging.sourceParamNote")}{" "}
+                <Link href="/app/staging">{t("staging.sourceParamAll")}</Link>
               </p>
             ) : null}
-            <button className="c-btn c-btn--patina" onClick={acceptVerified} disabled={busy.has("__batch__") || !counts.ok}>
+
+            {/* LOS DOS EJES DEL LOTE, con los números que da el servidor. Un
+                duplicado está perfectamente verificado —su evidencia aparece
+                literal en el raw_text, dos veces—, así que «todo lo verificado»
+                era el camino por el que pasaban todos. Ahora quedan fuera y se
+                DICE cuántos y por qué. Ningún número que no venga de datos. */}
+            {batch.excluded.duplicates > 0 ? (
+              <p className="stg-batchout" role="note">
+                {t("staging.batchOutDup")
+                  .replace("{n}", String(batch.excluded.duplicates))
+                  .replace("{s}", batch.excluded.duplicates === 1 ? "" : "s")}
+              </p>
+            ) : null}
+            {batch.excluded.doubts > 0 ? (
+              <p className="stg-batchout" role="note">
+                {t("staging.batchOutDoubt")
+                  .replace("{n}", String(batch.excluded.doubts))
+                  .replace("{s}", batch.excluded.doubts === 1 ? "" : "s")}
+              </p>
+            ) : null}
+
+            <button
+              className="c-btn c-btn--patina"
+              onClick={acceptVerified}
+              disabled={busy.has("__batch__") || !batch.eligible}
+            >
               {busy.has("__batch__")
                 ? t("staging.batchAccepting")
-                : t("staging.batchAccept").replace("{n}", String(counts.ok))}
+                : t("staging.batchAccept").replace("{n}", String(batch.eligible))}
             </button>
           </div>
 
@@ -621,6 +896,20 @@ export function StagingScreen() {
               <section className="stg-g" data-g="pj">
                 <div className="stg-gh">
                   <span className="t-overline">{t("staging.groupProjects")}</span>
+                  {/* Doce grupos de habilidades disfrazados de proyecto no se
+                      arreglan a doce clics. El número es real: son los proyectos
+                      que classifyProjectShape marcó, contados aquí mismo. */}
+                  {gruposDeSkills.length > 0 ? (
+                    <button
+                      className="stg-skillall"
+                      disabled={busy.has("__skills__")}
+                      onClick={() => reclassSkillAll(gruposDeSkills)}
+                    >
+                      {busy.has("__skills__")
+                        ? t("staging.skillGroupAllBusy")
+                        : t("staging.skillGroupAll").replace("{n}", String(gruposDeSkills.length))}
+                    </button>
+                  ) : null}
                 </div>
                 <hr className="c-divider" />
                 {group("project").map((it) => (

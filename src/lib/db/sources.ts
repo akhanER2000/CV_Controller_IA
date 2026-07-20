@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { StagedRow } from "@/lib/extract/types";
+import type { SuspicionLevel, DuplicateSignal } from "@/lib/extract/dedup";
 
 /**
  * Capa de datos de FUENTES (agente B). Espejo de persistImport (queries.ts) pero
@@ -138,12 +139,123 @@ export function sourceInsert(userId: string, meta: SourceMeta) {
   };
 }
 
+/* ============================================================================
+   LA SOSPECHA DE DUPLICADO, PERSISTIDA (§A2)
+   ============================================================================
+   El detector (extract/dedup.ts) ya emparejaba bien, pero su veredicto moría en
+   memoria: ningún writer lo escribía. Vive en `staged_items.merge_proposal`
+   (jsonb), que el esquema 0001 ya reservaba con el comentario «la decide el
+   USUARIO».
+
+   ⚠ NO en `duplicate_of`: esa columna referencia profile_items(id) y el par que
+     detectamos es entre dos STAGED. La FK no encaja, y forzarla obligaría a
+     promover uno de los dos al master ANTES de que el usuario decidiera — que es
+     exactamente lo que la doctrina prohíbe.                                     */
+
+/** Los tres niveles, para validar lo que vuelve de la base sin confiar en ello. */
+const NIVELES: SuspicionLevel[] = ["baja", "media", "alta"];
+
+/**
+ * La sospecha tal cual se PERSISTE. `v` versiona la forma: hay staged_items en
+ * producción escritos antes de esto (merge_proposal null o con otra forma), y la
+ * cola tiene que sobrevivirlos — de eso se encarga `readMergeProposal`.
+ *
+ * `duplicateOf` es el id REAL del otro staged, no la clave local: las claves del
+ * detector solo existen durante la ingesta. Puede ser null cuando la pareja no se
+ * pudo resolver; la marca sigue valiendo porque el `reason` la explica sola.
+ */
+export interface MergeProposal {
+  v: 1;
+  duplicateOf: string | null;
+  level: SuspicionLevel;
+  signals: DuplicateSignal[];
+  reason: string;
+}
+
+/**
+ * Lee merge_proposal DEFENSIVAMENTE. Cualquier cosa que no traiga un nivel válido
+ * se trata como «no hay sospecha» en vez de reventar la cola: una fila vieja no
+ * puede tumbar la pantalla de otro usuario.
+ */
+export function readMergeProposal(raw: unknown): MergeProposal | null {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+  const o = raw as Record<string, unknown>;
+  const level = NIVELES.find((l) => l === o.level);
+  if (!level) return null; // forma vieja o ajena: se ignora, no se adivina
+  const signals = Array.isArray(o.signals)
+    ? o.signals.filter((s): s is DuplicateSignal => typeof s === "string")
+    : [];
+  return {
+    v: 1,
+    duplicateOf: typeof o.duplicateOf === "string" && o.duplicateOf ? o.duplicateOf : null,
+    level,
+    signals,
+    reason: typeof o.reason === "string" ? o.reason : "",
+  };
+}
+
+/**
+ * La sospecha de una fila, con la pareja ya resuelta a id real. `null` cuando no
+ * hay sospecha: se escribe null explícito para que un «releer» limpie la marca
+ * anterior en vez de dejarla rancia.
+ */
+export function mergeProposalFor(r: StagedRow, keyToId: Map<string, string>): MergeProposal | null {
+  const d = r.duplicate;
+  if (!d) return null;
+  return {
+    v: 1,
+    duplicateOf: keyToId.get(d.otherKey) ?? null,
+    level: d.level,
+    signals: d.signals,
+    reason: d.reason,
+  };
+}
+
+/* ── Ids generados en el CLIENTE ──────────────────────────────────────────────
+   La correlación clave-local → id real se hacía por ÍNDICE sobre lo que devolvía
+   el insert (`data.forEach((row,i) => …)`), asumiendo que Supabase devuelve las
+   filas en el mismo orden del array. Eso NO está en ningún contrato, y aquí no es
+   cosmético: si el orden bailara, las viñetas colgarían del rol equivocado y la
+   sospecha de duplicado apuntaría a otro item — dos mentiras con procedencia.
+
+   Generando el uuid antes de insertar, la correlación deja de ser una suposición
+   y pasa a ser un dato: se conoce ANTES de hablar con la base, lo que además
+   permite resolver `duplicateOf` en el mismo insert, sin un UPDATE posterior.   */
+
+/** uuid v4 con la criptografía de la plataforma. Falla RUIDOSO antes que colisionar. */
+function nuevoId(): string {
+  const c = globalThis.crypto;
+  if (c?.randomUUID) return c.randomUUID();
+  if (c?.getRandomValues) {
+    const b = c.getRandomValues(new Uint8Array(16));
+    b[6] = (b[6]! & 0x0f) | 0x40;
+    b[8] = (b[8]! & 0x3f) | 0x80;
+    const h = [...b].map((x) => x.toString(16).padStart(2, "0")).join("");
+    return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20)}`;
+  }
+  throw new Error("Sin criptografía para generar ids de staging.");
+}
+
+/** clave local → id real, decidido AQUÍ. `gen` se inyecta en los tests. */
+export function assignIds(rows: StagedRow[], gen: () => string = nuevoId): Map<string, string> {
+  const m = new Map<string, string>();
+  for (const r of rows) if (!m.has(r.key)) m.set(r.key, gen());
+  return m;
+}
+
 /** Procedencia que viaja en data._* (staged_items no tiene columnas origin/level/source). */
 const META = (r: StagedRow) => ({ _origin: r.origin, _level: r.evidenceLevel, _source: r.sourceLabel });
 
+/** Lo que el writer decide por fuera de la fila: su id y su sospecha ya resuelta. */
+export interface RowExtra {
+  id?: string;
+  mergeProposal?: MergeProposal | null;
+}
+
 /** Fila de staged_items para un item PADRE (todo lo que no es viñeta). */
-export function parentRow(userId: string, sourceId: string, r: StagedRow) {
+export function parentRow(userId: string, sourceId: string, r: StagedRow, extra: RowExtra = {}) {
   return {
+    ...(extra.id ? { id: extra.id } : {}),
     user_id: userId,
     source_id: sourceId,
     kind: r.kind,
@@ -152,12 +264,47 @@ export function parentRow(userId: string, sourceId: string, r: StagedRow) {
     evidence_snippet: r.evidenceSnippet,
     evidence_verified: r.evidenceVerified,
     status: "pending" as const,
+    merge_proposal: extra.mergeProposal ?? null,
   };
 }
 
 /** Fila de staged_items para una VIÑETA, apuntando a su rol ya insertado. */
-export function bulletRow(userId: string, sourceId: string, r: StagedRow, parentStagedId: string | null) {
-  return { ...parentRow(userId, sourceId, r), parent_staged_id: parentStagedId };
+export function bulletRow(
+  userId: string,
+  sourceId: string,
+  r: StagedRow,
+  parentStagedId: string | null,
+  extra: RowExtra = {},
+) {
+  return { ...parentRow(userId, sourceId, r, extra), parent_staged_id: parentStagedId };
+}
+
+/**
+ * Las filas de UNA ingesta, en dos fases y con la sospecha ya resuelta a ids
+ * reales. PURO: es el armado que comparten los dos writers (persistImport de
+ * queries.ts y persistSource/restageSource de aquí). Tenerlo en un solo sitio es
+ * lo que impide que el camino de Fuentes se quede sin la marca — que es
+ * exactamente lo que pasaba cuando cada writer construía su fila a mano.
+ */
+export function stagedRowsFor(
+  userId: string,
+  sourceId: string,
+  rows: StagedRow[],
+  gen?: () => string,
+): { keyToId: Map<string, string>; parents: ReturnType<typeof parentRow>[]; bullets: ReturnType<typeof bulletRow>[] } {
+  const { parents, bullets } = splitStaged(rows);
+  const keyToId = assignIds(rows, gen);
+  const extraDe = (r: StagedRow): RowExtra => ({
+    id: keyToId.get(r.key),
+    mergeProposal: mergeProposalFor(r, keyToId),
+  });
+  return {
+    keyToId,
+    parents: parents.map((r) => parentRow(userId, sourceId, r, extraDe(r))),
+    bullets: bullets.map((r) =>
+      bulletRow(userId, sourceId, r, r.parentKey ? keyToId.get(r.parentKey) ?? null : null, extraDe(r)),
+    ),
+  };
 }
 
 /** Separa los padres de las viñetas conservando el orden (patrón de dos fases). */
@@ -178,23 +325,18 @@ export function splitStaged(rows: StagedRow[]): { parents: StagedRow[]; bullets:
  * mismo patrón de persistImport, extraído para compartirlo entre alta y releer.
  * Devuelve cuántas filas se insertaron.
  */
-async function insertStagedTwoPhase(sb: SB, userId: string, sourceId: string, rows: StagedRow[]): Promise<number> {
-  const { parents, bullets } = splitStaged(rows);
-  const keyToId = new Map<string, string>();
+export async function insertStagedTwoPhase(sb: SB, userId: string, sourceId: string, rows: StagedRow[]): Promise<number> {
+  const { parents, bullets } = stagedRowsFor(userId, sourceId, rows);
 
+  // Siguen siendo DOS fases aunque los ids ya se conozcan: la FK
+  // parent_staged_id → staged_items(id) se comprueba fila a fila, así que el rol
+  // tiene que estar escrito antes que su viñeta.
   if (parents.length) {
-    const { data, error } = await sb
-      .from("staged_items")
-      .insert(parents.map((r) => parentRow(userId, sourceId, r)))
-      .select("id");
+    const { error } = await sb.from("staged_items").insert(parents);
     if (error) throw new Error(`Staged: ${error.message}`);
-    (data ?? []).forEach((row, i) => keyToId.set(parents[i]!.key, row.id as string));
   }
-
   if (bullets.length) {
-    const { error } = await sb.from("staged_items").insert(
-      bullets.map((r) => bulletRow(userId, sourceId, r, r.parentKey ? keyToId.get(r.parentKey) ?? null : null)),
-    );
+    const { error } = await sb.from("staged_items").insert(bullets);
     if (error) throw new Error(`Viñetas: ${error.message}`);
   }
 
