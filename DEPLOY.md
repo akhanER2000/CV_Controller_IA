@@ -30,9 +30,25 @@
 ## 1 · Supabase (primero — desbloquea las Fases 2-6)
 
 1. Crea un proyecto en [supabase.com](https://supabase.com).
-2. **Aplica el esquema:** panel → **SQL Editor** → pega **`supabase/migrations/0002_user_state.sql`** → Run.
-   Ese es el esquema ACTIVO de la app (una fila jsonb por usuario, con RLS). El `0001_schema.sql`
-   es el modelo completo del producto futuro (variantes por tabla, ingesta) — **no lo corras aún**.
+2. **Aplica el esquema**, panel → **SQL Editor**, **en este orden y un fichero por ejecución**:
+   1. `supabase/migrations/0001_schema.sql` — **el esquema ACTIVO**. Master, items,
+      variantes, staging, fuentes y RLS. Sin él, `/api/master`, `/api/variants`,
+      `/api/staging`, `/api/sources` y `/api/health/status` fallan enteras.
+   2. `0002_user_state.sql` — la fila jsonb por usuario. Convive con 0001; hoy solo la
+      usa el store de cliente.
+   3. `0003_avatars.sql` — foto y nombre visible del menú (nunca entran al CV).
+   4. `0004_item_kind_reference.sql` — añade `'reference'` al enum `item_kind`.
+      **Ejecútalo SOLO, sin nada más pegado**: `alter type … add value` no admite
+      compañía en la misma transacción.
+   5. `0005_reference_links.sql` — la tabla que vincula una referencia con el rol o el
+      proyecto que la respalda, con su RLS y su guarda anti-IDOR.
+
+   Todas son idempotentes: re-ejecutarlas no da error. Si `/app/master` responde pero
+   sale vacío o con error de tabla, es que falta alguna.
+
+   > Esto reemplaza a la instrucción anterior, que decía que el esquema activo era el
+   > `0002` y que el `0001` «no lo corras aún». Era falso desde que las rutas `/api/*`
+   > pasaron a leer el modelo relacional, y seguirla dejaba la app a medio funcionar.
 3. **Auth por correo y contraseña:** panel → **Authentication → Providers → Email** → activado.
    - Para uso personal rápido: **Authentication → Sign In / Providers → Confirm email = OFF**
      (entras al instante sin confirmar por correo). Actívalo si luego quieres más seguridad.
