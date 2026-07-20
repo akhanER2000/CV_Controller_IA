@@ -187,6 +187,64 @@ export function preservesFacts(original: string, proposed: string, evidence = ""
   return { ok: newNumbers.length === 0 && newEntities.length === 0, newNumbers, newEntities };
 }
 
+// ── Acortar: la operación de más riesgo del producto ─────────────────────────
+export interface ShortenResult extends PreserveResult {
+  /** cifras del ORIGINAL que la propuesta se comió */
+  lostNumbers: string[];
+  /** entidades nombradas del ORIGINAL que la propuesta se comió */
+  lostEntities: string[];
+  /** ¿la propuesta es de verdad más corta? Si no, no es un acortamiento */
+  shorter: boolean;
+}
+
+/**
+ * ★ EL CANDADO DEL ACORTADO. preservesFacts es asimétrico a propósito: solo caza
+ * hechos que APARECEN de la nada, porque eso es lo que hace un LLM que adorna.
+ * Al acortar, el peligro es el CONTRARIO y preservesFacts lo deja pasar entero.
+ *
+ * Comprimir «reduje la latencia p99 de 850 ms a 180 ms» a «optimicé la latencia»
+ * no inventa NADA: pasa preservesFacts con sobresaliente. Y borra exactamente el
+ * dato que hacía valiosa la viñeta. Peor todavía, comprimir mal puede CAMBIAR la
+ * magnitud (850 → 85), y eso ya no es perder información: es mentir en un
+ * documento que el usuario firma con su nombre.
+ *
+ * Por eso aquí la regla es dura y va en las dos direcciones:
+ *  1. Nada nuevo — se hereda preservesFacts.
+ *  2. Nada perdido — toda cifra (valor + unidad) y toda entidad nombrada del
+ *     original tiene que seguir estando. Se recorta el RELLENO, jamás el HECHO.
+ *  3. Y tiene que ser más corto, o no es un acortamiento: una "propuesta" más
+ *     larga que el original es otra cosa y no debe colarse por esta puerta.
+ *
+ * Se compara SOLO contra el item de origen, nunca contra el master entero: si la
+ * referencia fuera todo el master, un año que aparece en la educación
+ * "autorizaría" esa cifra en cualquier viñeta. La verificación tiene que ser tan
+ * estrecha como el hecho que protege.
+ */
+export function preservesFactsWhenShortening(original: string, proposed: string): ShortenResult {
+  const base = preservesFacts(original, proposed);
+
+  const propNumbers = extractNumbers(proposed);
+  const lostNumbers = extractNumbers(original)
+    .filter((n) => !propNumbers.some((x) => x.value === n.value && x.unit === n.unit))
+    .map((n) => n.raw);
+
+  const propText = normalize(proposed);
+  const propEntities = new Set(extractEntities(proposed));
+  const lostEntities = extractEntities(original).filter(
+    (e) => !propEntities.has(e) && !hasToken(propText, e),
+  );
+
+  const shorter = normalize(proposed).length < normalize(original).length;
+
+  return {
+    ...base,
+    lostNumbers,
+    lostEntities,
+    shorter,
+    ok: base.ok && lostNumbers.length === 0 && lostEntities.length === 0 && shorter,
+  };
+}
+
 // ── Filtro anti-"suena a IA" (prompt §6.1) ───────────────────────────────────
 const AI_TELLS_ES = ["potenciar sinergias", "impulsar la excelencia", "gestión integral", "gestion integral"];
 const AI_TELLS_EN = ["delve", "leverage", "spearheaded", "robust", "seamless"];
