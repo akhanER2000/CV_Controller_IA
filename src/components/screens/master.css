@@ -310,3 +310,54 @@
 
 .ms-ref--draft .ms-draft{margin-top:12px}
 @media (max-width:768px){.ms-ref__fields .meta{margin-left:0;width:100%}}
+
+/* ══ B · BARRIDO DEL MASTER CON IA ══════════════════════════════════════════
+   Revisar los 105 items DE UNA. La CTA va junto al «+ Añadir» (dos acciones de
+   la misma barra); el panel se abre a lo ancho, encima de los grupos. Zona
+   aplicable (con casilla) y zona consultiva (sin ella): la segunda existe porque
+   editar tu prosa o borrar un dato es SIEMPRE tu decisión, nunca la del sistema. */
+.ms-actions{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.ms-barrido-cta:disabled{opacity:.6;cursor:default}
+
+.ms-bar{margin:16px 0 4px;padding:16px 18px;background:var(--surface-sunken);
+  border:1px solid var(--border-patina);border-radius:var(--radius-md)}
+.ms-bar__h{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
+.ms-bar__h .t-overline{flex:1 1 auto}
+.ms-bar__rerun,.ms-bar__x{font:500 var(--fs-micro)/1 var(--font-mono);color:var(--text-subtle);padding:2px 6px}
+.ms-bar__rerun:hover,.ms-bar__x:hover{color:var(--text)}
+.ms-bar__intro{margin:8px 0 0;font:400 var(--fs-micro)/1.6 var(--font-sans);color:var(--text-muted);max-width:78ch}
+.ms-bar__busy{margin:12px 0 0;font:400 var(--fs-ui)/1.4 var(--font-mono);color:var(--accent-text)}
+.ms-bar__err{margin:12px 0 0;font:500 var(--fs-micro)/1.5 var(--font-sans);color:var(--danger)}
+
+/* Progreso honesto: qué se examinó, con cifras reales. Nunca un porcentaje. */
+.ms-bar__walk{margin:12px 0 0;padding:0;list-style:none;display:flex;flex-direction:column;gap:3px}
+.ms-bar__walk li{font:400 var(--fs-micro)/1.5 var(--font-mono);color:var(--text-subtle);padding-left:14px;position:relative}
+.ms-bar__walk li::before{content:"·";position:absolute;left:2px;color:var(--accent-text)}
+.ms-bar__empty{margin:14px 0 0;font:500 var(--fs-ui)/1.5 var(--font-sans);color:var(--text-muted)}
+
+.ms-bar__sec{margin-top:18px;padding-top:14px;border-top:1px solid var(--border)}
+.ms-bar__sec--adv{opacity:.92}
+.ms-bar__advhint{margin:6px 0 0;font:400 var(--fs-micro)/1.6 var(--font-sans);color:var(--text-subtle);max-width:78ch}
+.ms-bar__list{display:flex;flex-direction:column;gap:8px;margin-top:12px}
+
+.ms-bar__row{display:flex;gap:10px;padding:10px 12px;border:1px solid var(--border);border-radius:6px;
+  background:var(--surface);cursor:pointer}
+.ms-bar__row:hover{border-color:var(--border-strong)}
+.ms-bar__row--adv{cursor:default;background:transparent;border-style:dashed}
+.ms-bar__row input[type=checkbox]{margin-top:3px;flex:none;accent-color:var(--accent-text)}
+.ms-bar__body{display:flex;flex-direction:column;gap:3px;min-width:0}
+.ms-bar__tipo{font:600 var(--fs-micro)/1 var(--font-mono);color:var(--accent-text);text-transform:uppercase;letter-spacing:.04em}
+.ms-bar__prop{font:500 var(--fs-ui)/1.45 var(--font-sans);color:var(--text)}
+.ms-bar__det{font:400 var(--fs-micro)/1.5 var(--font-sans);color:var(--text-muted)}
+/* La evidencia LITERAL del origen: es lo que convierte una propuesta en un hecho. */
+.ms-bar__ev{font:400 var(--fs-micro)/1.5 var(--font-mono);color:var(--text-subtle);
+  border-left:2px solid var(--border-patina);padding-left:8px;margin-top:2px}
+.ms-bar__ev em{font-style:normal;color:var(--accent-text)}
+
+.ms-bar__acts{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:14px}
+.ms-bar__apply{font:600 var(--fs-micro)/1 var(--font-mono);padding:9px 14px;border-radius:5px;
+  border:1px solid var(--border-patina);color:var(--accent-text);
+  background:color-mix(in srgb,var(--accent-text) 8%,transparent)}
+.ms-bar__apply:hover{color:var(--text);background:color-mix(in srgb,var(--accent-text) 14%,transparent)}
+.ms-bar__apply:disabled{opacity:.45;cursor:default;background:transparent}
+.ms-bar__never{font:400 var(--fs-micro)/1 var(--font-mono);color:var(--text-subtle)}

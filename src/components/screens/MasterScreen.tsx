@@ -22,6 +22,19 @@ import type { ItemUsage } from "@/lib/db/master";
 // pantalla no se lleva nada de eso al bundle del navegador. Los datos que necesita
 // —campos comparables, viñetas, motivo— vienen ya calculados en el JSON del GET.
 import type { ClusterDuplicado, MiembroDuplicado } from "@/lib/db/duplicados";
+// SOLO TIPOS también aquí: barrido.ts arrastra el detector entero (dedup → similar
+// → verify) además de resolverDuplicado. El `import type` se borra al compilar, así
+// que la pantalla recibe los hallazgos YA calculados por el GET y no se lleva ni una
+// línea del analizador al bundle del navegador.
+import type {
+  ResultadoBarrido,
+  Hallazgo,
+  HallazgoDuplicado,
+  HallazgoMalClasificado,
+  HallazgoFecha,
+  HallazgoVineta,
+  HallazgoAptitud,
+} from "@/lib/master/barrido";
 import "./master.css";
 
 /* ============================================================================
@@ -918,6 +931,19 @@ export function MasterScreen() {
     } | null
   >(null);
 
+  /* ── B · BARRIDO DEL MASTER CON IA ──────────────────────────────────────────
+     Revisar los 105 items DE UNA, en dos pasos. `barResult` es lo que devuelve
+     ANALIZAR (una lista de propuestas, nada aplicado). `barSel` son las
+     correcciones aplicables que el usuario deja marcadas: por defecto TODAS, pero
+     cada una se puede desmarcar (ajuste individual antes de aplicar el lote). El
+     APLICAR se DIFIERE por el UndoToast, así que el lote entero es reversible con
+     un solo deshacer: hasta que la ventana expira, no se ha tocado nada. */
+  const [barOpen, setBarOpen] = useState(false);
+  const [barBusy, setBarBusy] = useState(false);
+  const [barResult, setBarResult] = useState<ResultadoBarrido | null>(null);
+  const [barError, setBarError] = useState("");
+  const [barSel, setBarSel] = useState<ReadonlySet<string>>(new Set());
+
   /* ── B · REFERENCIAS ────────────────────────────────────────────────────────
      Los ITEMS viven en `view.references` (salen de /api/master como cualquier otro
      profile_item). Los VÍNCULOS no: son una tabla aparte y los trae /api/references,
@@ -1781,6 +1807,118 @@ export function MasterScreen() {
     setDupBlocked(null);
   }, [filter, query]);
 
+  /* ── B · las dos llamadas del barrido ───────────────────────────────────────
+     ANALIZAR (GET) es de solo lectura: trae la lista de propuestas. APLICAR (POST)
+     ejecuta el lote — y se DIFIERE por el UndoToast, no se llama aquí de inmediato. */
+
+  /** Clave estable de un hallazgo aplicable (para marcar/desmarcar). */
+  const barKey = useCallback((h: Hallazgo): string => {
+    if (h.tipo === "duplicado") return `dup:${h.fusion.keepId}`;
+    if (h.tipo === "mal-clasificado") return `bad:${h.itemId}`;
+    if (h.tipo === "fecha-ausente") return `date:${h.itemId}`;
+    return `x:${(h as { itemId?: string }).itemId ?? ""}`; // consultivos: no se seleccionan
+  }, []);
+
+  /** ¿este hallazgo entra en el lote de «Aplicar»? (gemelo de esAplicable en barrido.ts). */
+  const barAplicable = useCallback(
+    (h: Hallazgo): boolean =>
+      h.tipo === "duplicado" || h.tipo === "mal-clasificado" || h.tipo === "fecha-ausente",
+    [],
+  );
+
+  const runBarrido = useCallback(() => {
+    if (!supabaseEnabled) {
+      setBarOpen(true);
+      setBarError(t("master.barrido.localOff"));
+      setBarResult(null);
+      return;
+    }
+    setBarOpen(true);
+    setBarBusy(true);
+    setBarError("");
+    void (async () => {
+      try {
+        const res = await fetch("/api/master/barrido");
+        if (!res.ok) throw new Error();
+        const j = (await res.json()) as ResultadoBarrido;
+        setBarResult(j);
+        // Por defecto, TODO lo aplicable queda marcado: el usuario desmarca lo que
+        // no quiera. (Lo consultivo no se marca: no entra al lote.)
+        const sel = new Set<string>();
+        for (const h of j.hallazgos) if (barAplicable(h)) sel.add(barKey(h));
+        setBarSel(sel);
+      } catch {
+        setBarError(t("master.barrido.fail"));
+        setBarResult(null);
+      } finally {
+        setBarBusy(false);
+      }
+    })();
+  }, [t, barAplicable, barKey]);
+
+  const toggleBarSel = useCallback((key: string) => {
+    setBarSel((prev) => {
+      const n = new Set(prev);
+      if (n.has(key)) n.delete(key);
+      else n.add(key);
+      return n;
+    });
+  }, []);
+
+  /** Hallazgo aplicable → la corrección que se manda al POST. */
+  const barCorreccion = useCallback((h: Hallazgo): Record<string, unknown> | null => {
+    if (h.tipo === "duplicado") {
+      return { tipo: "duplicado", keepId: h.fusion.keepId, dropIds: h.fusion.dropIds, data: h.fusion.data, vinetas: h.fusion.vinetas };
+    }
+    if (h.tipo === "mal-clasificado") {
+      return { tipo: "reclasificar", itemId: h.itemId, group: h.group, items: h.items };
+    }
+    if (h.tipo === "fecha-ausente") {
+      return { tipo: "fecha", itemId: h.itemId, dates: h.dates, sourceId: h.sourceId };
+    }
+    return null;
+  }, []);
+
+  /* APLICAR el lote. Se DIFIERE con el UndoToast: hasta que la ventana de gracia
+     expira NO se ha tocado nada, así que un solo «deshacer» cancela el lote entero
+     (la regla del encargo). Al confirmar, un único POST aplica todas las
+     correcciones seleccionadas; las fusiones que tocan una variante vuelven en
+     `bloqueadas` y se cuentan aparte (nunca un borrado a la brava). */
+  const applyBarrido = useCallback(() => {
+    if (!supabaseEnabled || !barResult) return;
+    const correcciones = barResult.hallazgos
+      .filter((h) => barAplicable(h) && barSel.has(barKey(h)))
+      .map(barCorreccion)
+      .filter((c): c is Record<string, unknown> => c !== null);
+    if (correcciones.length === 0) return;
+
+    setBarOpen(false);
+    undo.show({
+      message: t("master.barrido.undoBatch").replace("{n}", String(correcciones.length)),
+      onUndo: () => setBarOpen(true), // nada se aplicó: se reabre el panel intacto
+      onCommit: async () => {
+        try {
+          const res = await fetch("/api/master/barrido", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ correcciones }),
+          });
+          if (!res.ok) throw new Error();
+          const j = (await res.json()) as { aplicadas?: number; bloqueadas?: unknown[] };
+          const bloqueadas = j.bloqueadas?.length ?? 0;
+          let msg = t("master.barrido.applied").replace("{n}", String(j.aplicadas ?? 0));
+          if (bloqueadas > 0) msg += " · " + t("master.barrido.blocked").replace("{n}", String(bloqueadas));
+          noteSaved(msg);
+          setBarResult(null);
+          refrescarMaster();
+        } catch {
+          noteSaved(t("master.barrido.fail"));
+          setBarOpen(true); // volvió a fallar: el panel sigue disponible para reintentar
+        }
+      },
+    });
+  }, [barResult, barSel, barAplicable, barKey, barCorreccion, undo, t, noteSaved, refrescarMaster]);
+
   /* ── B · las tres escrituras de una referencia ──────────────────────────────
      Todas pasan por /api/references, NUNCA por /api/master/[id]: esa ruta valida
      el `data` contra un vocabulario cerrado que no conoce `role`, `org` ni
@@ -2431,6 +2569,174 @@ export function MasterScreen() {
           {dupBusy ? <span className="ms-dup__busy">{t("master.dup.busy")}</span> : null}
         </div>
         {dupBlockedWarning()}
+      </div>
+    );
+  };
+
+  /* ── B · el panel del BARRIDO ───────────────────────────────────────────────
+     Dos zonas: las correcciones que el sistema PUEDE aplicar (con casilla, para
+     ajustar el lote una a una) y las CONSULTIVAS, que solo se muestran porque
+     aplicarlas —editar tu prosa, borrar un dato— es siempre tu decisión. Y el
+     recorrido honesto: qué se examinó, con cifras reales. */
+  const interp = (clave: string, datos: Record<string, number>): string => {
+    let s = t(clave);
+    for (const [k, v] of Object.entries(datos)) s = s.split(`{${k}}`).join(String(v));
+    return s;
+  };
+
+  const barNombreBase = (h: HallazgoDuplicado): string => {
+    const m = h.cluster.miembros.find((x) => x.id === h.fusion.keepId);
+    return m?.titulo?.trim() || t("master.role.untitled");
+  };
+
+  /** El texto de la propuesta de un hallazgo, ya traducido. */
+  const barPropuesta = (h: Hallazgo): string => {
+    switch (h.tipo) {
+      case "duplicado":
+        return t("master.barrido.h.dupProp")
+          .replace("{keep}", barNombreBase(h))
+          .replace("{n}", String(h.cluster.miembros.length));
+      case "mal-clasificado":
+        return t("master.barrido.h.badclassProp").replace("{name}", (h as HallazgoMalClasificado).nombre);
+      case "fecha-ausente":
+        return t("master.barrido.h.dateProp")
+          .replace("{dates}", (h as HallazgoFecha).dates)
+          .replace("{item}", (h as HallazgoFecha).etiqueta);
+      case "vineta-sin-cifra":
+        return t("master.barrido.h.figureProp").replace("{num}", (h as HallazgoVineta).numeros.join(", "));
+      default:
+        return t("master.barrido.h.skillProp").replace("{chips}", (h as HallazgoAptitud).sinEvidencia.join(", "));
+    }
+  };
+
+  const barTipoLabel = (h: Hallazgo): string =>
+    t(
+      h.tipo === "duplicado" ? "master.barrido.h.dup"
+      : h.tipo === "mal-clasificado" ? "master.barrido.h.badclass"
+      : h.tipo === "fecha-ausente" ? "master.barrido.h.date"
+      : h.tipo === "vineta-sin-cifra" ? "master.barrido.h.figure"
+      : "master.barrido.h.skill",
+    );
+
+  /** La evidencia LITERAL del origen, cuando el hallazgo la trae. */
+  const barEvidencia = (h: Hallazgo): string | null => {
+    if (h.tipo === "fecha-ausente") return (h as HallazgoFecha).evidencia;
+    if (h.tipo === "vineta-sin-cifra") return (h as HallazgoVineta).evidencia;
+    return null;
+  };
+
+  /** La razón/el detalle del hallazgo (la viñeta o el motivo del detector). */
+  const barDetalle = (h: Hallazgo): string | null => {
+    if (h.tipo === "duplicado") return h.cluster.reason;
+    if (h.tipo === "mal-clasificado") return (h as HallazgoMalClasificado).razon;
+    if (h.tipo === "vineta-sin-cifra") return (h as HallazgoVineta).texto;
+    return null;
+  };
+
+  const barFilaAplicable = (h: Hallazgo, i: number): ReactNode => {
+    const key = barKey(h);
+    const ev = barEvidencia(h);
+    const det = barDetalle(h);
+    return (
+      <label className="ms-bar__row" key={`ap-${i}-${key}`}>
+        <input type="checkbox" checked={barSel.has(key)} onChange={() => toggleBarSel(key)} aria-label={t("master.barrido.include")} />
+        <span className="ms-bar__body">
+          <span className="ms-bar__tipo">{barTipoLabel(h)}</span>
+          <span className="ms-bar__prop">{barPropuesta(h)}</span>
+          {det ? <span className="ms-bar__det">{det}</span> : null}
+          {ev ? (
+            <span className="ms-bar__ev">
+              <em>{t("master.barrido.evidence")}</em> {ev}
+            </span>
+          ) : null}
+        </span>
+      </label>
+    );
+  };
+
+  const barFilaConsultiva = (h: Hallazgo, i: number): ReactNode => {
+    const ev = barEvidencia(h);
+    const det = barDetalle(h);
+    return (
+      <div className="ms-bar__row ms-bar__row--adv" key={`cs-${i}`}>
+        <span className="ms-bar__body">
+          <span className="ms-bar__tipo">{barTipoLabel(h)}</span>
+          <span className="ms-bar__prop">{barPropuesta(h)}</span>
+          {det ? <span className="ms-bar__det">{det}</span> : null}
+          {ev ? (
+            <span className="ms-bar__ev">
+              <em>{t("master.barrido.evidence")}</em> {ev}
+            </span>
+          ) : null}
+        </span>
+      </div>
+    );
+  };
+
+  const barridoPanel = (): ReactNode => {
+    if (!barOpen) return null;
+    const r = barResult;
+    const aplicables = r ? r.hallazgos.filter(barAplicable) : [];
+    const consultivas = r ? r.hallazgos.filter((h) => !barAplicable(h)) : [];
+    const nSel = aplicables.filter((h) => barSel.has(barKey(h))).length;
+    const applyLabel =
+      nSel === 0 ? t("master.barrido.applyNone")
+      : nSel === 1 ? t("master.barrido.applyOne")
+      : t("master.barrido.apply").replace("{n}", String(nSel));
+
+    return (
+      <div className="ms-bar" role="group" aria-label={t("master.barrido.title")}>
+        <div className="ms-bar__h">
+          <span className="t-overline">{t("master.barrido.title")}</span>
+          {r && !barBusy ? (
+            <button type="button" className="ms-bar__rerun" onClick={runBarrido}>
+              {t("master.barrido.rerun")}
+            </button>
+          ) : null}
+          <button type="button" className="ms-bar__x" onClick={() => setBarOpen(false)}>
+            {t("master.barrido.close")}
+          </button>
+        </div>
+        <p className="ms-bar__intro">{t("master.barrido.intro")}</p>
+
+        {barBusy ? <p className="ms-bar__busy" role="status">{t("master.barrido.ctaBusy")}</p> : null}
+        {barError ? <p className="ms-bar__err" role="alert">{barError}</p> : null}
+
+        {r && !barBusy ? (
+          <>
+            {/* Progreso honesto: qué se examinó, con cifras reales. */}
+            <ul className="ms-bar__walk">
+              {r.recorrido.map((p) => (
+                <li key={p.clave}>{interp(p.clave, p.datos)}</li>
+              ))}
+            </ul>
+
+            {r.hallazgos.length === 0 ? (
+              <p className="ms-bar__empty">{t("master.barrido.empty")}</p>
+            ) : null}
+
+            {aplicables.length > 0 ? (
+              <div className="ms-bar__sec">
+                <span className="t-overline">{t("master.barrido.sec.aplicables")}</span>
+                <div className="ms-bar__list">{aplicables.map((h, i) => barFilaAplicable(h, i))}</div>
+                <div className="ms-bar__acts">
+                  <button type="button" className="ms-bar__apply" disabled={nSel === 0} onClick={applyBarrido}>
+                    {applyLabel}
+                  </button>
+                  <span className="ms-bar__never">{t("master.dup.never")}</span>
+                </div>
+              </div>
+            ) : null}
+
+            {consultivas.length > 0 ? (
+              <div className="ms-bar__sec ms-bar__sec--adv">
+                <span className="t-overline">{t("master.barrido.sec.consultivas")}</span>
+                <p className="ms-bar__advhint">{t("master.barrido.consultivasHint")}</p>
+                <div className="ms-bar__list">{consultivas.map((h, i) => barFilaConsultiva(h, i))}</div>
+              </div>
+            ) : null}
+          </>
+        ) : null}
       </div>
     );
   };
@@ -3123,7 +3429,21 @@ export function MasterScreen() {
               <b style={{ color: "var(--text)", fontWeight: 500 }}>{t("master.intro.b")}</b>
               {t("master.intro.c")}
             </p>
-            <div className="ms-addwrap">
+            <div className="ms-actions">
+              {/* B · «Revisar mi master con IA»: el barrido en dos pasos. Solo con
+                  registro poblado (vacío no hay nada que barrer). */}
+              {!loading && !isEmpty ? (
+                <button
+                  type="button"
+                  className="c-btn c-btn--patina ms-barrido-cta"
+                  aria-expanded={barOpen}
+                  disabled={barBusy}
+                  onClick={runBarrido}
+                >
+                  {barBusy ? t("master.barrido.ctaBusy") : t("master.barrido.cta")}
+                </button>
+              ) : null}
+              <div className="ms-addwrap">
               <button
                 type="button"
                 className="c-btn"
@@ -3174,7 +3494,10 @@ export function MasterScreen() {
                 </div>
               ) : null}
             </div>
+            </div>
           </div>
+
+          {barridoPanel()}
 
           <div id="groups" ref={groupsRef}>
             {loading || !v || isEmpty ? null : (
