@@ -173,6 +173,41 @@ export const REGISTRO: Readonly<Record<Tarea, Definicion>> = {
 export const modeloDe = (tarea: Tarea): string => REGISTRO[tarea].modelo;
 
 /**
+ * ════════════════════════════════════════════════════════════════════════════
+ * ★ LA ELECCIÓN DEL USUARIO (selector de modelos probados) — y su ESPEJO.
+ *
+ * El usuario puede elegir, entre los modelos que su clave admite DE VERDAD (los
+ * que respondieron a una llamada real; ver lib/ai/catalogo.ts), cuál atiende la
+ * extracción. Su elección NO reemplaza al registro: lo SOMBREA en estas tareas y
+ * solo en estas.
+ *
+ * POR QUÉ SOLO ESTAS DOS:
+ *   · `extraccion-estructurada` — es lo que el selector dice que elige, y es el
+ *     80 % de los tokens.
+ *   · `ping-salud` — porque ESPEJA a la extracción. Si el usuario mueve la
+ *     extracción a otro modelo y el chequeo de salud se queda probando el del
+ *     registro, el panel diría «en línea» mientras la extracción se cae con 404:
+ *     un chequeo que prueba OTRA cosa no prueba nada. El espejo no es una
+ *     coincidencia de dos entradas iguales en la tabla, es esta función.
+ *   · visión y redacción NO se mueven: la sonda del catálogo prueba texto contra
+ *     un schema, no visión ni calidad de redacción. Ofrecer para visión un modelo
+ *     que nadie probó en visión sería el mismo ✓ optimista que este bloque combate.
+ * ════════════════════════════════════════════════════════════════════════════
+ */
+export const TAREAS_ELEGIBLES: readonly Tarea[] = ["extraccion-estructurada", "ping-salud"] as const;
+
+/**
+ * El modelo que atiende DE VERDAD una tarea con la elección del usuario aplicada.
+ * `elegido` vacío/nulo ⇒ el del registro (que sigue siendo el valor por defecto y
+ * el que se recomienda: es el que ganó el A/B).
+ */
+export function modeloEfectivo(tarea: Tarea, elegido?: string | null): string {
+  const e = typeof elegido === "string" ? elegido.trim() : "";
+  if (e && TAREAS_ELEGIBLES.includes(tarea)) return e;
+  return REGISTRO[tarea].modelo;
+}
+
+/**
  * La clave EFECTIVA de Gemini: la BYOK del usuario (ya descifrada) o la del servidor.
  * Se acepta cualquiera de las dos variables de entorno; el provider de Google solo
  * mira GOOGLE_GENERATIVE_AI_API_KEY por su cuenta, así que se pasa explícita.
@@ -229,11 +264,18 @@ function modeloBarato(modelo: string, apiKey2: string) {
  *
  * Los llamadores existentes (extracción, visión, redacción, ping) pasan solo
  * `apiKey`: son tareas de Gemini y siguen yendo a Gemini sin cambio alguno.
+ *
+ *   · `elegido`  — el modelo que el usuario eligió en Ajustes (ya validado contra
+ *     una llamada REAL; ver catalogo.ts). Solo sombrea a las TAREAS_ELEGIBLES, y
+ *     el parámetro es opcional: quien no lo pasa se comporta EXACTAMENTE igual que
+ *     antes. Es un parámetro y no un estado global a propósito — un override
+ *     guardado en el módulo se filtraría entre peticiones de usuarios distintos.
  */
-export function modeloPara(tarea: Tarea, apiKey?: string, apiKey2?: string) {
+export function modeloPara(tarea: Tarea, apiKey?: string, apiKey2?: string, elegido?: string | null) {
   const def = REGISTRO[tarea];
 
-  // Tarea barata + 2ª clave presente ⇒ proveedor barato (Groq).
+  // Tarea barata + 2ª clave presente ⇒ proveedor barato (Groq). La elección del
+  // usuario es un modelo de Gemini: no toca esta rama (TAREAS_ELEGIBLES es google).
   if (def.proveedor === PROVEEDOR_BARATO && apiKey2) {
     return modeloBarato(def.modelo, apiKey2);
   }
@@ -242,7 +284,8 @@ export function modeloPara(tarea: Tarea, apiKey?: string, apiKey2?: string) {
   // (degradan al modelo fallback declarado en el registro). Degrada, no rompe.
   const key = apiKey || claveGemini();
   if (!key) throw new Error("Falta GEMINI_API_KEY");
-  const modelo = def.proveedor === "google" ? def.modelo : (def.modeloFallback ?? def.modelo);
+  const modelo =
+    def.proveedor === "google" ? modeloEfectivo(tarea, elegido) : (def.modeloFallback ?? def.modelo);
   return createGoogleGenerativeAI({ apiKey: key })(modelo);
 }
 
@@ -328,17 +371,31 @@ async function ejecutarPing(
 /**
  * Comprueba de verdad que GEMINI responde. Compartido por las dos rutas de salud.
  * `forzar: true` salta la ventana y llama sí o sí.
+ *
+ * ★ `elegido` — el modelo que el usuario haya elegido en Ajustes. EL ESPEJO VIVE
+ *   AQUÍ: si la extracción se mueve a otro modelo y el chequeo se queda en el del
+ *   registro, el panel diría «en línea» mientras la extracción devuelve 404. Se
+ *   pasa el mismo valor que se le pasa a la extracción y `modeloEfectivo` hace el
+ *   resto. Omitirlo deja el comportamiento EXACTAMENTE como estaba.
+ *
+ * ⚠ La ventana compartida se indexa por clave Y MODELO. Sin el modelo en la clave,
+ *   el «sí responde» de un modelo se reutilizaría para otro distinto: una caché que
+ *   miente es peor que no tener caché.
  */
-export async function pingProveedor(apiKey?: string, forzar = false): Promise<ResultadoPing> {
+export async function pingProveedor(
+  apiKey?: string,
+  forzar = false,
+  elegido?: string | null,
+): Promise<ResultadoPing> {
   const key = apiKey || claveGemini();
   if (!key) throw new Error("Falta GEMINI_API_KEY");
-  const modelo = modeloDe("ping-salud");
+  const modelo = modeloEfectivo("ping-salud", elegido);
   return ejecutarPing(
-    `google:${huella(key)}`,
+    `google:${huella(key)}:${modelo}`,
     modelo,
     async () => {
       const { text } = await generateText({
-        model: modeloPara("ping-salud", key),
+        model: modeloPara("ping-salud", key, undefined, elegido),
         prompt: "Responde exactamente con la palabra: OK",
       });
       return text;
