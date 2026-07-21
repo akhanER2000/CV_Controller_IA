@@ -4,6 +4,7 @@ import { createGoogleGenerativeAI } from "@ai-sdk/google";
 import { createClient } from "@/lib/supabase/server";
 import { listVariants, countMasterItems, getMasterItems, type MasterItem } from "@/lib/db/queries";
 import { createVariant, updateVariant, addItem, setAiOverride } from "@/lib/db/variants";
+import { preservesFacts } from "@/lib/verify";
 import { geminiApiKey } from "@/lib/extract/llm";
 import { getUserLlmKey } from "@/lib/account/byok";
 import {
@@ -79,15 +80,27 @@ function geminiVariantLLM(apiKey?: string): VariantLLM {
  *   { mode:'manual', name? }            → variante VACÍA. → { variant }
  *   { mode:'ai', prompt, name? }        → variante armada desde el master con IA.
  *                                         → { variant, notes }
+ *   { mode:'tailor', includeIds, targetTitle?, summary?, name? }
+ *                                       → variante YA ADAPTADA a un aviso, a partir de
+ *                                         una SELECCIÓN que el usuario acaba de revisar
+ *                                         (la propone /api/tailor/analizar). → { variant, notes }
  * La IA NUNCA inventa: ids se filtran a los del master; el summary pasa por
- * preservesFacts (variant-ai.ts) antes de convertirse en override.
+ * preservesFacts (variant-ai.ts / verify.ts) antes de convertirse en override.
  */
 export async function POST(req: Request) {
   const sb = await createClient();
   const { data: { user } } = await sb.auth.getUser();
   if (!user) return NextResponse.json({ error: "Sesión requerida." }, { status: 401 });
 
-  let body: { mode?: "manual" | "ai"; name?: string; prompt?: string };
+  let body: {
+    mode?: "manual" | "ai" | "tailor";
+    name?: string;
+    prompt?: string;
+    includeIds?: string[];
+    targetTitle?: string;
+    summary?: string;
+    notes?: string;
+  };
   try {
     body = await req.json();
   } catch {
@@ -100,6 +113,69 @@ export async function POST(req: Request) {
     if (mode === "manual") {
       const variant = await createVariant(sb, user.id, body.name);
       return NextResponse.json({ variant });
+    }
+
+    // mode === "tailor": crear una variante desde una SELECCIÓN ya revisada por el
+    // usuario (la tercera puerta de Variantes / el análisis de un aviso). No hay LLM
+    // aquí: la sastrería ya la hizo /api/tailor/analizar; esto solo MATERIALIZA lo que
+    // el usuario aprobó. Como todo lo demás, no se confía en el cliente: los ids se
+    // validan contra el master real y el summary vuelve a pasar preservesFacts.
+    if (mode === "tailor") {
+      const pedidos = Array.isArray(body.includeIds) ? body.includeIds.filter((x): x is string => typeof x === "string") : [];
+      if (pedidos.length === 0) {
+        return NextResponse.json({ error: "Selecciona al menos un item para la variante." }, { status: 400 });
+      }
+      const master = await getMasterItems(sb, user.id);
+      if (master.length === 0) {
+        return NextResponse.json({ error: "Tu master está vacío: importa o agrega items antes de crear una variante." }, { status: 422 });
+      }
+      const valido = new Set(master.map((m) => m.id));
+      const ordenados: string[] = [];
+      const vistos = new Set<string>();
+      for (const id of pedidos) {
+        if (valido.has(id) && !vistos.has(id)) {
+          vistos.add(id);
+          ordenados.push(id);
+        }
+      }
+      if (ordenados.length === 0) {
+        return NextResponse.json({ error: "Ninguno de los items seleccionados existe en tu master." }, { status: 422 });
+      }
+
+      const targetTitle = (body.targetTitle ?? "").trim();
+      const variant = await createVariant(sb, user.id, (body.name ?? "").trim() || targetTitle);
+
+      const variantItemByMaster = new Map<string, string>();
+      for (const id of ordenados) {
+        const row = await addItem(sb, user.id, variant.id, id);
+        variantItemByMaster.set(row.item_id as string, row.id as string);
+      }
+      if (targetTitle) {
+        await updateVariant(sb, user.id, variant.id, { target_title: targetTitle });
+      }
+
+      // El summary reformulado para el aviso vuelve a validarse aquí: llegó del cliente,
+      // y un cliente es cualquiera. Si introduce una cifra o entidad ausente, se ignora.
+      const summary = (body.summary ?? "").trim();
+      if (summary) {
+        const masterBody = master.map(masterItemText).join(" \n ");
+        if (preservesFacts(masterBody, summary).ok) {
+          const summaryMaster = master.find((m) => m.kind === "summary");
+          const summaryVariantItem = summaryMaster ? variantItemByMaster.get(summaryMaster.id) : undefined;
+          if (summaryMaster && summaryVariantItem) {
+            await setAiOverride(sb, user.id, summaryVariantItem, {
+              data: { text: summary },
+              sourceItem: summaryMaster.id,
+              reason: "Resumen redactado por IA para un aviso; hechos del master preservados.",
+            });
+          }
+        }
+      }
+
+      return NextResponse.json({
+        variant: { ...variant, target_title: targetTitle || variant.target_title },
+        notes: (body.notes ?? "").trim() || null,
+      });
     }
 
     // mode === "ai"

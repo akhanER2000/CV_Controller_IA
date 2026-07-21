@@ -174,12 +174,25 @@ export function VariantesScreen() {
   const [draftIds, setDraftIds] = useState<Set<string>>(new Set());
   const undo = useUndoToast();
 
-  // Creación de variantes.
+  // Creación de variantes. El tercer modo ("tailor") es la TERCERA PUERTA: crear un
+  // CV para una oferta concreta. Todo el gating de `disabled` mira `creating !== null`,
+  // así que ampliar el tipo basta para que las tres puertas se bloqueen entre sí.
   const [newName, setNewName] = useState("");
   const [aiPrompt, setAiPrompt] = useState("");
-  const [creating, setCreating] = useState<"manual" | "ai" | null>(null);
+  const [creating, setCreating] = useState<"manual" | "ai" | "tailor" | null>(null);
   const [createErr, setCreateErr] = useState("");
   const [aiResult, setAiResult] = useState<{ id: string; name: string; notes: string | null } | null>(null);
+
+  // Tercera puerta: el aviso pegado (o su enlace) y la PROPUESTA a revisar antes de crear.
+  const [offerDraft, setOfferDraft] = useState("");
+  const [tailorProposal, setTailorProposal] = useState<{
+    title: string;
+    includeIds: string[];
+    summary: string | null;
+    selectionCount: number;
+    gapCount: number;
+    notes: string | null;
+  } | null>(null);
 
   const mainRef = useRef<HTMLElement>(null);
 
@@ -459,6 +472,91 @@ export function VariantesScreen() {
     }
   }
 
+  // ── Tercera puerta: analizar una oferta y crear la variante ya adaptada ──────
+  // Paso 1: analizar (NO crea nada) → una propuesta que el usuario revisa.
+  // Paso 2: crear con la selección revisada. Nada se aplica en silencio, y el
+  // servidor revalida ids y resumen: aquí solo se orquesta y se enseña.
+  async function analizarOferta() {
+    const offer = offerDraft.trim();
+    if (creating || offer.length < 4) return;
+    setCreateErr("");
+    setTailorProposal(null);
+    setAiResult(null);
+    if (!supabaseEnabled) {
+      setCreateErr(t("variantes.aiLocalNote"));
+      return;
+    }
+    // Una sola línea que parece una dirección viaja como URL (JobPosting/portal);
+    // cualquier otra cosa, como texto pegado del aviso.
+    const looksUrl = /^https?:\/\/\S+$/i.test(offer) || (/^[\w.-]+\.[a-z]{2,}(\/\S*)?$/i.test(offer) && !/\s/.test(offer));
+    if (!looksUrl && offer.length < 20) {
+      setCreateErr(t("variantes.tailorErr"));
+      return;
+    }
+    setCreating("tailor");
+    try {
+      const res = await fetch("/api/tailor/analizar", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(looksUrl ? { url: offer } : { offerText: offer }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setCreateErr(data.error || t("variantes.tailorErr"));
+        return;
+      }
+      const a = data.analisis as {
+        tituloObjetivo: string;
+        seleccion: string[];
+        faltan: unknown[];
+        resumen: string | null;
+        notas: string;
+      };
+      setTailorProposal({
+        title: a.tituloObjetivo || "",
+        includeIds: Array.isArray(a.seleccion) ? a.seleccion : [],
+        summary: a.resumen ?? null,
+        selectionCount: Array.isArray(a.seleccion) ? a.seleccion.length : 0,
+        gapCount: Array.isArray(a.faltan) ? a.faltan.length : 0,
+        notes: a.notas || null,
+      });
+    } catch {
+      setCreateErr(t("variantes.tailorErr"));
+    } finally {
+      setCreating(null);
+    }
+  }
+
+  async function crearDesdeOferta() {
+    if (creating || !tailorProposal || tailorProposal.includeIds.length === 0) return;
+    setCreateErr("");
+    setCreating("tailor");
+    try {
+      const res = await fetch("/api/variants", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          mode: "tailor",
+          includeIds: tailorProposal.includeIds,
+          targetTitle: tailorProposal.title,
+          summary: tailorProposal.summary ?? undefined,
+          notes: tailorProposal.notes ?? undefined,
+        }),
+      });
+      if (!res.ok) throw new Error();
+      const { variant, notes } = (await res.json()) as { variant: { id: string; name: string }; notes?: string | null };
+      // Se reutiliza la tarjeta de resultado de IA: «creada — revísala → abrir».
+      setAiResult({ id: variant.id, name: variant.name, notes: notes ?? null });
+      setTailorProposal(null);
+      setOfferDraft("");
+      setAnnounce(t("variantes.announceAiCreated").replace("{nm}", variant.name));
+    } catch {
+      setCreateErr(t("variantes.tailorErr"));
+    } finally {
+      setCreating(null);
+    }
+  }
+
   // Panel de creación (se muestra en el lead y, con master, también en el vacío).
   const createPanel = (
     <div className="vr-create">
@@ -520,12 +618,100 @@ export function VariantesScreen() {
           </span>
         </div>
 
+        {/* ── TERCERA PUERTA · crear un CV para una oferta ──────────────────────
+            Mismo separador borderTop que las dos puertas de arriba. Analiza el
+            aviso (o su enlace) contra tu master y propone selección + título; tú
+            revisas antes de crear. Nunca inventa, nunca un score. */}
+        <div style={{ borderTop: "1px solid var(--border)", paddingTop: "14px" }}>
+          <label htmlFor="offerDraft" className="t-overline" style={{ display: "block", marginBottom: "8px" }}>
+            {t("variantes.tailorLabel")}
+          </label>
+          <textarea
+            id="offerDraft"
+            className="c-input"
+            rows={2}
+            placeholder={t("variantes.tailorPlaceholder")}
+            value={offerDraft}
+            onChange={(e) => setOfferDraft(e.target.value)}
+            style={{ resize: "vertical", minHeight: "54px", width: "100%", lineHeight: 1.5 }}
+          />
+          <div style={{ display: "flex", alignItems: "center", gap: "12px", marginTop: "10px", flexWrap: "wrap" }}>
+            <button
+              type="button"
+              className="c-btn c-btn--patina"
+              disabled={creating !== null || offerDraft.trim().length < 4}
+              onClick={() => void analizarOferta()}
+            >
+              {creating === "tailor" && !tailorProposal ? t("variantes.tailorAnalyzing") : t("variantes.tailorAnalyze")}
+            </button>
+            <span style={{ font: "400 var(--fs-micro)/1.5 var(--font-mono)", color: "var(--text-subtle)", maxWidth: "52ch" }}>
+              {t("variantes.tailorHint")}
+            </span>
+          </div>
+        </div>
+
         {createErr ? (
           <p style={{ font: "400 var(--fs-micro)/1.6 var(--font-mono)", color: "var(--danger)", margin: 0 }} role="alert">
             {createErr}
           </p>
         ) : null}
       </div>
+
+      {tailorProposal ? (
+        <div
+          className="c-card"
+          style={{
+            padding: "18px 20px",
+            marginTop: "14px",
+            maxWidth: "760px",
+            marginInline: "auto",
+            textAlign: "left",
+            borderColor: "var(--border-patina)",
+          }}
+        >
+          <span className="t-overline">{t("variantes.tailorProposalOverline")}</span>
+          {tailorProposal.title ? (
+            <p style={{ marginTop: "10px", color: "var(--text-muted)", display: "flex", gap: "8px", alignItems: "baseline", flexWrap: "wrap" }}>
+              <span className="t-overline">{t("variantes.tailorProposalTarget")}</span>
+              <b style={{ color: "var(--text)" }}>{tailorProposal.title}</b>
+            </p>
+          ) : null}
+          <p style={{ marginTop: "8px", color: "var(--text-muted)", lineHeight: 1.6 }}>
+            {t("variantes.tailorProposalSelection").replace("{n}", String(tailorProposal.selectionCount))}
+          </p>
+          <p style={{ marginTop: "4px", font: "400 var(--fs-micro)/1.7 var(--font-mono)", color: "var(--text-subtle)" }}>
+            {tailorProposal.gapCount > 0
+              ? t("variantes.tailorProposalGap").replace("{n}", String(tailorProposal.gapCount))
+              : t("variantes.tailorProposalNoGap")}
+          </p>
+          {tailorProposal.notes ? (
+            <p style={{ marginTop: "8px", font: "400 var(--fs-micro)/1.7 var(--font-mono)", color: "var(--text-subtle)" }}>
+              {t("variantes.aiResultNotePrefix")}{tailorProposal.notes}
+            </p>
+          ) : null}
+          <div style={{ marginTop: "14px", display: "flex", gap: "12px", flexWrap: "wrap" }}>
+            <button
+              type="button"
+              className="c-btn c-btn--patina"
+              disabled={creating !== null || tailorProposal.selectionCount === 0}
+              onClick={() => void crearDesdeOferta()}
+            >
+              {creating === "tailor" ? t("variantes.tailorCreating") : t("variantes.tailorCreate")}
+            </button>
+            <button
+              type="button"
+              className="c-btn c-btn--quiet"
+              disabled={creating !== null}
+              onClick={() => {
+                setTailorProposal(null);
+                setOfferDraft("");
+              }}
+            >
+              {t("variantes.tailorReset")}
+            </button>
+          </div>
+        </div>
+      ) : null}
 
       {aiResult ? (
         <div

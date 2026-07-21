@@ -1,16 +1,8 @@
-/* ── tailor — ESTADO VACÍO HONESTO. MURO. ──
-   Ver el porqué del vaciado en la cabecera de TailorScreen.tsx.
-
-   QUÉ PASÓ CON EL CSS VIEJO. Este archivo era el porte literal del 2º <style> de
-   corpus-design/04-pantallas/tailor.html: .tl-grid, .tl-left, .tl-work, .tl-hint,
-   .tl-title, .tl-g/.tl-gh/.tl-rows/.tl-row, .tl-gap-note, .tl-ref, .tl-prop,
-   .tl-phead, .tl-cols, .tl-pfoot. Todas ellas vestían la maqueta de los tres
-   grupos y las reformulaciones, que ya no existe: sin un solo nodo que las use,
-   quedarse serían 60 líneas de CSS muerto sugiriendo que la pantalla hace algo
-   que no hace. Cuando el análisis se construya de verdad, vuelven del HTML de
-   diseño (que sigue siendo el contrato) junto con el markup que las justifica.
-
-   Se conservan .tl-bar y .tl-main porque su markup sigue en pie. */
+/* ── tailor — PANTALLA CABLEADA (bloque C). MURO. ──
+   Entrada del aviso (pegar / URL / captura) y el análisis en TRES GRUPOS. Ver el
+   porqué en la cabecera de TailorScreen.tsx. El CSS viejo era el porte de una
+   maqueta con datos inventados; se retiró con ella. Este es el CSS del markup que
+   SÍ existe y pinta datos reales verificados por el servidor. */
 .tl-bar{position:sticky;top:var(--header-h);z-index:9;height:52px;background:color-mix(in srgb,var(--bg) 88%,transparent);
   backdrop-filter:blur(8px);border-bottom:1px solid var(--border)}
 .tl-bar .c-container{height:100%;display:flex;align-items:center;gap:14px}
@@ -37,4 +29,70 @@
   .tl-out{align-items:flex-start}
   /* Táctil: 44px mínimo (handoff a11y). Los c-btn del sistema quedan por debajo. */
   .tl-out .c-btn{min-height:44px}
+}
+
+/* ── Envoltura de lectura ────────────────────────────────────────────────────
+   Ni tan estrecha como una columna de prosa ni tan ancha como una parrilla: es
+   texto que se lee y tarjetas que se comparan. */
+.tl-wrap{max-width:880px;margin-inline:auto;padding-top:12px}
+
+/* ── Entrada del aviso ──────────────────────────────────────────────────────── */
+.tl-entry{margin-top:26px;padding:20px 22px;display:block}
+.tl-entry-body{margin-top:8px;color:var(--text-muted);font-size:var(--fs-ui);line-height:1.7;max-width:64ch}
+.tl-tabs{display:flex;gap:6px;margin-top:16px;flex-wrap:wrap}
+.tl-tab{padding:7px 14px;border:1px solid var(--border);border-radius:999px;background:transparent;
+  color:var(--text-muted);font:500 var(--fs-micro)/1 var(--font-mono);letter-spacing:.04em;cursor:pointer}
+.tl-tab:hover{border-color:var(--border-strong);color:var(--text)}
+.tl-tab.on{border-color:var(--border-patina);color:var(--text);background:color-mix(in srgb,var(--border-patina) 12%,transparent)}
+.tl-paste{margin-top:14px;width:100%;resize:vertical;min-height:120px;line-height:1.55}
+.tl-urlrow,.tl-filerow{margin-top:14px;display:flex;flex-direction:column;gap:8px}
+.tl-urlrow .c-input{max-width:520px}
+.tl-hint{color:var(--text-subtle);font:400 var(--fs-micro)/1.6 var(--font-mono);max-width:64ch}
+.tl-filepick{cursor:pointer;align-self:flex-start;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tl-actions{display:flex;align-items:center;gap:14px;margin-top:16px;flex-wrap:wrap}
+.tl-score{color:var(--text-subtle);font:400 var(--fs-micro)/1.5 var(--font-mono);max-width:52ch}
+.tl-score--result{display:block;margin-top:6px}
+.tl-err{color:var(--danger);font:400 var(--fs-micro)/1.6 var(--font-mono);margin:8px 0 0}
+
+/* ── El análisis ────────────────────────────────────────────────────────────── */
+.tl-rhead{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-top:6px}
+.tl-target{margin-top:12px;color:var(--text-muted);display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}
+.tl-target b{color:var(--text);font-size:var(--fs-h3)}
+.tl-warns{margin:12px 0 0;padding-left:18px;color:var(--text-subtle);font:400 var(--fs-micro)/1.7 var(--font-mono)}
+.tl-warns li{margin:4px 0}
+
+.tl-group{margin-top:26px}
+.tl-ghead{margin-bottom:12px}
+.tl-ghead h3{font-size:var(--fs-h3)}
+.tl-gnote{display:block;margin-top:5px;color:var(--text-muted);font:400 var(--fs-data)/1.6 var(--font-mono);max-width:70ch}
+
+/* Item de un grupo (HAVE / ADD). */
+.tl-item{display:flex;align-items:center;gap:14px;padding:14px 18px;margin-top:10px;flex-wrap:wrap}
+.tl-item--add{border-color:var(--border-patina)}
+.tl-itext{flex:1;min-width:240px;color:var(--text);line-height:1.55}
+.tl-cubre{color:var(--text-subtle);font:400 var(--fs-micro)/1.4 var(--font-mono)}
+.tl-done{color:var(--text-patina, var(--text-muted));font:500 var(--fs-micro)/1 var(--font-mono)}
+
+/* GRUPO 3 — el hueco. Filo punteado a la izquierda: falta algo, no ha fallado nada. */
+.tl-gaps{display:grid;gap:8px}
+.tl-gap{padding:10px 16px;border-left:2px dashed var(--border-strong);
+  display:flex;align-items:baseline;gap:12px;flex-wrap:wrap}
+.tl-gap b{color:var(--text)}
+.tl-cite{color:var(--text-subtle);font:400 var(--fs-micro)/1.5 var(--font-mono)}
+
+/* Reformulaciones — original contra propuesto. */
+.tl-reform{padding:16px 18px;margin-top:10px}
+.tl-rcols{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+.tl-rcol .t-overline{display:block;margin-bottom:6px}
+.tl-rtext{color:var(--text);line-height:1.55;font-size:var(--fs-data)}
+.tl-rtext--orig{color:var(--text-muted)}
+.tl-rmotivo{display:block;margin-top:12px;color:var(--text-subtle);font:400 var(--fs-micro)/1.5 var(--font-mono)}
+.tl-ractions{display:flex;align-items:center;gap:14px;margin-top:14px;flex-wrap:wrap}
+
+.tl-notes{margin-top:24px;color:var(--text-subtle);font:400 var(--fs-micro)/1.7 var(--font-mono);max-width:70ch}
+
+@media (max-width:768px){
+  .tl-rcols{grid-template-columns:1fr}
+  .tl-item .c-btn,.tl-reform .c-btn,.tl-tab{min-height:44px}
+  .tl-tab{display:flex;align-items:center}
 }

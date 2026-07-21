@@ -156,13 +156,29 @@ describe("costuras · ninguna pantalla presenta datos de una persona inventada",
     expect(fuenteSalud).not.toContain("dangerouslySetInnerHTML");
   });
 
-  it("las dos pantallas no leen NADA del usuario: lo que no se lee no se pinta mal", () => {
-    // Invariante de hoy, y la razón por la que estas pantallas ya no pueden
-    // mentir. Si algún día se cablean de verdad, este test debe caer — y ese es
-    // justo el momento de volver a demostrar que lo que pintan es real.
-    for (const [nombre, src] of [["TailorScreen", fuenteTailor], ["SaludScreen", fuenteSalud]] as const) {
-      expect(src.includes("fetch("), `${nombre} hace fetch: demuestra que lo que pinta es real`).toBe(false);
-    }
+  it("Salud sigue sin leer nada del usuario: lo que no se lee no se pinta mal", () => {
+    // SaludScreen sigue siendo un vacío honesto: no lee la variante, así que no
+    // puede pintar el análisis de nadie como si fuera tuyo. El día que se cablee,
+    // esta línea cae y toca demostrar que lo que pinta es real (como abajo con
+    // Tailor).
+    expect(
+      fuenteSalud.includes("fetch("),
+      "SaludScreen hace fetch: ya no es un vacío honesto, hay que probar que lo que pinta es real",
+    ).toBe(false);
+  });
+
+  it("★ Tailor SÍ lee del usuario ahora — y por eso lo que pinta es suyo, no de una maqueta", () => {
+    // Tailor dejó de ser un vacío honesto: adapta el CV a una oferta contra el
+    // master REAL del usuario. La garantía cambia de bando — antes era «no hace
+    // fetch, no puede mentir»; ahora es «hace fetch a datos reales, y ningún
+    // rastro de maqueta sobrevive» (lo cubren los tests de RASTROS_INVENTADOS y
+    // de las constantes de arriba). Que lea de verdad es el objetivo, no el fallo.
+    expect(
+      fuenteTailor.includes("fetch("),
+      "TailorScreen ya no hace fetch: se ha quedado en maqueta en vez de leer el master real",
+    ).toBe(true);
+    // Y lee su [id] de la ruta, no un id hardcodeado de una variante inventada.
+    expect(fuenteTailor).toContain("useParams");
   });
 
   it("el conteo de hallazgos de salud ya no existe: no se puede contar lo que no se midió", () => {

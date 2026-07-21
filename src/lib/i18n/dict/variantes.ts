@@ -17,6 +17,24 @@ export const variantes = {
     "variantes.aiHint":
       "La IA elige del master lo que encaja y propone un título. Tú lo revisas antes de nada — no se aplica en silencio.",
 
+    // Panel de creación — TERCERA PUERTA: crear un CV para una oferta concreta.
+    "variantes.tailorLabel": "Crear un CV para una oferta",
+    "variantes.tailorPlaceholder": "Pega el aviso al que te postulas (o su enlace https://…)…",
+    "variantes.tailorAnalyze": "Analizar la oferta",
+    "variantes.tailorAnalyzing": "Leyendo la oferta…",
+    "variantes.tailorHint":
+      "La IA propone qué items de tu master usar y un título objetivo. Lo revisas antes de crear nada — nunca inventa, nunca un score.",
+    "variantes.tailorErr": "No se pudo leer la oferta. Pega el texto directamente o intenta con otra.",
+    "variantes.tailorProposalOverline": "Propuesta para la oferta — revísala",
+    "variantes.tailorProposalTarget": "Puesto objetivo: ",
+    "variantes.tailorProposalSelection": "Items de tu master que entrarían en la variante: {n}.",
+    "variantes.tailorProposalGap": "Requisitos del aviso que no están en tu master (no se inventan): {n}.",
+    "variantes.tailorProposalNoGap": "Todo lo que pide el aviso lo cubre tu master.",
+    "variantes.tailorCreate": "Crear la variante con esta selección",
+    "variantes.tailorCreating": "Creando…",
+    "variantes.tailorEmpty": "La oferta no coincidió con nada de tu master. Revisa que pegaste el aviso correcto.",
+    "variantes.tailorReset": "Empezar de nuevo",
+
     // Panel de creación — manual.
     "variantes.nameAria": "Nombre de la nueva variante",
     "variantes.namePlaceholder": "Nombre (opcional): «Backend — Fintech»",
@@ -104,6 +122,24 @@ export const variantes = {
     "variantes.aiCreating": "Building…",
     "variantes.aiHint":
       "The AI picks what fits from your master and proposes a title. You review it before anything — nothing is applied silently.",
+
+    // Creation panel — THIRD DOOR: create a resume for a specific posting.
+    "variantes.tailorLabel": "Create a resume for a posting",
+    "variantes.tailorPlaceholder": "Paste the posting you're applying to (or its https://… link)…",
+    "variantes.tailorAnalyze": "Analyze the posting",
+    "variantes.tailorAnalyzing": "Reading the posting…",
+    "variantes.tailorHint":
+      "The AI proposes which of your master items to use and a target title. You review before anything is created — it never invents, never a score.",
+    "variantes.tailorErr": "Couldn't read the posting. Paste the text directly or try another.",
+    "variantes.tailorProposalOverline": "Proposal for the posting — review it",
+    "variantes.tailorProposalTarget": "Target role: ",
+    "variantes.tailorProposalSelection": "Items from your master that would go in: {n}.",
+    "variantes.tailorProposalGap": "Requirements the posting asks for that aren't in your master (not invented): {n}.",
+    "variantes.tailorProposalNoGap": "Everything the posting asks for is covered by your master.",
+    "variantes.tailorCreate": "Create the variant with this selection",
+    "variantes.tailorCreating": "Creating…",
+    "variantes.tailorEmpty": "The posting didn't match anything in your master. Make sure you pasted the right posting.",
+    "variantes.tailorReset": "Start over",
 
     "variantes.nameAria": "Name for the new variant",
     "variantes.namePlaceholder": "Name (optional): 'Backend — Fintech'",
