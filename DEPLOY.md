@@ -64,7 +64,35 @@
 ## 2 · Vercel
 
 - Importa el repo de GitHub en Vercel (framework: Next.js, detección automática).
-- **Environment Variables:** las 4 de arriba + `NEXT_PUBLIC_SITE_URL` (la URL del deploy).
+- **Environment Variables:** las 4 de arriba + `NEXT_PUBLIC_SITE_URL` (la URL del deploy)
+  + las de IA y cifrado de la tabla siguiente. La lista completa, con comentarios, está
+  en [`.env.local.example`](.env.local.example).
+
+| Variable | ¿Obligatoria? | Sin ella |
+| --- | --- | --- |
+| `GEMINI_API_KEY` | sí, para la IA | La extracción no funciona salvo que el usuario ponga su propia clave (BYOK). |
+| `CORPUS_ENCRYPTION_KEY` | sí, para BYOK | **No se guarda ninguna clave BYOK** y el campo de Ajustes sale cerrado con el motivo. |
+| `ANTHROPIC_API_KEY` | no | Nada: hoy ningún código la usa (el panel de salud lo dice tal cual). |
+| `AI_GATEWAY_API_KEY` | no | Nada: solo si usas el AI Gateway en vez de las claves directas. |
+
+- **`CORPUS_ENCRYPTION_KEY` — el candado de las claves BYOK.** Son 32 bytes en **base64**
+  (AES-256-GCM). Genérala con **uno** de estos dos comandos, que producen exactamente ese
+  formato (44 caracteres acabados en `=`):
+
+  ```bash
+  node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
+  openssl rand -base64 32
+  ```
+
+  Pégala en `.env.local` (local) y en Vercel → *Environment Variables* (Production y
+  Preview), y **redespliega**. `openssl rand -hex 32` **no vale**: 64 caracteres hex leídos
+  como base64 dan 48 bytes y `src/lib/crypto.ts` los rechaza — te quedarías sin cifrado
+  creyendo que lo configuraste. Si la pierdes o la cambias, las claves BYOK ya guardadas
+  quedan ilegibles: se muestran como *aparcadas* y hay que volver a pegarlas.
+- **Clave de Groq (proveedor barato):** no es una variable de entorno. Se guarda por
+  usuario y cifrada desde *Ajustes → «Segunda clave»*, y necesita aplicada la migración
+  `supabase/migrations/0006_byok_segundo_proveedor.sql` (columna `llm_api_key_2`). Sin
+  ella todo va a Gemini: degrada, no rompe — y el panel de salud dice cuál de las dos falta.
 - **Settings → Functions → Fluid Compute: ON.** (Y `maxDuration = 300` en la ruta de ingesta, Fase 4.)
 - Redeploy. La CI de GitHub (`.github/workflows/ci.yml`) corre typecheck + el round-trip ATS en cada push.
 

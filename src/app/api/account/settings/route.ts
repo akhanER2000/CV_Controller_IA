@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { encryptionAvailable, encryptSecret } from "@/lib/crypto";
+import { decryptSecret, encryptionAvailable, encryptSecret } from "@/lib/crypto";
 import { estadoLlmKey2 } from "@/lib/account/byok";
 
 export const runtime = "nodejs";
@@ -9,6 +9,12 @@ export const runtime = "nodejs";
  * Ajustes del usuario (user_settings). GET devuelve todo MENOS las claves BYOK
  * (solo `hasKey` / `hasKey2`): las claves nunca vuelven al cliente (02 §2). POST
  * persiste los campos enviados con la sesión del usuario (RLS por auth.uid()).
+ *
+ * ★ EL CANDADO. Sin CORPUS_ENCRYPTION_KEY no se persiste NINGUNA clave (se aparca), y
+ *   el GET lo dice con `encryptionAvailable` para que la pantalla pueda CERRAR el campo
+ *   en vez de aceptar un secreto que va a rechazar. `keyParked`/`key2Parked` distinguen
+ *   «hay clave guardada» de «hay clave que sirve»: un blob que ya no se puede descifrar
+ *   (maestra perdida o rotada) se marca aparcado, nunca se muestra como buena.
  *
  * ★ §H · SEGUNDA CLAVE (Groq, router por coste). Se lee y se escribe SIEMPRE en su
  *   propia consulta, nunca junto al resto: la columna llm_api_key_2 (migración 0006)
@@ -29,6 +35,27 @@ export async function GET() {
   // La 2ª clave se sondea aparte (columna que puede faltar). Solo la PRESENCIA.
   const est2 = await estadoLlmKey2(sb, user.id);
 
+  // ★ ¿Hay candado? Se expone el ESTADO del cifrado (un booleano de configuración),
+  //   nunca la clave maestra ni nada derivado de ella. Lo necesita la UI para CERRAR
+  //   el campo BYOK en vez de dejar escribir un secreto que después va a rechazar:
+  //   un campo que acepta texto y luego lo tira parece roto y hace perder el tiempo.
+  const cifradoDisponible = encryptionAvailable();
+
+  // ¿La 1ª clave guardada es USABLE hoy? Se comprueba descifrando el blob que ya
+  // tenemos (sin consulta extra). Se distingue «hay clave» de «hay clave que sirve»:
+  // si se perdió o se rotó CORPUS_ENCRYPTION_KEY, el valor sigue en la base pero es
+  // ilegible — decirlo «guardada ✓» sería el ✓ optimista que este producto no admite.
+  // Es la MISMA distinción que estadoLlmKey2 hace para la 2ª clave (byok.ts §H).
+  const blob1 = (data?.llm_api_key as string | null | undefined) ?? null;
+  let clave1Usable = false;
+  if (blob1 && blob1.startsWith("v1:") && cifradoDisponible) {
+    try {
+      clave1Usable = !!decryptSecret(blob1).trim();
+    } catch {
+      clave1Usable = false; // maestra distinta o blob corrupto: aparcada, nunca en claro
+    }
+  }
+
   return NextResponse.json({
     ui_lang: data?.ui_lang ?? "es",
     theme: data?.theme ?? "dark",
@@ -38,6 +65,9 @@ export async function GET() {
     provider: (user.app_metadata?.provider as string) ?? "email",
     hasKey: !!data?.llm_api_key, // la clave NO se devuelve
     hasKey2: est2.almacenada, // la 2ª clave tampoco se devuelve, solo si existe
+    encryptionAvailable: cifradoDisponible, // hay CORPUS_ENCRYPTION_KEY válida en el servidor
+    // 1ª clave guardada de antes pero hoy indescifrable (falta o cambió la maestra).
+    keyParked: !!blob1 && !clave1Usable,
     key2Parked: est2.aparcada, // guardada pero indescifrable (falta CORPUS_ENCRYPTION_KEY)
     key2Unavailable: est2.columnaAusente, // migración 0006 sin aplicar
   });
@@ -106,5 +136,15 @@ export async function POST(req: Request) {
     }
   }
 
-  return NextResponse.json({ ok: true, keyParked, key2Parked, key2Unavailable });
+  // `encryptionAvailable` viaja también en la respuesta del POST: si el estado que
+  // tenía el cliente estaba viejo (se guardó ANTES de que el servidor perdiera la
+  // clave maestra), la pantalla puede cerrar el campo en el acto en vez de esperar
+  // a la siguiente carga. El motivo real acompaña siempre al rechazo.
+  return NextResponse.json({
+    ok: true,
+    keyParked,
+    key2Parked,
+    key2Unavailable,
+    encryptionAvailable: encryptionAvailable(),
+  });
 }

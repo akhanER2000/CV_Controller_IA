@@ -27,6 +27,22 @@ export function encryptionAvailable(): boolean {
   return masterKey() !== null;
 }
 
+/**
+ * Genera un valor VÁLIDO para CORPUS_ENCRYPTION_KEY: 32 bytes aleatorios en base64.
+ *
+ * Existe para que el formato que la documentación pide y el que `masterKey()` acepta
+ * sean el MISMO objeto, no dos frases que hay que mantener sincronizadas a mano. Es
+ * exactamente lo que producen los dos comandos documentados en `.env.local.example`:
+ *   node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
+ *   openssl rand -base64 32
+ * Ojo con la trampa clásica: `openssl rand -hex 32` da 64 caracteres hex que al
+ * decodificarse como base64 dan 48 bytes → masterKey() lo RECHAZA y la app se queda
+ * sin cifrado creyendo que la configuró. El test cubre ese caso.
+ */
+export function generarClaveMaestra(): string {
+  return randomBytes(32).toString("base64");
+}
+
 /** Cifra un secreto → "v1:iv:tag:ciphertext" (todo base64). Lanza si no hay clave. */
 export function encryptSecret(plain: string): string {
   const key = masterKey();
