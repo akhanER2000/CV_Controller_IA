@@ -47,6 +47,93 @@
 .imp-li li .h{font:500 var(--fs-ui)/1.4 var(--font-sans);color:var(--text)}
 .imp-li li .d{font:400 var(--fs-data)/1.6 var(--font-sans);color:var(--text-muted)}
 .imp-li li .d .c-kbd{margin:0 1px}
+/* ── EL ÍNDICE DE LAS TRES PUERTAS ──────────────────────────────────────────
+   Tres tarjetas IDÉNTICAS en tamaño, borde y tipografía. Lo único que las
+   distingue es la etiqueta de coste, que es la diferencia REAL entre ellas: dos
+   gastan tokens y una no. Si la tercera se pintara más pequeña o más apagada
+   por ser "la alternativa", el copy diría una cosa y la jerarquía visual otra —
+   y la jerarquía visual siempre gana. */
+.imp-doors{width:100%;margin-top:34px;text-align:left}
+.imp-doors__h{display:block;margin-bottom:12px}
+.imp-doors__row{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.imp-door{display:flex;flex-direction:column;align-items:flex-start;gap:6px;padding:16px 16px 14px;
+  text-align:left;border:1px solid var(--border-strong);border-radius:var(--radius-md);
+  background:color-mix(in srgb,var(--surface) 42%,transparent);cursor:pointer;
+  transition:border-color .14s,background-color .14s}
+.imp-door:hover{border-color:var(--border-patina);background:var(--surface)}
+.imp-door .n{font:500 var(--fs-micro)/1 var(--font-mono);letter-spacing:.1em;color:var(--accent-text)}
+.imp-door .h{font:500 var(--fs-body)/1.35 var(--font-sans);color:var(--text)}
+.imp-door .d{flex:1;font:400 var(--fs-data)/1.55 var(--font-sans);color:var(--text-muted)}
+/* La etiqueta de coste: lo primero que el usuario necesita saber y lo último
+   que se contaba. Va en píldora para que se lea de un vistazo, no en letra
+   pequeña al pie. */
+.imp-door .cost{margin-top:4px;padding:5px 8px;border-radius:99px;border:1px solid var(--border);
+  font:500 10px/1.4 var(--font-mono);letter-spacing:.06em;text-transform:uppercase}
+.imp-door .cost--ia{color:var(--text-subtle)}
+.imp-door .cost--free{color:var(--accent-text);border-color:var(--border-patina);
+  background:color-mix(in srgb,var(--accent-text) 8%,transparent)}
+.imp-door .go{margin-top:8px;font:500 var(--fs-micro)/1 var(--font-mono);color:var(--text-subtle)}
+.imp-door:hover .go{color:var(--accent-text)}
+
+/* ── PUERTA 3 · LA PLANTILLA ESTRUCTURADA ───────────────────────────────────
+   Mismo molde que .imp-li (título + párrafo + <ol> numerado): un procedimiento
+   de tres pasos explicado con dignidad. Clases propias porque el contenido no
+   es el mismo —aquí dentro viven un ancla de descarga, un bloque copiable, una
+   zona de arrastre y un informe— y meter bloques dentro del <span class="d">
+   de .imp-li sería HTML inválido. */
+.imp-pl{width:100%;margin-top:34px;text-align:left;padding:24px 26px}
+.imp-pl:focus{outline:none}
+.imp-pl h3{font-size:17px;margin-top:12px}
+.imp-pl__lead{margin-top:6px;max-width:64ch;color:var(--text-muted);font-size:var(--fs-ui);line-height:1.65}
+.imp-pl ol{list-style:none;padding:0;margin:18px 0 0;display:flex;flex-direction:column}
+.imp-pl li{display:grid;grid-template-columns:28px 1fr;gap:6px 14px;padding:16px 0;border-top:1px solid var(--border)}
+.imp-pl li .n{grid-row:span 2;font:500 13px/1.4 var(--font-mono);color:var(--accent-text)}
+.imp-pl li .h{font:500 var(--fs-body)/1.4 var(--font-sans);color:var(--text)}
+/* min-width:0 — sin esto el <pre> del bloque copiable estira la columna del
+   grid y la página entera desborda en horizontal. */
+.imp-pl li .d{min-width:0;font:400 var(--fs-ui)/1.6 var(--font-sans);color:var(--text-muted)}
+.imp-pl li .d>p{margin:0;max-width:64ch}
+.imp-pl__dl{margin-top:12px}
+.bc.imp-pl__prompt{margin-top:12px}
+.dz.imp-pl__drop{margin-top:14px}
+
+.imp-pl__file{display:flex;align-items:center;flex-wrap:wrap;gap:8px;margin-top:12px;
+  font:400 var(--fs-data)/1.5 var(--font-mono);color:var(--text-muted)}
+.imp-pl__file .k{color:var(--text-subtle)}
+.imp-pl__file b{font-weight:500;color:var(--text)}
+.imp-pl__file .busy{margin-left:auto;color:var(--accent-text)}
+.imp-pl__otro{margin-left:auto;padding:5px 8px;border-radius:5px;border:1px solid var(--border);
+  font:500 var(--fs-micro)/1 var(--font-mono);color:var(--text-subtle)}
+.imp-pl__otro:hover{color:var(--text);border-color:var(--border-patina)}
+.imp-pl__err{margin-top:12px;max-width:64ch;font:500 var(--fs-ui)/1.55 var(--font-sans);color:var(--danger)}
+.imp-pl__raw{margin-top:12px}
+.imp-pl__raw p{margin:0 0 8px;max-width:64ch;font:500 var(--fs-ui)/1.55 var(--font-sans);color:var(--danger)}
+.imp-pl__raw pre{margin:0;padding:12px;max-height:200px;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere;
+  background:var(--surface-sunken);border:1px solid var(--border);border-radius:var(--radius-sm);
+  font:400 var(--fs-data)/1.6 var(--font-mono);color:var(--text-subtle)}
+
+/* El informe previo: se lee ANTES de que nada se mueva. Borde de pátina porque
+   es el momento en el que el sistema te está enseñando su lectura, no un
+   resultado ya consumado. */
+.imp-pl__inf{margin-top:16px;padding:16px 18px;background:var(--surface-sunken);
+  border:1px solid var(--border-patina);border-radius:var(--radius-md)}
+.imp-pl__tot{margin:10px 0 0;font:500 var(--fs-lead)/1.35 var(--font-sans);color:var(--text)}
+.imp-pl__blk{margin-top:16px;padding-top:12px;border-top:1px solid var(--border)}
+.imp-pl__k{display:block;font:500 var(--fs-micro)/1 var(--font-mono);letter-spacing:.08em;
+  text-transform:uppercase;color:var(--text-subtle)}
+.imp-pl__blkd{margin:8px 0 0;max-width:70ch;font:400 var(--fs-micro)/1.6 var(--font-sans);color:var(--text-muted)}
+.imp-pl__tipos{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+.imp-pl__tipos .c-chip b{font-weight:500;color:var(--text)}
+.imp-pl__lines{margin:10px 0 0;padding:0;list-style:none;display:flex;flex-direction:column;gap:6px}
+.imp-pl__lines li{display:flex;align-items:baseline;gap:8px;
+  font:400 var(--fs-data)/1.6 var(--font-mono);color:var(--text-muted)}
+.imp-pl__lines .ln{flex:none;color:var(--text-subtle)}
+.imp-pl__lines .tx{min-width:0;overflow-wrap:anywhere}
+.imp-pl__acts{display:flex;align-items:center;flex-wrap:wrap;gap:12px;margin-top:18px}
+.imp-pl__cancel{padding:6px 8px;border-radius:5px;font:500 var(--fs-micro)/1 var(--font-mono);color:var(--text-subtle)}
+.imp-pl__cancel:hover{color:var(--danger)}
+.imp-pl__sub{margin:12px 0 0;max-width:70ch;font:400 var(--fs-micro)/1.6 var(--font-sans);color:var(--text-subtle)}
+
 .imp-cta{margin-top:40px;display:flex;flex-direction:column;align-items:center;gap:18px}
 .imp-alt{font-size:var(--fs-ui)}
 .imp-note{margin-top:46px;max-width:52ch;font:400 var(--fs-micro)/1.8 var(--font-mono);color:var(--text-subtle)}
@@ -100,6 +187,11 @@
   .imp-ta{min-height:190px;padding:20px 20px 10px}
   .imp-meta,.imp-detect,.imp-files{padding-inline:20px}
   .dz.imp-drop{margin-inline:20px}
+  /* Las tres puertas se apilan; siguen siendo tres tarjetas iguales, ninguna
+     se pliega ni se esconde tras un "ver más". */
+  .imp-doors__row{grid-template-columns:1fr}
+  .imp-pl{padding:20px}
+  .imp-pl li{grid-template-columns:24px 1fr;gap:6px 10px}
   .fin-grid{grid-template-columns:repeat(2,1fr)}
   .ing-count{font-size:56px}
   /* En estrecho manda LA SALIDA: cae el rótulo de paso (y su separador, que si

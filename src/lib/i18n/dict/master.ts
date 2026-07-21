@@ -29,6 +29,12 @@ export const master = {
     "master.intro.b": "Haz clic en cualquier texto y edítalo ahí mismo",
     "master.intro.c": "; cada item recuerda de dónde salió.",
     "master.addManual": "+ Añadir item manual",
+    // La tercera vía desde el master: el .md del formato corpus/1, el mismo
+    // fichero que Corpus vuelve a leer sin IA. El title dice para qué sirve
+    // (la etiqueta tiene que caber en una barra ya llena).
+    "master.plantilla.descargar": "Descargar .md",
+    "master.plantilla.title":
+      "Descarga tu registro en el formato .md que Corpus vuelve a leer sin IA. Edítalo donde quieras y súbelo por la puerta 3 de Importar.",
     "master.add.role": "Rol de experiencia",
     "master.add.project": "Proyecto",
     "master.add.education": "Educación",
@@ -108,6 +114,11 @@ export const master = {
     "master.empty.body": "Vuélcalo con IA en 5 minutos, o escríbelo de cero con la IA apagada.",
     "master.empty.dump": "Volcar lo que tengo",
     "master.empty.scratch": "Escribir de cero",
+    // La tercera vía: con el master vacío es donde más vale.
+    "master.empty.plantilla": "Descargar plantilla .md",
+    "master.empty.plantillaNote":
+      "O rellena una plantilla: sin IA y sin coste. Te bajas un .md con las secciones puestas, lo rellenas a mano o con la IA que ya pagas, y lo subes. Lo leemos con un parser, así que no hay nada que alucinar.",
+    "master.empty.plantillaHow": "Cómo funciona →",
 
     // Notas de guardado (transitorias)
     "master.saved.localEdit": "editado (modo local)",
@@ -325,6 +336,9 @@ export const master = {
     "master.intro.b": "Click any text and edit it in place",
     "master.intro.c": "; every item remembers where it came from.",
     "master.addManual": "+ Add manual item",
+    "master.plantilla.descargar": "Download .md",
+    "master.plantilla.title":
+      "Download your record in the .md format Corpus reads back without AI. Edit it wherever you like and upload it through door 3 in Import.",
     "master.add.role": "Experience role",
     "master.add.project": "Project",
     "master.add.education": "Education",
@@ -404,6 +418,10 @@ export const master = {
     "master.empty.body": "Dump it with AI in 5 minutes, or write it from scratch with AI off.",
     "master.empty.dump": "Dump what I have",
     "master.empty.scratch": "Write from scratch",
+    "master.empty.plantilla": "Download template .md",
+    "master.empty.plantillaNote":
+      "Or fill in a template: no AI, no cost. You download a .md with the sections laid out, fill it in by hand or with the AI you already pay for, and upload it. We read it with a parser, so there's nothing to hallucinate.",
+    "master.empty.plantillaHow": "How it works →",
 
     // Save notes (transient)
     "master.saved.localEdit": "edited (local mode)",

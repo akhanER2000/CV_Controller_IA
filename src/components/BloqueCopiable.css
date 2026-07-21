@@ -1,0 +1,83 @@
+/* ── BloqueCopiable.css — el texto que el usuario se lleva a otra parte ──
+   Prefijo propio `bc-`; no toca ni redefine ninguna clase del sistema
+   (globals.css es intocable). Sin @keyframes ni transform: solo transiciones de
+   color y borde, como DropZone.css — nada que revisar bajo
+   prefers-reduced-motion porque no se introduce ningún movimiento.
+
+   El bloque tiene que LEERSE, no solo copiarse: quien no confía en un botón de
+   portapapeles (o a quien le falla) necesita ver el texto entero y poder
+   seleccionarlo. De ahí el <pre> con scroll propio y `user-select:text`. */
+
+.bc {
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-sunken);
+  overflow: hidden;
+}
+
+.bc-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 9px 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.bc-label {
+  font: 500 var(--fs-micro) / 1 var(--font-mono);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-subtle);
+  min-width: 0;
+}
+
+.bc-copy {
+  flex: none;
+  font: 500 var(--fs-micro) / 1 var(--font-mono);
+  color: var(--text-muted);
+  padding: 7px 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: 5px;
+  background: transparent;
+  cursor: pointer;
+  transition: color 0.14s, border-color 0.14s, background-color 0.14s;
+}
+
+.bc-copy:hover {
+  color: var(--accent-text);
+  border-color: var(--border-patina);
+}
+
+.bc-pre {
+  margin: 0;
+  padding: 14px 16px;
+  /* Alto contenido: el prompt es largo a propósito (dice las reglas del formato
+     una a una). Se acota para que no empuje la puerta entera fuera de pantalla,
+     con scroll propio — el contenedor de la página nunca desborda en horizontal. */
+  max-height: 260px;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  user-select: text;
+  font: 400 var(--fs-data) / 1.7 var(--font-mono);
+  color: var(--text-muted);
+}
+
+.bc-status {
+  margin: 0;
+  padding: 0 12px;
+  max-height: 0;
+  overflow: hidden;
+  font: 400 var(--fs-micro) / 1.5 var(--font-sans);
+  color: var(--danger);
+}
+
+/* El aviso solo ocupa sitio cuando hay algo que decir: la live region existe
+   siempre en el DOM (para que se anuncie) pero no deja un hueco en reposo. */
+.bc-status.is-fallo {
+  max-height: none;
+  padding: 10px 12px;
+  border-top: 1px dashed color-mix(in srgb, var(--danger) 45%, transparent);
+}

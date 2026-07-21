@@ -73,6 +73,14 @@
 .ms-add:hover{color:var(--accent-text);border-color:var(--border-patina)}
 .ms-empty{max-width:520px;margin:80px auto;text-align:center}
 .ms-empty p{margin-top:12px;color:var(--text-muted)}
+/* La tercera vía en el estado vacío: separada por una regla porque NO es una de
+   las dos puertas de arriba (volcar / escribir), es la que no gasta IA. Con el
+   mismo peso de botón, no en letra pequeña. */
+.ms-empty__pl{margin-top:26px;padding-top:20px;border-top:1px solid var(--border)}
+.ms-empty__pl p{margin:0;font:400 var(--fs-ui)/1.65 var(--font-sans);color:var(--text-muted)}
+.ms-empty__plrow{display:flex;flex-wrap:wrap;gap:10px;justify-content:center;align-items:center;margin-top:14px}
+.ms-empty__pllink{font:400 var(--fs-ui)/1 var(--font-sans);color:var(--text-muted)}
+.ms-empty__pllink:hover{color:var(--accent-text)}
 @media (max-width:768px){.ms-skills{grid-template-columns:1fr}.ms-nudge{display:none}}
 
 /* ── a11y — AÑADIDO al portar (spec §8). No altera ninguna declaración de diseño de arriba.

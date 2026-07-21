@@ -2,8 +2,10 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { AuroraTune, AURORA_HOJEO } from "@/components/Aurora";
 import { DropZone } from "@/components/DropZone";
+import { BloqueCopiable } from "@/components/BloqueCopiable";
 import { Breadcrumb, readOrigin, withOrigin } from "@/components/Breadcrumb";
 import { createClient } from "@/lib/supabase/client";
 import { fileKindFromName, FILE_ACCEPT, type FileKind } from "@/lib/db/sources";
@@ -118,6 +120,142 @@ interface ImportResponse {
   } | null;
 }
 
+/* ════════════════════════════════════════════════════════════════════════════
+   PUERTA 3 · LA PLANTILLA ESTRUCTURADA — el informe previo del parseo.
+
+   EL CONTRATO CON EL SERVIDOR (ruta de otro agente, POST /api/import/corpus-md):
+
+     paso 1 · informe     { nombre, texto, confirmar: false }  → NO escribe nada
+     paso 2 · confirmar   { nombre, texto, confirmar: true, token? } → a staging
+
+   Dos viajes con el mismo cuerpo a propósito: el informe no puede dejar rastro
+   en la base (si lo dejara, mirar ya sería importar) y el usuario tiene que
+   poder cerrar la pestaña después de leerlo sin haber creado nada. El `token`,
+   si el servidor lo devuelve, se le devuelve tal cual — es SU mecanismo de
+   idempotencia, no nuestro.
+
+   ★ POR QUÉ LA LECTURA ES TOLERANTE Y AUN ASÍ HONESTA. La ruta la escribe otro
+   agente en paralelo y su forma exacta puede no coincidir con la que aquí se
+   espera. Se aceptan los sinónimos razonables de cada campo (total/items,
+   notas/notes, linea/line…) porque un nombre distinto no cambia el dato. Lo que
+   NO se hace es rellenar huecos: si no se reconoce ni siquiera el total, esto
+   devuelve null y la pantalla enseña la respuesta CRUDA diciendo que no la sabe
+   leer — jamás un "0 items" tranquilizador que sería mentira.
+   ════════════════════════════════════════════════════════════════════════════ */
+
+/** Una línea del informe: lo que no encajó, o lo que hay que preguntar. */
+interface InformeLinea {
+  /** nº de línea del .md; null si el servidor no lo dio (no se inventa). */
+  linea: number | null;
+  texto: string;
+}
+
+interface Informe {
+  /** items que entrarían a staging. Es el campo que decide si sabemos leer. */
+  total: number;
+  /** reparto por kind. Vacío = el servidor no lo desglosó, no "no hay". */
+  tipos: { kind: string; n: number }[];
+  /** líneas conservadas como nota (regla capital: nunca se descarta nada). */
+  notas: InformeLinea[];
+  /** lo que el parser NO adivina y va a preguntar (fechas ilegibles…). */
+  preguntas: InformeLinea[];
+  avisos: string[];
+  /** idempotencia del servidor, si la usa. Se devuelve tal cual. */
+  token: string | null;
+}
+
+function esObjeto(x: unknown): x is Record<string, unknown> {
+  return typeof x === "object" && x !== null && !Array.isArray(x);
+}
+
+/** Primer valor numérico finito entre varias claves sinónimas. */
+function numeroDe(o: Record<string, unknown>, claves: string[]): number | null {
+  for (const k of claves) {
+    const v = o[k];
+    if (typeof v === "number" && Number.isFinite(v)) return v;
+  }
+  return null;
+}
+
+/** Primer valor string no vacío entre varias claves sinónimas. */
+function textoDe(o: Record<string, unknown>, claves: string[]): string | null {
+  for (const k of claves) {
+    const v = o[k];
+    if (typeof v === "string" && v.trim()) return v;
+  }
+  return null;
+}
+
+/** Lista de strings: acepta el array directo e ignora lo que no sea texto. */
+function listaTexto(x: unknown): string[] {
+  if (!Array.isArray(x)) return [];
+  return x.filter((v): v is string => typeof v === "string" && v.trim().length > 0);
+}
+
+/** Lista de líneas: acepta strings sueltos y objetos {linea,texto} con sinónimos. */
+function listaLineas(x: unknown): InformeLinea[] {
+  if (!Array.isArray(x)) return [];
+  const out: InformeLinea[] = [];
+  for (const v of x) {
+    if (typeof v === "string" && v.trim()) {
+      out.push({ linea: null, texto: v });
+    } else if (esObjeto(v)) {
+      const texto = textoDe(v, ["texto", "text", "mensaje", "message", "raw", "contenido"]);
+      if (!texto) continue;
+      out.push({ linea: numeroDe(v, ["linea", "line", "lineNumber", "n"]), texto });
+    }
+  }
+  return out;
+}
+
+/** Reparto por tipo: acepta el array [{kind,n}] y el mapa {work:5,bullet:20}. */
+function listaTipos(x: unknown): { kind: string; n: number }[] {
+  if (Array.isArray(x)) {
+    const out: { kind: string; n: number }[] = [];
+    for (const v of x) {
+      if (!esObjeto(v)) continue;
+      const kind = textoDe(v, ["kind", "tipo", "k", "nombre", "name"]);
+      const n = numeroDe(v, ["n", "count", "total", "items", "cuantos"]);
+      if (kind && n !== null) out.push({ kind, n });
+    }
+    return out;
+  }
+  if (esObjeto(x)) {
+    const out: { kind: string; n: number }[] = [];
+    for (const [kind, v] of Object.entries(x)) {
+      if (typeof v === "number" && Number.isFinite(v)) out.push({ kind, n: v });
+    }
+    return out;
+  }
+  return [];
+}
+
+/**
+ * Lee el informe del servidor. Devuelve null cuando NO reconoce la forma: eso
+ * lleva a enseñar la respuesta cruda, no a inventarse un informe vacío.
+ */
+function normalizarInforme(json: unknown): Informe | null {
+  if (!esObjeto(json)) return null;
+  // El informe puede venir envuelto (`{ok, informe:{…}}`) o plano.
+  const raiz = esObjeto(json.informe) ? json.informe : esObjeto(json.report) ? json.report : json;
+  const total = numeroDe(raiz, ["total", "items", "staged", "count", "n"]);
+  if (total === null) return null;
+  return {
+    total,
+    tipos: listaTipos(raiz.porTipo ?? raiz.tipos ?? raiz.byKind ?? raiz.kinds),
+    notas: listaLineas(raiz.notas ?? raiz.notes ?? raiz.sinUbicar ?? raiz.unmatched),
+    preguntas: listaLineas(raiz.preguntas ?? raiz.dudas ?? raiz.questions ?? raiz.marcados),
+    avisos: listaTexto(raiz.avisos ?? raiz.warnings ?? raiz.aviso),
+    token: textoDe(raiz, ["token", "idempotencia", "importId", "id"]) ?? textoDe(json, ["token"]),
+  };
+}
+
+/** Mensaje de error del servidor si lo trae; si no, null (no se maquilla). */
+function errorDe(json: unknown): string | null {
+  if (!esObjeto(json)) return null;
+  return textoDe(json, ["error", "message", "mensaje", "detalle"]);
+}
+
 /* Detección de links en vivo — misma regex y clasificación del diseño. */
 const URL_RE = /(?:https?:\/\/)?(?:www\.)?([a-z0-9-]+(?:\.[a-z0-9-]+)+)(\/[^\s,;)»"']*)?/gi;
 
@@ -201,6 +339,25 @@ export function ImportarScreen() {
   const [result, setResult] = useState<ImportResponse | null>(null);
   const [warnings, setWarnings] = useState<string[]>([]);
   const [err, setErr] = useState<string | null>(null);
+
+  /* ── Puerta 3 · la plantilla estructurada ────────────────────────────────
+     `plTexto` guarda el contenido leído del fichero para poder MANDARLO OTRA
+     VEZ al confirmar. Alternativa descartada: que el informe deje el .md
+     guardado en el servidor y el confirmar lo referencie — eso convertiría el
+     mero hecho de mirar en una escritura, y el informe tiene que poder
+     abandonarse sin dejar rastro. El .md son unos pocos KB: reenviarlo es
+     barato y deja la ruta sin estado entre los dos viajes. */
+  const [plName, setPlName] = useState<string | null>(null);
+  const [plTexto, setPlTexto] = useState("");
+  const [plBusy, setPlBusy] = useState(false);
+  const [plConfBusy, setPlConfBusy] = useState(false);
+  const [plErr, setPlErr] = useState<string | null>(null);
+  const [plInf, setPlInf] = useState<Informe | null>(null);
+  /* La respuesta que NO supimos leer, tal cual. Se enseña en vez de fingir un
+     informe: el usuario tiene derecho a ver qué contestó el servidor. */
+  const [plRaw, setPlRaw] = useState<string | null>(null);
+  const plPanelRef = useRef<HTMLDivElement>(null);
+  const router = useRouter();
 
   /* ── De dónde vienes (?from=) ────────────────────────────────────────────────
      El <Breadcrumb> resuelve su destino solo. Aquí hace falta el MISMO origen
@@ -388,6 +545,133 @@ export function ImportarScreen() {
     prevLi.current = false;
   }
 
+  /* ── Las tres puertas: cada tarjeta LLEVA a su superficie de trabajo ──────
+     Las tres superficies están montadas siempre (ninguna puerta detrás de un
+     desplegable); las tarjetas solo mueven el foco a la que toca. Que la 1 y la
+     2 compartan caja es un hecho del volcado, no un intento de esconder la 3:
+     por eso la 3 tiene panel propio y su propia entrada en el índice. */
+  // El desplazamiento respeta prefers-reduced-motion (M.rm()): un scroll suave
+  // no deja de ser movimiento, y aquí lo dispara un control, no el usuario.
+  const scrollBehavior = (): ScrollBehavior => (window.CorpusMotion?.rm() ? "auto" : "smooth");
+
+  function irAPuerta1() {
+    taRef.current?.focus();
+    taRef.current?.scrollIntoView({ block: "center", behavior: scrollBehavior() });
+  }
+  function irAPuerta2() {
+    // El <DropZone> compartido no expone ref; su botón sí tiene id="drop" y su
+    // click abre el selector nativo, que es exactamente lo que la puerta promete.
+    document.getElementById("drop")?.click();
+  }
+  function irAPuerta3() {
+    const el = plPanelRef.current;
+    if (!el) return;
+    el.scrollIntoView({ block: "start", behavior: scrollBehavior() });
+    el.focus();
+  }
+
+  /* ── Puerta 3 · leer la plantilla (informe previo, sin escribir nada) ───── */
+  function resetPlantilla() {
+    setPlName(null);
+    setPlTexto("");
+    setPlErr(null);
+    setPlInf(null);
+    setPlRaw(null);
+  }
+
+  async function leerPlantilla(list: File[]) {
+    const file = list[0];
+    if (!file) return;
+    setPlErr(null);
+    setPlInf(null);
+    setPlRaw(null);
+    setPlName(file.name);
+
+    // El filtro por extensión es del CLIENTE y es una cortesía, no una barrera:
+    // manda un aviso claro y redirige a la puerta que sí lee ese tipo. Un PDF
+    // aquí no es un error del usuario, es una puerta equivocada.
+    const ext = (file.name.split(".").pop() ?? "").toLowerCase();
+    if (ext !== "md" && ext !== "markdown") {
+      setPlErr(t("importar.pl.badExt"));
+      return;
+    }
+
+    setPlBusy(true);
+    try {
+      const texto = await file.text();
+      if (!texto.trim()) {
+        setPlErr(t("importar.pl.empty"));
+        return;
+      }
+      setPlTexto(texto);
+      const res = await fetch("/api/import/corpus-md", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ nombre: file.name, texto, confirmar: false }),
+      });
+      // Se lee como TEXTO y se parsea a mano: si la ruta aún no existe, la
+      // respuesta es HTML de Next y res.json() reventaría con un error de
+      // sintaxis que no le dice nada a nadie. Así el fallo se puede contar.
+      const cuerpo = await res.text();
+      let json: unknown = null;
+      try {
+        json = JSON.parse(cuerpo);
+      } catch {
+        json = null;
+      }
+      if (!res.ok) {
+        throw new Error(errorDe(json) ?? `${t("importar.pl.failed")} (HTTP ${res.status})`);
+      }
+      const inf = normalizarInforme(json);
+      if (!inf) {
+        // Recortado: la respuesta cruda es para diagnosticar, no para volcar
+        // media base de datos en la pantalla.
+        setPlRaw(cuerpo.slice(0, 4000));
+        return;
+      }
+      setPlInf(inf);
+    } catch (e) {
+      setPlErr(e instanceof Error ? e.message : t("importar.pl.failed"));
+    } finally {
+      setPlBusy(false);
+    }
+  }
+
+  /* ── Puerta 3 · confirmar: SEGUNDO viaje, el único que escribe ─────────── */
+  async function confirmarPlantilla() {
+    if (!plInf || plConfBusy) return;
+    setPlConfBusy(true);
+    setPlErr(null);
+    try {
+      const res = await fetch("/api/import/corpus-md", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          nombre: plName,
+          texto: plTexto,
+          confirmar: true,
+          ...(plInf.token ? { token: plInf.token } : {}),
+        }),
+      });
+      const cuerpo = await res.text();
+      let json: unknown = null;
+      try {
+        json = JSON.parse(cuerpo);
+      } catch {
+        json = null;
+      }
+      if (!res.ok) {
+        throw new Error(errorDe(json) ?? `${t("importar.pl.failed")} (HTTP ${res.status})`);
+      }
+      // A staging, arrastrando el origen: "volver" desde la revisión tiene que
+      // devolverte al sitio del que saliste, no a esta pantalla.
+      router.push(withOrigin("/app/staging", origen));
+    } catch (e) {
+      setPlErr(e instanceof Error ? e.message : t("importar.pl.failed"));
+      setPlConfBusy(false);
+    }
+  }
+
   // ── la espera: progreso específico y verdadero, jamás un porcentaje ────────
   const rm = (): boolean => !!window.CorpusMotion?.rm();
   const wait = (ms: number) => new Promise<void>((r) => window.setTimeout(r, rm() ? Math.min(ms, 120) : ms));
@@ -551,6 +835,50 @@ export function ImportarScreen() {
           <p className="imp-sub" data-reveal style={{ "--d": "520ms" } as React.CSSProperties}>
             {t("importar.sub")}
           </p>
+
+          {/* ═══ EL ÍNDICE DE LAS TRES PUERTAS ═════════════════════════════
+              Antes esta pantalla tenía dos puertas (pegar y subir) metidas en
+              la misma caja y NINGUNA decía que gastan IA: el coste se
+              descubría en el informe del final, cuando ya se había pagado. Y
+              la tercera vía —la que más se va a usar y la única sin coste ni
+              invención— no existía en la interfaz, vivía en la documentación.
+
+              Las tres van aquí arriba, con el mismo tamaño, y cada una lleva
+              su etiqueta de coste EN LA CARA. No es un menú que oculte nada:
+              las tres superficies de trabajo están montadas más abajo y estas
+              tarjetas solo llevan el foco a la que toca. ═══════════════════ */}
+          <div
+            className="imp-doors"
+            role="group"
+            aria-label={t("importar.puertas.aria")}
+            data-reveal
+            style={{ "--d": "580ms" } as React.CSSProperties}
+          >
+            <span className="t-overline imp-doors__h">{t("importar.puertas.overline")}</span>
+            <div className="imp-doors__row">
+              <button type="button" className="imp-door" id="puerta1" onClick={irAPuerta1}>
+                <span className="n">01</span>
+                <span className="h">{t("importar.puerta1.title")}</span>
+                <span className="d">{t("importar.puerta1.body")}</span>
+                <span className="cost cost--ia">{t("importar.puerta1.cost")}</span>
+                <span className="go">{t("importar.puerta1.go")} →</span>
+              </button>
+              <button type="button" className="imp-door" id="puerta2" onClick={irAPuerta2}>
+                <span className="n">02</span>
+                <span className="h">{t("importar.puerta2.title")}</span>
+                <span className="d">{t("importar.puerta2.body")}</span>
+                <span className="cost cost--ia">{t("importar.puerta2.cost")}</span>
+                <span className="go">{t("importar.puerta2.go")} →</span>
+              </button>
+              <button type="button" className="imp-door" id="puerta3" onClick={irAPuerta3}>
+                <span className="n">03</span>
+                <span className="h">{t("importar.puerta3.title")}</span>
+                <span className="d">{t("importar.puerta3.body")}</span>
+                <span className="cost cost--free">{t("importar.puerta3.cost")}</span>
+                <span className="go">{t("importar.puerta3.go")} →</span>
+              </button>
+            </div>
+          </div>
 
           <div
             className={`c-panel imp-box${isDrag ? " is-drag" : ""}`}
@@ -721,6 +1049,221 @@ export function ImportarScreen() {
               {err}
             </p>
           ) : null}
+
+          {/* ═══ PUERTA 3 · LA PLANTILLA ESTRUCTURADA ══════════════════════
+              Vive FUERA de .imp-box a propósito: esa caja captura los sueltes
+              en toda su superficie, y una zona de arrastre suya dentro daría
+              de alta el mismo fichero dos veces (el suelte burbujea). Aquí,
+              como hermana, no hay solape posible.
+
+              El molde es el del panel de LinkedIn: título + párrafo + <ol>
+              numerado. Un procedimiento de tres pasos explicado con dignidad,
+              que es exactamente lo que esto es. ═══════════════════════════ */}
+          <div
+            className="c-panel imp-pl"
+            id="plantilla"
+            ref={plPanelRef}
+            tabIndex={-1}
+            data-screen-label="importar-plantilla"
+            data-reveal
+            style={{ "--d": "820ms" } as React.CSSProperties}
+          >
+            <span className="t-overline">{t("importar.pl.overline")}</span>
+            <h3>{t("importar.pl.title")}</h3>
+            <p className="imp-pl__lead">{t("importar.pl.body")}</p>
+            <ol>
+              <li>
+                <span className="n">01</span>
+                <div className="h">{t("importar.pl.s1.h")}</div>
+                <div className="d">
+                  <p>{t("importar.pl.s1.d")}</p>
+                  {/* Ancla plana con `download`: el Content-Disposition lo pone
+                      el servidor (mismo patrón que la descarga de datos de
+                      Ajustes). Sin Blob ni createObjectURL — no hay nada que
+                      construir en el cliente ni un revoke que temporizar. */}
+                  <a className="c-btn imp-pl__dl" id="btnPlantilla" href="/api/master/plantilla" download>
+                    {t("importar.pl.download")}
+                  </a>
+                </div>
+              </li>
+              <li>
+                <span className="n">02</span>
+                <div className="h">{t("importar.pl.s2.h")}</div>
+                <div className="d">
+                  <p>{t("importar.pl.s2.d")}</p>
+                  <BloqueCopiable
+                    id="plPrompt"
+                    className="imp-pl__prompt"
+                    texto={t("importar.pl.prompt")}
+                    label={t("importar.pl.promptLabel")}
+                    aria={t("importar.pl.promptAria")}
+                    copiar={t("importar.pl.copiar")}
+                    copiado={t("importar.pl.copiado")}
+                    fallo={t("importar.pl.copiaFallo")}
+                  />
+                </div>
+              </li>
+              <li>
+                <span className="n">03</span>
+                <div className="h">{t("importar.pl.s3.h")}</div>
+                <div className="d">
+                  <p>{t("importar.pl.s3.d")}</p>
+                  <DropZone
+                    id="plDrop"
+                    className="imp-pl__drop"
+                    accept=".md,.markdown,text/markdown"
+                    disabled={plBusy || plConfBusy}
+                    onFiles={leerPlantilla}
+                    label={
+                      <>
+                        <b>{t("importar.pl.drop.bold")}</b>
+                        {t("importar.pl.drop.rest")}
+                        <br />
+                        {t("importar.pl.drop.line2")}
+                      </>
+                    }
+                  />
+
+                  {plName ? (
+                    <p className="imp-pl__file">
+                      <span className="k">{t("importar.pl.fileLabel")}</span>
+                      <b>{plName}</b>
+                      {plBusy ? (
+                        <span className="busy" role="status" aria-live="polite">
+                          <span className="c-spin">⟳</span> {t("importar.pl.reading")}
+                        </span>
+                      ) : (
+                        <button type="button" className="imp-pl__otro" onClick={resetPlantilla}>
+                          {t("importar.pl.otro")}
+                        </button>
+                      )}
+                    </p>
+                  ) : null}
+
+                  {plErr ? (
+                    <p className="imp-pl__err" role="alert">
+                      {plErr}
+                    </p>
+                  ) : null}
+
+                  {/* La respuesta que no supimos leer, TAL CUAL. No se maquilla
+                      como "0 items": eso sería decirle al usuario que su
+                      fichero está vacío cuando lo que falla es la ruta. */}
+                  {plRaw ? (
+                    <div className="imp-pl__raw" role="alert">
+                      <p>{t("importar.pl.inf.rara")}</p>
+                      <pre>{plRaw}</pre>
+                    </div>
+                  ) : null}
+
+                  {/* ★ EL INFORME PREVIO. Se lee ANTES de que nada se mueva: el
+                      servidor no ha escrito una línea todavía. Solo el botón de
+                      confirmar dispara el segundo viaje. */}
+                  {plInf ? (
+                    <div className="imp-pl__inf">
+                      <span className="t-overline">{t("importar.pl.inf.overline")}</span>
+                      {plInf.total > 0 ? (
+                        <p className="imp-pl__tot">
+                          {plInf.total === 1
+                            ? t("importar.pl.inf.totalUno")
+                            : t("importar.pl.inf.total").replace("{n}", String(plInf.total))}
+                        </p>
+                      ) : (
+                        <p className="imp-pl__err" role="alert">
+                          {t("importar.pl.inf.cero")}
+                        </p>
+                      )}
+
+                      {plInf.tipos.length > 0 ? (
+                        <div className="imp-pl__blk">
+                          <span className="imp-pl__k">{t("importar.pl.inf.tipos")}</span>
+                          <div className="imp-pl__tipos">
+                            {plInf.tipos.map((x) => (
+                              <span className="c-chip" key={x.kind}>
+                                <b>{x.n}</b>
+                                <span>{x.kind}</span>
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      ) : null}
+
+                      {/* Lo que no encajó. La regla capital del producto en una
+                          lista: se conserva CON su número de línea. */}
+                      {plInf.notas.length > 0 ? (
+                        <div className="imp-pl__blk">
+                          <span className="imp-pl__k">{t("importar.pl.inf.notas")}</span>
+                          <p className="imp-pl__blkd">{t("importar.pl.inf.notasBody")}</p>
+                          <ul className="imp-pl__lines">
+                            {plInf.notas.map((l, i) => (
+                              <li key={i}>
+                                {l.linea !== null ? (
+                                  <span className="ln">
+                                    {t("importar.pl.inf.linea").replace("{n}", String(l.linea))}
+                                  </span>
+                                ) : null}
+                                <span className="tx">{l.texto}</span>
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      ) : null}
+
+                      {plInf.preguntas.length > 0 ? (
+                        <div className="imp-pl__blk">
+                          <span className="imp-pl__k">{t("importar.pl.inf.preguntas")}</span>
+                          <p className="imp-pl__blkd">{t("importar.pl.inf.preguntasBody")}</p>
+                          <ul className="imp-pl__lines">
+                            {plInf.preguntas.map((l, i) => (
+                              <li key={i}>
+                                {l.linea !== null ? (
+                                  <span className="ln">
+                                    {t("importar.pl.inf.linea").replace("{n}", String(l.linea))}
+                                  </span>
+                                ) : null}
+                                <span className="tx">{l.texto}</span>
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      ) : null}
+
+                      {plInf.avisos.length > 0 ? (
+                        <div className="imp-pl__blk">
+                          <span className="imp-pl__k">{t("importar.pl.inf.avisos")}</span>
+                          <ul className="imp-pl__lines">
+                            {plInf.avisos.map((a, i) => (
+                              <li key={i}>
+                                <span className="tx">{a}</span>
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      ) : null}
+
+                      {plInf.total > 0 ? (
+                        <div className="imp-pl__acts">
+                          <button
+                            type="button"
+                            className="c-btn c-btn--patina"
+                            id="plConfirm"
+                            disabled={plConfBusy}
+                            onClick={() => void confirmarPlantilla()}
+                          >
+                            {plConfBusy ? t("importar.pl.inf.confirmando") : t("importar.pl.inf.confirmar")}
+                          </button>
+                          <button type="button" className="imp-pl__cancel" onClick={resetPlantilla}>
+                            {t("importar.pl.inf.cancelar")}
+                          </button>
+                        </div>
+                      ) : null}
+                      <p className="imp-pl__sub">{t("importar.pl.inf.sub")}</p>
+                    </div>
+                  ) : null}
+                </div>
+              </li>
+            </ol>
+          </div>
 
           <p className="imp-note" data-reveal style={{ "--d": "880ms" } as React.CSSProperties}>
             <span className="c-divider" style={{ "--d": "900ms" } as React.CSSProperties} />

@@ -48,6 +48,100 @@ export const importar = {
     "importar.useSample": "usar texto de ejemplo",
     "importar.clear": "limpiar",
 
+    // ── LAS TRES PUERTAS (el índice honesto de la pantalla) ───────────────
+    // Cada puerta dice EN SU CARA si consume IA. Antes las dos primeras eran lo
+    // único que había y no lo decían: el usuario descubría el gasto después.
+    "importar.puertas.aria": "Las tres formas de entrar",
+    "importar.puertas.overline": "Tres formas de entrar · elige la tuya",
+    "importar.puerta1.title": "Pega lo que tengas",
+    "importar.puerta1.body": "Párrafos sueltos, tu CV viejo, notas, links. Desordenado.",
+    "importar.puerta1.cost": "Usa IA · consume tokens",
+    "importar.puerta1.go": "Pegar aquí abajo",
+    "importar.puerta2.title": "Sube un archivo",
+    "importar.puerta2.body": "PDF, DOCX, .txt o capturas de pantalla.",
+    "importar.puerta2.cost": "Usa IA · consume tokens",
+    "importar.puerta2.go": "Elegir archivo",
+    "importar.puerta3.title": "Plantilla estructurada",
+    "importar.puerta3.body": "Descárgala, rellénala (a mano o con tu propia IA) y súbela.",
+    "importar.puerta3.cost": "Sin IA · sin coste · sin invención",
+    "importar.puerta3.go": "Ir a la plantilla",
+
+    // ── PUERTA 3 · la plantilla estructurada ──────────────────────────────
+    // La comodidad del modelo grande la pagas en una suscripción que YA tienes;
+    // aquí no se gasta ni un token de API. El copy no exagera: la plantilla no
+    // es "mejor", es distinta — pide trabajo tuyo a cambio de coste cero.
+    "importar.pl.overline": "Puerta 3 · sin IA, sin coste",
+    "importar.pl.title": "Rellena la plantilla y súbela.",
+    "importar.pl.body":
+      "Es un .md con las secciones ya puestas. Lo rellenas a mano, o se lo das a la IA que ya pagas (ChatGPT, Claude, Gemini) junto con tu LinkedIn y tu CV viejo. Nosotros lo leemos con un parser: sin modelo, sin tokens, sin nada que alucinar.",
+    "importar.pl.s1.h": "Descarga la plantilla",
+    "importar.pl.s1.d": "Un fichero .md con las secciones y los campos ya escritos. Ábrelo con cualquier editor de texto.",
+    "importar.pl.download": "Descargar plantilla (.md)",
+    "importar.pl.s2.h": "Rellénala — a mano o con tu propia IA",
+    "importar.pl.s2.d":
+      "Si la rellenas a mano, escribe y ya está. Si prefieres que la rellene un modelo, copia estas instrucciones y pégalas en tu chat con la plantilla y tu material:",
+    "importar.pl.promptLabel": "Instrucciones para tu chat",
+    "importar.pl.promptAria": "Instrucciones listas para pegar en tu chat",
+    "importar.pl.copiar": "Copiar",
+    "importar.pl.copiado": "Copiado",
+    "importar.pl.copiaFallo":
+      "Tu navegador no dejó copiar. El texto ha quedado seleccionado: pulsa Ctrl+C (⌘+C en Mac).",
+    // ★ La regla 1 es LITERAL y no se toca: es lo único que impide que la vía
+    //   segura meta invención por la puerta de atrás. Si un día alguien la
+    //   suaviza, tests/tres-puertas.test.ts se cae.
+    "importar.pl.prompt": `Te voy a dar dos cosas: una plantilla en Markdown y mi información en bruto (mi perfil de LinkedIn, mi CV antiguo, mis notas sueltas). Rellena la plantilla con mis datos y devuélvemela.
+
+Reglas, sin excepciones:
+1. No inventes datos: si algo no está en lo que te doy, déjalo vacío.
+2. No adornes ni reescribas: copia mis frases tal cual. Si algo está mal redactado, déjalo mal redactado.
+3. Respeta los encabezados (## EXPERIENCIA, ## HABILIDADES…) y los nombres de los campos (titulo:, empresa:, fechas:…). No añadas secciones nuevas.
+4. Las fechas van tal y como aparecen en mi material: «2020 - 2024», «marzo 2025 - actualidad». No las normalices ni deduzcas las que falten.
+5. Un logro por viñeta, empezando con «- ». No los fusiones ni los resumas.
+6. Las habilidades van en una línea por grupo: «Lenguajes: Python, SQL, Go».
+7. Si dudas entre dos secciones, elige una sola y no dupliques el dato.
+8. Devuélveme el fichero .md completo, dentro de un bloque de código y sin comentarios tuyos alrededor.
+
+--- PLANTILLA ---
+[pega aquí la plantilla que descargaste de Corpus]
+
+--- MI INFORMACIÓN ---
+[pega aquí tu perfil de LinkedIn, tu CV antiguo y tus notas]`,
+    "importar.pl.s3.h": "Súbela aquí",
+    "importar.pl.s3.d":
+      "La leemos con un parser, no con un modelo. Antes de guardar nada te enseñamos qué hemos entendido, línea por línea.",
+    "importar.pl.drop.bold": "arrastra el .md relleno",
+    "importar.pl.drop.rest": " — o haz clic para elegirlo",
+    "importar.pl.drop.line2": "Solo el fichero de plantilla (.md). Para PDF, DOCX o capturas usa la puerta 2.",
+    "importar.pl.badExt":
+      "Eso no es un .md. Esta puerta solo lee el fichero de plantilla; para PDF, DOCX o capturas usa la puerta 2 — esa sí usa IA.",
+    "importar.pl.empty": "El fichero está vacío. No hemos enviado nada.",
+    "importar.pl.reading": "leyendo la plantilla, sin IA…",
+    "importar.pl.failed": "No se pudo leer la plantilla.",
+    "importar.pl.fileLabel": "Fichero:",
+    "importar.pl.otro": "Subir otro",
+
+    // ── Informe previo del parseo (ANTES de tocar staging) ────────────────
+    "importar.pl.inf.overline": "Lo que hemos entendido",
+    "importar.pl.inf.total": "{n} items listos para pasar a staging",
+    "importar.pl.inf.totalUno": "1 item listo para pasar a staging",
+    "importar.pl.inf.tipos": "Por tipo",
+    "importar.pl.inf.notas": "Líneas que no encajaban en ninguna sección",
+    "importar.pl.inf.notasBody":
+      "No se descartan. Entran como nota con su número de línea, para que las coloques tú donde toque.",
+    "importar.pl.inf.preguntas": "Cosas que no vamos a adivinar",
+    "importar.pl.inf.preguntasBody":
+      "Van marcadas y te las preguntamos en staging. Una fecha que no se entiende no se inventa.",
+    "importar.pl.inf.avisos": "Avisos",
+    "importar.pl.inf.linea": "línea {n}",
+    "importar.pl.inf.confirmar": "Confirmar y llevar a staging →",
+    "importar.pl.inf.confirmando": "llevando a staging…",
+    "importar.pl.inf.cancelar": "Descartar esta lectura",
+    "importar.pl.inf.sub": "Esto solo lo deja en staging. Al master no entra nada sin que lo confirmes item por item.",
+    "importar.pl.inf.cero":
+      "El fichero se leyó, pero no salió ningún item. Comprueba que conserve los encabezados (## EXPERIENCIA, ## HABILIDADES…). No hemos guardado nada.",
+    "importar.pl.inf.rara":
+      "El servidor respondió algo que no sabemos leer, así que no hemos guardado nada. Esto es lo que devolvió, tal cual:",
+
     // ── El momento LinkedIn ───────────────────────────────────────────────
     "importar.li.title": "LinkedIn no permite que un servicio lea tu perfil desde fuera.",
     "importar.li.body":
@@ -181,6 +275,94 @@ export const importar = {
     "importar.meta.linkMany": "{n} links detected",
     "importar.useSample": "use sample text",
     "importar.clear": "clear",
+
+    // ── THE THREE DOORS (the screen's honest index) ───────────────────────
+    "importar.puertas.aria": "The three ways in",
+    "importar.puertas.overline": "Three ways in · pick yours",
+    "importar.puerta1.title": "Paste whatever you have",
+    "importar.puerta1.body": "Loose paragraphs, your old resume, notes, links. Unsorted.",
+    "importar.puerta1.cost": "Uses AI · spends tokens",
+    "importar.puerta1.go": "Paste below",
+    "importar.puerta2.title": "Upload a file",
+    "importar.puerta2.body": "PDF, DOCX, .txt or screenshots.",
+    "importar.puerta2.cost": "Uses AI · spends tokens",
+    "importar.puerta2.go": "Choose a file",
+    "importar.puerta3.title": "Structured template",
+    "importar.puerta3.body": "Download it, fill it in (by hand or with your own AI), upload it.",
+    "importar.puerta3.cost": "No AI · no cost · nothing invented",
+    "importar.puerta3.go": "Go to the template",
+
+    // ── DOOR 3 · the structured template ──────────────────────────────────
+    "importar.pl.overline": "Door 3 · no AI, no cost",
+    "importar.pl.title": "Fill in the template and upload it.",
+    "importar.pl.body":
+      "It's a .md file with the sections already laid out. Fill it in by hand, or hand it to the AI you already pay for (ChatGPT, Claude, Gemini) along with your LinkedIn and your old resume. We read it with a parser: no model, no tokens, nothing to hallucinate.",
+    "importar.pl.s1.h": "Download the template",
+    "importar.pl.s1.d": "A .md file with the sections and fields already written. Open it with any text editor.",
+    "importar.pl.download": "Download template (.md)",
+    "importar.pl.s2.h": "Fill it in — by hand or with your own AI",
+    "importar.pl.s2.d":
+      "Filling it by hand is just typing. If you'd rather have a model do it, copy these instructions and paste them into your chat together with the template and your material:",
+    "importar.pl.promptLabel": "Instructions for your chat",
+    "importar.pl.promptAria": "Instructions ready to paste into your chat",
+    "importar.pl.copiar": "Copy",
+    "importar.pl.copiado": "Copied",
+    "importar.pl.copiaFallo":
+      "Your browser wouldn't let us copy. The text is selected: press Ctrl+C (⌘+C on Mac).",
+    // ★ Rule 1 is LITERAL and stays that way: it's the only thing keeping the
+    //   safe route from smuggling invention in through the back door.
+    "importar.pl.prompt": `I'm going to give you two things: a Markdown template and my raw material (my LinkedIn profile, my old resume, my loose notes). Fill the template in with my data and give it back to me.
+
+Rules, no exceptions:
+1. Don't make anything up: if something isn't in what I give you, leave it empty.
+2. Don't embellish or rewrite: copy my sentences as they are. If something is badly worded, leave it badly worded.
+3. Keep the headings (## EXPERIENCE, ## SKILLS…) and the field names (title:, company:, dates:…). Don't add new sections.
+4. Dates go exactly as they appear in my material: "2020 - 2024", "March 2025 - present". Don't normalise them and don't infer the missing ones.
+5. One achievement per bullet, starting with "- ". Don't merge or summarise them.
+6. Skills go one line per group: "Languages: Python, SQL, Go".
+7. If you're torn between two sections, pick one and don't duplicate the entry.
+8. Give me back the complete .md file, inside a code block, with no commentary around it.
+
+--- TEMPLATE ---
+[paste here the template you downloaded from Corpus]
+
+--- MY MATERIAL ---
+[paste here your LinkedIn profile, your old resume and your notes]`,
+    "importar.pl.s3.h": "Upload it here",
+    "importar.pl.s3.d":
+      "We read it with a parser, not a model. Before anything is saved we show you what we understood, line by line.",
+    "importar.pl.drop.bold": "drag the filled-in .md here",
+    "importar.pl.drop.rest": " — or click to choose it",
+    "importar.pl.drop.line2": "Template file only (.md). For PDF, DOCX or screenshots use door 2.",
+    "importar.pl.badExt":
+      "That isn't a .md file. This door only reads the template; for PDF, DOCX or screenshots use door 2 — that one does use AI.",
+    "importar.pl.empty": "The file is empty. We haven't sent anything.",
+    "importar.pl.reading": "reading the template, no AI…",
+    "importar.pl.failed": "Couldn't read the template.",
+    "importar.pl.fileLabel": "File:",
+    "importar.pl.otro": "Upload another",
+
+    // ── Parse preview report (BEFORE anything touches staging) ────────────
+    "importar.pl.inf.overline": "What we understood",
+    "importar.pl.inf.total": "{n} items ready to go to staging",
+    "importar.pl.inf.totalUno": "1 item ready to go to staging",
+    "importar.pl.inf.tipos": "By type",
+    "importar.pl.inf.notas": "Lines that didn't fit any section",
+    "importar.pl.inf.notasBody":
+      "Nothing is dropped. They come in as a note with their line number, for you to place where they belong.",
+    "importar.pl.inf.preguntas": "Things we won't guess",
+    "importar.pl.inf.preguntasBody":
+      "They're flagged and we'll ask you in staging. A date we can't read doesn't get invented.",
+    "importar.pl.inf.avisos": "Warnings",
+    "importar.pl.inf.linea": "line {n}",
+    "importar.pl.inf.confirmar": "Confirm and send to staging →",
+    "importar.pl.inf.confirmando": "sending to staging…",
+    "importar.pl.inf.cancelar": "Discard this reading",
+    "importar.pl.inf.sub": "This only puts it in staging. Nothing enters your master until you confirm it item by item.",
+    "importar.pl.inf.cero":
+      "The file was read, but no items came out. Check that it still has its headings (## EXPERIENCE, ## SKILLS…). Nothing has been saved.",
+    "importar.pl.inf.rara":
+      "The server answered something we can't read, so nothing has been saved. Here's exactly what it returned:",
 
     // ── The LinkedIn moment ───────────────────────────────────────────────
     "importar.li.title": "LinkedIn doesn't let any service read your profile from outside.",

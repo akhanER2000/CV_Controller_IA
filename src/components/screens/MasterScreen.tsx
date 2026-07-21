@@ -3430,6 +3430,15 @@ export function MasterScreen() {
               {t("master.intro.c")}
             </p>
             <div className="ms-actions">
+              {/* C · LA TERCERA VÍA, también desde aquí. El .md en formato
+                  corpus/1 es el mismo fichero que Corpus vuelve a leer SIN IA:
+                  lo bajas, lo editas donde quieras (o se lo das a tu propio
+                  ChatGPT) y lo subes por la puerta 3 de Importar. Ancla plana
+                  con `download`: el Content-Disposition lo pone el servidor,
+                  igual que la descarga de datos de Ajustes. */}
+              <a className="c-btn" id="btnMasterMd" href="/api/master/plantilla" download title={t("master.plantilla.title")}>
+                {t("master.plantilla.descargar")}
+              </a>
               {/* B · «Revisar mi master con IA»: el barrido en dos pasos. Solo con
                   registro poblado (vacío no hay nada que barrer). */}
               {!loading && !isEmpty ? (
@@ -3748,13 +3757,29 @@ export function MasterScreen() {
             <span className="t-overline">{t("master.empty.overline")}</span>
             <h2 style={{ marginTop: "14px" }}>{t("master.empty.title")}</h2>
             <p>{t("master.empty.body")}</p>
-            <div style={{ display: "flex", gap: "10px", justifyContent: "center", marginTop: "24px" }}>
+            <div style={{ display: "flex", gap: "10px", justifyContent: "center", marginTop: "24px", flexWrap: "wrap" }}>
               <Link className="c-btn c-btn--patina" href="/app/importar">
                 {t("master.empty.dump")}
               </Link>
               <Link className="c-btn" href="/app/onboarding">
                 {t("master.empty.scratch")}
               </Link>
+            </div>
+            {/* ★ LA TERCERA VÍA, y aquí es donde MÁS vale: con el master vacío no
+                hay nada que exportar y todo que rellenar. Se descarga la
+                plantilla y se sube rellena por la puerta 3 de Importar — sin IA,
+                sin coste y sin nada que alucinar. No es una nota al pie: es la
+                opción que más gente va a usar. */}
+            <div className="ms-empty__pl">
+              <p>{t("master.empty.plantillaNote")}</p>
+              <div className="ms-empty__plrow">
+                <a className="c-btn" href="/api/master/plantilla" download>
+                  {t("master.empty.plantilla")}
+                </a>
+                <Link className="ms-empty__pllink" href="/app/importar#plantilla">
+                  {t("master.empty.plantillaHow")}
+                </Link>
+              </div>
             </div>
           </div>
         </div>
