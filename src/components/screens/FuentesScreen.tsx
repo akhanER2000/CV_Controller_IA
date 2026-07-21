@@ -68,8 +68,20 @@ interface SourceView {
   sourceUrl: string | null;
   status: string;
   pageCount: number | null;
-  rawTextLength: number;
   createdAt: string;
+  // ── Informe por fuente (bloque D). El servidor rellena estos; null ⟺ sin dato. ──
+  error: string | null;
+  isTranscription: boolean;
+  charsRead: number | null;
+  aiCalls: number | null;
+  tokens: number | null;
+  tokensAreFloor: boolean;
+  fromCache: boolean;
+  contextSections: { titulo: string; caracteres: number }[];
+  itemsExtracted: number;
+  pending: number;
+  possibleDuplicates: number;
+  withoutEvidence: number;
 }
 
 const KIND_KEYS = new Set(["paste", "pdf", "docx", "image", "url", "github", "manual"]);
@@ -115,12 +127,98 @@ interface PostResult {
   error?: string;
 }
 
+/* ── Un chip del informe: valor grande + etiqueta pequeña. `warn` tiñe el valor
+   cuando la cifra pide atención (un duplicado o una falta de evidencia por
+   revisar). Es la misma voz que .fu-facts pero en un contenedor flexible, para
+   que añadir un dato NO obligue a tocar ningún gridTemplateColumns a mano. */
+function ReportChip({ v, k, warn, tag }: { v: string; k: string; warn?: boolean; tag?: string }) {
+  return (
+    <div className={`fu-rchip${warn ? " fu-rchip--warn" : ""}`}>
+      <div className="v">
+        {v}
+        {tag ? <span className="fu-rtag">{tag}</span> : null}
+      </div>
+      <div className="k">{k}</div>
+    </div>
+  );
+}
+
+/* ── EL INFORME POR FUENTE (bloque D · §1·§2) ─────────────────────────────────
+   Todos los números salen del servidor (queries.listSources). La regla manda: un
+   dato que no se tiene NO se pinta —charsRead/aiCalls/tokens son null cuando no
+   hay telemetría (p. ej. GitHub no llama al modelo), y entonces su chip no
+   aparece— en vez de enseñar un cero inventado. Los recuentos del staging
+   (ítems / duplicados / sin evidencia) SÍ se conocen siempre, así que sus ceros
+   se muestran: «0 sin evidencia» tranquiliza, no es ruido. */
+function SourceReport({ s, t }: { s: SourceView; t: (key: string) => string }) {
+  const statusLabel = (st: string) => (STATUS_KEYS.has(st) ? t(`fuentes.status.${st}`) : st);
+  const nf = (n: number) => n.toLocaleString("es-CL");
+
+  // «104 KB» a partir de 1 KB; por debajo, los caracteres exactos (no se redondea
+  // a 0 KB una fuente pequeña). El sufijo de páginas viaja con este mismo chip.
+  let readValue: string | null = null;
+  if (s.charsRead != null) {
+    readValue =
+      s.charsRead >= 1024
+        ? t("fuentes.report.kb").replace("{n}", nf(Math.round(s.charsRead / 1024)))
+        : t("fuentes.report.chars").replace("{n}", nf(s.charsRead));
+    if (s.pageCount) readValue += t("fuentes.item.pages").replace("{n}", String(s.pageCount));
+  }
+
+  const ctx = s.contextSections.filter((c) => c.titulo.trim());
+
+  return (
+    <>
+      <div className="fu-report">
+        <ReportChip v={statusLabel(s.status)} k={t("fuentes.item.readStatus")} />
+        {readValue != null ? (
+          <ReportChip
+            v={readValue}
+            k={t("fuentes.report.readK")}
+            tag={s.isTranscription ? t("fuentes.report.transcribed") : undefined}
+          />
+        ) : null}
+        {s.aiCalls != null ? <ReportChip v={nf(s.aiCalls)} k={t("fuentes.report.callsK")} /> : null}
+        {s.tokens != null ? (
+          <ReportChip v={`${s.tokensAreFloor ? "≥ " : ""}${nf(s.tokens)}`} k={t("fuentes.report.tokensK")} />
+        ) : null}
+        <ReportChip v={nf(s.itemsExtracted)} k={t("fuentes.report.itemsK")} />
+        <ReportChip v={nf(s.possibleDuplicates)} k={t("fuentes.report.duplicatesK")} warn={s.possibleDuplicates > 0} />
+        <ReportChip v={nf(s.withoutEvidence)} k={t("fuentes.report.noEvidenceK")} warn={s.withoutEvidence > 0} />
+        <ReportChip v={rel(s.createdAt, t)} k={t("fuentes.item.added")} />
+      </div>
+
+      {s.fromCache ? <div className="fu-rnote">{t("fuentes.report.cache")}</div> : null}
+
+      {/* «qué quedó fuera», PERSISTIDO: las secciones que se leyeron como contexto y
+          no se mandaron a extraer, por su nombre. La regla capital hecha durable —
+          antes esto era un aviso que se veía una vez y se perdía. */}
+      {ctx.length ? (
+        <div className="fu-rnote fu-rnote--ctx">
+          {t(ctx.length === 1 ? "fuentes.report.contextOne" : "fuentes.report.contextMany")
+            .replace("{n}", String(ctx.length))
+            .replace("{list}", ctx.map((c) => `«${c.titulo}»`).join(", "))}
+        </div>
+      ) : null}
+
+      {/* El motivo del fallo, que hasta hoy estaba escrito y no se enseñaba. Solo
+          cuando la fuente falló de verdad (status 'failed' rellena `error`). */}
+      {s.status === "failed" && s.error ? (
+        <div className="fu-status is-err" role="alert">
+          <span aria-hidden="true">✕</span> {t("fuentes.report.failed").replace("{msg}", s.error)}
+        </div>
+      ) : null}
+    </>
+  );
+}
+
 export function FuentesScreen() {
   // boot() dibuja el hr.c-divider del scope.
   const bootRef = useBoot<HTMLElement>();
   const t = useT();
   const kindLabel = (k: string) => (KIND_KEYS.has(k) ? t(`fuentes.kind.${k}`) : k);
-  const statusLabel = (s: string) => (STATUS_KEYS.has(s) ? t(`fuentes.status.${s}`) : s);
+  // statusLabel vive ahora en <SourceReport> (el único sitio que lo usa tras el
+  // informe por fuente); aquí solo se etiqueta el kind en la cabecera de la tarjeta.
 
   // Cliente de Supabase del navegador SOLO en modo Supabase (createClient exige
   // las NEXT_PUBLIC_*; en modo local no existen y lanzaría al construirse).
@@ -744,29 +842,7 @@ export function FuentesScreen() {
                         </Link>
                       </span>
                     </div>
-                    <div className="fu-facts" style={{ gridTemplateColumns: "1fr 1fr 1fr" }}>
-                      <div>
-                        <div className="v" style={{ fontSize: "13px" }}>
-                          {statusLabel(s.status)}
-                        </div>
-                        <div className="k">{t("fuentes.item.readStatus")}</div>
-                      </div>
-                      <div>
-                        <div className="v" style={{ fontSize: "13px" }}>
-                          {s.rawTextLength.toLocaleString("es-CL")}
-                        </div>
-                        <div className="k">
-                          {t("fuentes.item.charsRead")}
-                          {s.pageCount ? t("fuentes.item.pages").replace("{n}", String(s.pageCount)) : ""}
-                        </div>
-                      </div>
-                      <div>
-                        <div className="v" style={{ fontSize: "13px" }}>
-                          {rel(s.createdAt, t)}
-                        </div>
-                        <div className="k">{t("fuentes.item.added")}</div>
-                      </div>
-                    </div>
+                    <SourceReport s={s} t={t} />
 
                     {confirmRemove === s.id ? (
                       <div className="fu-confirm" role="alertdialog" aria-label={t("fuentes.item.remove")}>

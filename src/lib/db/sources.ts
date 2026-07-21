@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { StagedRow } from "@/lib/extract/types";
-import type { SuspicionLevel, DuplicateSignal } from "@/lib/extract/dedup";
+import { detectDuplicates, type SuspicionLevel, type DuplicateSignal, type DedupItem } from "@/lib/extract/dedup";
 
 /**
  * Capa de datos de FUENTES (agente B). Espejo de persistImport (queries.ts) pero
@@ -246,10 +246,14 @@ export function assignIds(rows: StagedRow[], gen: () => string = nuevoId): Map<s
 /** Procedencia que viaja en data._* (staged_items no tiene columnas origin/level/source). */
 const META = (r: StagedRow) => ({ _origin: r.origin, _level: r.evidenceLevel, _source: r.sourceLabel });
 
-/** Lo que el writer decide por fuera de la fila: su id y su sospecha ya resuelta. */
+/** Lo que el writer decide por fuera de la fila: su id, su sospecha ya resuelta y,
+ *  al RELEER, si este item ya está aceptado en el master (duplicate_of). */
 export interface RowExtra {
   id?: string;
   mergeProposal?: MergeProposal | null;
+  /** id del profile_item del MASTER al que este staged ya corresponde (§4.3). null
+   *  en el alta normal; se rellena solo en «releer» para no re-proponer a ciegas. */
+  duplicateOf?: string | null;
 }
 
 /** Fila de staged_items para un item PADRE (todo lo que no es viñeta). */
@@ -265,6 +269,9 @@ export function parentRow(userId: string, sourceId: string, r: StagedRow, extra:
     evidence_verified: r.evidenceVerified,
     status: "pending" as const,
     merge_proposal: extra.mergeProposal ?? null,
+    // Columna de 0001 SIN writer hasta ahora: FK a profile_items(id). null cuando
+    // este item NO está ya en el master (el caso del alta). Ver matchStagedAgainstMaster.
+    duplicate_of: extra.duplicateOf ?? null,
   };
 }
 
@@ -291,12 +298,15 @@ export function stagedRowsFor(
   sourceId: string,
   rows: StagedRow[],
   gen?: () => string,
+  /** clave local → id del profile_item del master que ya la contiene (solo releer). */
+  dupMap?: Map<string, string>,
 ): { keyToId: Map<string, string>; parents: ReturnType<typeof parentRow>[]; bullets: ReturnType<typeof bulletRow>[] } {
   const { parents, bullets } = splitStaged(rows);
   const keyToId = assignIds(rows, gen);
   const extraDe = (r: StagedRow): RowExtra => ({
     id: keyToId.get(r.key),
     mergeProposal: mergeProposalFor(r, keyToId),
+    duplicateOf: dupMap?.get(r.key) ?? null,
   });
   return {
     keyToId,
@@ -325,8 +335,14 @@ export function splitStaged(rows: StagedRow[]): { parents: StagedRow[]; bullets:
  * mismo patrón de persistImport, extraído para compartirlo entre alta y releer.
  * Devuelve cuántas filas se insertaron.
  */
-export async function insertStagedTwoPhase(sb: SB, userId: string, sourceId: string, rows: StagedRow[]): Promise<number> {
-  const { parents, bullets } = stagedRowsFor(userId, sourceId, rows);
+export async function insertStagedTwoPhase(
+  sb: SB,
+  userId: string,
+  sourceId: string,
+  rows: StagedRow[],
+  dupMap?: Map<string, string>,
+): Promise<number> {
+  const { parents, bullets } = stagedRowsFor(userId, sourceId, rows, undefined, dupMap);
 
   // Siguen siendo DOS fases aunque los ids ya se conozcan: la FK
   // parent_staged_id → staged_items(id) se comprueba fila a fila, así que el rol
@@ -419,10 +435,134 @@ async function clearPendingStaged(sb: SB, userId: string, sourceId: string): Pro
   if (error) throw new Error(error.message);
 }
 
+/* ============================================================================
+   RELEER SIN VOLVER A PROPONER LO QUE YA ESTÁ EN EL MASTER (§4.3)
+   ============================================================================
+   El problema: `restageSource` re-proponía TODO. Si el usuario ya aceptó «Backend
+   Developer · Altiplano» y vuelve a leer la misma fuente, ese rol reaparecía en la
+   cola y tocaba descartarlo a mano, uno por uno. Releer castigaba por haber
+   revisado.
+
+   La columna `staged_items.duplicate_of` existe desde 0001, referencia
+   profile_items(id) y NO TENÍA WRITER: es exactamente su caso de uso. Al releer,
+   cada item nuevo que ya esté aceptado en el master DESDE ESTA MISMA FUENTE se
+   MARCA con el id del item del master al que corresponde.
+
+   ⚠ SE MARCA, NO SE DESCARTA. La fila se inserta igual (status 'pending'): nada
+     del usuario desaparece en silencio —el fallo capital de este producto—. El
+     `duplicate_of` es una SEÑAL para que la cola pueda decir «esto ya está en tu
+     master» y ofrecer saltarlo en un clic, sin borrarlo por él.
+
+   ⚠ CONSERVADOR A PROPÓSITO. Marcar un item NUEVO como «ya está» sería peor que no
+     marcar nada: el usuario lo saltaría y perdería un dato real. Por eso el match
+     exige nivel 'alta' (la evidencia fuerte del detector) y se apoya en el MISMO
+     motor de duplicados que todo lo demás —una sola definición de «esto puede ser
+     lo mismo»—. Los kinds cuya identidad el detector NO resuelve con solidez
+     (education, bullets, basics, summary) se dejan sin marcar: se re-proponen, que
+     es el lado seguro del error.
+   ============================================================================ */
+
+/** Un item del master reducido a lo que el matcher necesita (id + kind + data). */
+export interface MasterItemLite {
+  id: string;
+  kind: string;
+  data: Record<string, unknown>;
+}
+
+/** Kinds cuya identidad el detector resuelve con solidez: work (empresa+fechas),
+ *  skill/project (el nombre ES la identidad, n1-bis). Fuera de aquí no se marca. */
+const MATCHABLE_KINDS = new Set(["work", "project", "skill"]);
+
+const str = (v: unknown): string => (typeof v === "string" ? v : v == null ? "" : String(v));
+
+/** kind + data → DedupItem, o null si el kind no es de identidad sólida. Sirve
+ *  igual para una fila del master y para una StagedRow: comparan lo mismo. */
+function aDedupItem(kind: string, data: Record<string, unknown>, key: string): DedupItem | null {
+  if (kind === "work") {
+    return { key, kind, title: str(data.title), company: str(data.company), dates: str(data.dates), text: str(data.title) };
+  }
+  if (kind === "project") {
+    return { key, kind, title: str(data.name), text: [str(data.name), str(data.description)].filter(Boolean).join(" · ") };
+  }
+  if (kind === "skill") {
+    return { key, kind, title: str(data.group), text: str(data.items) };
+  }
+  return null;
+}
+
+/**
+ * Casa las filas nuevas contra lo que YA está en el master (de la misma fuente) y
+ * devuelve `clave local → id del profile_item` para las que son claramente el
+ * mismo item. PURO y determinista: es lo que se prueba con mutantes.
+ *
+ * ⚠ NO se le pasa sourceId al detector: el bump «misma-fuente» (n3) subiría de
+ *   nivel pares dudosos y podría marcar como «ya está» algo que solo se parece.
+ *   Aquí solo cuenta la evidencia FUERTE por sí sola (nivel 'alta'): empresa +
+ *   fechas que se solapan, o el mismo nombre de grupo/proyecto.
+ */
+export function matchStagedAgainstMaster(
+  master: MasterItemLite[],
+  rows: StagedRow[],
+  currentYear?: number,
+): Map<string, string> {
+  const out = new Map<string, string>();
+
+  // Prefijos que separan los dos lados dentro de una sola lista de comparación.
+  const items: DedupItem[] = [];
+  const masterKeyToId = new Map<string, string>(); // "m:0" → profile_item id real
+  master.forEach((m, i) => {
+    const di = aDedupItem(m.kind, m.data, `m:${i}`);
+    if (di) { items.push(di); masterKeyToId.set(`m:${i}`, m.id); }
+  });
+  const stagedKeyReal = new Map<string, string>(); // "s:0" → StagedRow.key real
+  rows.forEach((r, i) => {
+    if (!MATCHABLE_KINDS.has(r.kind)) return;
+    const di = aDedupItem(r.kind, r.data, `s:${i}`);
+    if (di) { items.push(di); stagedKeyReal.set(`s:${i}`, r.key); }
+  });
+  if (!masterKeyToId.size || !stagedKeyReal.size) return out;
+
+  // Solo el nivel 'alta' marca. detectDuplicates devuelve ordenado por sospecha
+  // descendente, así que el PRIMER match de un staged es el más fuerte y gana.
+  for (const s of detectDuplicates(items, { minLevel: "alta", currentYear })) {
+    // Solo interesan los pares MASTER↔STAGED (no staged-staged ni master-master).
+    const pair = [s.aKey, s.bKey];
+    const mKey = pair.find((k) => k.startsWith("m:"));
+    const sKey = pair.find((k) => k.startsWith("s:"));
+    if (!mKey || !sKey) continue;
+    const stagedReal = stagedKeyReal.get(sKey);
+    const masterId = masterKeyToId.get(mKey);
+    if (!stagedReal || !masterId || out.has(stagedReal)) continue;
+    out.set(stagedReal, masterId);
+  }
+  return out;
+}
+
+/** Los items ya ACEPTADOS en el master que salieron de ESTA fuente (para no
+ *  re-proponerlos al releer). Solo los kinds que el matcher sabe casar. */
+async function masterItemsOfSource(sb: SB, userId: string, sourceId: string): Promise<MasterItemLite[]> {
+  const { data, error } = await sb
+    .from("profile_items")
+    .select("id,kind,data")
+    .eq("user_id", userId)
+    .eq("source_id", sourceId)
+    .in("kind", [...MATCHABLE_KINDS]);
+  if (error) throw new Error(error.message);
+  return (data ?? []).map((r) => ({
+    id: r.id as string,
+    kind: (r.kind as string) ?? "",
+    data: (r.data as Record<string, unknown>) ?? {},
+  }));
+}
+
 /**
  * "Releer": reemplaza el staging PENDIENTE de una fuente por la lectura nueva y
  * actualiza sus metadatos (raw_text, page_count, status…). Lo ya aceptado en el
  * master no se toca. Devuelve cuántos items nuevos quedaron en staging.
+ *
+ * Antes de insertar, casa las filas nuevas contra lo que el usuario ya aceptó de
+ * esta fuente y MARCA (duplicate_of) las que ya están: releer deja de re-proponer
+ * a ciegas el trabajo ya revisado, sin descartar nada por su cuenta (ver arriba).
  */
 export async function restageSource(
   sb: SB,
@@ -432,7 +572,9 @@ export async function restageSource(
   patch?: Partial<ReturnType<typeof sourceInsert>>,
 ): Promise<number> {
   await clearPendingStaged(sb, userId, sourceId);
-  const n = await insertStagedTwoPhase(sb, userId, sourceId, rows);
+  const master = rows.length ? await masterItemsOfSource(sb, userId, sourceId) : [];
+  const dupMap = master.length ? matchStagedAgainstMaster(master, rows) : undefined;
+  const n = await insertStagedTwoPhase(sb, userId, sourceId, rows, dupMap);
   if (patch) {
     const { error } = await sb.from("ingestion_sources").update(patch).eq("id", sourceId).eq("user_id", userId);
     if (error) throw new Error(error.message);

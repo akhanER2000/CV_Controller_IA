@@ -46,6 +46,22 @@ export const fuentes = {
     "fuentes.item.pages": " · {n} págs",
     "fuentes.item.added": "añadida",
 
+    // ── Informe por fuente (bloque D) — números reales del servidor. Cada chip es
+    //    un valor (calculado en código) + esta etiqueta. Sin dato → no se pinta. ──
+    "fuentes.report.readK": "leídos del documento",
+    "fuentes.report.kb": "{n} KB",
+    "fuentes.report.chars": "{n} caracteres",
+    "fuentes.report.transcribed": "transcrito por IA",
+    "fuentes.report.callsK": "llamadas al modelo",
+    "fuentes.report.tokensK": "tokens",
+    "fuentes.report.itemsK": "ítems extraídos",
+    "fuentes.report.duplicatesK": "posibles duplicados",
+    "fuentes.report.noEvidenceK": "sin evidencia",
+    "fuentes.report.cache": "servido de caché — sin coste de IA",
+    "fuentes.report.failed": "No se pudo leer: {msg}",
+    "fuentes.report.contextOne": "1 sección se leyó como contexto y no se extrajo: {list}",
+    "fuentes.report.contextMany": "{n} secciones se leyeron como contexto y no se extrajeron: {list}",
+
     // Tags compartidos
     "fuentes.tag.noAiApi": "sin IA — API con esquema",
     "fuentes.tag.portfolio": "portfolio",
@@ -239,6 +255,22 @@ export const fuentes = {
     "fuentes.item.charsRead": "characters read",
     "fuentes.item.pages": " · {n} pages",
     "fuentes.item.added": "added",
+
+    // ── Per-source report (block D) — real server numbers. Each chip is a value
+    //    (computed in code) + this label. No datum → not painted. ──
+    "fuentes.report.readK": "read from the document",
+    "fuentes.report.kb": "{n} KB",
+    "fuentes.report.chars": "{n} characters",
+    "fuentes.report.transcribed": "AI-transcribed",
+    "fuentes.report.callsK": "model calls",
+    "fuentes.report.tokensK": "tokens",
+    "fuentes.report.itemsK": "items extracted",
+    "fuentes.report.duplicatesK": "possible duplicates",
+    "fuentes.report.noEvidenceK": "without evidence",
+    "fuentes.report.cache": "served from cache — no AI cost",
+    "fuentes.report.failed": "Couldn't read: {msg}",
+    "fuentes.report.contextOne": "1 section was read as context and not extracted: {list}",
+    "fuentes.report.contextMany": "{n} sections were read as context and not extracted: {list}",
 
     // Shared tags
     "fuentes.tag.noAiApi": "no AI — schema-backed API",

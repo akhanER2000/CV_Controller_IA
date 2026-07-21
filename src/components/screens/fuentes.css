@@ -81,6 +81,29 @@
 .fu-card .fu-repo:hover{background:color-mix(in srgb,var(--surface) 58%,transparent)}
 .fu-card .c-input{background:color-mix(in srgb,var(--surface-sunken) 70%,transparent)}
 
+/* ── Informe por fuente (bloque D) ───────────────────────────────────────────
+   Reemplaza el .fu-facts de columnas FIJAS (grid-template-columns hardcodeado a
+   "1fr 1fr 1fr") por chips que FLUYEN: añadir un dato es añadir un chip, sin tocar
+   ningún literal de columnas. Misma voz tipográfica que .fu-facts (valor mono
+   grande + etiqueta micro), pero en flex-wrap. Cada chip lleva su propia línea de
+   1px a la izquierda para conservar el ritmo de rejilla del panel de vidrio. */
+.fu-report{display:flex;flex-wrap:wrap;gap:1px;background:var(--border);border-top:1px solid var(--border)}
+.fu-rchip{flex:1 1 auto;min-width:120px;background:color-mix(in srgb,var(--surface) 58%,transparent);padding:12px 22px 14px}
+.fu-rchip .v{font:500 15px/1.2 var(--font-mono);color:var(--text);display:flex;align-items:baseline;gap:7px;flex-wrap:wrap}
+.fu-rchip .k{margin-top:4px;font:400 var(--fs-micro)/1.4 var(--font-sans);color:var(--text-muted)}
+/* una cifra que pide revisión (duplicado / sin evidencia por decidir): se tiñe el
+   valor, no el fondo, para que salte sin gritar. El cero se queda neutro. */
+.fu-rchip--warn .v{color:var(--accent-text)}
+/* el sello de procedencia dentro del chip de lectura: «transcrito por IA» */
+.fu-rtag{font:500 8px/1 var(--font-mono);letter-spacing:.09em;text-transform:uppercase;color:var(--text-subtle);
+  border:1px solid var(--border);border-radius:4px;padding:3px 5px;transform:translateY(-1px)}
+/* notas del informe (caché, contexto no extraído): voz de .fu-note pero sin borde
+   punteado propio, porque cuelgan directamente del informe. */
+.fu-rnote{padding:11px 22px;border-top:1px solid var(--border);
+  font:400 var(--fs-micro)/1.6 var(--font-mono);color:var(--text-subtle)}
+.fu-rnote--ctx{color:var(--text-muted);border-top:1px dashed var(--border)}
+@media (max-width:768px){.fu-rchip{min-width:44%}}
+
 /* vías de LinkedIn como botones ejecutables (mismo look que los enlaces .vias>a) */
 .fu-li .vias>button{background:color-mix(in srgb,var(--surface) 58%,transparent);border:0;text-align:left;cursor:pointer;padding:13px 18px;
   font:400 var(--fs-data)/1.6 var(--font-sans);color:var(--text-muted)}

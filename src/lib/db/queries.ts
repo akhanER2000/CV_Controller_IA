@@ -2,6 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { ImportResult } from "@/lib/extract/types";
 import { normalizeLinks, type ResumeData } from "@/lib/cv/resume";
 import { insertStagedTwoPhase, readMergeProposal, type MergeProposal } from "@/lib/db/sources";
+import { sourceStagedCounts, ZERO_TALLY } from "@/lib/db/staging-counts";
 
 /**
  * Capa de datos del servidor (contra el esquema 0001). Recibe el cliente de
@@ -461,7 +462,137 @@ export async function listVariants(sb: SB, userId: string): Promise<VariantSumma
   });
 }
 
-/** Una fuente de ingesta, tal como la lista FuentesScreen/Dashboard. */
+/* ============================================================================
+   INFORME POR FUENTE (bloque D · §1·§2) — que el usuario CONFÍE en que una fuente
+   entró completa sin auditar el master a mano.
+
+   La tarjeta de una fuente tiene que decir, con NÚMEROS REALES del servidor:
+   cuánto se leyó, cuántas llamadas al modelo costó, cuántos items produjo y
+   cuántos de ellos quedaron dudosos (posible duplicado / sin evidencia). Cada
+   cifra tiene su procedencia; la que no se pueda leer de datos reales NO se pinta
+   (mejor tres ciertas que cinco con una inventada).
+
+   De dónde sale cada número:
+     · llamadas / tokens / caracteres leídos → `ingestion_events` (telemetría por
+       ingesta que escribe db/telemetria.ts). Ver `resumirEventos`.
+     · items / posibles duplicados / sin evidencia → recuento por fuente del
+       staging (db/staging-counts.ts · sourceStagedCounts).
+     · estado / fallo / transcripción / páginas → columnas de la propia fuente.
+   ============================================================================ */
+
+/* Claves de i18n con que db/telemetria.ts (EVENTO.*) escribe en `ingestion_events`.
+   Se REPLICAN aquí como constantes de LECTURA en vez de importar telemetria: ese
+   módulo es `server-only` y este lector se prueba en aislamiento. Si allá cambian,
+   `tests/informe-fuente.test.ts` —que ancla estos strings contra EVENTO— lo grita. */
+export const EVENTO_CONSUMO = "ingesta.evento.consumo";
+export const EVENTO_CONTEXTO = "ingesta.evento.contexto";
+
+/** Lo que la telemetría sabe de CÓMO se leyó una fuente. `null` donde no hay dato:
+ *  GitHub no llama al modelo (no hay consumo), una fuente vieja no tiene eventos. */
+export interface SourceTelemetry {
+  /** caracteres del documento leído (consumo.caracteresDocumento). null si no hay evento. */
+  charsRead: number | null;
+  /** llamadas REALES al modelo. null si la fuente no pasó por IA (p. ej. GitHub). */
+  aiCalls: number | null;
+  /** tokens entrada+salida. null si no hay telemetría de consumo. */
+  tokens: number | null;
+  /** true si alguna llamada no reportó `usage`: los tokens son un SUELO, van con «≥». */
+  tokensAreFloor: boolean;
+  /** la extracción salió entera de la caché por hash (coste cero). */
+  fromCache: boolean;
+  /** secciones que se leyeron como CONTEXTO y NO se mandaron a extraer, con nombre.
+   *  Es «qué quedó fuera», persistido: la regla capital hecha durable, no un aviso
+   *  que se ve una vez y se pierde. */
+  contextSections: { titulo: string; caracteres: number }[];
+}
+
+/** Telemetría en blanco: una fuente sin eventos no inventa números, los deja en null. */
+const TELEMETRIA_VACIA: SourceTelemetry = Object.freeze({
+  charsRead: null,
+  aiCalls: null,
+  tokens: null,
+  tokensAreFloor: false,
+  fromCache: false,
+  contextSections: [],
+});
+
+const esObj = (v: unknown): v is Record<string, unknown> => !!v && typeof v === "object" && !Array.isArray(v);
+const num = (v: unknown): number | null => (typeof v === "number" && Number.isFinite(v) ? v : null);
+
+/** Una fila cruda de ingestion_events, tal como se baja para el informe. */
+export interface EventoRow {
+  /** bigserial: mayor id ⟺ evento más reciente (para quedarnos con la última ingesta). */
+  id: number;
+  sourceId: string;
+  message: string;
+  payload: unknown;
+}
+
+/**
+ * Resume los eventos de ingesta por fuente. PURO y determinista (se prueba sin
+ * Supabase). De cada fuente se queda con el consumo y el contexto MÁS RECIENTES
+ * (mayor id): un «releer» añade eventos nuevos, y lo que la tarjeta debe reflejar
+ * es la última lectura —la que produjo el staging actual—, no la suma de todas.
+ * Parseo DEFENSIVO: un payload con otra forma degrada a null/vacío, no revienta.
+ */
+export function resumirEventos(rows: EventoRow[]): Record<string, SourceTelemetry> {
+  // último consumo y último contexto por fuente (mayor id gana).
+  const consumo = new Map<string, { id: number; p: Record<string, unknown> }>();
+  const contexto = new Map<string, { id: number; p: Record<string, unknown> }>();
+  for (const r of rows) {
+    if (!r.sourceId || !esObj(r.payload)) continue;
+    const bucket = r.message === EVENTO_CONSUMO ? consumo : r.message === EVENTO_CONTEXTO ? contexto : null;
+    if (!bucket) continue;
+    const prev = bucket.get(r.sourceId);
+    if (!prev || r.id > prev.id) bucket.set(r.sourceId, { id: r.id, p: r.payload });
+  }
+
+  const out: Record<string, SourceTelemetry> = {};
+  const ids = new Set<string>([...consumo.keys(), ...contexto.keys()]);
+  for (const id of ids) {
+    const c = consumo.get(id)?.p;
+    const x = contexto.get(id)?.p;
+
+    const tokensEntrada = c ? num(c.tokensEntrada) : null;
+    const tokensSalida = c ? num(c.tokensSalida) : null;
+    const tokens =
+      tokensEntrada === null && tokensSalida === null ? null : (tokensEntrada ?? 0) + (tokensSalida ?? 0);
+
+    const secciones = Array.isArray(x?.secciones) ? x!.secciones : [];
+    const contextSections = secciones
+      .filter(esObj)
+      .map((s) => ({ titulo: typeof s.titulo === "string" ? s.titulo : "", caracteres: num(s.caracteres) ?? 0 }));
+
+    out[id] = {
+      charsRead: c ? num(c.caracteresDocumento) : null,
+      aiCalls: c ? num(c.llamadas) : null,
+      tokens,
+      tokensAreFloor: c ? (num(c.llamadasSinUso) ?? 0) > 0 : false,
+      fromCache: c ? c.desdeCache === true : false,
+      contextSections,
+    };
+  }
+  return out;
+}
+
+/** Baja los eventos de ingesta del usuario y los resume por fuente (RLS own rows). */
+async function readIngestaEventos(sb: SB, userId: string): Promise<Record<string, SourceTelemetry>> {
+  const { data, error } = await sb
+    .from("ingestion_events")
+    .select("id,source_id,message,payload")
+    .eq("user_id", userId)
+    .in("message", [EVENTO_CONSUMO, EVENTO_CONTEXTO]);
+  if (error) throw new Error(error.message);
+  const rows: EventoRow[] = (data ?? []).map((r) => ({
+    id: Number(r.id),
+    sourceId: (r.source_id as string) ?? "",
+    message: (r.message as string) ?? "",
+    payload: r.payload,
+  }));
+  return resumirEventos(rows);
+}
+
+/** Una fuente de ingesta CON SU INFORME, tal como la lista FuentesScreen/Dashboard. */
 export interface SourceSummary {
   id: string;
   kind: string;
@@ -469,28 +600,82 @@ export interface SourceSummary {
   sourceUrl: string | null;
   status: string;
   pageCount: number | null;
-  rawTextLength: number;
   createdAt: string;
+  /** motivo del fallo (columna `error`). Se rellena de verdad y hasta hoy NO se
+   *  enseñaba: una fuente que dice «falló» tenía el porqué a un select de distancia. */
+  error: string | null;
+  /** raw_text es una TRANSCRIPCIÓN del LLM (captura/escaneo), no texto extraído.
+   *  Distingue «7.200 caracteres de un PDF» de «7.200 transcritos de una imagen». */
+  isTranscription: boolean;
+  /** caracteres del documento, como número plano. Se CONSERVA en el contrato porque
+   *  el Panel (DashboardScreen, fuera de esta frontera) lo lee para su tarjeta de
+   *  fuentes. Ahora sale de la telemetría (charsRead), NO de bajar raw_text: 0 si no
+   *  hay telemetría (p. ej. GitHub). El informe de Fuentes usa `charsRead` (que
+   *  distingue «0 real» de «sin dato»); este campo es solo para el consumidor viejo. */
+  rawTextLength: number;
+  // ── Informe (telemetría). null ⟺ no hay dato real; la tarjeta no lo pinta. ──
+  charsRead: number | null;
+  aiCalls: number | null;
+  tokens: number | null;
+  tokensAreFloor: boolean;
+  fromCache: boolean;
+  contextSections: { titulo: string; caracteres: number }[];
+  // ── Informe (staging). Siempre conocidos (0 incluido). ──
+  itemsExtracted: number;
+  pending: number;
+  possibleDuplicates: number;
+  withoutEvidence: number;
 }
 
-/** ingestion_sources del usuario (más recientes primero). */
+/**
+ * ingestion_sources del usuario (más recientes primero), CON su informe.
+ *
+ * ★ ARREGLO DE RENDIMIENTO. Antes esta consulta hacía `select(...,raw_text,...)`
+ *   solo para calcular `raw_text.length` en memoria: bajaba el CORPUS ENTERO del
+ *   usuario —cientos de KB por fuente— en cada carga de Fuentes, para mostrar un
+ *   número. Ahora `raw_text` NO se baja: los «caracteres leídos» salen de la
+ *   telemetría (consumo.caracteresDocumento, que ES raw_text.length medido en la
+ *   ingesta), y el resto del informe de dos consultas de columnas minúsculas. La
+ *   pantalla deja de arrastrar el CV de nadie para pintar una cifra.
+ */
 export async function listSources(sb: SB, userId: string): Promise<SourceSummary[]> {
-  const { data, error } = await sb
-    .from("ingestion_sources")
-    .select("id,kind,original_name,source_url,status,page_count,raw_text,created_at")
-    .eq("user_id", userId)
-    .order("created_at", { ascending: false });
-  if (error) throw new Error(error.message);
-  return (data ?? []).map((r) => ({
-    id: r.id as string,
-    kind: (r.kind as string) ?? "paste",
-    originalName: (r.original_name as string | null) ?? null,
-    sourceUrl: (r.source_url as string | null) ?? null,
-    status: (r.status as string) ?? "pending",
-    pageCount: (r.page_count as number | null) ?? null,
-    rawTextLength: typeof r.raw_text === "string" ? (r.raw_text as string).length : 0,
-    createdAt: r.created_at as string,
-  }));
+  const [srcRes, telemetria, tally] = await Promise.all([
+    sb
+      .from("ingestion_sources")
+      .select("id,kind,original_name,source_url,status,page_count,raw_text_is_transcription,error,created_at")
+      .eq("user_id", userId)
+      .order("created_at", { ascending: false }),
+    readIngestaEventos(sb, userId),
+    sourceStagedCounts(sb, userId),
+  ]);
+  if (srcRes.error) throw new Error(srcRes.error.message);
+  return (srcRes.data ?? []).map((r) => {
+    const id = r.id as string;
+    const tel = telemetria[id] ?? TELEMETRIA_VACIA;
+    const t = tally[id] ?? ZERO_TALLY;
+    return {
+      id,
+      kind: (r.kind as string) ?? "paste",
+      originalName: (r.original_name as string | null) ?? null,
+      sourceUrl: (r.source_url as string | null) ?? null,
+      status: (r.status as string) ?? "pending",
+      pageCount: (r.page_count as number | null) ?? null,
+      createdAt: r.created_at as string,
+      error: (r.error as string | null) ?? null,
+      isTranscription: Boolean(r.raw_text_is_transcription),
+      rawTextLength: tel.charsRead ?? 0,
+      charsRead: tel.charsRead,
+      aiCalls: tel.aiCalls,
+      tokens: tel.tokens,
+      tokensAreFloor: tel.tokensAreFloor,
+      fromCache: tel.fromCache,
+      contextSections: tel.contextSections,
+      itemsExtracted: t.items,
+      pending: t.pending,
+      possibleDuplicates: t.duplicates,
+      withoutEvidence: t.withoutEvidence,
+    };
+  });
 }
 
 /** Recuento simple de profile_items del usuario (para copys de estado vacío). */
