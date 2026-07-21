@@ -462,6 +462,253 @@ function buildFallback(variantId: string): { master: MasterRow[]; items: VItem[]
 type Mode = "doc" | "raw";
 type View = "master" | "mid" | "preview";
 
+/* ============================================================================
+   PUNTO 5 · ACORDEÓN DE LA BIBLIOTECA — lógica PURA y testeable
+   ----------------------------------------------------------------------------
+   La columna izquierda pintaba el master DE CORRIDO; con 105 items no se navega.
+   Estas funciones deciden, SIN tocar el DOM, qué grupos existen, qué filas
+   sobreviven al buscador y qué cuenta va en cada cabecera. Se extraen del
+   componente por la MISMA razón que buildEditorResumeData: en este repo los
+   tests corren en Node (sin DOM), así que lo único demostrable de una pantalla
+   es su lógica pura.
+
+   ⚠ Y aquí hay una TRAMPA real que probar. El filtrado de búsqueda ocurría
+   DENTRO de la fila (libRow devolvía null si no casaba), no antes: la cabecera y
+   su contador salían del master SIN filtrar. Consecuencia: al buscar, un grupo
+   podía pintar cabecera y CERO filas, y un contador basado en esa longitud diría
+   «12» con nada a la vista. Por eso el plan se calcula ANTES de pintar: el
+   contador cuenta lo que DE VERDAD se pinta, y saber qué grupos tienen resultados
+   es lo que permite auto-desplegar solo esos. */
+
+/** Las secciones de la biblioteca, EN ORDEN de pintado. Son EXACTAMENTE los
+ *  grupos que ya existían. No se inventan «Certificaciones» ni «Idiomas» como
+ *  sección propia: el modelo de datos no los agrupa así (los idiomas viven como
+ *  un grupo de skills, p. ej. «Idiomas: Español nativo, Inglés B2»), y pintar una
+ *  sección que jamás tendrá filas sería ruido, no una ayuda. */
+export type LibSectionId = "summary" | "work" | "skills" | "projects" | "education" | "references";
+export const LIB_SECTIONS: readonly LibSectionId[] = [
+  "summary",
+  "work",
+  "skills",
+  "projects",
+  "education",
+  "references",
+] as const;
+
+/** El kind del master → su sección de biblioteca. 'bullet' cae en 'work' porque
+ *  una viñeta se lee bajo su rol. Un kind sin grupo propio (certification,
+ *  language, publication, link, basics) devuelve null: no tiene columna. */
+export function libSectionOfKind(kind: string): LibSectionId | null {
+  switch (kind) {
+    case "summary":
+      return "summary";
+    case "work":
+    case "bullet":
+      return "work";
+    case "skill":
+      return "skills";
+    case "project":
+      return "projects";
+    case "education":
+      return "education";
+    case "reference":
+      return "references";
+    default:
+      return null;
+  }
+}
+
+/** Texto buscable de un item del master. Módulo-scope y puro: es el MISMO texto
+ *  que se pinta, para que «buscar lo que veo» encuentre «lo que hay». Espeja el
+ *  libText que usaba el componente; la referencia usa referenceLine (idéntico a
+ *  lo que saldría impreso), no una versión resumida que engañe. */
+export function libTextOf(kind: string, data: Record<string, unknown>): string {
+  switch (kind) {
+    case "summary":
+      return S(data, "text");
+    case "work":
+      return [S(data, "title"), S(data, "company")].filter(Boolean).join(" · ");
+    case "bullet":
+      return S(data, "text");
+    case "skill":
+      return [S(data, "group"), S(data, "items")].filter(Boolean).join(": ");
+    case "project":
+      return [S(data, "name"), S(data, "description")].filter(Boolean).join(" — ");
+    case "education":
+      return [S(data, "degree"), S(data, "institution")].filter(Boolean).join(" · ");
+    case "reference":
+      return referenceLine(data as ReferenceFields);
+    default:
+      return "";
+  }
+}
+
+/** ¿el item casa con la consulta (ya recortada y en minúsculas)? Consulta vacía
+ *  = todo casa. */
+function libMatch(m: MasterRow, q: string): boolean {
+  return q === "" || libTextOf(m.kind, m.data).toLowerCase().includes(q);
+}
+
+/** Una fila del plan: la fila del master y si es viñeta (para sangrarla y no
+ *  contarla como rol). */
+export interface LibRowPlan {
+  row: MasterRow;
+  isBullet: boolean;
+}
+
+/** El plan de un grupo YA filtrado: las filas a pintar en orden, si el grupo
+ *  existe en el master, si algo sobrevivió al filtro, y los conteos de lo que se
+ *  pinta (roles/viñetas para work; total para el resto). */
+export interface LibGroupPlan {
+  id: LibSectionId;
+  rows: LibRowPlan[];
+  /** ¿el master tiene datos de este grupo (SIN filtrar)? decide si hay cabecera */
+  present: boolean;
+  /** ¿queda ≥1 fila tras el filtro? decide auto-desplegado y ocultar-al-buscar */
+  hasMatches: boolean;
+  roles: number;
+  bullets: number;
+  /** total de filas pintadas (roles + viñetas en work) */
+  count: number;
+}
+
+/**
+ * El plan COMPLETO de la biblioteca a partir del master y la consulta. Filtra
+ * ANTES de pintar (ese es el arreglo del bug del contador) y arma el grupo de
+ * experiencia como lo que es: roles con sus viñetas intercaladas.
+ *
+ * Regla de la búsqueda en experiencia, pensada para que sirva para AÑADIR:
+ *   · sin consulta            → el rol y TODAS sus viñetas.
+ *   · el rol casa             → el rol y TODAS sus viñetas (contexto completo).
+ *   · solo casan viñetas      → la cabecera del rol + esas viñetas (para no
+ *                               dejarlas huérfanas, como pasaba antes).
+ *   · no casa nada del rol    → el rol entero desaparece.
+ */
+export function computeLibPlan(master: MasterRow[], query: string): LibGroupPlan[] {
+  const q = query.trim().toLowerCase();
+  const bySo = (a: MasterRow, b: MasterRow) => a.sort_order - b.sort_order;
+  const of = (k: string) => master.filter((m) => m.kind === k).sort(bySo);
+  const bulletsOf = (id: string) =>
+    master.filter((m) => m.kind === "bullet" && m.parent_id === id).sort(bySo);
+
+  const plain = (id: LibSectionId, all: MasterRow[]): LibGroupPlan => {
+    const shown = all.filter((m) => libMatch(m, q));
+    return {
+      id,
+      rows: shown.map((row) => ({ row, isBullet: false })),
+      present: all.length > 0,
+      hasMatches: shown.length > 0,
+      roles: 0,
+      bullets: 0,
+      count: shown.length,
+    };
+  };
+
+  // Experiencia: lista plana en el DOM (roles y viñetas hermanos), pero el plan
+  // los agrupa para poder contarlos por separado y filtrar por rol.
+  const works = of("work");
+  const workRows: LibRowPlan[] = [];
+  let roles = 0;
+  let bullets = 0;
+  for (const w of works) {
+    const bs = bulletsOf(w.id);
+    const roleHit = libMatch(w, q);
+    const bulletHits = q === "" ? bs : bs.filter((b) => libMatch(b, q));
+    let show: MasterRow[] | null = null;
+    if (q === "" || roleHit) show = bs;
+    else if (bulletHits.length) show = bulletHits;
+    else show = null;
+    if (show === null) continue;
+    workRows.push({ row: w, isBullet: false });
+    roles += 1;
+    for (const b of show) {
+      workRows.push({ row: b, isBullet: true });
+      bullets += 1;
+    }
+  }
+  const workGroup: LibGroupPlan = {
+    id: "work",
+    rows: workRows,
+    present: works.length > 0,
+    hasMatches: workRows.length > 0,
+    roles,
+    bullets,
+    count: roles + bullets,
+  };
+
+  const byId: Record<LibSectionId, LibGroupPlan> = {
+    summary: plain("summary", of("summary")),
+    work: workGroup,
+    skills: plain("skills", of("skill")),
+    projects: plain("projects", of("project")),
+    education: plain("education", of("education")),
+    references: plain("references", of("reference")),
+  };
+  return LIB_SECTIONS.map((id) => byId[id]);
+}
+
+/**
+ * Qué secciones se abren SOLAS: al buscar, las que TIENEN resultados; y siempre
+ * la sección del item que se edita en el centro (para verlo en su contexto). Es
+ * una capa que se SUPERPONE al plegado manual: no lo borra. Al limpiar el
+ * buscador, cada sección vuelve al estado que el usuario recordaba.
+ */
+export function forcedOpenSections(
+  plan: LibGroupPlan[],
+  query: string,
+  editingSection: LibSectionId | null,
+): Set<LibSectionId> {
+  const out = new Set<LibSectionId>();
+  if (query.trim()) for (const g of plan) if (g.hasMatches) out.add(g.id);
+  if (editingSection) out.add(editingSection);
+  return out;
+}
+
+/** ¿esta sección está desplegada? Una forzada-abierta gana; si no, está abierta
+ *  salvo que el usuario la haya plegado a mano. */
+export function libSectionOpen(
+  id: LibSectionId,
+  folded: ReadonlySet<string>,
+  forced: ReadonlySet<LibSectionId>,
+): boolean {
+  if (forced.has(id)) return true;
+  return !folded.has(id);
+}
+
+/* ── Persistencia del plegado ────────────────────────────────────────────────
+   El estado de plegado es PREFERENCIA DE UI, no un dato del usuario: no pasa por
+   user_settings (vocabulario cerrado) ni por el servidor. localStorage es lo
+   razonable —vive en el navegador, sobrevive a la sesión y su pérdida no rompe
+   nada (todo vuelve desplegado). Puro y exportado para poder probarlo con un
+   stub de localStorage. */
+export const LIB_FOLD_KEY = "corpus.editor.libFolded";
+
+export function loadFoldedFrom(store: Pick<Storage, "getItem"> | null | undefined): Set<string> {
+  if (!store) return new Set();
+  try {
+    const raw = store.getItem(LIB_FOLD_KEY);
+    if (!raw) return new Set();
+    const arr: unknown = JSON.parse(raw);
+    return Array.isArray(arr) ? new Set(arr.filter((x): x is string => typeof x === "string")) : new Set();
+  } catch {
+    // localStorage puede lanzar (modo privado, cuota, JSON corrupto): degradar a
+    // «nada plegado» es correcto, callar el motivo no.
+    return new Set();
+  }
+}
+
+export function saveFoldedTo(
+  store: Pick<Storage, "setItem"> | null | undefined,
+  folded: ReadonlySet<string>,
+): void {
+  if (!store) return;
+  try {
+    store.setItem(LIB_FOLD_KEY, JSON.stringify([...folded]));
+  } catch {
+    /* sin persistencia hoy; la UI sigue funcionando en memoria */
+  }
+}
+
 export function EditorVarianteScreen({ variantId = "editor" }: { variantId?: string } = {}) {
   const t = useT();
   const router = useRouter();
@@ -484,6 +731,29 @@ export function EditorVarianteScreen({ variantId = "editor" }: { variantId?: str
      porque los vínculos viven en su propia tabla (reference_links) y GET
      /api/variants/[id] no los trae. Solo sirven para SUGERIR: nada se añade solo. */
   const [refs, setRefs] = useState<ReferenceView[]>([]);
+  /* HUECO ARREGLADO: GET /api/references devuelve migracionPendiente cuando faltan
+     las migraciones 0004/0005, y antes el editor lo tiraba con setRefs([]) EN
+     SILENCIO. El usuario veía una biblioteca sin referencias y ni una pista. Ahora
+     el motivo (migración pendiente o error real) se guarda y se pinta donde el
+     usuario iría a crearlas. */
+  const [refsMigracion, setRefsMigracion] = useState(false);
+  const [refsError, setRefsError] = useState("");
+  /* PUNTO 5 · plegado del acordeón de la biblioteca. Set de LibSectionId plegadas.
+     Preferencia de UI que SOBREVIVE a la sesión (localStorage). Nace vacío y se
+     hidrata en un efecto de montaje, NO en el inicializador: leer localStorage en
+     el primer render rompería la hidratación de Next (el HTML del servidor no
+     tiene localStorage, así que pintaría todo desplegado y el cliente discreparía).
+     El ref marca que ya se hidrató, para que el efecto de guardado no escriba el
+     Set vacío inicial encima de lo que había guardado. */
+  const [folded, setFolded] = useState<ReadonlySet<string>>(new Set());
+  const foldedHydrated = useRef(false);
+  /* PUNTO 6 · formulario de alta de referencia DESDE el editor. Nace cerrado; se
+     abre solo cuando el master no tiene ninguna (ver más abajo). El borrador es
+     local hasta pulsar «Añadir»: nada entra al master a medio escribir. */
+  const [refFormOpen, setRefFormOpen] = useState(false);
+  const [refDraft, setRefDraft] = useState<ReferenceFields>({});
+  const [refSaving, setRefSaving] = useState(false);
+  const [refFormErr, setRefFormErr] = useState("");
   // Galería de plantillas (el selector con miniaturas reales). Cerrarla no pierde
   // nada: cada elección se persiste en el momento, como cualquier otro ajuste.
   const [galleryOpen, setGalleryOpen] = useState(false);
@@ -584,12 +854,21 @@ export function EditorVarianteScreen({ variantId = "editor" }: { variantId?: str
       try {
         const res = await fetch("/api/references");
         if (!res.ok) throw new Error(await readApiError(res));
-        const j = (await res.json()) as { references?: ReferenceView[] };
-        if (active) setRefs(j.references ?? []);
+        const j = (await res.json()) as { references?: ReferenceView[]; migracionPendiente?: boolean };
+        if (!active) return;
+        setRefs(j.references ?? []);
+        // NO se descarta en silencio: si faltan las migraciones, se recuerda para
+        // pintar el aviso real donde el usuario querría crear una referencia, en
+        // vez de mostrarle una biblioteca vacía sin explicación.
+        setRefsMigracion(j.migracionPendiente === true);
+        setRefsError("");
       } catch (e) {
         // No se calla: sin esto, «¿por qué no me sugiere a mi jefe?» no se depura.
         console.error("[editor] no se pudieron leer las referencias", e);
-        if (active) setRefs([]);
+        if (active) {
+          setRefs([]);
+          setRefsError(reason(e));
+        }
       }
     })();
     return () => {
@@ -1104,9 +1383,13 @@ export function EditorVarianteScreen({ variantId = "editor" }: { variantId?: str
   );
 
   // POST un item del master a la variante (optimista con id temporal + reconcilia).
+  // rowHint: la fila del master cuando TODAVÍA no está en masterById — es el caso
+  // de una referencia recién creada desde el editor, cuyo setMaster aún no se ha
+  // reflejado en este render. Sin él, postItem saldría en vacío y la referencia
+  // nueva no se añadiría a la variante.
   const postItem = useCallback(
-    async (masterId: string) => {
-      const m = masterById.get(masterId);
+    async (masterId: string, rowHint?: MasterRow) => {
+      const m = masterById.get(masterId) ?? rowHint;
       if (!m || items.some((i) => i.item_id === masterId)) return;
       const tmpId = "tmp-" + Math.random().toString(36).slice(2);
       const optimistic: VItem = {
@@ -1192,6 +1475,89 @@ export function EditorVarianteScreen({ variantId = "editor" }: { variantId?: str
     },
     [items, masterById, removeItem, postItem, flash, t],
   );
+
+  /* ── PUNTO 6 · crear una referencia DESDE el editor ───────────────────────────
+     LA REGLA DEL PRODUCTO, INTACTA: una referencia creada desde la variante TAMBIÉN
+     ENTRA AL MASTER. El master es la fuente de verdad; no se crean datos huérfanos
+     dentro de una variante. La variante decide cuáles se IMPRIMEN, no cuáles
+     existen. Por eso el gesto son dos pasos encadenados y verificables:
+       1) POST /api/references  → nace en el master (origin 'manual').
+       2) postItem(ref.id, hint)→ se añade a ESTA variante.
+     El `hint` es imprescindible: setMaster no se ve en este mismo render, así que
+     postItem no encontraría la fila por masterById sin él. */
+  const createReferenceFromEditor = useCallback(async () => {
+    const nombre = String(refDraft.name ?? "").trim();
+    if (!nombre) {
+      // El servidor también lo exige (invalidReferenceData), pero decirlo aquí
+      // ahorra un viaje y no deja el foco perdido.
+      setRefFormErr(tRef.current("editor.refFormNameReq"));
+      return;
+    }
+    if (!supabaseEnabled) {
+      // Sin backend no hay dónde crearla; se dice, no se finge que se guardó.
+      setRefFormErr(tRef.current("editor.fitLocal"));
+      return;
+    }
+    setRefSaving(true);
+    setRefFormErr("");
+    try {
+      const res = await fetch("/api/references", {
+        method: "POST",
+        headers: JSON_HEADERS,
+        body: JSON.stringify({ data: refDraft }),
+      });
+      if (!res.ok) throw new Error(await readApiError(res));
+      const { reference } = (await res.json()) as { reference?: ReferenceView };
+      if (!reference) throw new Error("La respuesta no trae la referencia creada.");
+      // 1) que la biblioteca y las sugerencias la vean YA.
+      setRefs((prev) => [...prev, reference]);
+      const fila: MasterRow = {
+        id: reference.id,
+        kind: "reference",
+        data: reference.data,
+        parent_id: null,
+        sort_order: reference.sortOrder,
+      };
+      setMaster((prev) => (prev.some((m) => m.id === fila.id) ? prev : [...prev, fila]));
+      // 2) añadirla a esta variante (con hint, porque el master aún no se refleja).
+      await postItem(reference.id, fila);
+      setRefDraft({});
+      setRefFormOpen(false);
+      flash(tRef.current("editor.refFormSaved"));
+    } catch (e) {
+      // Se destapa el motivo real (403 sin sesión, 503 migración pendiente, 400 de
+      // validación…): un formulario que falla en mudo es peor que no tenerlo.
+      console.error("[editor] no se pudo crear la referencia", e);
+      setRefFormErr(tRef.current("editor.refFormErr").replace("{r}", reason(e)));
+    } finally {
+      setRefSaving(false);
+    }
+  }, [refDraft, postItem, flash]);
+
+  // ── PUNTO 5 · plegar/desplegar y persistir ──
+  const toggleFold = useCallback((id: string) => {
+    setFolded((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
+  const foldAll = useCallback(() => setFolded(new Set(LIB_SECTIONS)), []);
+  const expandAll = useCallback(() => setFolded(new Set<string>()), []);
+  // Hidratar desde localStorage UNA vez, ya montado en el cliente (evita el desajuste
+  // de hidratación de leerlo en el primer render).
+  useEffect(() => {
+    setFolded(loadFoldedFrom(typeof window === "undefined" ? null : window.localStorage));
+    foldedHydrated.current = true;
+  }, []);
+  // El plegado se persiste cuando cambia. Efecto aparte (no en el handler) para que
+  // foldAll/expand/toggle escriban por el mismo sitio. NO escribe hasta hidratar:
+  // así el Set vacío inicial no pisa lo guardado antes de leerlo.
+  useEffect(() => {
+    if (!foldedHydrated.current) return;
+    saveFoldedTo(typeof window === "undefined" ? null : window.localStorage, folded);
+  }, [folded]);
 
   const toggleHide = useCallback(
     (vitemId: string) => {
@@ -1618,38 +1984,105 @@ export function EditorVarianteScreen({ variantId = "editor" }: { variantId?: str
     );
   };
 
-  // ── Biblioteca (master): filas filtradas por substring del texto visible ──
+  // ── Biblioteca (master): el PLAN de grupos, ya filtrado ANTES de pintar ──
+  // (ver computeLibPlan y la nota del bug del contador arriba). El texto buscable
+  // es la función pura libTextOf, compartida con el plan: buscar «lo que veo».
   const q = libQ.trim().toLowerCase();
-  const libText = (m: MasterRow): string => {
+  const libText = (m: MasterRow): string => libTextOf(m.kind, m.data);
+
+  // El plan y los conteos estructurales se MEMOIZAN: antes los seis filtros y
+  // mBulletsOf recorrían el master entero en cada render (y con contadores por
+  // grupo eso solo crece). Ahora se recalculan solo si cambia el master o la
+  // consulta.
+  const libPlan = useMemo(() => computeLibPlan(master, libQ), [master, libQ]);
+  const mReferences = useMemo(() => master.filter((m) => m.kind === "reference"), [master]);
+  // El total de la cabecera de columna es ESTRUCTURAL (toda la biblioteca), no el
+  // filtrado: dice cuánto hay, no cuánto se ve ahora mismo.
+  const libCount = useMemo(
+    () =>
+      master.reduce(
+        (n, m) => (libSectionOfKind(m.kind) ? n + 1 : n),
+        0,
+      ),
+    [master],
+  );
+
+  // La sección del item que se edita en el centro: se auto-despliega y se resalta.
+  const editingSection = useMemo<LibSectionId | null>(() => {
+    if (!editingId) return null;
+    const it = items.find((i) => i.id === editingId);
+    return it ? libSectionOfKind(it.kind) : null;
+  }, [editingId, items]);
+  // Qué secciones se abren solas (búsqueda con resultados + la que se edita).
+  const forcedOpen = useMemo(
+    () => forcedOpenSections(libPlan, libQ, editingSection),
+    [libPlan, libQ, editingSection],
+  );
+  // Los grupos que SE PINTAN: presentes y —al buscar— solo los que tienen filas.
+  const visibleGroups = libPlan.filter((g) => g.present && (q === "" || g.hasMatches));
+  const anyMatches = libPlan.some((g) => g.hasMatches);
+  // El control «plegar/desplegar todo» es UN botón que refleja el estado: si todo
+  // lo presente está plegado, ofrece desplegar; si no, plegar.
+  const presentIds = libPlan.filter((g) => g.present).map((g) => g.id);
+  const allFolded = presentIds.length > 0 && presentIds.every((id) => folded.has(id));
+
+  // Etiqueta con singular/plural honesto por sección.
+  const plural = (n: number, kOne: string, kMany: string) =>
+    t(n === 1 ? kOne : kMany).replace("{n}", String(n));
+  const groupTitle = (id: LibSectionId): string =>
+    t(
+      id === "summary"
+        ? "editor.groupSummary"
+        : id === "work"
+          ? "editor.groupWorkBullets"
+          : id === "skills"
+            ? "editor.groupSkills"
+            : id === "projects"
+              ? "editor.groupProjects"
+              : id === "education"
+                ? "editor.groupEducation"
+                : "editor.groupReferences",
+    );
+  const groupCountLabel = (g: LibGroupPlan): string =>
+    g.id === "work"
+      ? `${plural(g.roles, "editor.libNRole", "editor.libNRoles")} · ${plural(g.bullets, "editor.libNBullet", "editor.libNBullets")}`
+      : plural(g.count, "editor.libNItem", "editor.libNItems");
+
+  // El nodo interior de una fila del master (título en negrita para rol/skill,
+  // resumen recortado); el resto es su texto plano.
+  const libRowNode = (m: MasterRow): React.ReactNode => {
     switch (m.kind) {
-      case "summary":
-        return S(m.data, "text");
+      case "summary": {
+        const txt = S(m.data, "text");
+        return txt.slice(0, 80) + (txt.length > 80 ? "…" : "");
+      }
       case "work":
-        return [S(m.data, "title"), S(m.data, "company")].filter(Boolean).join(" · ");
-      case "bullet":
-        return S(m.data, "text");
+        return (
+          <>
+            <b style={{ color: "var(--text)" }}>{S(m.data, "title")}</b>
+            {S(m.data, "company") ? " · " + S(m.data, "company") : ""}
+          </>
+        );
       case "skill":
-        return [S(m.data, "group"), S(m.data, "items")].filter(Boolean).join(": ");
-      case "project":
-        return [S(m.data, "name"), S(m.data, "description")].filter(Boolean).join(" — ");
-      case "education":
-        return [S(m.data, "degree"), S(m.data, "institution")].filter(Boolean).join(" · ");
-      case "reference":
-        // La MISMA composición que imprime el documento (referenceLine): lo que se
-        // ve en la biblioteca es exactamente lo que saldría en el PDF si se
-        // encendiera el interruptor. Nada de una versión "resumida" que engañe.
-        return referenceLine(m.data as ReferenceFields);
+        return (
+          <>
+            <b style={{ color: "var(--text)" }}>{S(m.data, "group")}:</b> {S(m.data, "items")}
+          </>
+        );
       default:
-        return "";
+        return libTextOf(m.kind, m.data);
     }
   };
-  const libRow = (m: MasterRow, node?: React.ReactNode) => {
-    const text = libText(m);
-    if (q && !text.toLowerCase().includes(q)) return null;
+  // Una fila del plan. Ya viene filtrada, así que NO vuelve a decidir visibilidad.
+  const libRow = (m: MasterRow, isBullet: boolean) => {
     const inV = vItemByMaster.has(m.id);
     return (
-      <div className={"lib-row" + (inV ? " in" : "")} data-lib={m.id} key={m.id}>
-        <span className="tx">{node ?? text}</span>
+      <div
+        className={"lib-row" + (inV ? " in" : "") + (isBullet ? " lib-bullet" : "")}
+        data-lib={m.id}
+        key={m.id}
+      >
+        <span className="tx">{libRowNode(m)}</span>
         <button
           type="button"
           className="add"
@@ -1662,23 +2095,6 @@ export function EditorVarianteScreen({ variantId = "editor" }: { variantId?: str
       </div>
     );
   };
-
-  // ── Grupos del master para la biblioteca ──
-  const mSummary = master.filter((m) => m.kind === "summary");
-  const mWorks = master.filter((m) => m.kind === "work").sort((a, b) => a.sort_order - b.sort_order);
-  const mBulletsOf = (workId: string) =>
-    master.filter((m) => m.kind === "bullet" && m.parent_id === workId).sort((a, b) => a.sort_order - b.sort_order);
-  const mSkills = master.filter((m) => m.kind === "skill");
-  const mProjects = master.filter((m) => m.kind === "project");
-  const mEducation = master.filter((m) => m.kind === "education");
-  const mReferences = master.filter((m) => m.kind === "reference");
-  const libCount =
-    mSummary.length +
-    mWorks.reduce((n, w) => n + 1 + mBulletsOf(w.id).length, 0) +
-    mSkills.length +
-    mProjects.length +
-    mEducation.length +
-    mReferences.length;
 
   // ── Grupos de la variante (centro) ──
   const summaryItems = items.filter((i) => i.kind === "summary");
@@ -1855,64 +2271,62 @@ export function EditorVarianteScreen({ variantId = "editor" }: { variantId?: str
               value={libQ}
               onChange={(e) => setLibQ(e.target.value)}
             />
+            {/* Plegar / desplegar todo: UN control que refleja el estado. Al buscar
+                el plegado se ignora (mandan las secciones con resultados), pero el
+                botón sigue vivo porque decide cómo quedará al limpiar el buscador. */}
+            {presentIds.length > 0 && (
+              <button
+                type="button"
+                className="lib-foldall"
+                onClick={allFolded ? expandAll : foldAll}
+              >
+                {allFolded ? t("editor.libExpandAll") : t("editor.libFoldAll")}
+              </button>
+            )}
           </div>
           <div id="lib">
-            {mSummary.length > 0 && (
-              <div className="lib-g">
-                <span className="t-overline">{t("editor.groupSummary")}</span>
-                {mSummary.map((m) => libRow(m, S(m.data, "text").slice(0, 80) + (S(m.data, "text").length > 80 ? "…" : "")))}
-              </div>
-            )}
-            {mWorks.length > 0 && (
-              <div className="lib-g">
-                <span className="t-overline">{t("editor.groupWorkBullets")}</span>
-                {mWorks.map((w) => (
-                  <Fragment key={w.id}>
-                    {libRow(w, (
-                      <>
-                        <b style={{ color: "var(--text)" }}>{S(w.data, "title")}</b>
-                        {S(w.data, "company") ? " · " + S(w.data, "company") : ""}
-                      </>
-                    ))}
-                    {mBulletsOf(w.id).map((b) => libRow(b))}
-                  </Fragment>
-                ))}
-              </div>
-            )}
-            {mSkills.length > 0 && (
-              <div className="lib-g">
-                <span className="t-overline">{t("editor.groupSkills")}</span>
-                {mSkills.map((s) =>
-                  libRow(s, (
-                    <>
-                      <b style={{ color: "var(--text)" }}>{S(s.data, "group")}:</b> {S(s.data, "items")}
-                    </>
-                  )),
-                )}
-              </div>
-            )}
-            {mProjects.length > 0 && (
-              <div className="lib-g">
-                <span className="t-overline">{t("editor.groupProjects")}</span>
-                {mProjects.map((p) => libRow(p))}
-              </div>
-            )}
-            {mEducation.length > 0 && (
-              <div className="lib-g">
-                <span className="t-overline">{t("editor.groupEducation")}</span>
-                {mEducation.map((d) => libRow(d))}
-              </div>
-            )}
-            {/* Referencias: añadirlas a la variante NO las imprime. Para eso hace
-                falta además el interruptor de la tarjeta de presentación, y el
-                aviso lo dice aquí para que nadie lo descubra al abrir el PDF. */}
-            {mReferences.length > 0 && (
-              <div className="lib-g">
-                <span className="t-overline">{t("editor.groupReferences")}</span>
-                <p className="lib-note">{t("editor.refsWhenOn")}</p>
-                {mReferences.map((r) => libRow(r))}
-              </div>
-            )}
+            {/* ACORDEÓN: una sección por grupo, con su contador (que cuenta lo que
+                SE PINTA, no el master sin filtrar), su plegado recordado entre
+                sesiones y auto-desplegado al buscar / al editar su item. */}
+            {visibleGroups.map((g) => {
+              const open = libSectionOpen(g.id, folded, forcedOpen);
+              const highlighted = editingSection === g.id;
+              const bodyId = `lib-body-${g.id}`;
+              return (
+                <section
+                  className={"lib-g" + (open ? "" : " folded") + (highlighted ? " lib-editing" : "")}
+                  key={g.id}
+                  data-lib-section={g.id}
+                >
+                  <button
+                    type="button"
+                    className="lib-gh"
+                    aria-expanded={open}
+                    aria-controls={bodyId}
+                    onClick={() => toggleFold(g.id)}
+                  >
+                    <span className="chev" aria-hidden="true">
+                      {open ? "▾" : "▸"}
+                    </span>
+                    <span className="t-overline">{groupTitle(g.id)}</span>
+                    <span className="cnt">{groupCountLabel(g)}</span>
+                  </button>
+                  {open && (
+                    <div className="lib-body" id={bodyId}>
+                      {/* Referencias: añadirlas a la variante NO las imprime. Para
+                          eso hace falta además el interruptor de la tarjeta de
+                          presentación, y el aviso lo dice aquí, que es cuando
+                          importa, para que nadie lo descubra al abrir el PDF. */}
+                      {g.id === "references" && <p className="lib-note">{t("editor.refsWhenOn")}</p>}
+                      {g.rows.map((r) => libRow(r.row, r.isBullet))}
+                    </div>
+                  )}
+                </section>
+              );
+            })}
+            {/* Búsqueda sin ninguna coincidencia: se dice, no se deja la columna en
+                blanco como si el master estuviera vacío. */}
+            {q !== "" && !anyMatches && <p className="lib-empty">{t("editor.libNoMatches")}</p>}
           </div>
           <p style={{ margin: "20px 18px 30px", font: "400 10px/1.7 var(--font-mono)", color: "var(--text-subtle)" }}>
             {t("editor.libFootA")} <b style={{ color: "var(--text-muted)" }}>{t("editor.libFootRef")}</b>{" "}
@@ -2475,12 +2889,155 @@ export function EditorVarianteScreen({ variantId = "editor" }: { variantId?: str
                 <p className="note">{t("editor.refsWhyOff")}</p>
                 <p className="note warn">{t("editor.refsConsent")}</p>
                 {refsOn && (
-                  <div className="pbody">
+                  <div className="pbody var-refbody">
                     <p className="note">{t("editor.refsWhenOn")}</p>
+
+                    {/* HUECO ARREGLADO: si faltan las migraciones (o la lectura
+                        falló), se DICE — antes se tragaba con setRefs([]) y el
+                        usuario veía una biblioteca vacía sin ninguna pista. */}
+                    {(refsMigracion || refsError) && (
+                      <p className="note warn">{refsMigracion ? t("editor.refsMigracion") : refsError}</p>
+                    )}
+
+                    {!refsMigracion && (
+                      <>
+                        {/* CUÁLES IMPRIME ESTA VARIANTE. La lista de referencias del
+                            master con un toggle por fila: la variante decide cuáles
+                            se imprimen, no cuáles existen. */}
+                        {mReferences.length > 0 && (
+                          <div className="refchooser">
+                            <span className="t-overline">{t("editor.refChooserTitle")}</span>
+                            {mReferences.map((r) => {
+                              const inV = vItemByMaster.has(r.id);
+                              return (
+                                <div className={"refchoice" + (inV ? " in" : "")} key={r.id}>
+                                  <span className="tx">{referenceLine(r.data as ReferenceFields)}</span>
+                                  <button
+                                    type="button"
+                                    className="c-btn c-btn--quiet"
+                                    aria-pressed={inV}
+                                    onClick={() => void toggleFromLib(r.id)}
+                                  >
+                                    {inV ? t("editor.removeFromVariant") : t("editor.addToVariant")}
+                                  </button>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+
+                        {/* EL FORMULARIO. Sin salir del editor, aunque el master no
+                            tenga ninguna: si está vacío se muestra directo (en vez de
+                            un vacío); si ya hay, un botón lo despliega para añadir
+                            otra. Lo que crea ENTRA AL MASTER y a esta variante —el
+                            master es la fuente, la variante no inventa datos sueltos. */}
+                        {refFormOpen || mReferences.length === 0 ? (
+                          <div className="refform" data-screen-label="editor-ref-form">
+                            <span className="t-overline">{t("editor.refFormTitle")}</span>
+                            <p className="note">{t("editor.refFormHint")}</p>
+                            {/* Datos de TERCEROS: el permiso, también aquí, no solo
+                                bajo el interruptor. */}
+                            <p className="note warn">{t("editor.refsConsent")}</p>
+
+                            <label className="f" htmlFor="refFName">{t("editor.refFieldName")}</label>
+                            <input
+                              id="refFName"
+                              className="c-input"
+                              value={refDraft.name ?? ""}
+                              placeholder={t("editor.refFieldNamePh")}
+                              onChange={(e) => setRefDraft((d) => ({ ...d, name: e.target.value }))}
+                            />
+                            <label className="f" htmlFor="refFRole">{t("editor.refFieldRole")}</label>
+                            <input
+                              id="refFRole"
+                              className="c-input"
+                              value={refDraft.role ?? ""}
+                              placeholder={t("editor.refFieldRolePh")}
+                              onChange={(e) => setRefDraft((d) => ({ ...d, role: e.target.value }))}
+                            />
+                            <label className="f" htmlFor="refFOrg">{t("editor.refFieldOrg")}</label>
+                            <input
+                              id="refFOrg"
+                              className="c-input"
+                              value={refDraft.org ?? ""}
+                              placeholder={t("editor.refFieldOrgPh")}
+                              onChange={(e) => setRefDraft((d) => ({ ...d, org: e.target.value }))}
+                            />
+                            <label className="f" htmlFor="refFRel">{t("editor.refFieldRelation")}</label>
+                            <input
+                              id="refFRel"
+                              className="c-input"
+                              value={refDraft.relation ?? ""}
+                              placeholder={t("editor.refFieldRelationPh")}
+                              onChange={(e) => setRefDraft((d) => ({ ...d, relation: e.target.value }))}
+                            />
+                            <label className="f" htmlFor="refFEmail">{t("editor.refFieldEmail")}</label>
+                            <input
+                              id="refFEmail"
+                              className="c-input"
+                              type="email"
+                              inputMode="email"
+                              value={refDraft.email ?? ""}
+                              placeholder={t("editor.refFieldEmailPh")}
+                              onChange={(e) => setRefDraft((d) => ({ ...d, email: e.target.value }))}
+                            />
+                            <label className="f" htmlFor="refFPhone">{t("editor.refFieldPhone")}</label>
+                            <input
+                              id="refFPhone"
+                              className="c-input"
+                              type="tel"
+                              inputMode="tel"
+                              value={refDraft.phone ?? ""}
+                              placeholder={t("editor.refFieldPhonePh")}
+                              onChange={(e) => setRefDraft((d) => ({ ...d, phone: e.target.value }))}
+                            />
+
+                            {refFormErr && <p className="note warn refferr">{refFormErr}</p>}
+                            <div className="reffacts">
+                              {mReferences.length > 0 && (
+                                <button
+                                  type="button"
+                                  className="c-btn c-btn--quiet"
+                                  onClick={() => {
+                                    setRefFormOpen(false);
+                                    setRefFormErr("");
+                                    setRefDraft({});
+                                  }}
+                                >
+                                  {t("editor.refFormCancel")}
+                                </button>
+                              )}
+                              <button
+                                type="button"
+                                className="c-btn c-btn--patina"
+                                disabled={refSaving}
+                                onClick={() => void createReferenceFromEditor()}
+                              >
+                                {t("editor.refFormSubmit")}
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          <button
+                            type="button"
+                            className="c-btn c-btn--quiet refform-open"
+                            onClick={() => {
+                              setRefFormOpen(true);
+                              setRefFormErr("");
+                            }}
+                          >
+                            {t("editor.refFormOpen")}
+                          </button>
+                        )}
+                      </>
+                    )}
+
                     {/* Encendido y sin ninguna referencia añadida: el documento no
                         imprimirá la sección. Decirlo es la diferencia entre un
                         interruptor honesto y uno que parece roto. */}
-                    {refItems.length === 0 && <p className="note warn">{t("editor.refsNoneInVariant")}</p>}
+                    {refItems.length === 0 && !refsMigracion && (
+                      <p className="note warn">{t("editor.refsNoneInVariant")}</p>
+                    )}
                   </div>
                 )}
               </div>

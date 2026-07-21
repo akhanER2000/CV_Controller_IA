@@ -35,7 +35,7 @@
 .ed-colh .t-overline{font-size:10px}
 .ed-colh .n{font:400 10px/1 var(--font-mono);color:var(--text-subtle)}
 /* ── librería (master) ── */
-.lib-search{margin:12px 14px 4px}
+.lib-search{margin:12px 14px 4px;display:flex;flex-direction:column;gap:8px}
 .lib-search input{height:34px;font-size:var(--fs-data)}
 .lib-g{margin-top:14px}
 .lib-g .t-overline{display:block;padding:0 18px 8px;font-size:10px}
@@ -281,3 +281,59 @@
 .refsug-row .tx{flex:1 1 240px;display:flex;flex-direction:column;gap:3px;min-width:0}
 .refsug-row .tx b{font:500 var(--fs-ui)/1.45 var(--font-sans);color:var(--text);overflow-wrap:anywhere}
 .refsug-row .tx em{font:400 var(--fs-micro)/1.5 var(--font-sans);font-style:normal;color:var(--text-subtle)}
+
+/* ══ PUNTO 5 · ACORDEÓN DE LA BIBLIOTECA ════════════════════════════════════
+   La columna izquierda pasa de lista de corrido a secciones plegables. .lib-g ya
+   era el contenedor de grupo; ahora su cabecera es un BOTÓN que pliega, con su
+   contador (el que cuenta lo que SE PINTA tras el buscador) y su estado recordado
+   entre sesiones. Prefijo lib- propio: no se importa ni se toca ninguna clase ms-
+   del master (eso es contrato con diseño). */
+.lib-gh{width:100%;display:flex;align-items:baseline;gap:9px;padding:10px 18px 8px;
+  background:transparent;text-align:left;cursor:pointer}
+.lib-gh:hover{background:var(--surface)}
+.lib-gh .chev{flex:none;font-size:9px;color:var(--text-subtle);line-height:1;transform:translateY(-1px)}
+/* La cabecera-botón redefine el overline del grupo: en línea, sin el padding de la
+   versión de-corrido (esta regla va después que .lib-g .t-overline y la gana). */
+.lib-gh .t-overline{display:inline;padding:0;font-size:10px}
+.lib-gh .cnt{margin-left:auto;font:400 10px/1 var(--font-mono);color:var(--text-subtle)}
+/* Sección resaltada = la del item que se edita en el centro. Filete pátina, el
+   mismo lenguaje visual que un override: «esto es lo que estás tocando ahora». */
+.lib-g.lib-editing{box-shadow:inset 2px 0 0 var(--patina-500)}
+.lib-g.lib-editing .lib-gh .t-overline{color:var(--accent-text)}
+.lib-body{padding-bottom:6px}
+/* Viñeta bajo su rol: sangrada para leerse como hija, no como hermana suelta. */
+.lib-row.lib-bullet{padding-left:30px}
+/* Plegar/desplegar todo, y el vacío honesto de una búsqueda sin coincidencias. */
+.lib-foldall{align-self:flex-start;font:500 var(--fs-micro)/1 var(--font-mono);color:var(--text-muted);
+  border:1px solid var(--border);border-radius:6px;padding:6px 10px}
+.lib-foldall:hover{color:var(--accent-text);border-color:var(--border-patina)}
+.lib-empty{margin:18px;font:400 var(--fs-micro)/1.6 var(--font-mono);color:var(--text-subtle)}
+
+/* ══ PUNTO 6 · REFERENCIAS DESDE EL EDITOR ══════════════════════════════════
+   Elegir cuáles imprime la variante y CREAR nuevas sin salir del editor. Vive
+   dentro del cuerpo del interruptor de referencias (.var-refbody), en la tarjeta
+   de presentación. */
+.var-refbody{gap:12px}
+.var-refbody .refchooser{display:flex;flex-direction:column;gap:0}
+.var-refbody .refchooser .t-overline{font-size:10px;margin-bottom:4px}
+.refchoice{display:flex;align-items:center;gap:10px;padding:8px 0;border-top:1px solid var(--border)}
+.refchoice:first-of-type{border-top:0}
+.refchoice .tx{flex:1;min-width:0;font:400 12.5px/1.45 var(--font-sans);color:var(--text-muted);overflow-wrap:anywhere}
+.refchoice.in .tx{color:var(--text)}
+.refchoice .c-btn{flex:none;height:28px;padding:0 10px;font-size:var(--fs-micro)}
+/* Botón para desplegar el formulario cuando el master YA tiene referencias. */
+.refform-open{align-self:flex-start;height:30px;padding:0 12px;font-size:var(--fs-micro);
+  border:1px dashed var(--border-strong);color:var(--text-muted)}
+.refform-open:hover{color:var(--accent-text);border-color:var(--border-patina)}
+/* El formulario. Datos de terceros: el aviso de permiso va DENTRO, no solo bajo
+   el interruptor. */
+.refform{padding:14px;border:1px solid var(--border);border-radius:var(--radius-md);
+  background:var(--surface-sunken);display:flex;flex-direction:column}
+.refform>.t-overline{font-size:10px}
+.refform label.f{margin-top:12px;font:500 9.5px/1 var(--font-mono);letter-spacing:.1em;
+  text-transform:uppercase;color:var(--text-subtle)}
+.refform .c-input{margin-top:6px;height:36px;background:var(--surface)}
+.refform .refferr{color:var(--danger)}
+.refform .reffacts{margin-top:14px;display:flex;gap:8px;justify-content:flex-end}
+.refform .reffacts .c-btn{height:32px;padding:0 14px;font-size:var(--fs-micro)}
+.refform .reffacts .c-btn[disabled]{opacity:.5;cursor:default}

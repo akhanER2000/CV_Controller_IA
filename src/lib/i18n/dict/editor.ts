@@ -45,6 +45,18 @@ export const editor = {
     "editor.groupSkills": "Skills",
     "editor.groupProjects": "Proyectos",
     "editor.groupEducation": "Educación",
+    // ── Acordeón de la biblioteca (punto 5) — contadores y controles de plegado.
+    //    Singular/plural separados para que la cabecera no diga «1 roles». El
+    //    contador cuenta lo que SE PINTA (tras el buscador), no el master entero.
+    "editor.libNRole": "{n} rol",
+    "editor.libNRoles": "{n} roles",
+    "editor.libNBullet": "{n} viñeta",
+    "editor.libNBullets": "{n} viñetas",
+    "editor.libNItem": "{n} item",
+    "editor.libNItems": "{n} items",
+    "editor.libFoldAll": "plegar todo",
+    "editor.libExpandAll": "desplegar todo",
+    "editor.libNoMatches": "sin coincidencias en tu master",
     "editor.libFootA": "Aquí vive todo. La variante solo",
     "editor.libFootRef": "referencia",
     "editor.libFootB": "— si editas el master, las variantes se actualizan solas.",
@@ -156,6 +168,35 @@ export const editor = {
     "editor.refsSuggestTitle": "Referencias vinculadas a lo que ya incluiste",
     "editor.refsSuggestBody": "Trabajasteis juntos en {items}. Se sugiere, no se añade: decides tú.",
     "editor.refsSuggestAdd": "añadir a la variante",
+
+    /* ── PUNTO 6 · REFERENCIAS DESDE EL EDITOR ────────────────────────────────
+       Crear y elegir referencias sin salir del editor, aunque el master no tenga
+       ninguna. Lo que se crea ENTRA AL MASTER y a esta variante: el master es la
+       fuente de verdad, una variante no crea datos huérfanos. */
+    "editor.refsMigracion":
+      "Las referencias necesitan una migración de base de datos que aún no está aplicada (0004 y 0005). Hasta entonces no se pueden leer ni crear.",
+    "editor.refChooserTitle": "Cuáles imprime esta variante",
+    "editor.refFormOpen": "Añadir una referencia nueva",
+    "editor.refFormTitle": "Nueva referencia",
+    "editor.refFormHint":
+      "Entra a tu master y se añade a esta variante. El master es la fuente; una variante no crea datos sueltos.",
+    "editor.refFieldName": "Nombre",
+    "editor.refFieldRole": "Cargo",
+    "editor.refFieldOrg": "Organización",
+    "editor.refFieldRelation": "Relación (cómo se conocieron)",
+    "editor.refFieldEmail": "Email",
+    "editor.refFieldPhone": "Teléfono",
+    "editor.refFieldNamePh": "Nombre y apellido",
+    "editor.refFieldRolePh": "p. ej. CTO",
+    "editor.refFieldOrgPh": "p. ej. Tesseract",
+    "editor.refFieldRelationPh": "p. ej. jefe directo",
+    "editor.refFieldEmailPh": "persona@ejemplo.cl",
+    "editor.refFieldPhonePh": "+56 9 …",
+    "editor.refFormSubmit": "Añadir al master y a la variante",
+    "editor.refFormCancel": "Cancelar",
+    "editor.refFormNameReq": "Escribe al menos el nombre de la persona.",
+    "editor.refFormErr": "no se pudo crear la referencia — {r}",
+    "editor.refFormSaved": "referencia añadida a tu master y a esta variante",
 
     // Contacto por variante (identidad). Se imprime en el CUERPO; hereda del master.
     "editor.contactOverline": "Contacto",
@@ -370,6 +411,18 @@ export const editor = {
     "editor.groupSkills": "Skills",
     "editor.groupProjects": "Projects",
     "editor.groupEducation": "Education",
+    // Library accordion (point 5) — counters and fold controls. Singular/plural
+    // kept apart so the header never reads "1 roles". The counter counts what is
+    // PAINTED (after the search), not the whole master.
+    "editor.libNRole": "{n} role",
+    "editor.libNRoles": "{n} roles",
+    "editor.libNBullet": "{n} bullet",
+    "editor.libNBullets": "{n} bullets",
+    "editor.libNItem": "{n} item",
+    "editor.libNItems": "{n} items",
+    "editor.libFoldAll": "collapse all",
+    "editor.libExpandAll": "expand all",
+    "editor.libNoMatches": "no matches in your master",
     "editor.libFootA": "Everything lives here. The variant only",
     "editor.libFootRef": "references",
     "editor.libFootB": "— edit the master and variants update on their own.",
@@ -478,6 +531,35 @@ export const editor = {
     "editor.refsSuggestTitle": "References linked to what you already included",
     "editor.refsSuggestBody": "You worked together on {items}. It's a suggestion, not an addition: you decide.",
     "editor.refsSuggestAdd": "add to the variant",
+
+    // POINT 6 · REFERENCES FROM THE EDITOR — create and pick references without
+    // leaving the editor, even if the master has none. What you create goes INTO
+    // the master and this variant: the master is the source of truth, a variant
+    // never creates orphan data.
+    "editor.refsMigracion":
+      "References need a database migration that isn't applied yet (0004 and 0005). Until then they can't be read or created.",
+    "editor.refChooserTitle": "Which ones this variant prints",
+    "editor.refFormOpen": "Add a new reference",
+    "editor.refFormTitle": "New reference",
+    "editor.refFormHint":
+      "It goes into your master and is added to this variant. The master is the source; a variant doesn't create loose data.",
+    "editor.refFieldName": "Name",
+    "editor.refFieldRole": "Role",
+    "editor.refFieldOrg": "Organisation",
+    "editor.refFieldRelation": "Relationship (how you know them)",
+    "editor.refFieldEmail": "Email",
+    "editor.refFieldPhone": "Phone",
+    "editor.refFieldNamePh": "Full name",
+    "editor.refFieldRolePh": "e.g. CTO",
+    "editor.refFieldOrgPh": "e.g. Tesseract",
+    "editor.refFieldRelationPh": "e.g. direct manager",
+    "editor.refFieldEmailPh": "person@example.com",
+    "editor.refFieldPhonePh": "+1 555 …",
+    "editor.refFormSubmit": "Add to master and variant",
+    "editor.refFormCancel": "Cancel",
+    "editor.refFormNameReq": "Enter at least the person's name.",
+    "editor.refFormErr": "couldn't create the reference — {r}",
+    "editor.refFormSaved": "reference added to your master and this variant",
 
     // Per-variant contact (identity). Prints in the BODY; inherits from the master.
     "editor.contactOverline": "Contact",
