@@ -354,6 +354,20 @@ export function parsearCorpusMd(texto: string): ResultadoParseo {
         continue;
       }
 
+      /* ★ Regla 7, y va ANTES de abrir entrada a propósito. Bajo ## HABILIDADES
+         una clave que no es campo conocido ES el nombre de un grupo, y ese grupo
+         se crea como item propio. Si primero se llamara a `entradaViva`, la
+         entrada implícita que abre quedaría VACÍA y huérfana: un item de
+         habilidad sin nombre ni contenido por cada sección, colándose en el
+         staging del usuario. Se vio en el ciclo completo de la tercera vía —una
+         plantilla rellenada producía tres grupos donde había dos—. */
+      if (seccionKind === "skill" && !entrada && !esNombreDeCampo("skill", claveCruda)) {
+        const idx = crearItem("skill", { group: claveCruda.trim(), items: leerValor(resto) });
+        entrada = { indice: idx, kind: "skill", desde: null, hasta: null, lineaDesde: n, lineaHasta: n, fechasExplicitas: false };
+        campoAbierto = { destino: items[idx]!.data, clave: "items" };
+        continue;
+      }
+
       const e = entradaViva(n);
       if (!e) { anotar(n, linea.trim()); continue; }
       const it = items[e.indice]!;
