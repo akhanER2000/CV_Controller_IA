@@ -1,13 +1,19 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { encryptionAvailable, encryptSecret } from "@/lib/crypto";
+import { estadoLlmKey2 } from "@/lib/account/byok";
 
 export const runtime = "nodejs";
 
 /**
- * Ajustes del usuario (user_settings). GET devuelve todo MENOS la clave BYOK
- * (solo `hasKey`): la clave nunca vuelve al cliente (02 §2). POST persiste los
- * campos enviados con la sesión del usuario (RLS por auth.uid()).
+ * Ajustes del usuario (user_settings). GET devuelve todo MENOS las claves BYOK
+ * (solo `hasKey` / `hasKey2`): las claves nunca vuelven al cliente (02 §2). POST
+ * persiste los campos enviados con la sesión del usuario (RLS por auth.uid()).
+ *
+ * ★ §H · SEGUNDA CLAVE (Groq, router por coste). Se lee y se escribe SIEMPRE en su
+ *   propia consulta, nunca junto al resto: la columna llm_api_key_2 (migración 0006)
+ *   puede no existir todavía, y un error suyo NO debe tumbar la lectura ni el guardado
+ *   de los demás ajustes. Degrada con honestidad — se dice, no se calla.
  */
 export async function GET() {
   const sb = await createClient();
@@ -20,6 +26,9 @@ export async function GET() {
     .eq("user_id", user.id)
     .maybeSingle();
 
+  // La 2ª clave se sondea aparte (columna que puede faltar). Solo la PRESENCIA.
+  const est2 = await estadoLlmKey2(sb, user.id);
+
   return NextResponse.json({
     ui_lang: data?.ui_lang ?? "es",
     theme: data?.theme ?? "dark",
@@ -28,6 +37,9 @@ export async function GET() {
     email: user.email ?? "",
     provider: (user.app_metadata?.provider as string) ?? "email",
     hasKey: !!data?.llm_api_key, // la clave NO se devuelve
+    hasKey2: est2.almacenada, // la 2ª clave tampoco se devuelve, solo si existe
+    key2Parked: est2.aparcada, // guardada pero indescifrable (falta CORPUS_ENCRYPTION_KEY)
+    key2Unavailable: est2.columnaAusente, // migración 0006 sin aplicar
   });
 }
 
@@ -66,5 +78,33 @@ export async function POST(req: Request) {
 
   const { error } = await sb.from("user_settings").upsert(patch, { onConflict: "user_id" });
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  return NextResponse.json({ ok: true, keyParked });
+
+  // ── §H · la 2ª clave, en su PROPIA escritura ───────────────────────────────
+  // Va aparte a propósito: si la columna llm_api_key_2 no existe (migración 0006
+  // sin aplicar), su upsert falla, pero el resto de ajustes YA se guardaron arriba.
+  // El fallo NO se traga en silencio: se informa con `key2Unavailable`.
+  let key2Parked = false;
+  let key2Unavailable = false;
+  if ("llm_api_key_2" in body) {
+    const v = body["llm_api_key_2"];
+    let cifrada: string | null = null;
+    let escribir = true;
+    if (v == null || v === "") {
+      cifrada = null; // limpiar la 2ª clave → todo vuelve a Gemini
+    } else if (encryptionAvailable()) {
+      cifrada = encryptSecret(String(v)); // ★ CIFRADA igual que la primera
+    } else {
+      // Sin cifrado no se persiste un secreto en claro: se aparca, no se escribe.
+      key2Parked = true;
+      escribir = false;
+    }
+    if (escribir) {
+      const { error: e2 } = await sb
+        .from("user_settings")
+        .upsert({ user_id: user.id, llm_api_key_2: cifrada }, { onConflict: "user_id" });
+      if (e2) key2Unavailable = true; // columna sin aplicar: se dice, no se traga
+    }
+  }
+
+  return NextResponse.json({ ok: true, keyParked, key2Parked, key2Unavailable });
 }

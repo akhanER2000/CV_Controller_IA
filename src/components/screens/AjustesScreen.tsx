@@ -54,14 +54,16 @@ interface WipeCounts {
 const THEME_KEY = "corpus-theme";
 const WIPE_WORD = "BORRAR MIS DATOS";
 
-async function saveSettings(patch: Record<string, unknown>): Promise<{ ok?: boolean; keyParked?: boolean } | null> {
+type SaveResult = { ok?: boolean; keyParked?: boolean; key2Parked?: boolean; key2Unavailable?: boolean };
+
+async function saveSettings(patch: Record<string, unknown>): Promise<SaveResult | null> {
   if (!supabaseEnabled) return null;
   const r = await fetch("/api/account/settings", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(patch),
   });
-  return r.ok ? ((await r.json()) as { ok?: boolean; keyParked?: boolean }) : null;
+  return r.ok ? ((await r.json()) as SaveResult) : null;
 }
 
 /** Línea técnica compacta por servicio (meta). Solo datos, sin i18n: modelo,
@@ -94,6 +96,10 @@ export function AjustesScreen() {
   const [byok, setByok] = useState("");
   const [hasKey, setHasKey] = useState(false);
   const byokDisabled = provider === "Incluida";
+  // §H · segunda clave BYOK (proveedor barato del router por coste). Independiente
+  // de la primera: existe o no, se guarda o se quita, sin depender del segmento.
+  const [byok2, setByok2] = useState("");
+  const [hasKey2, setHasKey2] = useState(false);
   const [flash, setFlash] = useState<string | null>(null);
 
   const [delOpen, setDelOpen] = useState(false);
@@ -139,6 +145,7 @@ export function AjustesScreen() {
         setEmail(d.email ?? "");
         setIaOn(d.ai_enabled ?? true);
         setHasKey(!!d.hasKey);
+        setHasKey2(!!d.hasKey2);
         if (d.hasKey) setProvider("Anthropic");
         const t = (d.theme as ThemeSel) ?? "dark";
         setThemeSel(t);
@@ -194,6 +201,25 @@ export function AjustesScreen() {
       } else {
         setHasKey(!!value);
         note(value ? t("ajustes.flash.keySaved") : t("ajustes.flash.keyIncluded"));
+      }
+    });
+  }
+
+  // §H · guarda / quita la 2ª clave (proveedor barato). Las tres degradaciones del
+  // servidor se dicen, ninguna se traga: aparcada (sin cifrado), no disponible
+  // (migración 0006 sin aplicar) o guardada. La clave nunca vuelve del servidor.
+  function saveKey2(value: string | null) {
+    void saveSettings({ llm_api_key_2: value }).then((res) => {
+      if (value && res?.key2Unavailable) {
+        setHasKey2(false);
+        note(t("ajustes.flash.key2Unavailable"));
+      } else if (value && res?.key2Parked) {
+        setHasKey2(false);
+        note(t("ajustes.flash.key2Parked"));
+      } else {
+        setHasKey2(!!value);
+        setByok2("");
+        note(value ? t("ajustes.flash.key2Saved") : t("ajustes.flash.key2Cleared"));
       }
     });
   }
@@ -473,6 +499,39 @@ export function AjustesScreen() {
                     <button className="c-btn" onClick={saveKey}>
                       {byokDisabled ? t("ajustes.byok.useIncluded") : t("ajustes.byok.saveKey")}
                     </button>
+                  </span>
+                </span>
+              </div>
+              {/* §H · segunda clave: el proveedor BARATO del router por coste (Groq).
+                  Sin ella, el router no actúa y TODO va a Gemini — se dice en la nota. */}
+              <div className="aj-row">
+                <span className="k">
+                  <b>{t("ajustes.byok2.label")}</b>
+                  <span>{t("ajustes.byok2.hint")}{hasKey2 ? t("ajustes.byok2.hintSaved") : ""}</span>
+                </span>
+                <span className="v">
+                  <span style={{ display: "flex", gap: "10px", alignItems: "center", flexWrap: "wrap" }}>
+                    <input
+                      className="c-input"
+                      id="byok2"
+                      type="password"
+                      placeholder={hasKey2 ? t("ajustes.byok2.placeholderSaved") : t("ajustes.byok2.placeholder")}
+                      style={{ maxWidth: "320px" }}
+                      aria-label={t("ajustes.byok2.aria")}
+                      value={byok2}
+                      onChange={(e) => setByok2(e.target.value)}
+                    />
+                    <button className="c-btn" onClick={() => saveKey2(byok2.trim() || null)}>
+                      {t("ajustes.byok2.save")}
+                    </button>
+                    {hasKey2 ? (
+                      <button className="c-btn c-btn--quiet" onClick={() => saveKey2(null)}>
+                        {t("ajustes.byok2.clear")}
+                      </button>
+                    ) : null}
+                  </span>
+                  <span style={{ font: "400 var(--fs-micro)/1.5 var(--font-mono)", color: "var(--text-subtle)" }}>
+                    {t("ajustes.byok2.note")}
                   </span>
                 </span>
               </div>

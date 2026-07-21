@@ -1,9 +1,59 @@
 import { NextResponse } from "next/server";
+import { z } from "zod";
+import { generateObject } from "ai";
 import { createClient } from "@/lib/supabase/server";
-import { barrerMaster, aplicarBarrido, type Correccion } from "@/lib/master/barrido";
+import { barrerMaster, aplicarBarrido, type Correccion, type JuezDuplicados } from "@/lib/master/barrido";
 import type { DestinoVinetas } from "@/lib/db/duplicados";
+import { getUserLlmKey, getUserLlmKey2 } from "@/lib/account/byok";
+import { claveGemini, modeloPara } from "@/lib/ai/modelos";
 
 export const runtime = "nodejs";
+// El I/O del juez (una llamada por par candidato) no cuenta como Active CPU (02 §1).
+export const maxDuration = 300;
+
+/**
+ * ★ §H · EL JUEZ DE DESEMPATE, armado con el modelo BARATO del router. Recibe DOS
+ * textos de experiencia y decide IDENTIDAD (¿el mismo trabajo?), nunca redacta. Se
+ * inyecta en `barrerMaster` (como variant-ai.ts recibe su LLM) para poder testear el
+ * desempate con un doble. La ruta del modelo la elige `modeloPara`:
+ *   · con 2ª clave (Groq) → el barato;
+ *   · sin 2ª clave pero con Gemini → cae a Gemini (degrada, no rompe);
+ *   · sin NINGUNA clave → no hay juez: el barrido se queda en determinista y lo dice.
+ */
+const JuezSchema = z.object({
+  mismo_trabajo: z
+    .boolean()
+    .describe("true SOLO si los dos textos describen la MISMA etapa laboral (mismo trabajo real contado dos veces)."),
+  porque: z.string().describe("Una frase: qué te hace pensar que son el mismo trabajo, o dos distintos."),
+});
+
+const JUEZ_SYS =
+  "Eres un desempatador de DUPLICADOS en un CV. Te doy DOS descripciones de experiencia laboral del " +
+  "MISMO candidato. Decide si son EL MISMO trabajo contado dos veces (misma etapa/rol real, aunque el " +
+  "título, la empresa o las fechas estén escritos distinto o falten) o dos trabajos DISTINTOS.\n" +
+  "★ Solo juzgas IDENTIDAD. NO redactes, NO inventes, NO fusiones: la fusión la hace otro paso y la " +
+  "confirma la persona. En la duda, di que NO son el mismo (es peor fusionar dos trabajos reales que " +
+  "dejar un duplicado que la persona verá igualmente).";
+
+/** Construye el juez si hay alguna clave; si no, devuelve undefined (barrido determinista). */
+async function construirJuez(sb: Awaited<ReturnType<typeof createClient>>, userId: string): Promise<JuezDuplicados | undefined> {
+  const byok = await getUserLlmKey(sb, userId);
+  const key2 = (await getUserLlmKey2(sb, userId)) ?? undefined;
+  const googleKey = byok ?? claveGemini();
+  if (!key2 && !googleKey) return undefined; // ni 2ª clave ni Gemini → sin juez
+
+  return async ({ aTexto, bTexto }) => {
+    // La tarea barata: con key2 va a Groq; sin key2 cae a Gemini (googleKey).
+    const model = modeloPara("clasificacion-barata", googleKey, key2);
+    const { object } = await generateObject({
+      model,
+      schema: JuezSchema,
+      prompt: `${JUEZ_SYS}\n\n[A]\n${aTexto}\n\n[B]\n${bTexto}`,
+      temperature: 0,
+    });
+    return { mismoTrabajo: object.mismo_trabajo === true, porque: (object.porque ?? "").trim() };
+  };
+}
 
 /**
  * BARRIDO DEL MASTER CON IA (§B). Dos verbos, dos pasos:
@@ -28,7 +78,10 @@ export async function GET() {
   const { data: { user } } = await sb.auth.getUser();
   if (!user) return NextResponse.json({ error: "Sesión requerida." }, { status: 401 });
   try {
-    const r = await barrerMaster(sb, user.id);
+    // El juez es opcional: si no hay clave, `construirJuez` devuelve undefined y el
+    // barrido corre en DETERMINISTA (y la respuesta lo dice en `desempate`).
+    const juez = await construirJuez(sb, user.id);
+    const r = await barrerMaster(sb, user.id, {}, { juez });
     return NextResponse.json(r);
   } catch (e) {
     return NextResponse.json({ error: e instanceof Error ? e.message : "Error" }, { status: 500 });

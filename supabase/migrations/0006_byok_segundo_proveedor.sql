@@ -1,0 +1,22 @@
+-- ============================================================================
+-- Corpus · 0006_byok_segundo_proveedor.sql
+-- Una segunda clave BYOK, para el router de dos niveles por COSTE (§H).
+--
+-- Gemini hace la visión y la extracción estructurada; un segundo proveedor
+-- compatible con OpenAI (Groq por defecto) hace las tareas BARATAS —clasificar,
+-- normalizar, desempatar duplicados—. La clave del segundo proveedor se guarda
+-- IGUAL que la de Gemini: cifrada en reposo (formato "v1:…"), nunca en claro,
+-- nunca de vuelta al cliente. Reutiliza todo el candado de crypto.ts / byok.ts.
+--
+-- ⚠ NO es apilar modelos para «más fiabilidad» —eso solo añade modos de fallo—.
+--   Es abaratar: la fiabilidad de Corpus sigue viniendo de la verificación
+--   determinista (evidencia literal, preservesFacts, el round-trip). Un modelo
+--   barato solo entra al router si soporta salida estructurada.
+--
+-- Idempotente: se puede re-ejecutar sin error.
+-- ============================================================================
+
+-- La clave del segundo proveedor. Misma semántica que llm_api_key (0001:173):
+-- BYOK, CIFRADA, nunca al cliente. Nombre neutro (no "groq_") porque el
+-- proveedor concreto lo elige el registro de modelos, no el esquema.
+alter table user_settings add column if not exists llm_api_key_2 text;

@@ -9,6 +9,10 @@ export const ajustes = {
     "ajustes.flash.keyParked": "Cifrado en preparación — la clave NO se guardó (nada de secretos en texto plano).",
     "ajustes.flash.keySaved": "Clave guardada ✓ (cifrada, no se muestra)",
     "ajustes.flash.keyIncluded": "Se usará la clave incluida ✓",
+    "ajustes.flash.key2Saved": "2ª clave guardada ✓ (cifrada, no se muestra)",
+    "ajustes.flash.key2Parked": "Cifrado en preparación — la 2ª clave NO se guardó (nada de secretos en claro).",
+    "ajustes.flash.key2Unavailable": "Falta aplicar la migración 0006 (llm_api_key_2): la 2ª clave no se pudo guardar.",
+    "ajustes.flash.key2Cleared": "2ª clave quitada ✓ — todo vuelve a Gemini",
 
     // Cuenta
     "ajustes.account.overline": "Cuenta",
@@ -53,6 +57,17 @@ export const ajustes = {
     "ajustes.byok.useIncluded": "Usar la incluida",
     "ajustes.byok.saveKey": "Guardar clave",
 
+    // BYOK · segunda clave (§H) — el proveedor BARATO del router por coste (Groq)
+    "ajustes.byok2.label": "Segunda clave · proveedor barato",
+    "ajustes.byok2.hint": "BYOK — opcional · router por coste",
+    "ajustes.byok2.hintSaved": " · hay una guardada",
+    "ajustes.byok2.placeholder": "gsk-… (Groq · se cifra, solo tareas baratas)",
+    "ajustes.byok2.placeholderSaved": "•••••••••• (guardada — escribe para cambiarla)",
+    "ajustes.byok2.aria": "Segunda clave del proveedor barato (BYOK)",
+    "ajustes.byok2.save": "Guardar 2ª clave",
+    "ajustes.byok2.clear": "Quitar",
+    "ajustes.byok2.note": "Solo abarata clasificar y desempatar duplicados. Sin ella, todo va a Gemini (no se rompe nada).",
+
     // Nota de modo manual (IA apagada)
     "ajustes.manual.lead": "Modo manual — legítimo, no degradado.",
     "ajustes.manual.body1":
@@ -70,6 +85,7 @@ export const ajustes = {
     "ajustes.conn.warn": "a medias",
     "ajustes.conn.fail": "caído",
     "ajustes.conn.svc.gemini": "Gemini · extracción",
+    "ajustes.conn.svc.groq": "Groq · router barato",
     "ajustes.conn.svc.anthropic": "Anthropic",
     "ajustes.conn.svc.github": "GitHub",
     "ajustes.conn.svc.supabase": "Supabase · RLS",
@@ -117,6 +133,10 @@ export const ajustes = {
     "ajustes.flash.keyParked": "Encryption not ready — the key was NOT saved (no plaintext secrets).",
     "ajustes.flash.keySaved": "Key saved ✓ (encrypted, never shown)",
     "ajustes.flash.keyIncluded": "The included key will be used ✓",
+    "ajustes.flash.key2Saved": "2nd key saved ✓ (encrypted, never shown)",
+    "ajustes.flash.key2Parked": "Encryption not ready — the 2nd key was NOT saved (no plaintext secrets).",
+    "ajustes.flash.key2Unavailable": "Migration 0006 (llm_api_key_2) isn't applied yet: the 2nd key couldn't be saved.",
+    "ajustes.flash.key2Cleared": "2nd key removed ✓ — everything goes back to Gemini",
 
     // Account
     "ajustes.account.overline": "Account",
@@ -161,6 +181,17 @@ export const ajustes = {
     "ajustes.byok.useIncluded": "Use the included one",
     "ajustes.byok.saveKey": "Save key",
 
+    // BYOK · second key (§H) — the CHEAP provider of the cost router (Groq)
+    "ajustes.byok2.label": "Second key · cheap provider",
+    "ajustes.byok2.hint": "BYOK — optional · cost router",
+    "ajustes.byok2.hintSaved": " · one is saved",
+    "ajustes.byok2.placeholder": "gsk-… (Groq · encrypted, cheap tasks only)",
+    "ajustes.byok2.placeholderSaved": "•••••••••• (saved — type to change it)",
+    "ajustes.byok2.aria": "Second key for the cheap provider (BYOK)",
+    "ajustes.byok2.save": "Save 2nd key",
+    "ajustes.byok2.clear": "Remove",
+    "ajustes.byok2.note": "It only makes classifying and de-duplicating cheaper. Without it, everything goes to Gemini (nothing breaks).",
+
     // Manual-mode note (AI off)
     "ajustes.manual.lead": "Manual mode — legitimate, not degraded.",
     "ajustes.manual.body1":
@@ -178,6 +209,7 @@ export const ajustes = {
     "ajustes.conn.warn": "partial",
     "ajustes.conn.fail": "down",
     "ajustes.conn.svc.gemini": "Gemini · extraction",
+    "ajustes.conn.svc.groq": "Groq · cheap router",
     "ajustes.conn.svc.anthropic": "Anthropic",
     "ajustes.conn.svc.github": "GitHub",
     "ajustes.conn.svc.supabase": "Supabase · RLS",

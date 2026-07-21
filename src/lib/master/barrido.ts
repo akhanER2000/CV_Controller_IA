@@ -3,12 +3,18 @@ import type { MasterItem } from "@/lib/db/queries";
 import {
   clustersDeDuplicados,
   resolverDuplicado,
+  CAMPOS_POR_KIND,
   type ClusterDuplicado,
   type MiembroDuplicado,
   type DestinoVinetas,
 } from "@/lib/db/duplicados";
-import type { DetectOptions } from "@/lib/extract/dedup";
+import {
+  normalizeCompany,
+  parseRange,
+  type DetectOptions,
+} from "@/lib/extract/dedup";
 import { classifyProjectShape } from "@/lib/extract/classify";
+import { signalsOf } from "@/lib/extract/similar";
 import { chipsFromCsv, chipsToCsv, mergeChips } from "@/lib/db/master";
 import { normalize, extractNumbers } from "@/lib/verify";
 import { normalizeDateRange } from "@/lib/extract/dates";
@@ -171,10 +177,29 @@ export interface ResumenBarrido {
   aplicables: number;
 }
 
+/**
+ * ★ §H · el desglose del DESEMPATE con LLM barato. Viaja en la respuesta para que
+ * el panel diga la verdad: si el juez corrió o no, cuántos pares dudosos se le
+ * pasaron y cuántos confirmó. Sin clave (`ejecutado:false`) el barrido se queda en
+ * DETERMINISTA y lo DICE — la mejora requiere clave; su ausencia degrada, no rompe.
+ */
+export interface DesempateInfo {
+  /** ¿pudo correr el juez LLM? */
+  ejecutado: boolean;
+  /** por qué no corrió, si no corrió */
+  motivo?: "sin-clave";
+  /** pares dudosos generados (criba amplia, precisión baja a propósito) */
+  candidatos: number;
+  /** veredictos SÍ → nuevos hallazgos de duplicado que el usuario revisa uno a uno */
+  confirmados: number;
+}
+
 export interface ResultadoBarrido {
   hallazgos: Hallazgo[];
   recorrido: PasoBarrido[];
   resumen: ResumenBarrido;
+  /** presente cuando el barrido corre por `barrerMaster` (no en `analizarMaster` puro) */
+  desempate?: DesempateInfo;
 }
 
 /** ¿Este tipo de hallazgo entra en el lote de «Aplicar las N correcciones»? */
@@ -509,6 +534,380 @@ export function analizarMaster(
 }
 
 /* ============================================================================
+   ★ §H · DESEMPATE DE DUPLICADOS CON LLM BARATO — la pieza de más valor.
+   ============================================================================
+
+   EL PROBLEMA MEDIDO EN VIVO: el barrido DETERMINISTA (bloque B) sobre el master
+   REAL de 105 items baja 10 roles a 9, no a los ~5 que el usuario espera. Los
+   duplicados reales que quedan NO comparten texto, así que ningún algoritmo los ve:
+     · «Founder & AI Engineer @ PharmIQ» vs «Desarrollador de software @ Químico
+       farmacéutico» (Químico farmacéutico es la PROFESIÓN del cliente, no la
+       empresa: cero solape textual en empresa).
+     · Cuatro Tesseract con títulos totalmente distintos (becario / Práctica /
+       Software Engineering Intern) y la empresa escrita de cuatro formas, una vacía.
+     · Dos Scrum Master en la misma universidad, uno sin fecha ni viñetas.
+
+   LA DIVISIÓN CORRECTA (§1.5 del contrato): el LLB barato SUBE EL RECALL; la
+   confirmación humana MANTIENE LA PRECISIÓN. Nada de esto es «apilar modelos para
+   fiabilidad» —eso solo añade modos de fallo—: es una CRIBA amplia y barata cuyo
+   único trabajo es proponer pares al humano, que decide.
+
+     a) CANDIDATOS con recall alto y precisión baja A PROPÓSITO: pares de roles que
+        comparten una SEÑAL DÉBIL —misma empresa aunque mal escrita, fechas que se
+        solapan, o una entidad compartida (PharmIQ, Tesseract, 3DLab)—. No hace falta
+        que compartan texto: basta una entidad para que el par entre a la criba.
+     b) JUEZ LLM barato, INYECTADO (como variant-ai.ts y ajuste.ts reciben su LLM):
+        recibe los DOS textos completos y juzga IDENTIDAD —«¿es el mismo trabajo?»—,
+        SÍ/NO + por qué. NO redacta ni inventa: solo juzga.
+     c) Cada SÍ se convierte en un hallazgo de duplicado que el usuario REVISA una a
+        una. La FUSIÓN sigue siendo la determinista del bloque B (planFusion: base con
+        fecha + rellenar huecos + reenganchar viñetas). El juez NUNCA redacta el item
+        fusionado.
+
+   ⚠ SIN clave (ni 2ª ni Gemini) el juez no corre: el barrido se queda en 10→9 y lo
+     DICE (`desempate.ejecutado:false`). La mejora requiere clave; su ausencia degrada.
+   ⚠ El juez trabaja SOLO sobre roles (`work`): los ejemplos reales son todos roles y
+     ahí la identidad no la da un algoritmo. Educación/certificaciones no se desempatan
+     con LLM (su identidad —título+institución— sí la ve el determinista). */
+
+/** El veredicto del juez sobre un par: ¿es el mismo trabajo? */
+export interface VeredictoJuez {
+  mismoTrabajo: boolean;
+  /** por qué, en una frase. NO redacta el item: solo explica su juicio de identidad. */
+  porque: string;
+}
+
+/**
+ * El juez INYECTABLE. Recibe los dos textos completos (y los ids, por trazabilidad)
+ * y devuelve identidad SÍ/NO. Se inyecta para poder testear con un doble sin red ni
+ * clave — igual que VariantLLM y AjusteLLM.
+ */
+export type JuezDuplicados = (par: {
+  aId: string;
+  bId: string;
+  aTexto: string;
+  bTexto: string;
+}) => Promise<VeredictoJuez>;
+
+/** Un par candidato a desempate, con la señal débil que lo emparejó y los dos textos. */
+export interface CandidatoDesempate {
+  aId: string;
+  bId: string;
+  /** la señal DÉBIL (para depurar): «misma empresa», «comparten PharmIQ»… */
+  senal: string;
+  /** el texto completo de cada rol (cabecera + evidencia + viñetas): lo que ve el juez */
+  aTexto: string;
+  bTexto: string;
+}
+
+/** Un borde confirmado por el juez (los ids son el mismo trabajo). */
+export interface BordeDesempate {
+  aId: string;
+  bId: string;
+  porque: string;
+}
+
+/** Techo de candidatos: la criba es amplia, pero no infinita (cada par cuesta una
+ *  llamada al juez). O(n²) sobre ~15-20 roles cabe de sobra bajo este techo. */
+const MAX_CANDIDATOS = 300;
+
+/** Índice de hijos (viñetas) por padre, para componer el texto completo de un rol. */
+function indiceHijos(items: MasterItem[]): Map<string, MasterItem[]> {
+  const m = new Map<string, MasterItem[]>();
+  for (const it of items) {
+    if (!it.parentId) continue;
+    const l = m.get(it.parentId);
+    if (l) l.push(it);
+    else m.set(it.parentId, [it]);
+  }
+  return m;
+}
+
+/** El texto COMPLETO de un rol que ve el juez: cabecera + evidencia + todas sus viñetas. */
+function textoRolCompleto(it: MasterItem, hijosDe: Map<string, MasterItem[]>): string {
+  const d = it.data ?? {};
+  const cab = [str(d, "title"), str(d, "company"), str(d, "dates")].filter(Boolean).join(" · ");
+  const ev = (it.evidenceSnippet ?? "").trim();
+  const vs = (hijosDe.get(it.id) ?? []).map((h) => str(h.data ?? {}, "text")).filter(Boolean);
+  return [cab, ev, ...vs].filter(Boolean).join("\n");
+}
+
+/** Señales de contenido (entidades y cifras) de un rol, ya con sus viñetas dentro. */
+function senalesRol(texto: string): { entidades: Set<string>; cifras: Set<string> } {
+  const bag = signalsOf(texto);
+  return { entidades: bag.entities, cifras: bag.numbers };
+}
+
+const interseccion = (a: Set<string>, b: Set<string>): string[] => {
+  const out: string[] = [];
+  for (const x of a) if (b.has(x)) out.push(x);
+  return out;
+};
+
+/** El año (número) de un extremo de fecha, o null si es abierto («hoy») o no lo hay. */
+const anioNum = (s: string | null): number | null => {
+  if (!s) return null;
+  const m = /\b(?:19|20)\d{2}\b/.exec(s);
+  return m ? Number(m[0]) : null;
+};
+
+/**
+ * ¿Se solapan dos rangos CERRADOS (ambos con año de inicio Y de fin)? Como señal
+ * débil de candidato, el solape se exige CERRADO a propósito: un año suelto («2023»)
+ * o un rango abierto («… – actualidad») dejaría el extremo sin acotar y «solaparía»
+ * con casi todo, inundando la criba de pares falsos. Dos periodos cerrados que se
+ * pisan sí es una pista real de que podría ser el mismo trabajo.
+ */
+function fechasSolapanCerrado(a: ReturnType<typeof parseRange>, b: ReturnType<typeof parseRange>): boolean {
+  if (!a.ok || !b.ok) return false;
+  const aS = anioNum(a.start), aE = anioNum(a.end);
+  const bS = anioNum(b.start), bE = anioNum(b.end);
+  if (aS == null || aE == null || bS == null || bE == null) return false;
+  return aS <= bE && bS <= aE;
+}
+
+/**
+ * GENERA LOS CANDIDATOS. Criba amplia sobre los roles (`work`) que NO están ya en el
+ * mismo clúster determinista (esos ya son un hallazgo; no hay nada que preguntarle al
+ * juez sobre ellos). Un par entra si comparte CUALQUIER señal débil:
+ *   · misma empresa normalizada (igual o una contenida en la otra: «Tesseract» ⊂
+ *     «TesseractSoftwares» tras normalizar);
+ *   · fechas que se solapan de verdad;
+ *   · al menos una ENTIDAD compartida (PharmIQ, Tesseract, 3DLab, Node…): así entra
+ *     el par PharmIQ aunque su empresa no coincida en absoluto;
+ *   · al menos una CIFRA compartida.
+ * PURA y testeable: sin red, sin clave. El juez decide después; esto solo propone.
+ */
+export function generarCandidatosDesempate(items: MasterItem[], opts: DetectOptions = {}): CandidatoDesempate[] {
+  const hijosDe = indiceHijos(items);
+  const roles = items.filter((it) => it.kind === "work" && !it.parentId);
+  if (roles.length < 2) return [];
+
+  // Pares que YA están en el mismo clúster determinista (de roles): se saltan.
+  const clusters = clustersDeDuplicados(items, opts).filter((c) => c.kind === "work");
+  const clusterDe = new Map<string, string>();
+  for (const c of clusters) for (const m of c.miembros) clusterDe.set(m.id, c.id);
+
+  // Precómputo por rol: empresa normalizada, rango de fechas, señales de contenido.
+  const info = new Map<
+    string,
+    { empresa: string; rango: ReturnType<typeof parseRange>; sen: ReturnType<typeof senalesRol>; texto: string }
+  >();
+  for (const it of roles) {
+    const d = it.data ?? {};
+    const texto = textoRolCompleto(it, hijosDe);
+    info.set(it.id, {
+      empresa: normalizeCompany(str(d, "company")),
+      rango: parseRange(str(d, "dates")),
+      sen: senalesRol(texto),
+      texto,
+    });
+  }
+
+  type Cand = CandidatoDesempate & { rango: number };
+  const cands: Cand[] = [];
+
+  for (let i = 0; i < roles.length; i++) {
+    for (let j = i + 1; j < roles.length; j++) {
+      const a = roles[i]!;
+      const b = roles[j]!;
+      // Ya emparejados por el determinista → nada que desempatar.
+      const ca = clusterDe.get(a.id);
+      if (ca && ca === clusterDe.get(b.id)) continue;
+
+      const ia = info.get(a.id)!;
+      const ib = info.get(b.id)!;
+
+      // ── señal 1 · misma empresa (normalizada, con contención por camelCase) ──
+      const emp =
+        ia.empresa.length >= 3 &&
+        ib.empresa.length >= 3 &&
+        (ia.empresa === ib.empresa ||
+          (ia.empresa.length >= 4 && ib.empresa.length >= 4 &&
+            (ia.empresa.includes(ib.empresa) || ib.empresa.includes(ia.empresa))));
+      // ── señal 2 · dos periodos CERRADOS que se solapan ──
+      const fechas = fechasSolapanCerrado(ia.rango, ib.rango);
+      // ── señal 3 · entidades compartidas (PharmIQ, Tesseract, 3DLab, Node…) ──
+      const ents = interseccion(ia.sen.entidades, ib.sen.entidades);
+      // ── señal 4 · cifras compartidas ──
+      const nums = interseccion(ia.sen.cifras, ib.sen.cifras);
+
+      if (!emp && !fechas && ents.length === 0 && nums.length === 0) continue;
+
+      // Etiqueta legible de la señal más fuerte, y un rango para priorizar bajo el techo.
+      let senal: string;
+      let rango: number;
+      if (emp) { senal = "misma empresa (aunque escrita distinto)"; rango = 4; }
+      else if (fechas) { senal = "las fechas se solapan"; rango = 3; }
+      else if (ents.length) { senal = `comparten «${ents.slice(0, 3).join(", ")}»`; rango = 2; }
+      else { senal = `comparten la cifra ${nums.slice(0, 2).join(", ")}`; rango = 1; }
+
+      cands.push({ aId: a.id, bId: b.id, senal, aTexto: ia.texto, bTexto: ib.texto, rango });
+    }
+  }
+
+  // Si la criba desborda el techo, se quedan los pares de señal más fuerte primero.
+  cands.sort((x, y) => y.rango - x.rango);
+  return cands.slice(0, MAX_CANDIDATOS).map(({ rango: _r, ...c }) => c);
+}
+
+/**
+ * Pasa cada candidato por el juez INYECTADO y devuelve los bordes que dijo SÍ. Un
+ * juez que falla en un par no tumba el barrido: ese par se ignora (queda sin
+ * confirmar), que es el lado seguro —no confirmar de más—. Async y aislada del
+ * armado de clústeres para poder probarla con un doble.
+ */
+export async function juzgarCandidatos(
+  candidatos: CandidatoDesempate[],
+  juez: JuezDuplicados,
+): Promise<BordeDesempate[]> {
+  const bordes: BordeDesempate[] = [];
+  for (const c of candidatos) {
+    let v: VeredictoJuez;
+    try {
+      v = await juez({ aId: c.aId, bId: c.bId, aTexto: c.aTexto, bTexto: c.bTexto });
+    } catch {
+      continue; // el juez falló en este par: no se confirma (lado seguro)
+    }
+    if (v?.mismoTrabajo) bordes.push({ aId: c.aId, bId: c.bId, porque: (v.porque ?? "").trim() });
+  }
+  return bordes;
+}
+
+/** Construye un ClusterDuplicado desde MasterItems (para un grupo que armó el juez). */
+function construirClusterDesempate(
+  miembros: MasterItem[],
+  hijosDe: Map<string, MasterItem[]>,
+  reason: string,
+): ClusterDuplicado {
+  const kind = miembros[0]!.kind;
+  const claveTit = CAMPOS_POR_KIND[kind]?.[0]?.clave ?? "title";
+  return {
+    id: miembros[0]!.id,
+    kind,
+    level: "media", // el juez SUGIERE; la precisión la pone la confirmación humana
+    reason,
+    signals: [],
+    pares: [],
+    miembros: miembros.map((it) => {
+      const d = it.data ?? {};
+      const campos = (CAMPOS_POR_KIND[it.kind] ?? []).map((c) => ({
+        clave: c.clave,
+        ph: c.ph,
+        valor: str(d, c.clave),
+      }));
+      const empresa = str(d, "company") || str(d, "institution") || str(d, "issuer");
+      const fechas = str(d, "dates");
+      return {
+        id: it.id,
+        kind: it.kind,
+        titulo: str(d, claveTit),
+        subtitulo: [empresa, fechas].filter(Boolean).join(" · "),
+        campos,
+        vinetas: (hijosDe.get(it.id) ?? []).map((h) => ({ id: h.id, texto: str(h.data ?? {}, "text") })),
+        origen: it.origin,
+        evidencia: it.evidenceSnippet,
+      };
+    }),
+  };
+}
+
+/**
+ * ★ Combina el DETERMINISTA con los bordes del juez y devuelve TODOS los hallazgos de
+ * duplicado (el conjunto de reemplazo, no un añadido). Los clústeres deterministas de
+ * roles se SIEMBRAN en el union-find y los bordes del juez los EXTIENDEN; un grupo que
+ * crece supersede a su clúster determinista (no se reporta dos veces). Los clústeres
+ * que NO son roles (skills, proyectos, educación) pasan intactos: el juez no los toca.
+ *
+ * Con `bordes` vacío reproduce EXACTAMENTE los duplicados deterministas de hoy — esa
+ * es la garantía de «sin juez, el barrido no cambia».
+ */
+export function duplicadosConDesempate(
+  items: MasterItem[],
+  opts: DetectOptions,
+  bordes: BordeDesempate[],
+): HallazgoDuplicado[] {
+  const hijosDe = indiceHijos(items);
+  const clusters = clustersDeDuplicados(items, opts);
+  const workClusters = clusters.filter((c) => c.kind === "work");
+  const otros = clusters.filter((c) => c.kind !== "work");
+
+  const roles = items.filter((it) => it.kind === "work" && !it.parentId);
+  const rolPorId = new Map(roles.map((it) => [it.id, it]));
+  const ordenDe = new Map(items.map((it, i) => [it.id, i])); // orden de lectura del master
+
+  // union-find sobre los roles, sembrado con los clústeres deterministas.
+  const padre = new Map<string, string>();
+  for (const it of roles) padre.set(it.id, it.id);
+  const find = (k: string): string => {
+    let r = k;
+    while (padre.get(r) !== r) r = padre.get(r)!;
+    while (padre.get(k) !== r) { const n = padre.get(k)!; padre.set(k, r); k = n; }
+    return r;
+  };
+  const unir = (a: string, b: string) => {
+    if (!padre.has(a) || !padre.has(b)) return; // ids que no son roles: se ignoran
+    const ra = find(a), rb = find(b);
+    if (ra !== rb) padre.set(rb, ra);
+  };
+  for (const c of workClusters) {
+    const ids = c.miembros.map((m) => m.id);
+    for (let i = 1; i < ids.length; i++) unir(ids[0]!, ids[i]!);
+  }
+  const porqueDe = new Map<string, string>(); // raíz → un «por qué» del juez
+  for (const e of bordes) {
+    unir(e.aId, e.bId);
+    if (e.porque && !porqueDe.has(find(e.aId))) porqueDe.set(find(e.aId), e.porque);
+  }
+
+  // Agrupa los roles por raíz, en orden de lectura.
+  const grupos = new Map<string, MasterItem[]>();
+  for (const it of roles) {
+    const r = find(it.id);
+    const g = grupos.get(r);
+    if (g) g.push(it);
+    else grupos.set(r, [it]);
+  }
+
+  // Un clúster determinista reutilizable, indexado por su conjunto EXACTO de ids: si
+  // el grupo final coincide, se reusa (conserva su nivel/razón/pares ricos); si creció
+  // por el juez, se construye uno nuevo (el determinista queda superseded, no duplicado).
+  const claveIds = (ids: string[]) => [...ids].sort().join("|");
+  const detPorClave = new Map<string, ClusterDuplicado>();
+  for (const c of workClusters) detPorClave.set(claveIds(c.miembros.map((m) => m.id)), c);
+
+  const workHallazgos: HallazgoDuplicado[] = [];
+  for (const [raiz, miembros] of grupos) {
+    if (miembros.length < 2) continue;
+    const ordenados = [...miembros].sort((a, b) => (ordenDe.get(a.id) ?? 0) - (ordenDe.get(b.id) ?? 0));
+    const clave = claveIds(ordenados.map((m) => m.id));
+    const det = detPorClave.get(clave);
+    let cluster: ClusterDuplicado;
+    if (det) {
+      cluster = det; // idéntico al determinista: se reusa tal cual
+    } else {
+      const porque = porqueDe.get(raiz) ?? "";
+      const reason = porque
+        ? `El desempate con IA los marcó como el mismo trabajo: ${porque}`
+        : "El desempate con IA los marcó como el mismo trabajo.";
+      cluster = construirClusterDesempate(ordenados.filter((m) => rolPorId.has(m.id)), hijosDe, reason);
+    }
+    workHallazgos.push({ tipo: "duplicado", cluster, fusion: planFusion(cluster) });
+  }
+
+  // Los no-roles pasan intactos (misma forma que analizarMaster: cluster + planFusion).
+  const otrosHallazgos: HallazgoDuplicado[] = otros.map((c) => ({
+    tipo: "duplicado",
+    cluster: c,
+    fusion: planFusion(c),
+  }));
+
+  // Los grupos que más items le quitan de encima al usuario, primero.
+  workHallazgos.sort((a, b) => b.cluster.miembros.length - a.cluster.miembros.length);
+  return [...workHallazgos, ...otrosHallazgos];
+}
+
+/* ============================================================================
    Lectura de la base para el análisis (la parte con I/O; la lógica es la de arriba).
    ============================================================================ */
 
@@ -525,16 +924,58 @@ export async function fuentesDelUsuario(sb: SB, userId: string): Promise<FuenteB
     .filter((f) => f.rawText.trim().length > 0);
 }
 
-/** El barrido leyendo de la base: master + fuentes → análisis. No muta nada. */
+/**
+ * El barrido leyendo de la base: master + fuentes → análisis. No muta nada.
+ *
+ * ★ §H · si se INYECTA un `juez`, corre el desempate con LLM barato: genera pares
+ * candidatos, los juzga uno a uno y REEMPLAZA los hallazgos de duplicado por el
+ * conjunto combinado (determinista + confirmados por el juez). Sin juez, el barrido
+ * se queda EN DETERMINISTA y lo DICE (`desempate.ejecutado:false`) — la mejora
+ * requiere clave; su ausencia degrada, no rompe. El juez se inyecta desde la ruta
+ * (con el modelo barato del router) para poder testear el desempate con un doble.
+ */
 export async function barrerMaster(
   sb: SB,
   userId: string,
   opts: DetectOptions = {},
+  deps: { juez?: JuezDuplicados } = {},
 ): Promise<ResultadoBarrido> {
   // Import perezoso para no arrastrar queries.ts si un test solo usa analizarMaster.
   const { getMasterItems } = await import("@/lib/db/queries");
   const [items, fuentes] = await Promise.all([getMasterItems(sb, userId), fuentesDelUsuario(sb, userId)]);
-  return analizarMaster(items, fuentes, opts);
+  const base = analizarMaster(items, fuentes, opts);
+
+  // Sin juez: determinista puro, y se DICE. Nada de fingir una mejora que no corrió.
+  if (!deps.juez) {
+    return { ...base, desempate: { ejecutado: false, motivo: "sin-clave", candidatos: 0, confirmados: 0 } };
+  }
+
+  // Con juez: la criba amplia + el juez + el conjunto combinado de duplicados.
+  const candidatos = generarCandidatosDesempate(items, opts);
+  const bordes = await juzgarCandidatos(candidatos, deps.juez);
+  const dupHallazgos = duplicadosConDesempate(items, opts, bordes);
+
+  // Reemplaza los duplicados del análisis por el conjunto combinado, deja el resto igual.
+  const noDup = base.hallazgos.filter((h) => h.tipo !== "duplicado");
+  const hallazgos: Hallazgo[] = [...dupHallazgos, ...noDup];
+  const itemsSobrantes = dupHallazgos.reduce((n, h) => n + h.cluster.miembros.length - 1, 0);
+
+  const recorrido: PasoBarrido[] = [
+    ...base.recorrido,
+    { clave: "barrido.paso.desempate", datos: { candidatos: candidatos.length, confirmados: bordes.length } },
+  ];
+
+  return {
+    hallazgos,
+    recorrido,
+    resumen: {
+      ...base.resumen,
+      duplicados: dupHallazgos.length,
+      itemsSobrantes,
+      aplicables: hallazgos.filter(esAplicable).length,
+    },
+    desempate: { ejecutado: true, candidatos: candidatos.length, confirmados: bordes.length },
+  };
 }
 
 /* ============================================================================

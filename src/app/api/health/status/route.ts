@@ -1,7 +1,15 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
-import { getUserLlmKey } from "@/lib/account/byok";
-import { claveGemini, nombreVarClave, modeloDe, pingProveedor } from "@/lib/ai/modelos";
+import { getUserLlmKey, estadoLlmKey2 } from "@/lib/account/byok";
+import {
+  claveGemini,
+  nombreVarClave,
+  modeloDe,
+  pingProveedor,
+  pingProveedorBarato,
+  rutaDe,
+  TAREAS,
+} from "@/lib/ai/modelos";
 import { encryptionAvailable } from "@/lib/crypto";
 
 export const runtime = "nodejs";
@@ -119,6 +127,64 @@ async function checkGemini(sb: SupabaseClient, uid: string): Promise<Service> {
   };
 }
 
+/**
+ * ★ §H · EL ROUTER DE DOS NIVELES. El panel dice QUÉ MODELO ATIENDE CADA TAREA —y
+ * si es el barato o si degradó a Gemini— y, si hay 2ª clave, si Groq responde DE
+ * VERDAD (misma maquinaria de ping compartido con TTL que Gemini). Sin 2ª clave:
+ * «no configurado», y el mapa deja claro que TODO va a Gemini (degrada, no rompe).
+ *
+ * `routing` NUNCA miente: se calcula con `rutaDe`, la misma función que usa
+ * `modeloPara` para elegir. Si aquí dijera «groq» y la tarea fuera a Gemini, el
+ * chequeo volvería a mentir justo donde importa — que es lo que este panel evita.
+ */
+async function checkRouterBarato(sb: SupabaseClient, uid: string): Promise<Service> {
+  const est2 = await estadoLlmKey2(sb, uid);
+  const groqDisponible = !!est2.clave;
+
+  // El mapa tarea → proveedor → modelo, con las claves REALES de este usuario.
+  const routing = TAREAS.map((tarea) => {
+    const r = rutaDe(tarea, { groqDisponible });
+    return { tarea, proveedor: r.proveedor, modelo: r.modelo, degradado: r.degradado };
+  });
+  const metaBase = {
+    configured: groqDisponible,
+    parked: est2.aparcada,
+    columnAusente: est2.columnaAusente,
+    routing,
+  };
+
+  if (!groqDisponible) {
+    // Tres motivos honestos, todos degradan a Gemini sin romper nada.
+    const detail = est2.columnaAusente
+      ? "Segundo proveedor no disponible: falta aplicar la migración 0006 (llm_api_key_2). Todo va a Gemini."
+      : est2.aparcada
+        ? "Tu 2ª clave está APARCADA: falta CORPUS_ENCRYPTION_KEY para descifrarla. Mientras tanto, todo va a Gemini."
+        : "No configurado · sin 2ª clave el router de dos niveles no actúa: TODO va a Gemini (degrada, no rompe).";
+    return { id: "groq", ok: true, status: "warn", detail, meta: metaBase };
+  }
+
+  // Hay 2ª clave: llamada REAL al proveedor barato (reutiliza la ventana compartida).
+  const ping = await pingProveedorBarato(est2.clave!);
+  const meta = {
+    ...metaBase,
+    model: ping.modelo,
+    latencyMs: ping.latenciaMs,
+    sample: ping.muestra,
+    cached: ping.reutilizado,
+    checkedAgoMs: ping.edadMs,
+  };
+  if (!ping.ok) {
+    return { id: "groq", ok: false, status: "fail", detail: ping.error ?? "El 2º proveedor no respondió.", meta };
+  }
+  return {
+    id: "groq",
+    ok: true,
+    status: "ok",
+    detail: "Responde. Atiende las tareas baratas (clasificar · desempatar duplicados); el resto sigue en Gemini.",
+    meta,
+  };
+}
+
 /** Anthropic: sin red. La verdad verificada por grep — ninguna ruta la usa hoy.
  *  Presente o no, hoy no aporta nada: estado `warn` (informativo, no roto). */
 function checkAnthropic(): Service {
@@ -201,6 +267,7 @@ export async function GET() {
 
   const services = await Promise.all([
     run("gemini", 15000, () => checkGemini(sb, uid)),
+    run("groq", 15000, () => checkRouterBarato(sb, uid)),
     run("anthropic", 2000, async () => checkAnthropic()),
     run("github", 8000, () => checkGithub()),
     run("supabase", 8000, () => checkSupabase(sb, uid)),
