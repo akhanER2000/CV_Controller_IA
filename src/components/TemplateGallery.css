@@ -37,7 +37,12 @@ body:has(.tg-veil) .c-aurora{z-index:60}
   border-bottom:1px solid var(--border);
   background:color-mix(in srgb,var(--surface-sunken) 55%,transparent)}
 .tg-seg{display:flex;border:1px solid var(--border-strong);border-radius:6px;overflow:hidden;margin-right:6px}
-.tg-seg button{font:500 var(--fs-micro)/1 var(--font-mono);letter-spacing:.04em;padding:7px 10px;color:var(--text-muted)}
+.tg-seg button{font:500 var(--fs-micro)/1 var(--font-mono);letter-spacing:.04em;padding:7px 10px;color:var(--text-muted);
+  transition:color .14s}
+/* Gemelo de .aj-seg y .pv-seg: al lado, los .tg-chip de la misma barra SÍ tenían
+   hover, así que en la misma fila unos controles respondían y otros no
+   (bloque C · consistencia de estados). */
+.tg-seg button:hover:not([aria-pressed="true"]){color:var(--text)}
 .tg-seg button[aria-pressed="true"]{color:var(--text);background:var(--surface-elevated);
   box-shadow:inset 0 0 0 1px var(--border-patina)}
 .tg-chip{font:500 var(--fs-micro)/1 var(--font-mono);letter-spacing:.02em;padding:6px 10px;border-radius:20px;

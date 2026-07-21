@@ -56,6 +56,17 @@ body{background:var(--bg)}
 /* acciones por unidad */
 .stg-acts{display:flex;gap:2px;flex:none;opacity:0;transition:opacity .12s}
 .stg-b:hover .stg-acts,.stg-b.kb-focus .stg-acts,.stg-chead:hover .stg-acts,.kb-focus .stg-chead .stg-acts{opacity:1}
+/* ── El agujero de teclado que tenían SOLO estas acciones (bloque C) ──────────
+   Aceptar y descartar viven en opacity:0 y se revelaban con :hover del ratón o
+   con .kb-focus, que lo pone el JS de la navegación con flechas. Tabular no es
+   ninguna de las dos cosas: quien llega con TAB enfocaba un botón INVISIBLE y
+   además invisible es el foco. El resto del producto ya había tapado este
+   agujero en su sitio —master.css con `.ms-b:focus-within .ms-src`,
+   editor-variante.css con `.var-b:focus-within .bacts`, variantes.css con
+   `.vr-row:focus-within .vr-acts`—; staging se quedó fuera del barrido.
+   No se toca el reposo: solo se añade el disparador que faltaba. */
+.stg-b:focus-within .stg-acts,.stg-chead:focus-within .stg-acts,
+.stg-unit:focus-within>.stg-chead .stg-acts,.stg-acts button:focus-visible{opacity:1}
 .stg-acts button{font:500 var(--fs-micro)/1 var(--font-mono);color:var(--text-muted);padding:5px 8px;border-radius:5px}
 .stg-acts button:hover{color:var(--text);background:var(--surface-elevated)}
 .stg-acts button.ok:hover{color:var(--ver-ok)}
@@ -97,7 +108,7 @@ body{background:var(--bg)}
 .stg-sk .ev a:hover{color:var(--accent-text)}
 .stg-sk[data-ver="none"]{background:color-mix(in srgb,var(--danger) 4%,var(--surface));box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--danger) 30%,transparent)}
 .stg-sk .stg-acts{position:absolute;top:8px;right:8px;background:var(--surface);border-radius:5px}
-.stg-sk:hover .stg-acts,.stg-sk.kb-focus .stg-acts{opacity:1}
+.stg-sk:hover .stg-acts,.stg-sk.kb-focus .stg-acts,.stg-sk:focus-within .stg-acts{opacity:1}
 .stg-sk.kb-focus{box-shadow:inset 2px 0 0 var(--patina-300)}
 .stg-sk.done{opacity:.45}
 .stg-sk.done .stg-acts{display:none}
@@ -154,7 +165,17 @@ body{background:var(--bg)}
    ya marca «sin evidencia» (--ver-none), la otra cosa que frena una aceptación. */
 .stg-dupchip{border-color:color-mix(in srgb,var(--danger) 45%,transparent);
   color:var(--danger);white-space:nowrap}
-.stg-dup{margin:0 20px 12px;padding:8px 12px;
+/* ⚠ SE LLAMABA `.stg-dup` Y ESE NOMBRE YA ESTABA COGIDO (bloque C).
+   `.stg-dup` es del porte literal del diseño: es la TARJETA DE FUSIÓN de dos
+   entradas (la de `.dh` / `.stg-merge` / `.stg-mhead`, hoy sin markup pero con
+   su CSS en pie, arriba en «duplicados»). Este panel —el aviso «posible
+   duplicado» de §A2— llegó después y se sentó encima del mismo nombre: dos
+   componentes distintos, misma clase, mismo fichero. Hoy solo se notaba en un
+   sitio (el `overflow:hidden` del viejo caía sobre este), porque el viejo no
+   tiene nodos; el día que vuelva la fusión, este panel le pintaría encima su
+   filo rojo y su fondo de peligro. Renombrado el RECIÉN LLEGADO, que es el que
+   no está en el contrato con diseño: `dupwarn` = aviso de duplicado. */
+.stg-dupwarn{margin:0 20px 12px;padding:8px 12px;
   border-left:2px solid color-mix(in srgb,var(--danger) 55%,transparent);
   background:color-mix(in srgb,var(--danger) 4%,var(--surface));border-radius:0 6px 6px 0}
 .stg-duphead{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
@@ -165,7 +186,7 @@ body{background:var(--bg)}
 .stg-duphead button{font:500 var(--fs-micro)/1 var(--font-mono);padding:6px 10px;border:1px solid var(--border-strong);
   border-radius:5px;color:var(--text-muted);white-space:nowrap}
 .stg-duphead button:hover{color:var(--text);border-color:var(--border-patina)}
-.stg-dup .why{margin-top:6px;font:400 var(--fs-data)/1.5 var(--font-sans);color:var(--text-muted)}
+.stg-dupwarn .why{margin-top:6px;font:400 var(--fs-data)/1.5 var(--font-sans);color:var(--text-muted)}
 /* La resolución campo por campo: las dos versiones LADO A LADO. Es una rejilla de
    tres columnas (campo · esta · la otra) para que comparar sea leer una fila. */
 .stg-dupdiff{margin-top:12px;border-top:1px solid var(--border);padding-top:10px}
@@ -188,13 +209,13 @@ body{background:var(--bg)}
   border-radius:5px;color:var(--text-muted)}
 .stg-dupdiff .acts button:hover{color:var(--text);border-color:var(--border-patina)}
 .stg-dupdiff .acts button.ok{border-color:var(--border-patina);color:var(--accent-text)}
-.stg-dupdiff .acts button:disabled{opacity:.5;cursor:default}
+.stg-dupdiff .acts button:disabled{opacity:var(--opacity-disabled);cursor:default}
 /* El lote deja fuera por motivo, y lo dice con su número real. */
 .stg-batchout{margin-top:8px;font:400 var(--fs-micro)/1.7 var(--font-mono);color:var(--danger)}
 /* «esto parece un grupo de habilidades → moverlo a Skills», en lote. */
 .stg-skillall{margin-left:auto;font:500 var(--fs-micro)/1 var(--font-mono);padding:6px 10px;
   border:1px solid var(--border-patina);border-radius:5px;color:var(--accent-text)}
-.stg-skillall:disabled{opacity:.5;cursor:default}
+.stg-skillall:disabled{opacity:var(--opacity-disabled);cursor:default}
 /* §C1 · duda de clasificación: ¿viñeta o habilidad? (no se adivina en silencio) */
 .stg-classq{display:flex;align-items:center;gap:10px;margin:0 20px 12px;padding:8px 12px;flex-wrap:wrap;
   border-left:2px solid var(--border-patina);background:color-mix(in srgb,var(--patina-500) 5%,var(--surface));border-radius:0 6px 6px 0}
@@ -206,7 +227,7 @@ body{background:var(--bg)}
   border-radius:5px;color:var(--text-muted);white-space:nowrap}
 .stg-classq .acts button:hover{color:var(--text);border-color:var(--border-patina)}
 .stg-classq .acts button.ok:hover{color:var(--accent-text)}
-.stg-classq .acts button:disabled{opacity:.5;cursor:default}
+.stg-classq .acts button:disabled{opacity:var(--opacity-disabled);cursor:default}
 /* §C2 · falta fecha / fecha imposible: se rellena a mano, no se inventa */
 .stg-datefix{display:flex;align-items:center;gap:10px;margin:0 20px 12px;padding:8px 12px;flex-wrap:wrap;
   border-left:2px solid var(--border-strong);background:var(--surface-sunken);border-radius:0 6px 6px 0;
@@ -225,7 +246,7 @@ body{background:var(--bg)}
 .stg-dateinput input:focus{outline:none;border-color:var(--border-patina)}
 .stg-dateinput button{font:500 var(--fs-micro)/1 var(--font-mono);padding:7px 12px;border:1px solid var(--border-patina);
   border-radius:5px;color:var(--accent-text)}
-.stg-dateinput button:disabled{opacity:.5;cursor:default}
+.stg-dateinput button:disabled{opacity:var(--opacity-disabled);cursor:default}
 /* skeleton */
 .stg-skelrow{height:64px;margin-top:12px;border-radius:var(--radius-md)}
 @media (max-width:768px){

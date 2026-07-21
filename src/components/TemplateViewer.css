@@ -72,7 +72,7 @@
 .tv-nav{width:26px;height:26px;display:grid;place-items:center;border-radius:4px;
   font:500 13px/1 var(--font-mono);color:var(--text-muted)}
 .tv-nav:hover:not(:disabled){color:var(--accent-text);background:var(--surface-elevated)}
-.tv-nav:disabled{color:var(--text-subtle);opacity:.45;cursor:default}
+.tv-nav:disabled{color:var(--text-subtle);opacity:var(--opacity-disabled);cursor:default}
 .tv-pager,.tv-zoomv{min-width:56px;text-align:center;
   font:400 10px/1 var(--font-mono);color:var(--text-subtle)}
 .tv-zoomv:hover{color:var(--accent-text)}

@@ -15,10 +15,23 @@
 .aj-row .v{flex:1;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
 /* segmentos */
 .aj-seg{display:flex;border:1px solid var(--border-strong);border-radius:6px;overflow:hidden}
-.aj-seg button{font:500 var(--fs-micro)/1 var(--font-mono);letter-spacing:.04em;padding:9px 13px;color:var(--text-muted)}
+.aj-seg button{font:500 var(--fs-micro)/1 var(--font-mono);letter-spacing:.04em;padding:9px 13px;color:var(--text-muted);
+  transition:color .14s}
+/* El segmento SIN pulsar no tenía hover (bloque C · consistencia de estados):
+   pasabas el ratón por «Claro» y el producto no acusaba nada, cuando cualquier
+   otro grupo de botones del sistema sí lo hace (.ms-f, .stg-filter, .demo).
+   `:not([aria-pressed="true"])` deja fuera al pulsado a propósito: ese ya está
+   en su color final y un hover encima solo produce parpadeo. */
+.aj-seg button:hover:not([aria-pressed="true"]){color:var(--text)}
 .aj-seg button[aria-pressed="true"]{color:var(--text);background:var(--surface-elevated);box-shadow:inset 0 0 0 1px var(--border-patina)}
 /* switch */
 .aj-sw{position:relative;width:42px;height:24px;border-radius:12px;background:var(--surface-sunken);border:1px solid var(--border-strong);transition:background .14s,border-color .14s;flex:none}
+/* Mismo hueco que el segmento: el interruptor era el único control de la pantalla
+   que no acusaba el puntero. El filo de pátina es el acuse estándar del sistema
+   (.c-btn:hover, .ms-f button:hover, .fu-h .tag.star…), y solo se aplica cuando
+   está APAGADO: encendido, el carril ya es pátina maciza y el filo desaparecería
+   dentro de sí mismo. */
+.aj-sw:hover:not([aria-checked="true"]){border-color:var(--border-patina)}
 .aj-sw::after{content:"";position:absolute;top:3px;left:3px;width:16px;height:16px;border-radius:50%;background:var(--text-muted);transition:transform .18s var(--ease-standard),background .14s}
 .aj-sw[aria-checked="true"]{background:var(--patina-700);border-color:transparent}
 /* Este #EAF5F1 SE QUEDA, y no es un descuido que se haya colado en el barrido:
@@ -43,15 +56,32 @@
 /* Estado de conexiones — el color NUNCA es la única señal: dot + etiqueta + motivo.
    Paleta existente: pátina=en línea, gris(text)=a medias, danger=caído. Sin ámbar
    inventado (el cobre es solo atmósfera, prohibido en la UI). */
+/* Seis servicios seguidos con el relleno de una fila normal (16px arriba y
+   abajo) hacían del panel una columna de 340px para decir «todo bien». Se aprieta
+   SOLO este bloque —el resto de Ajustes conserva su ritmo— porque aquí lo que se
+   hace es BARRER seis líneas con la vista, no leer seis ajustes. */
+.aj-conn-row{padding-block:11px}
 .aj-conn-v{flex-direction:column;align-items:flex-start;gap:4px}
 .aj-conn-badge{display:inline-flex;align-items:center;gap:6px;
   font:600 var(--fs-micro)/1 var(--font-mono);letter-spacing:.04em}
-.aj-dot{width:8px;height:8px;border-radius:50%;flex:none}
+/* EL PUNTO TOMA EL COLOR DE SU ETIQUETA, no uno propio (bloque C). Antes cada
+   estado repetía el color a mano y el de «en línea» se había quedado en
+   patina-500 mientras su texto usaba --accent-text. En grafito da igual; en
+   PORCELANA no: patina-500 sobre el papel del panel mide 2,56:1 y un punto de
+   8px es un objeto gráfico con significado, que la norma pide a 3:1. Su
+   etiqueta ya lo cumple (patina-700 → 6,11:1) porque --accent-text invierte con
+   el tema. Con currentColor el punto no puede volver a separarse de su texto:
+   hay UNA fuente de color por estado, la del propio badge. */
+.aj-dot{width:8px;height:8px;border-radius:50%;flex:none;background:currentColor}
 .aj-conn-badge.is-ok{color:var(--accent-text)}
-.aj-conn-badge.is-ok .aj-dot{background:var(--patina-500)}
 .aj-conn-badge.is-warn{color:var(--text-muted)}
-.aj-conn-badge.is-warn .aj-dot{background:var(--text-subtle)}
+/* «A medias» no puede distinguirse SOLO por el tono: su etiqueta es --text-muted,
+   el mismo gris del motivo que va justo debajo, así que de un vistazo se leía
+   como una frase más y no como un estado. Se le da FORMA, no color inventado —el
+   sistema prohíbe el ámbar en la UI—: punto hueco, que es el ◐ de .c-ver--partial
+   traducido a este vocabulario. Lleno = resuelto (en línea o caído), hueco = a
+   medias. Se distingue también en blanco y negro. */
+.aj-conn-badge.is-warn .aj-dot{background:transparent;box-shadow:inset 0 0 0 2px currentColor}
 .aj-conn-badge.is-fail{color:var(--danger)}
-.aj-conn-badge.is-fail .aj-dot{background:var(--danger)}
 .aj-conn-detail{font:400 var(--fs-data)/1.5 var(--font-sans);color:var(--text-muted)}
 @media (max-width:768px){.aj-row{flex-direction:column;align-items:flex-start}.aj-row .k{min-width:0}}

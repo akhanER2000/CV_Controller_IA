@@ -9,6 +9,19 @@
 .imp-h1 em{font-style:italic}
 .imp-sub{max-width:52ch;margin-top:18px;color:var(--text-muted);font-size:var(--fs-lead);line-height:1.65}
 .imp-box{width:100%;margin-top:40px;text-align:left;overflow:hidden}
+/* EL FOCO DEL VOLCADO (bloque C · estados). `.imp-ta:focus{outline:none}` —tres
+   líneas más abajo— apaga el aro del sistema y no ponía NADA en su lugar: se
+   tabulaba hasta el campo más importante de la pantalla y no se veía. Apagarlo
+   en el <textarea> está bien (la caja ENTERA es el campo; un aro pegado al borde
+   interior se lee como un error de maquetación), así que el acuse se sube al
+   contenedor, que es lo que el ojo trata como el control.
+   Mismo gesto exacto que `.c-input:focus` del sistema —borde de --focus-ring y
+   halo de 3px al 16%—, así el volcado no inventa un foco propio.
+   Va ANTES que `.is-drag` a propósito: las dos reglas pesan igual (0,2,0) y en un
+   empate gana la última, o sea que arrastrar por encima sigue mandando sobre
+   estar enfocado, que es el orden correcto de las dos noticias. */
+.imp-box:focus-within{border-color:var(--focus-ring);
+  box-shadow:0 0 0 3px color-mix(in srgb,var(--focus-ring) 16%,transparent),var(--shadow-2)}
 .imp-box.is-drag{border-color:var(--border-patina);box-shadow:0 0 0 3px color-mix(in srgb,var(--patina-300) 14%,transparent),var(--shadow-2)}
 .imp-ta{display:block;width:100%;background:transparent;border:0;resize:none;color:var(--text);
   font:400 15px/1.7 var(--font-sans);padding:26px 28px 14px;min-height:240px;max-height:50vh;overflow:auto}
@@ -94,7 +107,7 @@
 .imp-pl li .d{min-width:0;font:400 var(--fs-ui)/1.6 var(--font-sans);color:var(--text-muted)}
 .imp-pl li .d>p{margin:0;max-width:64ch}
 .imp-pl__dl{margin-top:12px}
-.bc.imp-pl__prompt{margin-top:12px}
+.bcp.imp-pl__prompt{margin-top:12px}
 .dz.imp-pl__drop{margin-top:14px}
 
 .imp-pl__file{display:flex;align-items:center;flex-wrap:wrap;gap:8px;margin-top:12px;

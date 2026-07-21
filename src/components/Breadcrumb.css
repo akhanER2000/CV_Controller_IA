@@ -40,6 +40,12 @@
   color: var(--accent-text);
   transform: translateX(-2px);
 }
+/* `.bc-label` (el texto de «volver a X») NO lleva regla A PROPÓSITO: hereda de
+   .bc-back, y por eso el hover del botón lo arrastra sin declararlo dos veces.
+   Que estuviera SIN definir aquí fue lo que dejó que BloqueCopiable.css —que sí
+   tenía un `.bc-label` propio, en mono y versalitas— se lo quedara y de paso
+   congelara su color en el hover. Aquel fichero ya usa el prefijo `bcp-`; si
+   alguien vuelve a necesitar un `.bc-label`, que sea AQUÍ y con esta voz. */
 .bc-sep {
   flex: none;
   font: 400 var(--fs-micro) / 1 var(--font-mono);

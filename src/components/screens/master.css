@@ -212,7 +212,7 @@
   padding:7px 10px;border:1px solid var(--border-strong);border-radius:5px;color:var(--text-muted)}
 .ms-date__now:hover{color:var(--accent-text);border-color:var(--border-patina)}
 .ms-date__save{border-color:var(--border-patina);color:var(--accent-text)}
-.ms-date__save:disabled{opacity:.45;cursor:default;border-color:var(--border-strong);color:var(--text-subtle)}
+.ms-date__save:disabled{opacity:var(--opacity-disabled);cursor:default;border-color:var(--border-strong);color:var(--text-subtle)}
 .ms-date__cancel{border-color:transparent;padding:0 6px;font-size:13px}
 .ms-date__cancel:hover{color:var(--danger)}
 .ms-date__hint{flex:1 1 100%;font:400 var(--fs-micro)/1.5 var(--font-mono);color:var(--text-subtle)}
@@ -223,12 +223,26 @@
 
 /* ── A4 · posibles duplicados ya en el master ─────────────────────────────────
    La marca es un BOTÓN, no un cartel: la única salida de un duplicado es mirarlo.
-   Usa el color de aviso, no el de peligro: nada está roto, hay algo que decidir. */
+
+   ⚠ AQUÍ HABÍA UN TOKEN FANTASMA (bloque C). Estas tres líneas decían
+   `var(--warn, var(--danger))` y el comentario prometía «el color de aviso, no
+   el de peligro». `--warn` NO EXISTE: no está en globals.css ni en ningún otro
+   sitio del producto, así que el var() caía SIEMPRE al fallback y lo que se
+   pintaba era --danger. O sea: el comentario describía una intención, no el
+   píxel. Se quita el fantasma y se escribe lo que de verdad se pinta.
+   Y no se inventa el token que falta, por dos motivos escritos ya en el
+   producto: (1) el sistema prohíbe un ámbar en la UI —el cobre es atmósfera, no
+   señal—, y (2) staging.css toma exactamente esta decisión para exactamente
+   este caso («.stg-dupchip»), con su motivo: --danger es el mismo token que
+   marca «sin evidencia», la otra cosa que frena una aceptación. Dos pantallas
+   que dicen lo mismo tienen que decirlo con el mismo color.
+   Lo que evita que grite es el PESO, no el tono: filo al 32% y fondo al 7%,
+   con el texto en --text-muted. */
 .ms-dup__mark{display:inline-flex;align-items:baseline;gap:6px;margin:6px 0 0;padding:3px 8px;
-  border:1px solid color-mix(in srgb,var(--warn,var(--danger)) 32%,transparent);border-radius:5px;
-  background:color-mix(in srgb,var(--warn,var(--danger)) 7%,transparent);
+  border:1px solid color-mix(in srgb,var(--danger) 32%,transparent);border-radius:5px;
+  background:color-mix(in srgb,var(--danger) 7%,transparent);
   font:500 var(--fs-micro)/1.4 var(--font-mono);color:var(--text-muted);text-align:left}
-.ms-dup__mark:hover{color:var(--text);border-color:color-mix(in srgb,var(--warn,var(--danger)) 55%,transparent)}
+.ms-dup__mark:hover{color:var(--text);border-color:color-mix(in srgb,var(--danger) 55%,transparent)}
 .ms-dup__mark:focus-visible{outline:2px solid var(--border-patina);outline-offset:1px}
 .ms-row .ms-dup__mark{margin:0}
 
@@ -275,7 +289,7 @@
 .ms-dup__keep em{font-style:normal;color:var(--text-subtle)}
 .ms-dup__keep:hover,.ms-dup__merge:hover{color:var(--text);border-color:var(--border-patina)}
 .ms-dup__merge{border-color:var(--border-patina);color:var(--accent-text)}
-.ms-dup__keep:disabled,.ms-dup__merge:disabled{opacity:.45;cursor:default}
+.ms-dup__keep:disabled,.ms-dup__merge:disabled{opacity:var(--opacity-disabled);cursor:default}
 .ms-dup__busy{font:400 var(--fs-micro)/1 var(--font-mono);color:var(--text-subtle)}
 .ms-dup .ms-blocked{margin:12px 0 0}
 
@@ -325,7 +339,7 @@
    aplicable (con casilla) y zona consultiva (sin ella): la segunda existe porque
    editar tu prosa o borrar un dato es SIEMPRE tu decisión, nunca la del sistema. */
 .ms-actions{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
-.ms-barrido-cta:disabled{opacity:.6;cursor:default}
+.ms-barrido-cta:disabled{opacity:var(--opacity-disabled);cursor:default}
 
 .ms-bar{margin:16px 0 4px;padding:16px 18px;background:var(--surface-sunken);
   border:1px solid var(--border-patina);border-radius:var(--radius-md)}
@@ -367,5 +381,5 @@
   border:1px solid var(--border-patina);color:var(--accent-text);
   background:color-mix(in srgb,var(--accent-text) 8%,transparent)}
 .ms-bar__apply:hover{color:var(--text);background:color-mix(in srgb,var(--accent-text) 14%,transparent)}
-.ms-bar__apply:disabled{opacity:.45;cursor:default;background:transparent}
+.ms-bar__apply:disabled{opacity:var(--opacity-disabled);cursor:default;background:transparent}
 .ms-bar__never{font:400 var(--fs-micro)/1 var(--font-mono);color:var(--text-subtle)}

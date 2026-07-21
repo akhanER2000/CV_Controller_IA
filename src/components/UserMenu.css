@@ -186,7 +186,7 @@
   background: var(--danger-quiet);
 }
 .um-item[disabled] {
-  opacity: 0.5;
+  opacity: var(--opacity-disabled);
   pointer-events: none;
 }
 .um-sep {

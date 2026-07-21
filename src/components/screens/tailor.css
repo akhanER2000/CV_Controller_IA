@@ -71,7 +71,16 @@
 .tl-item--add{border-color:var(--border-patina)}
 .tl-itext{flex:1;min-width:240px;color:var(--text);line-height:1.55}
 .tl-cubre{color:var(--text-subtle);font:400 var(--fs-micro)/1.4 var(--font-mono)}
-.tl-done{color:var(--text-patina, var(--text-muted));font:500 var(--fs-micro)/1 var(--font-mono)}
+/* «añadido» / «reformulación aplicada»: el acuse de que la decisión YA está
+   tomada. Decía `var(--text-patina, var(--text-muted))` y --text-patina no
+   existe en ningún sitio (bloque C), así que caía al fallback y el acuse salía
+   del mismo gris que el texto de al lado — indistinguible de una etiqueta más.
+   El token que ese nombre estaba buscando es --accent-text, que ES «la pátina
+   como texto» y ya invierte sola con el tema (patina-300 en grafito, patina-700
+   en porcelana; AA sobre las cuatro superficies en ambos, medido en
+   tests/tema-porcelana.test.ts). Es además lo que usan los acuses gemelos del
+   editor (.fitok, .var-orig .rv). */
+.tl-done{color:var(--accent-text);font:500 var(--fs-micro)/1 var(--font-mono)}
 
 /* GRUPO 3 — el hueco. Filo punteado a la izquierda: falta algo, no ha fallado nada. */
 .tl-gaps{display:grid;gap:8px}

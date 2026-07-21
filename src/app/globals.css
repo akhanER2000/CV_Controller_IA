@@ -321,6 +321,20 @@
   /* Capas */
   --z-aurora: 0; --z-page: 1; --z-header: 10; --z-overlay: 100;
 
+  /* Opacidad de lo DESHABILITADO (bloque C · consistencia de estados).
+     No es un valor nuevo: es EL valor que ya usa `.c-btn[disabled]` en el porte
+     literal del sistema (§2, `opacity:.42`), sacado a token para que el resto de
+     controles del producto puedan apuntar al mismo sitio en vez de elegir cada
+     uno el suyo. Antes convivían .42, .45, .5, .55 y .6 en catorce reglas de
+     nueve ficheros, y había un caso peor: `.refform .reffacts .c-btn[disabled]`
+     le ganaba en especificidad al sistema y pintaba el MISMO botón al .5 dentro
+     del formulario de referencias y al .42 fuera. Un control apagado tiene que
+     apagarse igual en toda la app o el usuario no aprende a leerlo.
+     ⚠ La declaración de `.c-btn[disabled]` NO se toca: §2 es copia íntegra del
+     paquete de diseño y aquí no se "interpreta" el porte. Este token REFLEJA su
+     valor; si el sistema lo cambia, se re-inyecta allí y se copia aquí. */
+  --opacity-disabled: .42;
+
   /* Superficies de vidrio. Mismo color que --surface/--bg pero con un resto de
      transparencia: el contenido conserva SU superficie y la atmósfera se intuye
      detrás. Se resuelven en el sitio de uso, así que siguen al tema solas.

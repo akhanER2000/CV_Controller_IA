@@ -599,7 +599,7 @@ export function StagingScreen() {
     const b = busy.has(it.id);
     const campos = otra ? camposComparables(it.kind, it.data, otra.data) : [];
     return (
-      <div className={"stg-dup" + (abierta ? " open" : "")} data-level={sos.level}>
+      <div className={"stg-dupwarn" + (abierta ? " open" : "")} data-level={sos.level}>
         <div className="stg-duphead">
           <span className="q">{t("staging.dupOf")}</span>
           <span className="other">{otra ? textOf(otra) : t("staging.dupGone")}</span>

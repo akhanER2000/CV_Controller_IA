@@ -100,21 +100,21 @@ export function BloqueCopiable({
   }
 
   return (
-    <div className={`bc${className ? ` ${className}` : ""}`} id={id}>
-      <div className="bc-head">
-        {label ? <span className="bc-label">{label}</span> : <span />}
-        <button type="button" className="bc-copy" onClick={() => void copiarAlPortapapeles()}>
+    <div className={`bcp${className ? ` ${className}` : ""}`} id={id}>
+      <div className="bcp-head">
+        {label ? <span className="bcp-label">{label}</span> : <span />}
+        <button type="button" className="bcp-copy" onClick={() => void copiarAlPortapapeles()}>
           {estado === "ok" ? `✓ ${copiado}` : copiar}
         </button>
       </div>
       {/* tabIndex=0: un <pre> con scroll tiene que ser alcanzable por teclado o
           su contenido queda fuera del alcance de quien no usa ratón. */}
-      <pre className="bc-pre" ref={preRef} tabIndex={0} role="region" aria-label={aria}>
+      <pre className="bcp-pre" ref={preRef} tabIndex={0} role="region" aria-label={aria}>
         {texto}
       </pre>
       {/* Live region SIEMPRE presente: si el <p> se monta con el mensaje dentro,
           algunos lectores no lo anuncian. Vacío en reposo, con texto al actuar. */}
-      <p className={`bc-status${estado === "fallo" ? " is-fallo" : ""}`} role="status" aria-live="polite">
+      <p className={`bcp-status${estado === "fallo" ? " is-fallo" : ""}`} role="status" aria-live="polite">
         {estado === "fallo" ? fallo : ""}
       </p>
     </div>

@@ -23,7 +23,9 @@
 .vr-top .vr-acts button{font:500 var(--fs-micro)/1 var(--font-mono);color:var(--text-subtle);border:1px solid transparent;border-radius:5px;padding:8px 9px}
 .vr-top .vr-acts .dup:hover{color:var(--accent-text);border-color:var(--border-patina)}
 .vr-top .vr-acts .del:hover{color:var(--danger);border-color:color-mix(in srgb,var(--danger) 40%,transparent)}
-.vr-top .vr-acts button:disabled{opacity:.5}
+/* `cursor:default` faltaba SOLO aquí: el botón apagado seguía enseñando la
+   manita de <button>, prometiendo un clic que no llega. */
+.vr-top .vr-acts button:disabled{opacity:var(--opacity-disabled);cursor:default}
 .vr-top .obj{grid-column:1;font:400 var(--fs-micro)/1.4 var(--font-mono);color:var(--text-subtle)}
 .vr-top .meta{grid-row:span 2;font:400 var(--fs-micro)/1.6 var(--font-mono);color:var(--text-subtle);text-align:right}
 .vr-top .meta .old{color:var(--text-muted)}

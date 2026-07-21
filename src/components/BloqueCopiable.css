@@ -1,14 +1,34 @@
 /* ── BloqueCopiable.css — el texto que el usuario se lleva a otra parte ──
-   Prefijo propio `bc-`; no toca ni redefine ninguna clase del sistema
+   Prefijo propio `bcp-`; no toca ni redefine ninguna clase del sistema
    (globals.css es intocable). Sin @keyframes ni transform: solo transiciones de
    color y borde, como DropZone.css — nada que revisar bajo
    prefers-reduced-motion porque no se introduce ningún movimiento.
+
+   ⚠ POR QUÉ `bcp-` Y NO `bc-` (bloque C · revisión visual).
+   Este fichero nació con el prefijo `bc-` y COLISIONABA de frente con
+   Breadcrumb.css, que usa `bc-` desde antes (bc = breadcrumb). Los dos CSS son
+   globales —ambos se importan desde componentes que se montan en /app— así que
+   las reglas se sumaban sobre los mismos nodos. Tres choques REALES, no teóricos:
+     · `.bc` — la miga del header heredaba `width:100%`, borde, fondo hundido y
+       `overflow:hidden` de este fichero; y este bloque heredaba `display:flex`
+       de la miga, que ponía la cabecera y el <pre> UNO AL LADO DEL OTRO.
+     · `.bc-label` — solo estaba definido aquí, y se lo comía el <span> del texto
+       del botón «volver» (Breadcrumb.tsx lo pinta y su CSS no lo define): salía
+       en mono, versalitas y --text-subtle en vez de la sans de --text-muted que
+       declara .bc-back.
+     · …y por eso mismo el HOVER de «volver» dejaba de funcionar en el texto:
+       .bc-back:hover cambia el color por herencia, pero .bc-label lo fijaba.
+   Se renombra ESTE y no la miga porque `bc` = breadcrumb es el nombre con
+   derecho de antigüedad y con más sitios de uso (header de Importar, Staging,
+   Salud, Tailoring, Variantes). `bcp` = Bloque CoPiable. No es un sufijo de
+   `bc`: un selector de clase casa el token entero, así que `.bc` nunca casa
+   `bcp` ni al revés — la colisión desaparece de raíz, no se apaga a mano.
 
    El bloque tiene que LEERSE, no solo copiarse: quien no confía en un botón de
    portapapeles (o a quien le falla) necesita ver el texto entero y poder
    seleccionarlo. De ahí el <pre> con scroll propio y `user-select:text`. */
 
-.bc {
+.bcp {
   width: 100%;
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
@@ -16,7 +36,7 @@
   overflow: hidden;
 }
 
-.bc-head {
+.bcp-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -25,7 +45,7 @@
   border-bottom: 1px solid var(--border);
 }
 
-.bc-label {
+.bcp-label {
   font: 500 var(--fs-micro) / 1 var(--font-mono);
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -33,7 +53,7 @@
   min-width: 0;
 }
 
-.bc-copy {
+.bcp-copy {
   flex: none;
   font: 500 var(--fs-micro) / 1 var(--font-mono);
   color: var(--text-muted);
@@ -45,12 +65,12 @@
   transition: color 0.14s, border-color 0.14s, background-color 0.14s;
 }
 
-.bc-copy:hover {
+.bcp-copy:hover {
   color: var(--accent-text);
   border-color: var(--border-patina);
 }
 
-.bc-pre {
+.bcp-pre {
   margin: 0;
   padding: 14px 16px;
   /* Alto contenido: el prompt es largo a propósito (dice las reglas del formato
@@ -65,7 +85,7 @@
   color: var(--text-muted);
 }
 
-.bc-status {
+.bcp-status {
   margin: 0;
   padding: 0 12px;
   max-height: 0;
@@ -76,7 +96,7 @@
 
 /* El aviso solo ocupa sitio cuando hay algo que decir: la live region existe
    siempre en el DOM (para que se anuncie) pero no deja un hueco en reposo. */
-.bc-status.is-fallo {
+.bcp-status.is-fallo {
   max-height: none;
   padding: 10px 12px;
   border-top: 1px dashed color-mix(in srgb, var(--danger) 45%, transparent);

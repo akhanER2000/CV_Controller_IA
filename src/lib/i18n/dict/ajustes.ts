@@ -6,13 +6,23 @@ export const ajustes = {
 
     // Flash (avisos efímeros de estado)
     "ajustes.flash.nameSaved": "Nombre guardado ✓",
-    "ajustes.flash.keyParked": "Cifrado en preparación — la clave NO se guardó (nada de secretos en texto plano).",
+    // ★ El mensaje ACCIONABLE. El anterior («cifrado en preparación») sonaba a función a
+    //   medio hacer: el usuario lo leía como un fallo del producto. Es lo contrario —el
+    //   candado funcionando— y lo que falta es una variable de entorno. Se dice cuál.
+    "ajustes.flash.keyParked":
+      "Falta configurar CORPUS_ENCRYPTION_KEY en el servidor. Hasta entonces no se guarda ninguna clave — a propósito, para no dejar secretos en claro.",
     "ajustes.flash.keySaved": "Clave guardada ✓ (cifrada, no se muestra)",
     "ajustes.flash.keyIncluded": "Se usará la clave incluida ✓",
     "ajustes.flash.key2Saved": "2ª clave guardada ✓ (cifrada, no se muestra)",
-    "ajustes.flash.key2Parked": "Cifrado en preparación — la 2ª clave NO se guardó (nada de secretos en claro).",
+    "ajustes.flash.key2Parked":
+      "Falta configurar CORPUS_ENCRYPTION_KEY en el servidor. Hasta entonces no se guarda ninguna clave — a propósito, para no dejar secretos en claro.",
     "ajustes.flash.key2Unavailable": "Falta aplicar la migración 0006 (llm_api_key_2): la 2ª clave no se pudo guardar.",
     "ajustes.flash.key2Cleared": "2ª clave quitada ✓ — todo vuelve a Gemini",
+    "ajustes.flash.modeloSaved": "Modelo guardado ✓ — se probó antes de guardarlo",
+    "ajustes.flash.modeloRegistro": "Vuelves al modelo del registro ✓",
+    "ajustes.flash.modeloNoResponde": "Ese modelo no respondió — no se guarda nada",
+    "ajustes.flash.modeloSinColumna": "Falta la columna llm_model en user_settings: la elección no se pudo guardar.",
+    "ajustes.flash.modeloError": "No se pudo guardar la elección.",
 
     // Cuenta
     "ajustes.account.overline": "Cuenta",
@@ -57,6 +67,18 @@ export const ajustes = {
     "ajustes.byok.useIncluded": "Usar la incluida",
     "ajustes.byok.saveKey": "Guardar clave",
 
+    // ★ Candado del cifrado. Cuando el servidor no tiene CORPUS_ENCRYPTION_KEY, el campo
+    //   se CIERRA con su motivo al lado: aceptar el texto para tirarlo después hace
+    //   perder el tiempo y parece un producto roto. Es lo contrario: es el candado.
+    "ajustes.byok.lockedBadge": "Campo cerrado · sin cifrado en el servidor",
+    "ajustes.byok.lockedWhy":
+      "Falta configurar CORPUS_ENCRYPTION_KEY en el servidor. Hasta entonces no se guarda ninguna clave — a propósito, para no dejar secretos en claro.",
+    "ajustes.byok.lockedHow":
+      "Genérala con  node -e \"console.log(require('crypto').randomBytes(32).toString('base64'))\"  (o  openssl rand -base64 32 ) y ponla en .env.local y en las variables de entorno de Vercel.",
+    "ajustes.byok.lockedPlaceholder": "cerrado hasta que haya cifrado en el servidor",
+    "ajustes.byok.parkedSaved":
+      "Hay una clave guardada que HOY no se puede descifrar (falta o cambió CORPUS_ENCRYPTION_KEY): está aparcada, no se usa. Vuelve a pegarla cuando el servidor pueda cifrar.",
+
     // BYOK · segunda clave (§H) — el proveedor BARATO del router por coste (Groq)
     "ajustes.byok2.label": "Segunda clave · proveedor barato",
     "ajustes.byok2.hint": "BYOK — opcional · router por coste",
@@ -67,6 +89,37 @@ export const ajustes = {
     "ajustes.byok2.save": "Guardar 2ª clave",
     "ajustes.byok2.clear": "Quitar",
     "ajustes.byok2.note": "Solo abarata clasificar y desempatar duplicados. Sin ella, todo va a Gemini (no se rompe nada).",
+
+    // ★ Selector de modelos PROBADOS. El listado de la API miente (20 listados, 11
+    //   responden), así que aquí solo se ofrece lo que contestó a una llamada real.
+    "ajustes.modelo.label": "Modelo de extracción",
+    "ajustes.modelo.hint": "solo los que tu clave admite de verdad",
+    "ajustes.modelo.aria": "Modelo de extracción",
+    "ajustes.modelo.optRegistro": "El del registro (recomendado)",
+    "ajustes.modelo.origenElegido": "activo · lo elegiste tú",
+    "ajustes.modelo.origenRegistro": "activo · el del registro — ganó el A/B del canario (87 % de evidencia verificada)",
+    "ajustes.modelo.espejo": "el chequeo de salud prueba este mismo modelo — si probara otro, no probaría nada",
+    "ajustes.modelo.espejoRoto": "⚠ El chequeo de salud apunta a otro modelo: dejaría de probar lo que usas.",
+    "ajustes.modelo.probar": "Comprobar modelos",
+    "ajustes.modelo.probando": "Probando uno a uno…",
+    "ajustes.modelo.probarNota": "el listado miente: una llamada real por modelo, y solo cuando lo pidas",
+    "ajustes.modelo.guardar": "Usar este modelo",
+    "ajustes.modelo.guardando": "Probando y guardando…",
+    "ajustes.modelo.listados": "listados",
+    "ajustes.modelo.responden": "responden de verdad",
+    "ajustes.modelo.descartados": "sin probar (otra modalidad)",
+    "ajustes.modelo.responde": "responde",
+    "ajustes.modelo.caido": "no responde",
+    "ajustes.modelo.noRespondeActivo": "El modelo activo NO responde:",
+    "ajustes.modelo.sugerencia": "Sí responde ahora:",
+    "ajustes.modelo.usarSugerencia": "Usarlo",
+    "ajustes.modelo.sinSugerencia": "Pulsa «Comprobar modelos» para ver cuáles admite tu clave.",
+    "ajustes.modelo.sinClave": "Sin clave efectiva no hay nada que probar: guarda tu clave o define GEMINI_API_KEY en el servidor.",
+    "ajustes.modelo.avisoLite": "lite · medido: parafrasea en vez de citar (30–35 % de evidencia verificada frente al 87 %)",
+    "ajustes.modelo.avisoPreview": "preview · Google puede retirarlo sin aviso",
+    "ajustes.modelo.errorListado": "El listado no respondió:",
+    "ajustes.modelo.sinColumna": "La elección no se puede guardar todavía: falta la columna llm_model en user_settings. Mientras tanto va el del registro.",
+    "ajustes.modelo.reutilizado": "medido hace unos segundos, no ahora mismo",
 
     // Nota de modo manual (IA apagada)
     "ajustes.manual.lead": "Modo manual — legítimo, no degradado.",
@@ -130,13 +183,20 @@ export const ajustes = {
 
     // Flash (ephemeral status notes)
     "ajustes.flash.nameSaved": "Name saved ✓",
-    "ajustes.flash.keyParked": "Encryption not ready — the key was NOT saved (no plaintext secrets).",
+    "ajustes.flash.keyParked":
+      "CORPUS_ENCRYPTION_KEY isn't set on the server. Until it is, no key gets saved — on purpose, so no secret is ever stored in plaintext.",
     "ajustes.flash.keySaved": "Key saved ✓ (encrypted, never shown)",
     "ajustes.flash.keyIncluded": "The included key will be used ✓",
     "ajustes.flash.key2Saved": "2nd key saved ✓ (encrypted, never shown)",
-    "ajustes.flash.key2Parked": "Encryption not ready — the 2nd key was NOT saved (no plaintext secrets).",
+    "ajustes.flash.key2Parked":
+      "CORPUS_ENCRYPTION_KEY isn't set on the server. Until it is, no key gets saved — on purpose, so no secret is ever stored in plaintext.",
     "ajustes.flash.key2Unavailable": "Migration 0006 (llm_api_key_2) isn't applied yet: the 2nd key couldn't be saved.",
     "ajustes.flash.key2Cleared": "2nd key removed ✓ — everything goes back to Gemini",
+    "ajustes.flash.modeloSaved": "Model saved ✓ — it was probed before saving",
+    "ajustes.flash.modeloRegistro": "Back to the registry's model ✓",
+    "ajustes.flash.modeloNoResponde": "That model didn't answer — nothing was saved",
+    "ajustes.flash.modeloSinColumna": "Column llm_model is missing in user_settings: the choice couldn't be saved.",
+    "ajustes.flash.modeloError": "Couldn't save the choice.",
 
     // Account
     "ajustes.account.overline": "Account",
@@ -181,6 +241,17 @@ export const ajustes = {
     "ajustes.byok.useIncluded": "Use the included one",
     "ajustes.byok.saveKey": "Save key",
 
+    // ★ Encryption lock — same reasoning as ES: a closed field with its reason beats a
+    //   field that takes your secret and then throws it away.
+    "ajustes.byok.lockedBadge": "Field closed · no encryption on the server",
+    "ajustes.byok.lockedWhy":
+      "CORPUS_ENCRYPTION_KEY isn't set on the server. Until it is, no key gets saved — on purpose, so no secret is ever stored in plaintext.",
+    "ajustes.byok.lockedHow":
+      "Generate it with  node -e \"console.log(require('crypto').randomBytes(32).toString('base64'))\"  (or  openssl rand -base64 32 ) and set it in .env.local and in Vercel's environment variables.",
+    "ajustes.byok.lockedPlaceholder": "closed until the server can encrypt",
+    "ajustes.byok.parkedSaved":
+      "There's a saved key that can NOT be decrypted today (CORPUS_ENCRYPTION_KEY is missing or changed): it's parked, not used. Paste it again once the server can encrypt.",
+
     // BYOK · second key (§H) — the CHEAP provider of the cost router (Groq)
     "ajustes.byok2.label": "Second key · cheap provider",
     "ajustes.byok2.hint": "BYOK — optional · cost router",
@@ -191,6 +262,37 @@ export const ajustes = {
     "ajustes.byok2.save": "Save 2nd key",
     "ajustes.byok2.clear": "Remove",
     "ajustes.byok2.note": "It only makes classifying and de-duplicating cheaper. Without it, everything goes to Gemini (nothing breaks).",
+
+    // ★ Probed-model selector. The API listing lies (20 listed, 11 answer), so only
+    //   what answered a real call is offered here.
+    "ajustes.modelo.label": "Extraction model",
+    "ajustes.modelo.hint": "only the ones your key really accepts",
+    "ajustes.modelo.aria": "Extraction model",
+    "ajustes.modelo.optRegistro": "The registry's one (recommended)",
+    "ajustes.modelo.origenElegido": "active · you chose it",
+    "ajustes.modelo.origenRegistro": "active · the registry's one — it won the canary A/B (87% verified evidence)",
+    "ajustes.modelo.espejo": "the health check probes this very model — probing another would prove nothing",
+    "ajustes.modelo.espejoRoto": "⚠ The health check points at another model: it would stop probing what you use.",
+    "ajustes.modelo.probar": "Check models",
+    "ajustes.modelo.probando": "Probing one by one…",
+    "ajustes.modelo.probarNota": "the listing lies: one real call per model, and only when you ask",
+    "ajustes.modelo.guardar": "Use this model",
+    "ajustes.modelo.guardando": "Probing and saving…",
+    "ajustes.modelo.listados": "listed",
+    "ajustes.modelo.responden": "really answer",
+    "ajustes.modelo.descartados": "not probed (other modality)",
+    "ajustes.modelo.responde": "answers",
+    "ajustes.modelo.caido": "doesn't answer",
+    "ajustes.modelo.noRespondeActivo": "The active model does NOT answer:",
+    "ajustes.modelo.sugerencia": "This one does answer right now:",
+    "ajustes.modelo.usarSugerencia": "Use it",
+    "ajustes.modelo.sinSugerencia": "Press «Check models» to see which ones your key accepts.",
+    "ajustes.modelo.sinClave": "With no effective key there's nothing to probe: save your key or set GEMINI_API_KEY on the server.",
+    "ajustes.modelo.avisoLite": "lite · measured: it paraphrases instead of quoting (30–35% verified evidence vs. 87%)",
+    "ajustes.modelo.avisoPreview": "preview · Google can retire it without notice",
+    "ajustes.modelo.errorListado": "The listing didn't answer:",
+    "ajustes.modelo.sinColumna": "The choice can't be saved yet: column llm_model is missing in user_settings. Meanwhile the registry's one is used.",
+    "ajustes.modelo.reutilizado": "measured seconds ago, not right now",
 
     // Manual-mode note (AI off)
     "ajustes.manual.lead": "Manual mode — legitimate, not degraded.",

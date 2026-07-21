@@ -108,5 +108,5 @@
 .fu-li .vias>button{background:color-mix(in srgb,var(--surface) 58%,transparent);border:0;text-align:left;cursor:pointer;padding:13px 18px;
   font:400 var(--fs-data)/1.6 var(--font-sans);color:var(--text-muted)}
 .fu-li .vias>button:hover:not(:disabled){background:color-mix(in srgb,var(--surface-elevated) 72%,transparent);color:var(--text)}
-.fu-li .vias>button:disabled{opacity:.55;cursor:default}
+.fu-li .vias>button:disabled{opacity:var(--opacity-disabled);cursor:default}
 .fu-li .vias>button b{display:block;color:var(--text);font-weight:500;margin-bottom:3px}
