@@ -80,7 +80,10 @@ async function fetchViaJina(url: string): Promise<string> {
 }
 
 // ── 3 · Extracción con Gemini (REST, structured output) ──────────────────────
-const GEMINI_MODEL = "gemini-flash-latest";
+// ⚠ Este módulo es un camino ANTIGUO que hoy nadie importa (grep de "@/lib/ingest"
+//   → cero). Se versiona el modelo igual que el registro para que no quede ni un
+//   alias flotante en el repo; si se resucita, debería pasar por src/lib/ai/modelos.
+const GEMINI_MODEL = "gemini-2.5-flash";
 
 const SCHEMA = {
   type: "object",

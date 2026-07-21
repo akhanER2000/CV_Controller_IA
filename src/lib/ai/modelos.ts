@@ -85,39 +85,75 @@ export interface Definicion {
 /**
  * El único sitio del repo donde se nombra un modelo.
  *
- * Las tareas de Gemini apuntan a `gemini-flash-latest` por una razón concreta y
- * verificada: la clave del usuario NO habilita 2.5/2.0-flash (memoria del proyecto).
- * La tarea BARATA prefiere Groq (llama-3.3-70b-versatile, con salida estructurada)
- * y CAE a Gemini si no hay 2ª clave: la degradación es explícita, no un silencio.
+ * ★ NUNCA UN ALIAS FLOTANTE (`-latest`) EN PRODUCCIÓN. `gemini-flash-latest`
+ *   resuelve a «lo que Google promocione como Flash más reciente», y esa promoción
+ *   la decide GOOGLE, no nosotros: el consumo real de la cuenta se fue a Gemini 3.5
+ *   Flash —el escalón más caro— sin que nadie lo eligiera, solo porque el alias fue
+ *   detrás de la promoción. Un alias flotante es dejar que tu proveedor te elija la
+ *   factura, y la próxima promoción te la vuelve a cambiar sin que toques una línea.
+ *   Un ID versionado, en cambio, solo cambia cuando lo cambiamos aquí. `tests/
+ *   modelos-registro.test.ts` falla si reaparece un `-latest`.
+ *
+ * ⚠ EL MOTIVO VIEJO ERA FALSO. El comentario decía que las tareas apuntaban a
+ *   `-latest` porque «la clave NO habilita 2.5/2.0-flash». Ya no es cierto (y quizá
+ *   nunca lo fue del todo): se listaron los modelos que la clave ACEPTA de verdad
+ *   —gemini-2.5-flash, 2.5-flash-lite, 2.0-flash, 2.0-flash-lite, 2.5-pro…, todos
+ *   versionados— y 2.5-flash está disponible. La restricción que justificaba el
+ *   alias no existe; era, además, la que causaba el default caro.
+ *
+ * ELECCIÓN ACTUAL: todo lo de Gemini a `gemini-2.5-flash`. Es una rebaja real desde
+ * el 3.5 que resolvía el alias, es un modelo PLENO (no lite) y es el que el propio
+ * usuario usa para tareas de este tipo. El emparejamiento por dificultad —bajar la
+ * EXTRACCIÓN (80% de los tokens, reconocimiento de patrones sobre texto limpio) a un
+ * escalón Lite— es la rebaja de más valor, PERO exige medir el canario antes:
+ *
+ * ★ EL CANARIO. La extracción pide copiar el `evidence_snippet` LITERAL, y el
+ *   servidor comprueba `normalize(raw).includes(normalize(evidence))`. Un modelo más
+ *   débil no falla inventando: falla PARAFRASEANDO —resume «con sus palabras» y el
+ *   includes() da false—. Así que la tasa de verificación ES la medida de si el
+ *   modelo sirve para esta tarea. Línea base real (volcado 19-jul): 119 items · 101
+ *   verificados ≈ 85%. La herramienta para medirlo, con la clave y el dossier reales,
+ *   es `tests/manual/ab-modelos.ts` (no corre en CI; gasta tokens). Baja de uno en
+ *   uno —2.5-flash → 2.5-flash-lite— y si el % cae claro (<70%) o los items bajan de
+ *   119, sube el escalón. NO se bajó a Lite en esta ronda porque la clave del usuario
+ *   está SIN CRÉDITOS (429 RESOURCE_EXHAUSTED) y el A/B no se pudo ejecutar: bajar sin
+ *   medir es exactamente lo que el canario existe para impedir.
  */
 export const REGISTRO: Readonly<Record<Tarea, Definicion>> = {
   "transcripcion-vision": {
     proveedor: "google",
-    modelo: "gemini-flash-latest",
-    motivo: "258 tok/página y no cobra el texto nativo ya extraído; es la tarea que más páginas mueve.",
+    modelo: "gemini-2.5-flash",
+    motivo:
+      "de su fidelidad LITERAL depende el detector de alucinación; se queda en un flash pleno " +
+      "(no lite) hasta medir la transcripción aparte. Bajarla ciega se lleva el candado de evidencia.",
   },
   "extraccion-estructurada": {
     proveedor: "google",
-    modelo: "gemini-flash-latest",
-    motivo: "structured outputs con los cinco schemas troceados (límite de 24 opcionales).",
+    modelo: "gemini-2.5-flash",
+    motivo:
+      "structured outputs con los cinco schemas troceados (límite de 24 opcionales). Es el 80% de " +
+      "los tokens y la mejor candidata a bajar a 2.5-flash-lite — pero solo tras medir el canario " +
+      "(tests/manual/ab-modelos.ts); la clave sin créditos impidió el A/B en esta ronda.",
   },
   "redaccion-preserva-hechos": {
     proveedor: "google",
-    modelo: "gemini-flash-latest",
-    motivo: "redacta variantes sin inventar cifras; la verificación de evidencia corre después igual.",
+    modelo: "gemini-2.5-flash",
+    motivo:
+      "aquí se juega la promesa del producto: NO se baja a lite. preservesFacts corre después e " +
+      "impide la invención igual, pero un modelo débil redacta peor. Es el sitio donde pagar bien vale.",
   },
   "clasificacion-barata": {
     proveedor: "groq",
     modelo: "llama-3.3-70b-versatile",
-    modeloFallback: "gemini-flash-latest",
+    modeloFallback: "gemini-2.5-flash",
     motivo:
       "decisiones de una palabra y desempate de duplicados: barato y con salida estructurada. " +
-      "Sin 2ª clave cae a Gemini (degrada, no rompe).",
+      "Sin 2ª clave cae a Gemini 2.5-flash (degrada, no rompe).",
   },
   "ping-salud": {
     proveedor: "google",
-    modelo: "gemini-flash-latest",
-    motivo: "tiene que ser el MISMO modelo que la extracción, o el chequeo no prueba nada útil.",
+    modelo: "gemini-2.5-flash",
+    motivo: "espeja a extraccion-estructurada: si el chequeo usa OTRO modelo, no prueba nada útil.",
   },
 };
 

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { generateObject } from "ai";
-import { createGoogleGenerativeAI } from "@ai-sdk/google";
+import { modeloPara } from "@/lib/ai/modelos";
 import { createClient } from "@/lib/supabase/server";
 import { getVariant, getVariantItem, setAiOverride, buildVariantResumeData } from "@/lib/db/variants";
 import { geminiApiKey } from "@/lib/extract/llm";
@@ -22,8 +22,6 @@ import {
 export const runtime = "nodejs";
 // El I/O del LLM no cuenta como Active CPU en Fluid Compute (02 §1).
 export const maxDuration = 300;
-
-const AI_MODEL = "gemini-flash-latest";
 
 /**
  * «AJUSTAR A DOS PÁGINAS» — la ruta. Dos acciones, las dos MANUALES:
@@ -49,7 +47,8 @@ const motivo = (e: unknown) => (e instanceof Error ? e.message : "Error");
 function geminiAjusteLLM(apiKey?: string): AjusteLLM {
   const key = apiKey || geminiApiKey();
   if (!key) throw new Error("Falta GEMINI_API_KEY");
-  const model = createGoogleGenerativeAI({ apiKey: key })(AI_MODEL);
+  // Acortar/seleccionar sin inventar es redaccion-preserva-hechos: por el registro.
+  const model = modeloPara("redaccion-preserva-hechos", key);
   const SYS =
     "Eres un asistente que ayuda a que un CV QUEPA en un número de páginas. Te doy los items " +
     "VISIBLES de la variante (id, tipo y texto), el rol objetivo y CUÁNTAS LÍNEAS SOBRAN (medidas " +

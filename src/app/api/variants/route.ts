@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { generateObject } from "ai";
-import { createGoogleGenerativeAI } from "@ai-sdk/google";
+import { modeloPara } from "@/lib/ai/modelos";
 import { createClient } from "@/lib/supabase/server";
 import { listVariants, countMasterItems, getMasterItems, type MasterItem } from "@/lib/db/queries";
 import { createVariant, updateVariant, addItem, setAiOverride } from "@/lib/db/variants";
@@ -18,7 +18,6 @@ export const runtime = "nodejs";
 // El I/O del LLM no cuenta como Active CPU en Fluid Compute (02 §1).
 export const maxDuration = 300;
 
-const AI_MODEL = "gemini-flash-latest";
 
 /**
  * Lista las variantes del usuario autenticado (RLS por auth.uid()).
@@ -55,7 +54,9 @@ function masterItemText(m: MasterItem): string {
 function geminiVariantLLM(apiKey?: string): VariantLLM {
   const key = apiKey || geminiApiKey();
   if (!key) throw new Error("Falta GEMINI_API_KEY");
-  const model = createGoogleGenerativeAI({ apiKey: key })(AI_MODEL);
+  // Armar la variante es redacción/selección que no puede inventar: pasa por el
+  // registro (redaccion-preserva-hechos), no por un alias flotante propio.
+  const model = modeloPara("redaccion-preserva-hechos", key);
   const SYS =
     "Eres un asistente que arma una VARIANTE de CV a partir de un MASTER canónico. " +
     "Te doy los items del master (cada uno con su id, tipo y texto) y un rol/descripción objetivo. " +

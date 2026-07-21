@@ -28,7 +28,10 @@ import {
 } from "../src/lib/ai/modelos";
 
 const MODELO_GROQ = "llama-3.3-70b-versatile";
-const MODELO_GEMINI = "gemini-flash-latest";
+// El modelo de Gemini fijado en el registro (versionado, NUNCA un alias -latest).
+// Si el A/B lo cambia, se actualiza aquí; que no compile con -latest lo garantiza
+// tests/modelos-registro.test.ts, no este.
+const MODELO_GEMINI = "gemini-2.5-flash";
 
 /* ── El registro es la única fuente de verdad tarea→proveedor→modelo ─────────── */
 describe("registro · una tarea, un proveedor, un modelo", () => {
