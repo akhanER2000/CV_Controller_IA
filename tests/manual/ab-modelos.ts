@@ -39,7 +39,7 @@ const KEY = (env.GEMINI_API_KEY || env.GOOGLE_GENERATIVE_AI_API_KEY)!;
 const DOSSIER = readFileSync("J:/Code/CV_Controller_IA/material-perfil/dossier/DOSSIER-MAESTRO-AKHAN.md", "utf8");
 
 const SCHEMA = { basics: BasicsSchema, work: WorkSchema, education: EducationSchema, skills: SkillsSchema, projects: ProjectsSchema } as const;
-const MODELOS = ["gemini-3.5-flash", "gemini-2.5-flash", "gemini-2.5-flash-lite", "gemini-2.0-flash-lite"];
+const MODELOS = ["gemini-3.5-flash", "gemini-3.6-flash", "gemini-3.5-flash-lite", "gemini-3.1-flash-lite"];
 
 // Recoge (evidence) de cada item de una respuesta, según extractor.
 function evidencias(extractor: string, obj: any): string[] {

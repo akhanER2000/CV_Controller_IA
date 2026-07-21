@@ -31,7 +31,10 @@ const MODELO_GROQ = "llama-3.3-70b-versatile";
 // El modelo de Gemini fijado en el registro (versionado, NUNCA un alias -latest).
 // Si el A/B lo cambia, se actualiza aquí; que no compile con -latest lo garantiza
 // tests/modelos-registro.test.ts, no este.
-const MODELO_GEMINI = "gemini-2.5-flash";
+// El modelo de Gemini fijado en el registro. Versionado y —lo que importa más—
+// COMPROBADO con un ping real contra la clave: `gemini-2.5-flash` figuraba en el
+// listado de la API y devolvía 404 «no longer available» al llamarlo.
+const MODELO_GEMINI = "gemini-3.6-flash";
 
 /* ── El registro es la única fuente de verdad tarea→proveedor→modelo ─────────── */
 describe("registro · una tarea, un proveedor, un modelo", () => {

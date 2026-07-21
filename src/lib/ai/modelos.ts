@@ -94,50 +94,62 @@ export interface Definicion {
  *   Un ID versionado, en cambio, solo cambia cuando lo cambiamos aquí. `tests/
  *   modelos-registro.test.ts` falla si reaparece un `-latest`.
  *
- * ⚠ EL MOTIVO VIEJO ERA FALSO. El comentario decía que las tareas apuntaban a
- *   `-latest` porque «la clave NO habilita 2.5/2.0-flash». Ya no es cierto (y quizá
- *   nunca lo fue del todo): se listaron los modelos que la clave ACEPTA de verdad
- *   —gemini-2.5-flash, 2.5-flash-lite, 2.0-flash, 2.0-flash-lite, 2.5-pro…, todos
- *   versionados— y 2.5-flash está disponible. La restricción que justificaba el
- *   alias no existe; era, además, la que causaba el default caro.
+ * ⚠⚠ EL LISTADO DE MODELOS MIENTE. ESTE ES EL HECHO QUE MANDA AQUÍ.
+ *   `GET /v1beta/models` devolvió 20 modelos con `generateContent` para la clave del
+ *   usuario. Al hacerles un ping REAL, solo 11 respondieron: `gemini-2.5-flash`,
+ *   `2.5-pro`, `2.5-flash-lite`, `2.0-flash`, `2.0-flash-lite` y `3-pro-preview` dan
+ *   404 «no longer available to new users». Listado ≠ utilizable.
+ *   Por eso el selector de modelos NO puede poblarse solo con el listado: hay que
+ *   PROBAR cada uno. Es el mismo principio que el resto del producto — el chequeo
+ *   llama de verdad, nunca un ✓ optimista.
  *
- * ELECCIÓN ACTUAL: todo lo de Gemini a `gemini-2.5-flash`. Es una rebaja real desde
- * el 3.5 que resolvía el alias, es un modelo PLENO (no lite) y es el que el propio
- * usuario usa para tareas de este tipo. El emparejamiento por dificultad —bajar la
- * EXTRACCIÓN (80% de los tokens, reconocimiento de patrones sobre texto limpio) a un
- * escalón Lite— es la rebaja de más valor, PERO exige medir el canario antes:
+ * ⚠ Y ANTES DE ESO YO ME EQUIVOQUÉ, que conviene dejarlo escrito: fijé
+ *   `gemini-2.5-flash` afirmando que el comentario original («la clave NO habilita
+ *   2.5/2.0-flash») estaba obsoleto. No lo estaba. Leí una leyenda de familias de
+ *   modelos como si fuera la lista de lo que la clave puede llamar, y contradije un
+ *   comentario que tenía razón. Resultado: la app entera con un modelo inexistente y
+ *   el panel de salud en rojo. La regla que lo evita ya estaba escrita —«comprueba
+ *   cuáles acepta de verdad la clave, no adivines el string»— y no la seguí.
  *
- * ★ EL CANARIO. La extracción pide copiar el `evidence_snippet` LITERAL, y el
- *   servidor comprueba `normalize(raw).includes(normalize(evidence))`. Un modelo más
- *   débil no falla inventando: falla PARAFRASEANDO —resume «con sus palabras» y el
- *   includes() da false—. Así que la tasa de verificación ES la medida de si el
- *   modelo sirve para esta tarea. Línea base real (volcado 19-jul): 119 items · 101
- *   verificados ≈ 85%. La herramienta para medirlo, con la clave y el dossier reales,
- *   es `tests/manual/ab-modelos.ts` (no corre en CI; gasta tokens). Baja de uno en
- *   uno —2.5-flash → 2.5-flash-lite— y si el % cae claro (<70%) o los items bajan de
- *   119, sube el escalón. NO se bajó a Lite en esta ronda porque la clave del usuario
- *   está SIN CRÉDITOS (429 RESOURCE_EXHAUSTED) y el A/B no se pudo ejecutar: bajar sin
- *   medir es exactamente lo que el canario existe para impedir.
+ * ★ ELECCIÓN ACTUAL: `gemini-3.6-flash` en todo lo de Gemini, y no por intuición.
+ *   A/B MEDIDO sobre el dossier real (mismos prompts de producción, solo cambia el
+ *   modelo), con el CANARIO: la extracción pide copiar el `evidence_snippet` LITERAL
+ *   y el servidor comprueba `normalize(raw).includes(normalize(evidence))`.
+ *
+ *     gemini-3.6-flash        46 items · 87 % verificado ·  6 parciales   ← elegido
+ *     gemini-3.5-flash        35 items · 86 % verificado ·  5 parciales
+ *     gemini-3.5-flash-lite   40 items · 30 % verificado · 28 parciales   ✗
+ *     gemini-3.1-flash-lite   35 items · 35 % verificado · 22 parciales   ✗
+ *
+ *   ★ LOS LITE NO SIRVEN PARA ESTO, y el porqué importa más que el número: un modelo
+ *   débil NO falla inventando, falla PARAFRASEANDO. Resume la cita con sus palabras,
+ *   el includes() da false, y la evidencia se cae del 87 % al 30 %. Mírense los
+ *   parciales: 28 y 22 contra 5 y 6. La hipótesis de que «extraer contra un schema es
+ *   reconocimiento de patrones y aguanta un Lite» era MÍA y el canario la desmintió.
+ *   Bajar la extracción a Lite habría ahorrado tokens destruyendo lo único que hace
+ *   confiable este producto.
+ *
+ *   Reproducir: `tests/manual/ab-modelos.ts` (fuera de CI; gasta tokens reales).
  */
 export const REGISTRO: Readonly<Record<Tarea, Definicion>> = {
   "transcripcion-vision": {
     proveedor: "google",
-    modelo: "gemini-2.5-flash",
+    modelo: "gemini-3.6-flash",
     motivo:
       "de su fidelidad LITERAL depende el detector de alucinación; se queda en un flash pleno " +
       "(no lite) hasta medir la transcripción aparte. Bajarla ciega se lleva el candado de evidencia.",
   },
   "extraccion-estructurada": {
     proveedor: "google",
-    modelo: "gemini-2.5-flash",
+    modelo: "gemini-3.6-flash",
     motivo:
       "structured outputs con los cinco schemas troceados (límite de 24 opcionales). Es el 80% de " +
-      "los tokens y la mejor candidata a bajar a 2.5-flash-lite — pero solo tras medir el canario " +
-      "(tests/manual/ab-modelos.ts); la clave sin créditos impidió el A/B en esta ronda.",
+      "los tokens, así que era LA candidata a bajar a un Lite — y el A/B lo desmintió: 87% de " +
+      "evidencia verificada aquí contra 30% en 3.5-flash-lite, que parafrasea en vez de citar.",
   },
   "redaccion-preserva-hechos": {
     proveedor: "google",
-    modelo: "gemini-2.5-flash",
+    modelo: "gemini-3.6-flash",
     motivo:
       "aquí se juega la promesa del producto: NO se baja a lite. preservesFacts corre después e " +
       "impide la invención igual, pero un modelo débil redacta peor. Es el sitio donde pagar bien vale.",
@@ -145,14 +157,14 @@ export const REGISTRO: Readonly<Record<Tarea, Definicion>> = {
   "clasificacion-barata": {
     proveedor: "groq",
     modelo: "llama-3.3-70b-versatile",
-    modeloFallback: "gemini-2.5-flash",
+    modeloFallback: "gemini-3.6-flash",
     motivo:
       "decisiones de una palabra y desempate de duplicados: barato y con salida estructurada. " +
       "Sin 2ª clave cae a Gemini 2.5-flash (degrada, no rompe).",
   },
   "ping-salud": {
     proveedor: "google",
-    modelo: "gemini-2.5-flash",
+    modelo: "gemini-3.6-flash",
     motivo: "espeja a extraccion-estructurada: si el chequeo usa OTRO modelo, no prueba nada útil.",
   },
 };
