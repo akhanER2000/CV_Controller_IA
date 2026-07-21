@@ -362,12 +362,23 @@ export async function insertStagedTwoPhase(
 /**
  * Crea UNA fuente (parametrizada) + sus staged_items (dos fases). Devuelve el id de
  * la fuente y cuántos items quedaron en staging.
+ *
+ * `dupMap` (clave local → id del profile_item que ya lo contiene) es OPCIONAL y
+ * puramente aditivo: sin él, esta función se comporta exactamente igual que
+ * siempre. Existe porque el alta ya lo necesita en un caso real —importar un .md
+ * corpus/1 exportado del propio master—: sin la marca, releer el fichero
+ * re-propondría los ~105 items que el usuario ya revisó, uno por uno. Hasta ahora
+ * `duplicate_of` solo lo escribía «releer» (restageSource), donde el alta no
+ * pasa. ⚠ MARCA, NO DESCARTA: la fila entra igual en 'pending' — la señal sirve
+ * para que la cola pueda decir «esto ya está en tu master», nunca para decidir
+ * por el usuario.
  */
 export async function persistSource(
   sb: SB,
   userId: string,
   meta: SourceMeta,
   rows: StagedRow[],
+  dupMap?: Map<string, string>,
 ): Promise<{ sourceId: string; staged: number }> {
   const { data: source, error } = await sb
     .from("ingestion_sources")
@@ -376,7 +387,7 @@ export async function persistSource(
     .single();
   if (error) throw new Error(`Fuente: ${error.message}`);
   const sourceId = source.id as string;
-  const staged = await insertStagedTwoPhase(sb, userId, sourceId, rows);
+  const staged = await insertStagedTwoPhase(sb, userId, sourceId, rows, dupMap);
   return { sourceId, staged };
 }
 
