@@ -319,6 +319,14 @@ class FakeQuery implements PromiseLike<{ data: unknown; error: { message: string
     this.filtros.push([`in:${col}`, vals]);
     return this;
   }
+  /* getMasterItems EXCLUYE las traducciones con .neq("origin", …) para que no
+     reaparezcan como items duplicados en el otro idioma. El doble tiene que
+     conocer lo que el código usa de verdad: si le falta un método, el test se
+     cae por un hueco del PROPIO doble y parece una regresión del producto. */
+  neq(col: string, val: unknown) {
+    this.filtros.push([`neq:${col}`, val]);
+    return this;
+  }
   select(_cols?: string) {
     this.devolver = true;
     return this;
@@ -336,9 +344,11 @@ class FakeQuery implements PromiseLike<{ data: unknown; error: { message: string
   }
 
   private casan(f: Fila): boolean {
-    return this.filtros.every(([c, v]) =>
-      c.startsWith("in:") ? (v as unknown[]).includes(f[c.slice(3)]) : f[c] === v,
-    );
+    return this.filtros.every(([c, v]) => {
+      if (c.startsWith("in:")) return (v as unknown[]).includes(f[c.slice(3)]);
+      if (c.startsWith("neq:")) return f[c.slice(4)] !== v;
+      return f[c] === v;
+    });
   }
 
   private ejecutar(): unknown {

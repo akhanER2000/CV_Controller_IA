@@ -245,6 +245,85 @@ export function preservesFactsWhenShortening(original: string, proposed: string)
   };
 }
 
+// ── Traducir: el tercer candado, y por qué no vale ninguno de los dos anteriores ──
+export interface TraducirResult extends PreserveResult {
+  /** cifras del ORIGINAL que la traducción se dejó por el camino */
+  lostNumbers: string[];
+  /** entidades nombradas del ORIGINAL que la traducción se dejó por el camino */
+  lostEntities: string[];
+  /** el original tenía texto y la traducción llegó vacía (fallo mudo del modelo) */
+  vacia: boolean;
+}
+
+/**
+ * ★ EL CANDADO DE LA TRADUCCIÓN. Traducir NO es reformular ni mejorar: se traduce
+ * el HECHO y nada más. Las cifras y las entidades nombradas son INTOCABLES —
+ * «850 ms» es «850 ms» en los dos idiomas, «~300 personas» es «~300 people».
+ *
+ * ⚠ POR QUÉ NO SE REUSA `preservesFacts` TAL CUAL. Es asimétrico A PROPÓSITO: solo
+ *   caza lo que APARECE de la nada, porque eso es lo que hace un LLM que adorna. Al
+ *   traducir, PERDER una cifra es igual de grave — «Reduje la latencia p99 de 850 ms
+ *   a 180 ms» → «Improved latency» no inventa NADA y pasaría con sobresaliente,
+ *   dejando al usuario un CV en inglés sin el dato que lo hacía valioso.
+ *
+ * ⚠ POR QUÉ TAMPOCO SE REUSA `preservesFactsWhenShortening`, que SÍ mira las dos
+ *   direcciones. Porque además exige `shorter`, y esa condición es de OTRA
+ *   operación: una traducción al español es casi siempre MÁS LARGA que el inglés
+ *   («team» → «equipo de trabajo»), y al inglés suele ser más corta. Reutilizarlo
+ *   rechazaría traducciones impecables por un motivo que no tiene nada que ver con
+ *   los hechos, y el usuario vería «no se aplicó» sin entender por qué. Un candado
+ *   que se dispara por la razón equivocada enseña a ignorar los candados.
+ *   Por eso esto es una tercera función: las DOS direcciones de la del acortado, SIN
+ *   su condición de longitud, y con una pieza que ninguna de las dos necesitaba —
+ *   las equivalencias de sigla entre idiomas.
+ *
+ * ⚠ LAS EQUIVALENCIAS. `extractEntities` caza siglas en mayúsculas, y hay siglas que
+ *   CAMBIAN legítimamente al traducir: «IA» es «AI», «I+D» es «R&D». Sin una tabla
+ *   CERRADA que las declare, la traducción correcta se rechazaría por «perder IA e
+ *   inventar AI». La tabla la pone el llamador (vive en el dominio, no aquí) y es
+ *   cerrada a propósito: lo que no esté declarado tiene que sobrevivir LITERAL.
+ *
+ * `equivalencias` mapea entidad normalizada → forma canónica compartida por los dos
+ * idiomas (p. ej. "ia"→"ai" y "ai"→"ai"). Sin tabla, el control es literal.
+ */
+export function preservaHechosAlTraducir(
+  original: string,
+  propuesta: string,
+  equivalencias?: ReadonlyMap<string, string>,
+): TraducirResult {
+  const prop = (propuesta ?? "").trim();
+  const orig = (original ?? "").trim();
+  const vacia = orig.length > 0 && prop.length === 0;
+
+  // ── Cifras: en los dos sentidos, comparando valor Y unidad ────────────────
+  const origNumbers = extractNumbers(orig);
+  const propNumbers = extractNumbers(prop);
+  const mismo = (a: NumberToken, b: NumberToken) => a.value === b.value && a.unit === b.unit;
+  const newNumbers = propNumbers.filter((n) => !origNumbers.some((x) => mismo(x, n))).map((n) => n.raw);
+  const lostNumbers = origNumbers.filter((n) => !propNumbers.some((x) => mismo(x, n))).map((n) => n.raw);
+
+  // ── Entidades: en los dos sentidos, canonicalizando por la tabla cerrada ──
+  const canon = (e: string) => equivalencias?.get(e) ?? e;
+  const origEntities = new Set(extractEntities(orig).map(canon));
+  const propEntities = new Set(extractEntities(prop).map(canon));
+  const newEntities = [...propEntities].filter((e) => !origEntities.has(e));
+  const lostEntities = [...origEntities].filter((e) => !propEntities.has(e));
+
+  return {
+    ok:
+      !vacia &&
+      newNumbers.length === 0 &&
+      lostNumbers.length === 0 &&
+      newEntities.length === 0 &&
+      lostEntities.length === 0,
+    newNumbers,
+    lostNumbers,
+    newEntities,
+    lostEntities,
+    vacia,
+  };
+}
+
 // ── Filtro anti-"suena a IA" (prompt §6.1) ───────────────────────────────────
 const AI_TELLS_ES = ["potenciar sinergias", "impulsar la excelencia", "gestión integral", "gestion integral"];
 const AI_TELLS_EN = ["delve", "leverage", "spearheaded", "robust", "seamless"];

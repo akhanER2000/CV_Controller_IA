@@ -1,6 +1,26 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { ImportResult, StagedRow } from "@/lib/extract/types";
-import { normalizeLinks, type ResumeData } from "@/lib/cv/resume";
+import {
+  normalizeLinks,
+  DOCUMENT_HEADINGS,
+  certificationEntry,
+  languageLine,
+  publicationLine,
+  type CertificationFields,
+  type LanguageFields,
+  type PublicationFields,
+  type I18n,
+  type ResumeData,
+} from "@/lib/cv/resume";
+import {
+  ORIGEN_TRADUCCION,
+  campoBilingue,
+  datosBilingues,
+  esEspejo,
+  indiceDeTraducciones,
+  lineaBilingue,
+  type FilaBilingue,
+} from "@/lib/cv/traducir";
 import { insertStagedTwoPhase, itemsPorFuente, readMergeProposal, type MergeProposal } from "@/lib/db/sources";
 import { sourceStagedCounts, ZERO_TALLY } from "@/lib/db/staging-counts";
 
@@ -423,12 +443,37 @@ export interface MasterItem {
   sortOrder: number;
 }
 
-/** profile_items del usuario, en orden de lectura (sort_order → created_at). */
+/**
+ * profile_items del usuario, en orden de lectura (sort_order → created_at).
+ *
+ * ★★ EL EMBUDO DEL REGISTRO — y por qué aquí se excluye `ai_translated`.
+ *
+ * El CV bilingüe guarda cada traducción como una fila HERMANA en esta misma tabla
+ * (`translated_from` → el original, `lang` = idioma destino, `origin` =
+ * 'ai_translated'): es exactamente para lo que la 0001 creó esa columna y su
+ * índice. Pero esas filas NO son items del registro: son el espejo de uno que ya
+ * está. Si salieran por aquí, el master enseñaría 105 items donde hay 105 más su
+ * traducción, el barrido y el detector de duplicados verían 71 «duplicados» que en
+ * realidad son el mismo hecho en dos idiomas, la biblioteca de variantes ofrecería
+ * cada viñeta dos veces y la exportación .md sacaría el CV por partida doble.
+ *
+ * Esta función es el ÚNICO embudo por el que pasan todos ellos (master, barrido,
+ * duplicados, variantes, tailor, plantilla .md), así que el filtro va aquí y solo
+ * aquí. Quien necesite VER las traducciones —el render bilingüe y /api/master/
+ * traducir— consulta la tabla por su cuenta, que es lo correcto: son dos lecturas
+ * distintas de la misma tabla, no la misma lectura con una excepción.
+ *
+ * ⚠ Se filtra por `origin` y NO por `translated_from is null`: esa columna es
+ *   `on delete set null`, así que borrar un original dejaría a su traducción con
+ *   `translated_from` en nulo y la haría REAPARECER aquí como un item fantasma en
+ *   otro idioma. El `origin` no se cae solo.
+ */
 export async function getMasterItems(sb: SB, userId: string): Promise<MasterItem[]> {
   const { data, error } = await sb
     .from("profile_items")
     .select("id,kind,parent_id,data,origin,evidence_snippet,evidence_verified,sort_order")
     .eq("user_id", userId)
+    .neq("origin", ORIGEN_TRADUCCION)
     .order("sort_order", { ascending: true })
     .order("created_at", { ascending: true });
   if (error) throw new Error(error.message);
@@ -740,12 +785,15 @@ export async function listSources(sb: SB, userId: string): Promise<SourceSummary
   });
 }
 
-/** Recuento simple de profile_items del usuario (para copys de estado vacío). */
+/** Recuento simple de profile_items del usuario (para copys de estado vacío).
+ *  Mismo filtro que getMasterItems: las filas espejo de la traducción no son items
+ *  del registro, y contarlas haría que «tienes 176 items» significara 105. */
 export async function countMasterItems(sb: SB, userId: string): Promise<number> {
   const { count } = await sb
     .from("profile_items")
     .select("id", { count: "exact", head: true })
-    .eq("user_id", userId);
+    .eq("user_id", userId)
+    .neq("origin", ORIGEN_TRADUCCION);
   return count ?? 0;
 }
 
@@ -776,29 +824,49 @@ export async function dashboardSummary(sb: SB, userId: string): Promise<Dashboar
   };
 }
 
+/* ★ EL CV BILINGÜE, EN EL RENDER.
+   El modelo del documento SIEMPRE fue bilingüe (`I18n = {es, en}` en resume.ts) y
+   esta función lo rellenaba copiando el mismo string en los dos lados: la paridad
+   existía como forma y no como contenido. Ahora cada campo se resuelve con
+   `campoBilingue`, que busca la fila espejo (`origin='ai_translated'`) del idioma
+   pedido y CAE AL ORIGINAL si no la hay. Un master sin traducir rinde exactamente
+   igual que antes —el mismo texto en los dos lados—, así que esto no puede romper
+   ningún documento existente; y un master traducido rinde de verdad en los dos.
+
+   ⚠ `company`, `org` y los enlaces NO son bilingües y siguen leyéndose del original:
+     son nombres propios y datos de máquina. Que el tipo del modelo los tenga como
+     `string` suelto (y no `I18n`) no es casualidad, es la misma regla escrita en el
+     tipo. */
 export async function buildResumeData(sb: SB, userId: string): Promise<ResumeData> {
   const { data, error } = await sb
     .from("profile_items")
-    .select("id,kind,parent_id,data,sort_order")
+    .select("id,kind,parent_id,data,sort_order,lang,origin,translated_from")
     .eq("user_id", userId)
     .order("sort_order", { ascending: true });
   if (error) throw new Error(error.message);
-  const items = (data ?? []) as ProfileItemRow[];
+  const filas = (data ?? []) as unknown as (ProfileItemRow & FilaBilingue)[];
+  // Las filas espejo NO son items del documento: son el otro idioma de uno que ya
+  // está. Se apartan aquí y solo alimentan el índice.
+  const idx = indiceDeTraducciones(filas);
+  const items = filas.filter((f) => !esEspejo(f)) as ProfileItemRow[];
   const by = (k: string) => items.filter((i) => i.kind === k);
   const str = (o: Record<string, unknown>, key: string) => String(o[key] ?? "");
+  /** El campo de un item en los dos idiomas (traducción si la hay, original si no). */
+  const bi = (it: ProfileItemRow, campo: string): I18n => campoBilingue(it, campo, idx);
 
-  const basicsItem = by("basics")[0]?.data ?? {};
-  const summaryItem = by("summary")[0]?.data ?? {};
+  const basicsRow = by("basics")[0];
+  const summaryRow = by("summary")[0];
+  const basicsItem = basicsRow?.data ?? {};
 
   const work = by("work").map((w) => ({
     company: str(w.data, "company"),
-    location: i18n(str(w.data, "location")),
-    title: i18n(str(w.data, "title")),
-    dates: i18n(str(w.data, "dates")),
+    location: bi(w, "location"),
+    title: bi(w, "title"),
+    dates: bi(w, "dates"),
     p1: true,
     bullets: items
       .filter((b) => b.kind === "bullet" && b.parent_id === w.id)
-      .map((b) => ({ p1: true, es: str(b.data, "text"), en: str(b.data, "text") })),
+      .map((b) => ({ p1: true, ...bi(b, "text") })),
   }));
 
   // Foto y QR son OPT-IN, guardados en la data de basics. photo NUNCA es el avatar
@@ -810,26 +878,27 @@ export async function buildResumeData(sb: SB, userId: string): Promise<ResumeDat
   return {
     basics: {
       name: str(basicsItem, "name"),
-      label: i18n(str(basicsItem, "label")),
+      label: basicsRow ? bi(basicsRow, "label") : i18n(""),
       email: str(basicsItem, "email"),
       phone: str(basicsItem, "phone"),
-      location: i18n(str(basicsItem, "location")),
+      location: basicsRow ? bi(basicsRow, "location") : i18n(""),
       links: normalizeLinks(basicsItem.links),
-      summary: i18n(str(summaryItem, "text")),
+      summary: summaryRow ? bi(summaryRow, "text") : i18n(""),
     },
     photo,
     qr: qrUrl ? { url: qrUrl } : undefined,
-    skills: by("skill").map((s) => ({ group: i18n(str(s.data, "group")), items: i18n(str(s.data, "items")) })),
+    // El GRUPO se traduce («Infraestructura» → «Infrastructure»); la LISTA no
+    // (Python, Docker, RAG). Por eso son dos llamadas y no una compuesta.
+    skills: by("skill").map((s) => ({ group: bi(s, "group"), items: bi(s, "items") })),
     work,
     projects: by("project").map((p) => ({
       p1: true,
-      es: [str(p.data, "name"), str(p.data, "description")].filter(Boolean).join(" — "),
-      en: [str(p.data, "name"), str(p.data, "description")].filter(Boolean).join(" — "),
+      ...lineaBilingue(p, ["name", "description"], " — ", idx),
     })),
     education: by("education").map((e) => ({
-      title: i18n(str(e.data, "degree")),
+      title: bi(e, "degree"),
       org: str(e.data, "institution"),
-      dates: i18n(str(e.data, "dates")),
+      dates: bi(e, "dates"),
       p1: true,
     })),
     // ⚠⚠ REFERENCIAS: NUNCA en el render del MASTER, y no es un olvido.
@@ -840,10 +909,32 @@ export async function buildResumeData(sb: SB, userId: string): Promise<ResumeDat
     // un PDF por el camino que nadie miró. Se deja explícito —y no omitido— para que
     // se lea como una decisión y no como un hueco: buildVariantResumeData sí las trae.
     references: [],
-    headings: {
-      summary: i18n("Resumen"), skills: i18n("Habilidades"), work: i18n("Experiencia"),
-      projects: i18n("Proyectos"), education: i18n("Educación"),
-      references: i18n("Referencias"),
-    },
+    // ⚠ CERTIFICACIONES, IDIOMAS Y PUBLICACIONES SÍ VAN EN EL MASTER, y no es una
+    // incoherencia con las referencias de arriba: estos son DATOS PROPIOS del
+    // usuario, no de terceros, así que no necesitan permiso de nadie ni un opt-in
+    // por variante. Antes el master los tenía guardados y no los imprimía en ningún
+    // sitio — un certificado que existe y no sale es un dato descartado en silencio.
+    // La línea se compone con los MISMOS helpers puros que usa la variante.
+    // La línea se compone DENTRO de cada idioma con el mismo helper puro: componer
+    // en español y traducir la línea entera traduciría también los conectores, que
+    // son del documento y no del dato.
+    certifications: by("certification").map((c) => {
+      const d = datosBilingues(c, idx);
+      const es = certificationEntry(d.es as CertificationFields);
+      const en = certificationEntry(d.en as CertificationFields);
+      return { title: { es: es.title, en: en.title }, org: es.org, dates: { es: es.dates, en: en.dates }, p1: true };
+    }).filter((c) => c.title.es.trim() !== "" || c.org.trim() !== ""),
+    languages: by("language").map((l) => {
+      const d = datosBilingues(l, idx);
+      return { p1: true, es: languageLine(d.es as LanguageFields), en: languageLine(d.en as LanguageFields) };
+    }).filter((l) => l.es.trim() !== ""),
+    publications: by("publication").map((p) => {
+      const d = datosBilingues(p, idx);
+      return { p1: true, es: publicationLine(d.es as PublicationFields), en: publicationLine(d.en as PublicationFields) };
+    }).filter((p) => p.es.trim() !== ""),
+    // Los rótulos, de la ÚNICA fuente que hay (resume.ts). Estaban escritos a mano
+    // aquí, en variants.ts y en el editor: tres listas iguales que había que ampliar
+    // a la vez cada vez que nace una sección.
+    headings: DOCUMENT_HEADINGS,
   };
 }
