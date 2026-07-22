@@ -397,31 +397,43 @@ const M = (
  * formación delante incluso para perfiles con trayectoria— y lo que hace la
  * plantilla oficial de Harvard para egresados.
  *
- * ⚠ «references» VA AL FINAL DE LOS SEIS, SIEMPRE. `sectionOrder` es
- * `readonly SectionId[]`: NO exige exhaustividad, así que una sección que falte en
- * uno de estos arrays desaparece del documento SIN ERROR DE COMPILACIÓN — solo en
- * las plantillas que usan ese orden. Con 15 plantillas repartidas entre los seis,
- * olvidarse de uno significa que un usuario que activó sus referencias no las ve y
- * no hay nada que se lo diga. Lo vigila tests/referencias.test.ts, que compara cada
- * orden contra DEFAULT_SECTION_ORDER como CONJUNTO.
+ * ⚠ «references» VA AL FINAL, SIEMPRE. `sectionOrder` es `readonly SectionId[]`: NO
+ * exige exhaustividad, así que una sección que falte en uno de estos arrays
+ * desaparece del documento SIN ERROR DE COMPILACIÓN — solo en las plantillas que
+ * usan ese orden. Con 15 plantillas repartidas entre los seis, olvidarse de uno
+ * significa que un usuario que activó sus referencias no las ve y no hay nada que se
+ * lo diga. Lo vigila tests/secciones-paridad.test.ts, que recorre TODAS las
+ * SectionId contra TODOS estos arrays (y no solo los que alguna plantilla usa).
+ *
+ * ⚠⚠ EL CANDADO YA MORDIÓ UNA SEGUNDA VEZ. Al crear CERTIFICACIONES, IDIOMAS y
+ * PUBLICACIONES hubo que tocar los seis arrays a mano, uno por uno, porque el tipo
+ * no obliga: exactamente el fallo que este comentario avisaba. Cada orden coloca las
+ * tres donde le toca por su tesis (las certificaciones pegadas a la formación en los
+ * órdenes académicos, las publicaciones arriba en ninguno por defecto), pero LAS
+ * NUEVE están en LOS SEIS: perder una es perder datos del usuario en silencio.
  */
-const ORDEN = {
+export const ORDEN = {
   /** El de siempre: te vende lo que sabes hacer. */
-  habilidades: ["summary", "skills", "work", "projects", "education", "references"],
+  habilidades: ["summary", "skills", "work", "projects", "education", "certifications", "languages", "publications", "references"],
   /** Te vende dónde has estado: perfiles con recorrido. */
-  experiencia: ["summary", "work", "projects", "skills", "education", "references"],
+  experiencia: ["summary", "work", "projects", "skills", "education", "certifications", "languages", "publications", "references"],
   /** Te vende lo que has construido: portafolio por delante del cargo. */
-  proyectos: ["summary", "projects", "work", "skills", "education", "references"],
-  /** Te vende el título: academia, egresados y primer empleo. */
-  formacion: ["summary", "education", "skills", "work", "projects", "references"],
+  proyectos: ["summary", "projects", "work", "skills", "education", "certifications", "languages", "publications", "references"],
+  /** Te vende el título: academia, egresados y primer empleo. Las certificaciones
+   *  van pegadas a la formación (son lo mismo a ojos de quien lee: papel acreditado)
+   *  y las publicaciones suben por delante del empleo, que es lo que pesa en una
+   *  candidatura académica. */
+  formacion: ["summary", "education", "certifications", "publications", "skills", "work", "projects", "languages", "references"],
   /** Formación delante, experiencia detrás y habilidades al final: la costumbre chilena. */
-  chile: ["summary", "education", "work", "skills", "projects", "references"],
+  chile: ["summary", "education", "certifications", "work", "skills", "projects", "languages", "publications", "references"],
   /**
    * Cambio de carrera: el resumen hace de PUENTE y detrás van las habilidades y lo
    * que has construido por tu cuenta, antes del empleo previo. Nunca un funcional
    * puro (sin fechas ni empleador): los reclutadores lo leen como ocultamiento.
+   * Las certificaciones suben con las habilidades: en una transición son la prueba
+   * de la formación NUEVA, no un apéndice de la carrera vieja.
    */
-  transicion: ["summary", "skills", "projects", "work", "education", "references"],
+  transicion: ["summary", "skills", "certifications", "projects", "work", "education", "languages", "publications", "references"],
 } satisfies Record<string, readonly SectionId[]>;
 
 // ── PLANTILLAS ────────────────────────────────────────────────────────────────

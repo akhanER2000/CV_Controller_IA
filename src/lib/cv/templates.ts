@@ -15,7 +15,7 @@
  * mínimo sale exactamente como salía el CV antes de que existieran las plantillas.
  */
 
-import { PALETTES, TEMPLATES, TYPOGRAPHIES } from "./catalog";
+import { ORDEN, PALETTES, TEMPLATES, TYPOGRAPHIES } from "./catalog";
 
 /** Gama ATS: una columna, sin foto, sin barras, sin iconos. Visual: opt-in. */
 export type TemplateGama = "ats" | "visual";
@@ -66,7 +66,16 @@ export interface TemplateTypography {
  * Las secciones del documento, por su id. El ORDEN en que se listan es el orden de
  * lectura: el del PDF y el del texto plano, que son el mismo (eso es el candado).
  */
-export type SectionId = "summary" | "skills" | "work" | "projects" | "education" | "references";
+export type SectionId =
+  | "summary"
+  | "skills"
+  | "work"
+  | "projects"
+  | "education"
+  | "certifications"
+  | "languages"
+  | "publications"
+  | "references";
 
 /**
  * El orden de siempre. Sin declarar `sectionOrder`, el documento sale por aquí.
@@ -78,9 +87,58 @@ export type SectionId = "summary" | "skills" | "work" | "projects" | "education"
  * variante. Con la lista vacía, documentSections la descarta y el documento sale
  * exactamente igual que antes de que esta sección existiera — eso es lo que
  * mantiene el golden intacto byte a byte.
+ *
+ * ⚠⚠ CERTIFICACIONES, IDIOMAS Y PUBLICACIONES ENTRARON DESPUÉS, Y NO ERA UNA LÍNEA
+ * EN UN ARRAY. El master acepta esos tres kinds desde el esquema 0001 (el enum
+ * item_kind los lista y la pantalla del master deja crearlos), pero el DOCUMENTO no
+ * sabía pintarlos: no existían como SectionId, así que un certificado guardado a
+ * mano no aparecía en ningún CV y nada se lo decía al usuario. Ese es el fallo
+ * capital de este producto —descartar en silencio— y por eso la sección se creó
+ * entera (modelo, orden, PDF, texto plano, editor) en vez de parchear un array.
+ * Las tres nacen igual que las demás: si la lista está vacía, no se rotulan.
  */
 export const DEFAULT_SECTION_ORDER: readonly SectionId[] = [
-  "summary", "skills", "work", "projects", "education", "references",
+  "summary", "skills", "work", "projects", "education",
+  "certifications", "languages", "publications", "references",
+] as const;
+
+/**
+ * TODAS las secciones que existen, para que un recorrido exhaustivo no dependa de
+ * que alguien se acuerde de ampliar una lista suelta. Es DEFAULT_SECTION_ORDER: si
+ * una sección no está ahí, no está en el documento por defecto y el test de paridad
+ * (tests/secciones-paridad.test.ts) lo caza.
+ */
+export const ALL_SECTION_IDS: readonly SectionId[] = DEFAULT_SECTION_ORDER;
+
+/**
+ * La sección que NO se puede mover: las referencias van SIEMPRE al final. No es una
+ * preferencia de diseño — una referencia no abre un CV, y el catálogo ya lo tenía
+ * escrito como regla (ver la nota de ORDEN en catalog.ts). Lo aplica
+ * `normalizeSectionOrder` (resume.ts) sobre cualquier orden que llegue de fuera.
+ */
+export const PINNED_LAST_SECTION: SectionId = "references";
+
+/**
+ * PRESETS de orden de un clic. NO son órdenes nuevas: son los arrays que el catálogo
+ * ya usa para sus plantillas, expuestos con un id estable para que el editor los
+ * ofrezca sin redefinirlos (dos listas iguales mantenidas a mano divergen).
+ *
+ * ⚠ EL COPY DESCRIBE PARA QUIÉN ES, NUNCA QUÉ CONSIGUE. No hay estudio que respalde
+ * que un orden de secciones consiga más entrevistas, así que ni el id ni el texto de
+ * la UI pueden prometerlo. El único hecho verificable es a quién le suele servir:
+ * habilidades delante para perfiles técnicos, experiencia delante para trayectoria,
+ * formación delante para egresados (que es lo que hacen las guías chilenas y la
+ * plantilla de Harvard para recién titulados).
+ */
+export type SectionOrderPresetId = "tecnico" | "clasico" | "junior";
+export interface SectionOrderPreset {
+  id: SectionOrderPresetId;
+  order: readonly SectionId[];
+}
+export const SECTION_ORDER_PRESETS: readonly SectionOrderPreset[] = [
+  { id: "tecnico", order: ORDEN.habilidades },
+  { id: "clasico", order: ORDEN.experiencia },
+  { id: "junior", order: ORDEN.formacion },
 ] as const;
 
 /** Caja del nombre. Las versalitas de imprenta no existen en las .ttf del repo: lo

@@ -14,8 +14,12 @@ import {
   nameText,
   resolveMetrics,
   resolveTemplate,
+  ALL_SECTION_IDS,
+  DEFAULT_SECTION_ORDER,
+  PINNED_LAST_SECTION,
   type ResolvedMetrics,
   type SectionId,
+  type TemplateSelection,
 } from "./templates";
 
 // ── Shape de datos-ejemplo.json ──────────────────────────────────────────────
@@ -49,6 +53,55 @@ export interface ResumeEducation {
   org: string; // no i18n
   dates: I18n;
   p1: boolean;
+}
+
+/**
+ * Una CERTIFICACIÓN. Misma forma que ResumeEducation y por la misma razón: el
+ * documento la lee como una ENTRADA (título, emisor, fechas), así que reusa
+ * `entryLines` y sale colocada igual en los cinco ejes de fechas —incluida la
+ * columna colgante— sin escribir un segundo maquetador que un día discreparía.
+ * `org` es el emisor y NO es i18n: «Amazon Web Services» no se traduce.
+ */
+export interface ResumeCertification {
+  title: I18n;
+  org: string; // el emisor (nombre propio)
+  dates: I18n;
+  p1: boolean;
+}
+
+/**
+ * Un IDIOMA y una PUBLICACIÓN, ya compuestos en UNA línea (como los proyectos y las
+ * referencias). Llegan aquí montados por `languageLine` / `publicationLine`, que son
+ * puras y las comparten las TRES capas que arman un ResumeData: si cada una montara
+ * la línea por su cuenta, el PDF del master, el de la variante y el preview del
+ * editor dirían cosas distintas del mismo dato.
+ */
+export interface ResumeLanguage {
+  p1: boolean;
+  es: string;
+  en: string;
+}
+export interface ResumePublication {
+  p1: boolean;
+  es: string;
+  en: string;
+}
+
+/** Los campos crudos de un idioma, tal y como viven en profile_items.data. */
+export interface LanguageFields {
+  language?: string;
+  level?: string;
+}
+/** Los campos crudos de una publicación (mismo vocabulario que un proyecto). */
+export interface PublicationFields {
+  name?: string;
+  description?: string;
+}
+/** Los campos crudos de una certificación. */
+export interface CertificationFields {
+  name?: string;
+  issuer?: string;
+  dates?: string;
 }
 
 /**
@@ -100,6 +153,42 @@ export function referenceLine(r: ReferenceFields): string {
 }
 
 /**
+ * La línea que se IMPRIME de un IDIOMA: «Inglés — profesional (B2)». Usa el conector
+ * de siempre (CX.titleCompany) en vez de inventar paréntesis: el vocabulario de
+ * puntuación del documento está cerrado, y cada signo nuevo tendría que emitirlo
+ * también el texto plano. Sin nivel, solo el idioma (nunca un guion huérfano).
+ */
+export function languageLine(l: LanguageFields): string {
+  const idioma = (l.language ?? "").trim();
+  const nivel = (l.level ?? "").trim();
+  if (!idioma) return nivel; // un nivel sin idioma es raro, pero no se descarta
+  return nivel ? `${idioma}${CX.titleCompany}${nivel}` : idioma;
+}
+
+/**
+ * La línea que se IMPRIME de una PUBLICACIÓN: «Título — descripción». Es EXACTAMENTE
+ * la misma composición que un proyecto, porque en el documento son lo mismo: una
+ * línea con nombre y contexto. Aquí vive una sola vez para las tres capas.
+ */
+export function publicationLine(p: PublicationFields): string {
+  return [(p.name ?? "").trim(), (p.description ?? "").trim()].filter(Boolean).join(CX.titleCompany);
+}
+
+/**
+ * Una CERTIFICACIÓN como ENTRADA del documento (título / emisor / fechas). Pura y
+ * compartida, igual que las dos de arriba: el emisor va donde en un empleo va la
+ * ubicación y en formación el centro, así que la certificación hereda gratis los
+ * cinco ejes de fechas del catálogo.
+ */
+export function certificationEntry(c: CertificationFields): { title: string; org: string; dates: string } {
+  return {
+    title: (c.name ?? "").trim(),
+    org: (c.issuer ?? "").trim(),
+    dates: (c.dates ?? "").trim(),
+  };
+}
+
+/**
  * Un enlace del CV. La `url` es LO QUE IMPORTA (el ATS lee la URL como texto);
  * `label` es solo para el humano y nunca reemplaza a la URL en el documento.
  * Retrocompatible: un string suelto = una URL sin etiqueta (el fixture golden).
@@ -137,6 +226,17 @@ export interface ResumeData {
    * ResumeData solo rellena esta lista si el usuario lo pidió EN ESA VARIANTE.
    */
   references?: ResumeReference[];
+  /**
+   * CERTIFICACIONES, IDIOMAS y PUBLICACIONES — datos PROPIOS del usuario, así que no
+   * llevan opt-in ninguno: si están, se imprimen. Son opcionales por otra razón, la
+   * de siempre en este modelo: un CV sin certificados es el caso normal y `undefined`
+   * tiene que comportarse EXACTAMENTE como lista vacía (sección inexistente, golden
+   * intacto). Nunca se descartan en silencio: el editor las ofrece en la biblioteca
+   * como cualquier otro item del master.
+   */
+  certifications?: ResumeCertification[];
+  languages?: ResumeLanguage[];
+  publications?: ResumePublication[];
   headings: {
     summary: I18n;
     skills: I18n;
@@ -147,7 +247,26 @@ export interface ResumeData {
      *  nunca se imprima: si fuera opcional, el día que alguien la encienda el
      *  documento saldría con un rótulo vacío y nadie se enteraría hasta verlo. */
     references: I18n;
+    /** Los tres rótulos nuevos, TAMBIÉN obligatorios y por el mismo motivo: que
+     *  romper a compilar sea el aviso. Un rótulo opcional habría dejado el
+     *  documento imprimiendo una sección sin nombre el día que alguien guardara su
+     *  primer certificado, y eso no se ve hasta que ya está enviado. */
+    certifications: I18n;
+    languages: I18n;
+    publications: I18n;
   };
+  /**
+   * ORDEN DE LAS SECCIONES DE ESTE DOCUMENTO — opcional. Sin él manda el de la
+   * plantilla (que es lo que había, y lo que mantiene el golden byte a byte). Con él,
+   * la VARIANTE pisa a la plantilla: «Backend» puede llevar habilidades arriba e
+   * «Investigación» publicaciones arriba usando la misma plantilla.
+   *
+   * Llega SIN VALIDAR (viene de un jsonb del usuario), así que nadie lo consume tal
+   * cual: `metricsOf` lo pasa por `normalizeSectionOrder`, que descarta ids
+   * desconocidos, quita duplicados, completa lo que falte y deja las referencias al
+   * final. Un dato viejo o corrupto no puede dejar a nadie sin secciones.
+   */
+  sectionOrder?: readonly SectionId[];
   /**
    * Foto — OPT-IN explícito (versión "visual"). El CV estándar (y el golden) va
    * SIN foto. NUNCA es el avatar de la UI: es una imagen (data-URL) que el usuario
@@ -181,6 +300,31 @@ export interface ResumeData {
   typographyId?: string;
 }
 
+/**
+ * LOS RÓTULOS DEL DOCUMENTO, en un solo sitio. Los construían A MANO las TRES capas
+ * que arman un ResumeData (queries.ts, variants.ts y el espejo del editor), y las
+ * tres escribían la misma lista de literales: al crear las secciones nuevas eso eran
+ * tres oportunidades de que a una se le olvidara un rótulo y saliera un encabezado
+ * vacío en el PDF de esa capa y solo de esa.
+ *
+ * ⚠ SON RÓTULOS ESTÁNDAR Y NO SE RENOMBRAN. Un ATS segmenta el CV por estas
+ * palabras: «Experiencia» no puede convertirse en «Mi trayectoria» porque quede
+ * bonito (el catálogo ya prohíbe que una plantilla los cambie; ver templates.test).
+ * Lo que sí hacen ahora es existir en los DOS idiomas, que es lo que el modelo
+ * bilingüe (I18n) prometía desde el principio.
+ */
+export const DOCUMENT_HEADINGS: ResumeData["headings"] = {
+  summary: { es: "Resumen", en: "Summary" },
+  skills: { es: "Habilidades", en: "Skills" },
+  work: { es: "Experiencia", en: "Experience" },
+  projects: { es: "Proyectos", en: "Projects" },
+  education: { es: "Educación", en: "Education" },
+  certifications: { es: "Certificaciones", en: "Certifications" },
+  languages: { es: "Idiomas", en: "Languages" },
+  publications: { es: "Publicaciones", en: "Publications" },
+  references: { es: "Referencias", en: "References" },
+};
+
 // ── Presentación / contacto por variante (merge PURO, testeable) ──────────────
 /**
  * Patch de presentación: foto, QR (url + modo) y contacto (identidad). Reglas de
@@ -207,6 +351,65 @@ export interface PresentationPatch {
    * seguir siéndolo aunque el dato venga de un JSON viejo o a medio migrar.
    */
   showReferences?: boolean | null;
+  /**
+   * ORDEN DE SECCIONES DE ESTA VARIANTE. `undefined` no toca; `null` (o una lista
+   * inservible) borra el override y devuelve el mando a la plantilla; una lista se
+   * guarda YA NORMALIZADA (ids válidos, sin repetir, completa y con las referencias
+   * al final), porque lo que se persiste es lo que otro día se leerá sin mirar.
+   */
+  sectionOrder?: readonly SectionId[] | null;
+}
+
+/**
+ * La clave del orden de secciones dentro del override de basics. Vive con la foto,
+ * el QR, la plantilla y el interruptor de referencias porque es lo mismo: una
+ * decisión de PRESENTACIÓN de esta variante, no un dato del master. Por eso no hace
+ * falta ninguna migración: el jsonb `override_data` ya está ahí.
+ */
+export const SECTION_ORDER_FIELD = "sectionOrder";
+
+/**
+ * Deja utilizable CUALQUIER orden que llegue de fuera (un jsonb del usuario, un
+ * cuerpo HTTP, un dato de hace tres versiones). Devuelve `null` cuando no hay nada
+ * aprovechable, para que quien llame caiga en el orden de la plantilla.
+ *
+ * Cuatro reglas, y las cuatro existen porque su ausencia PIERDE SECCIONES:
+ *  1. lo que no es una SectionId conocida se descarta (un id inventado no se pinta);
+ *  2. los repetidos se quitan (una sección dos veces imprimiría el bloque dos veces);
+ *  3. lo que falte SE AÑADE al final, en el orden de `base` — que por defecto es el
+ *     de la plantilla. Esta es la regla que impide el fallo capital: guardar un orden
+ *     hoy y estrenar una sección mañana no puede dejarla fuera del documento;
+ *  4. las REFERENCIAS van al final SIEMPRE (una referencia no abre un CV).
+ */
+export function normalizeSectionOrder(
+  raw: unknown,
+  base: readonly SectionId[] = DEFAULT_SECTION_ORDER,
+): SectionId[] | null {
+  if (!Array.isArray(raw)) return null;
+  const conocidas = new Set<string>(ALL_SECTION_IDS);
+  const out: SectionId[] = [];
+  const vistas = new Set<SectionId>();
+  for (const v of raw) {
+    if (typeof v !== "string" || !conocidas.has(v)) continue;
+    const id = v as SectionId;
+    if (vistas.has(id)) continue;
+    vistas.add(id);
+    out.push(id);
+  }
+  if (out.length === 0) return null; // basura entera: que mande la plantilla
+  const anadir = (id: SectionId) => {
+    if (vistas.has(id)) return;
+    vistas.add(id);
+    out.push(id);
+  };
+  // Lo que falte, al final y en el orden de la base (la plantilla). Sin esto, una
+  // sección nueva no aparecería NUNCA en las variantes que ya guardaron su orden.
+  for (const id of base) anadir(id);
+  // Y por si la base tampoco la tuviera (una plantilla con un orden incompleto).
+  for (const id of ALL_SECTION_IDS) anadir(id);
+  // Candado: las referencias, las últimas.
+  const sinRefs = out.filter((id) => id !== PINNED_LAST_SECTION);
+  return [...sinRefs, PINNED_LAST_SECTION];
 }
 
 /**
@@ -277,6 +480,15 @@ export function mergePresentationOverride(
   if (patch.showReferences !== undefined) {
     if (patch.showReferences === true) next[REFERENCES_OPT_IN_FIELD] = true;
     else delete next[REFERENCES_OPT_IN_FIELD];
+  }
+  // ORDEN DE SECCIONES. Se guarda NORMALIZADO (no crudo): lo que entra por HTTP no
+  // manda en lo que se persiste. `null` —o una lista que no deja ni una sección en
+  // pie— BORRA la clave, que es lo mismo que «vuelve al orden de la plantilla»: así
+  // el estado por defecto y el reseteado a mano son el MISMO objeto.
+  if (patch.sectionOrder !== undefined) {
+    const orden = patch.sectionOrder === null ? null : normalizeSectionOrder(patch.sectionOrder);
+    if (orden) next[SECTION_ORDER_FIELD] = orden;
+    else delete next[SECTION_ORDER_FIELD];
   }
   return next;
 }
@@ -380,7 +592,11 @@ export function selectContent(data: ResumeData, onePage: boolean) {
   // `references` puede no venir (el caso normal: apagadas). `?? []` y no un
   // `data.references!`: un documento sin referencias no es un error, es lo esperado.
   const references = (data.references ?? []).filter((r) => !onePage || r.p1);
-  return { work, projects, education, references };
+  // Las tres nuevas siguen la MISMA regla y el MISMO filtro p1: ausentes = vacías.
+  const certifications = (data.certifications ?? []).filter((c) => !onePage || c.p1);
+  const languages = (data.languages ?? []).filter((l) => !onePage || l.p1);
+  const publications = (data.publications ?? []).filter((p) => !onePage || p.p1);
+  return { work, projects, education, references, certifications, languages, publications };
 }
 
 // ── Composición: lo que comparten el PDF y el texto plano ────────────────────
@@ -391,15 +607,29 @@ export function selectContent(data: ResumeData, onePage: boolean) {
  * describa el PDF que el usuario acaba de descargar y no a un primo suyo.
  */
 
-/** La métrica efectiva de un documento (respeta templateId/paletteId/typographyId). */
-export function metricsOf(data: ResumeData): ResolvedMetrics {
-  return resolveMetrics(
+/**
+ * La métrica efectiva de un documento (respeta templateId/paletteId/typographyId) Y
+ * el ORDEN DE SECCIONES de la variante, que pisa al de la plantilla.
+ *
+ * ⚠ LA LLAMAN LOS DOS RENDERIZADORES, y eso es el candado del bloque. ResumePDF
+ * resolvía su métrica por su cuenta (`resolveMetrics(tpl.metrics)`), así que un orden
+ * por variante habría reordenado el texto plano y NO el PDF: el rayos-X describiendo
+ * un documento que no existe, que es justo lo que este producto promete no hacer.
+ * `sel` está para que el render pueda pasar sus overrides de plantilla sin duplicar
+ * la resolución.
+ */
+export function metricsOf(data: ResumeData, sel: TemplateSelection = {}): ResolvedMetrics {
+  const m = resolveMetrics(
     resolveTemplate({
-      templateId: data.templateId,
-      paletteId: data.paletteId,
-      typographyId: data.typographyId,
+      templateId: sel.templateId ?? data.templateId,
+      paletteId: sel.paletteId ?? data.paletteId,
+      typographyId: sel.typographyId ?? data.typographyId,
     }).metrics,
   );
+  // El orden de la variante se normaliza CONTRA el de la plantilla: lo que la
+  // variante no diga, se completa con el criterio de la plantilla elegida.
+  const propio = normalizeSectionOrder(data.sectionOrder, m.sectionOrder);
+  return propio ? { ...m, sectionOrder: propio } : m;
 }
 
 /**
@@ -409,13 +639,22 @@ export function metricsOf(data: ResumeData): ResolvedMetrics {
  * queda: cambiarlo movería el golden).
  */
 export function documentSections(data: ResumeData, onePage: boolean, m: ResolvedMetrics): SectionId[] {
-  const { work, projects, education, references } = selectContent(data, onePage);
+  const { work, projects, education, references, certifications, languages, publications } =
+    selectContent(data, onePage);
+  // ⚠ EXHAUSTIVO A PROPÓSITO: `Record<SectionId, boolean>` obliga a que una sección
+  // nueva pase por aquí o el build cae. Es el único punto del recorrido donde TS
+  // puede exigirlo (sectionOrder es un array y no exige exhaustividad).
   const hay: Record<SectionId, boolean> = {
     summary: true,
     skills: true,
     work: work.length > 0,
     projects: projects.length > 0,
     education: education.length > 0,
+    // Datos propios: se imprimen si existen. Vacías, la sección NO existe — ni
+    // rótulo ni línea en blanco (por eso el golden no se mueve ni un byte).
+    certifications: certifications.length > 0,
+    languages: languages.length > 0,
+    publications: publications.length > 0,
     // Referencias: NUNCA por excepción histórica. Solo si el usuario las encendió
     // en esta variante Y hay al menos una. Sin lista, la sección no existe: no se
     // rotula, no gasta una línea, no queda un «disponibles a solicitud» flotando.
@@ -533,7 +772,8 @@ export interface PlainTextOpts {
 export function toPlainText(data: ResumeData, opts: PlainTextOpts = {}): string {
   const loc: Locale = opts.locale ?? "es";
   const onePage = opts.onePage ?? false;
-  const { work, projects, education, references } = selectContent(data, onePage);
+  const { work, projects, education, references, certifications, languages, publications } =
+    selectContent(data, onePage);
   const b = data.basics;
   const m = metricsOf(data);
   const secciones = documentSections(data, onePage, m);
@@ -598,6 +838,25 @@ export function toPlainText(data: ResumeData, opts: PlainTextOpts = {}): string 
     references: () => {
       abrir("references");
       for (const r of references) lines.push(`${vineta}${t(r, loc)}`);
+    },
+    // CERTIFICACIONES — ENTRADAS, como la formación: `entryLines` decide el orden de
+    // título, emisor y fechas según el eje de la plantilla, y ResumePDF llama a esa
+    // MISMA función. Si aquí se escribieran las tres líneas a mano, la columna
+    // colgante (que emite fechas → emisor → título) rompería el round-trip.
+    certifications: () => {
+      abrir("certifications");
+      for (const c of certifications) lines.push(...entryLines(t(c.title, loc), t(c.dates, loc), c.org, m));
+    },
+    // IDIOMAS y PUBLICACIONES — una VIÑETA cada uno, igual que proyectos y
+    // referencias, y con el mismo marcador de la plantilla. La línea ya viene
+    // compuesta desde languageLine/publicationLine: aquí no se decide nada.
+    languages: () => {
+      abrir("languages");
+      for (const l of languages) lines.push(`${vineta}${t(l, loc)}`);
+    },
+    publications: () => {
+      abrir("publications");
+      for (const p of publications) lines.push(`${vineta}${t(p, loc)}`);
     },
   };
 

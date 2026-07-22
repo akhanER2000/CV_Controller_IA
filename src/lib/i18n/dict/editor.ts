@@ -45,6 +45,11 @@ export const editor = {
     "editor.groupSkills": "Skills",
     "editor.groupProjects": "Proyectos",
     "editor.groupEducation": "Educación",
+    /* Las tres secciones que el documento aprendió a pintar. Existían en el master
+       desde el esquema 0001 y no tenían dónde salir: la biblioteca las escondía. */
+    "editor.groupCertifications": "Certificaciones",
+    "editor.groupLanguages": "Idiomas",
+    "editor.groupPublications": "Publicaciones",
     // ── Acordeón de la biblioteca (punto 5) — contadores y controles de plegado.
     //    Singular/plural separados para que la cabecera no diga «1 roles». El
     //    contador cuenta lo que SE PINTA (tras el buscador), no el master entero.
@@ -120,6 +125,10 @@ export const editor = {
     "editor.presOverline": "Presentación",
     "editor.presHint": "Opcional · solo esta variante",
     "editor.stPresSaved": "presentación guardada — solo esta variante",
+    /* El movimiento se ANUNCIA: la barra de estado es una live region, así que
+       quien navega con teclado o lector de pantalla sabe dónde quedó la sección
+       sin tener que ir a mirar el preview. */
+    "editor.stOrderMoved": "{s} ahora va en la posición {n} de {m}",
     "editor.stPresErr": "no se pudo guardar la presentación — {r}",
     "editor.stPhotoErr": "no se pudo leer la imagen — {r}",
     "editor.stPhotoBig": "la foto es muy pesada — prueba una imagen más pequeña",
@@ -228,6 +237,29 @@ export const editor = {
     "editor.designNote": "Cambiar de diseño no toca ningún dato: el mismo contenido, otra forma.",
     "editor.designBrowse": "Ver las {n} plantillas",
     "editor.designPickedNone": "Sin plantilla elegida",
+
+    /* ── ORDEN DE LAS SECCIONES (por variante) ────────────────────────────────
+       ⚠ NI UNA PROMESA. No hay evidencia de que un orden concreto consiga más
+       entrevistas, así que el copy dice PARA QUIÉN suele ser cada uno y nada más.
+       «Suele usarlo» describe una costumbre observable; «funciona mejor» sería
+       inventarse un estudio que no existe. */
+    "editor.orderOverline": "Orden de las secciones",
+    "editor.orderHint": "Solo esta variante · el preview se rehace",
+    "editor.orderPresets": "Órdenes de un clic",
+    "editor.orderPresetsNote": "Son los mismos órdenes que ya usan varias plantillas del catálogo. Describen para quién suele ser cada uno; ninguno consigue más entrevistas por sí solo.",
+    "editor.orderPreset_tecnico": "Técnico",
+    "editor.orderPreset_tecnico_who": "Habilidades delante del empleo. Lo suelen usar perfiles de ingeniería y datos, donde lo primero que se busca es el stack.",
+    "editor.orderPreset_clasico": "Clásico",
+    "editor.orderPreset_clasico_who": "Experiencia delante de todo. Lo suelen usar perfiles con trayectoria continua.",
+    "editor.orderPreset_junior": "Junior",
+    "editor.orderPreset_junior_who": "Formación y certificaciones delante. Lo piden las guías chilenas y lo usa la plantilla de Harvard para recién titulados.",
+    "editor.orderReset": "Volver al de la plantilla",
+    "editor.orderListAria": "Orden de las secciones del cuerpo",
+    "editor.orderUpAria": "Subir {s}",
+    "editor.orderDownAria": "Bajar {s}",
+    "editor.orderEmpty": "vacía: no se imprime",
+    "editor.orderPinned": "siempre al final",
+    "editor.orderHeaderNote": "El nombre y el contacto no se reordenan: van en la cabecera. Las referencias van siempre al final — una referencia no abre un CV.",
 
     // Galería de plantillas: la miniatura ES la página 1 del PDF real, con TUS datos.
     "editor.gal_title": "Elegir plantilla",
@@ -411,6 +443,11 @@ export const editor = {
     "editor.groupSkills": "Skills",
     "editor.groupProjects": "Projects",
     "editor.groupEducation": "Education",
+    // The three sections the document learned to print. They existed in the master
+    // since schema 0001 with nowhere to go: the library used to hide them.
+    "editor.groupCertifications": "Certifications",
+    "editor.groupLanguages": "Languages",
+    "editor.groupPublications": "Publications",
     // Library accordion (point 5) — counters and fold controls. Singular/plural
     // kept apart so the header never reads "1 roles". The counter counts what is
     // PAINTED (after the search), not the whole master.
@@ -486,6 +523,9 @@ export const editor = {
     "editor.presOverline": "Presentation",
     "editor.presHint": "Optional · this variant only",
     "editor.stPresSaved": "presentation saved — this variant only",
+    // The move is ANNOUNCED: the status bar is a live region, so keyboard and
+    // screen-reader users know where the section landed without checking the preview.
+    "editor.stOrderMoved": "{s} is now in position {n} of {m}",
     "editor.stPresErr": "couldn't save the presentation — {r}",
     "editor.stPhotoErr": "couldn't read the image — {r}",
     "editor.stPhotoBig": "the photo is too heavy — try a smaller image",
@@ -591,6 +631,27 @@ export const editor = {
     "editor.designNote": "Switching design touches no data: same content, different form.",
     "editor.designBrowse": "Browse the {n} templates",
     "editor.designPickedNone": "No template chosen",
+
+    /* SECTION ORDER (per variant). ⚠ NO PROMISES: there is no evidence that a
+       given order gets more interviews, so the copy says WHO tends to use each
+       one and nothing else. */
+    "editor.orderOverline": "Section order",
+    "editor.orderHint": "This variant only · preview re-renders",
+    "editor.orderPresets": "One-click orders",
+    "editor.orderPresetsNote": "These are the same orders several catalogue templates already use. They describe who tends to use each one; none of them gets you interviews on its own.",
+    "editor.orderPreset_tecnico": "Technical",
+    "editor.orderPreset_tecnico_who": "Skills ahead of work. Common in engineering and data profiles, where the stack is the first thing scanned.",
+    "editor.orderPreset_clasico": "Classic",
+    "editor.orderPreset_clasico_who": "Experience first. Common for profiles with a continuous track record.",
+    "editor.orderPreset_junior": "Junior",
+    "editor.orderPreset_junior_who": "Education and certifications first. Chilean guides ask for it and Harvard's template for new graduates uses it.",
+    "editor.orderReset": "Back to the template's order",
+    "editor.orderListAria": "Order of the body sections",
+    "editor.orderUpAria": "Move {s} up",
+    "editor.orderDownAria": "Move {s} down",
+    "editor.orderEmpty": "empty: not printed",
+    "editor.orderPinned": "always last",
+    "editor.orderHeaderNote": "Name and contact are not reordered: they live in the header. References always go last — a reference doesn't open a CV.",
 
     // Template gallery: the thumbnail IS page 1 of the real PDF, with YOUR data.
     "editor.gal_title": "Choose a template",

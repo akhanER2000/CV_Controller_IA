@@ -49,7 +49,15 @@ const row = (id: string, kind: string, data: Record<string, unknown>, parent: st
 });
 
 /** Un master realista: resumen, DOS roles con viñetas, skills, un proyecto, una
- *  educación y DOS referencias. El orden de inserción es el de pintado. */
+ *  educación, un certificado, dos idiomas, una publicación y DOS referencias. El
+ *  orden de inserción es el de pintado.
+ *
+ *  ⚠ CERTIFICADO, IDIOMAS Y PUBLICACIÓN ENTRARON DESPUÉS, y su ausencia aquí era
+ *  parte del problema: la biblioteca no ofrecía esos kinds (libSectionOfKind
+ *  devolvía null), así que un usuario con certificados guardados en el master no
+ *  podía meterlos en ninguna variante y nada se lo decía. Ahora el documento tiene
+ *  esas secciones y la biblioteca las ofrece; el fixture las trae para que el plan
+ *  se pruebe con ellas dentro y no solo en teoría. */
 function masterFixture(): Master {
   so = 0;
   return [
@@ -64,6 +72,10 @@ function masterFixture(): Master {
     row("s1", "skill", { group: "Lenguajes", items: "Go, Python, SQL" }),
     row("p1", "project", { name: "idempotency-go", description: "librería open source." }),
     row("ed1", "education", { degree: "Ingeniería Civil en Computación", institution: "UNAB" }),
+    row("ce1", "certification", { name: "AWS Solutions Architect", issuer: "Amazon Web Services" }),
+    row("la1", "language", { language: "Español", level: "nativo" }),
+    row("la2", "language", { language: "Inglés", level: "profesional (B2)" }),
+    row("pu1", "publication", { name: "Conciliación a escala", description: "charla en la PyCon local." }),
     row("ref1", "reference", { name: "Rodrigo Peña", role: "CTO", org: "Tesseract" }),
     row("ref2", "reference", { name: "Marta Ibáñez", role: "Profesora", org: "UNAB" }),
   ];
@@ -97,6 +109,9 @@ describe("computeLibPlan · sin búsqueda pinta todo el master, agrupado y en or
     expect(groupById(plan, "skills").count).toBe(1);
     expect(groupById(plan, "projects").count).toBe(1);
     expect(groupById(plan, "education").count).toBe(1);
+    expect(groupById(plan, "certifications").count).toBe(1);
+    expect(groupById(plan, "languages").count).toBe(2);
+    expect(groupById(plan, "publications").count).toBe(1);
     expect(groupById(plan, "references").count).toBe(2);
     for (const g of plan) {
       expect(g.present).toBe(true);
@@ -127,7 +142,11 @@ describe("computeLibPlan · al buscar, el contador cuenta lo que SE PINTA", () =
 
   it("los grupos sin coincidencias quedan a 0 y hasMatches=false (pero siguen present)", () => {
     const plan = computeLibPlan(masterFixture(), "idempotencia");
-    for (const id of ["summary", "skills", "projects", "education", "references"] as LibSectionId[]) {
+    const otras = [
+      "summary", "skills", "projects", "education",
+      "certifications", "languages", "publications", "references",
+    ] as LibSectionId[];
+    for (const id of otras) {
       const g = groupById(plan, id);
       expect(g.count, `${id} debería no pintar filas`).toBe(0);
       expect(g.hasMatches, `${id} no tiene coincidencias`).toBe(false);
@@ -226,12 +245,20 @@ describe("libSectionOfKind · cada kind cae en su sección; 'bullet' bajo 'work'
     expect(libSectionOfKind("project")).toBe("projects");
     expect(libSectionOfKind("education")).toBe("education");
     expect(libSectionOfKind("reference")).toBe("references");
+    // ⚠ EL AGUJERO QUE ESTE TEST DABA POR BUENO. Antes exigía que estos tres kinds
+    // devolvieran null «porque no tienen columna», y eso era justo el bug: el enum
+    // item_kind los acepta desde 0001, el master deja crearlos y el corpus.md los
+    // importa, pero el documento no sabía pintarlos, así que la biblioteca los
+    // escondía y no había forma de meterlos en un CV.
+    expect(libSectionOfKind("certification")).toBe("certifications");
+    expect(libSectionOfKind("language")).toBe("languages");
+    expect(libSectionOfKind("publication")).toBe("publications");
   });
 
-  it("un kind SIN grupo propio devuelve null (no se inventa una sección vacía)", () => {
-    // certification/language/publication/link/basics existen en el enum pero no
-    // tienen columna: los idiomas viven como un grupo de skills, no como sección.
-    for (const k of ["certification", "language", "publication", "link", "basics", "loquesea"]) {
+  it("un kind SIN sección en el documento devuelve null (no se inventa una columna)", () => {
+    // `basics` y `link` son CONTACTO, y el contacto vive en la cabecera: no se
+    // compone ni se reordena desde la biblioteca. Y un kind inventado tampoco.
+    for (const k of ["link", "basics", "loquesea"]) {
       expect(libSectionOfKind(k)).toBeNull();
     }
   });

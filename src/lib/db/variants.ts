@@ -2,14 +2,31 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import {
   normalizeLinks,
   mergePresentationOverride,
+  normalizeSectionOrder,
   referenceLine,
   referencesOptIn,
+  certificationEntry,
+  languageLine,
+  publicationLine,
   CONTACT_OVERRIDE_FIELDS,
+  DOCUMENT_HEADINGS,
+  SECTION_ORDER_FIELD,
   type ResumeData,
   type PresentationPatch,
   type ReferenceFields,
+  type CertificationFields,
+  type LanguageFields,
+  type PublicationFields,
 } from "@/lib/cv/resume";
 import { ensureMaster, getMasterItems, createMasterItem, type MasterItem } from "@/lib/db/queries";
+import {
+  ORIGEN_TRADUCCION,
+  SIN_TRADUCCIONES,
+  datosBilingues,
+  indiceDeTraducciones,
+  type FilaBilingue,
+  type Idioma,
+} from "@/lib/cv/traducir";
 
 /**
  * Capa de datos de las VARIANTES (contra el esquema 0001). Igual que queries.ts:
@@ -684,7 +701,7 @@ export async function buildVariantResumeData(
   const owned = await ownedVariant(sb, userId, variantId);
   if (!owned) throw new Error("Variante no encontrada.");
 
-  const [master, vitemsRes] = await Promise.all([
+  const [master, vitemsRes, espejosRes] = await Promise.all([
     getMasterItems(sb, userId),
     sb
       .from("variant_items")
@@ -693,47 +710,76 @@ export async function buildVariantResumeData(
       .eq("user_id", userId)
       .eq("visible", true)
       .order("sort_order", { ascending: true }),
+    // Las filas ESPEJO del CV bilingüe. Van en consulta aparte porque
+    // `getMasterItems` las excluye a propósito (no son items del registro, ver el
+    // comentario de esa función): esta es la otra lectura, la del render.
+    sb
+      .from("profile_items")
+      .select("id,data,lang,origin,translated_from")
+      .eq("user_id", userId)
+      .eq("origin", ORIGEN_TRADUCCION),
   ]);
   if (vitemsRes.error) throw new Error(vitemsRes.error.message);
+  // Un fallo bajando las traducciones NO puede tumbar el PDF: se degrada al
+  // documento monolingüe de siempre, que es exactamente lo que había antes.
+  const idx = espejosRes.error
+    ? SIN_TRADUCCIONES
+    : indiceDeTraducciones((espejosRes.data ?? []) as unknown as FilaBilingue[]);
 
   const masterById = new Map<string, MasterItem>(master.map((m) => [m.id, m]));
 
   interface EffItem {
     itemId: string;
     kind: string;
+    /** data efectiva en el idioma en que está escrito el master (master+override) */
     data: Record<string, unknown>;
+    /** data efectiva EN CADA IDIOMA (traducción del master + el MISMO override) */
+    bi: Record<Idioma, Record<string, unknown>>;
     parentId: string | null;
   }
   const eff: EffItem[] = [];
   for (const vi of vitemsRes.data ?? []) {
     const m = masterById.get(vi.item_id as string);
     if (!m) continue; // ON DELETE RESTRICT lo hace casi imposible; defensa igual.
+    const override = (vi.override_data as Record<string, unknown> | null) ?? null;
+    const trad = datosBilingues(m, idx);
+    /* ★ EL OVERRIDE GANA EN LOS DOS IDIOMAS, y esa es la decisión importante aquí.
+       Si un campo lo ha reescrito el usuario en ESTA variante (un acortado aceptado,
+       una edición a mano), la traducción del MASTER ya no describe ese campo: usarla
+       haría que el PDF en inglés dijera una cosa y el mismo PDF en español otra —
+       dos documentos distintos con el mismo nombre. Aplicando el override sobre los
+       dos lados, un campo reescrito sale IGUAL en ambos (sin traducir, y se ve) y
+       todo lo demás sí queda traducido. Se pierde traducción, nunca verdad. */
     eff.push({
       itemId: m.id,
       kind: m.kind,
-      data: effectiveData(m.data, (vi.override_data as Record<string, unknown> | null) ?? null),
+      data: effectiveData(m.data, override),
+      bi: { es: effectiveData(trad.es, override), en: effectiveData(trad.en, override) },
       parentId: m.parentId,
     });
   }
 
   const by = (k: string) => eff.filter((e) => e.kind === k);
+  /** Un campo del item en los dos idiomas (traducción si la hay, original si no). */
+  const bi = (e: EffItem, campo: string) => ({ es: str(e.bi.es, campo), en: str(e.bi.en, campo) });
   // Si la variante no tiene variant_item de basics (p. ej. una variante MANUAL,
   // que arranca vacía y no lo trae de la biblioteca), hereda el basics del master:
   // así el PDF nunca sale sin nombre/contacto. La foto/QR opt-in viven en el
   // override de ESE variant_item cuando existe (setVariantPresentation).
   const masterBasics = master.find((m) => m.kind === "basics")?.data ?? {};
-  const basicsItem = by("basics")[0]?.data ?? masterBasics;
-  const summaryItem = by("summary")[0]?.data ?? {};
+  const basicsRow = by("basics")[0];
+  const basicsItem = basicsRow?.data ?? masterBasics;
+  const summaryRow = by("summary")[0];
 
   const work = by("work").map((w) => ({
     company: str(w.data, "company"),
-    location: i18n(str(w.data, "location")),
-    title: i18n(str(w.data, "title")),
-    dates: i18n(str(w.data, "dates")),
+    location: bi(w, "location"),
+    title: bi(w, "title"),
+    dates: bi(w, "dates"),
     p1: true,
     bullets: eff
       .filter((b) => b.kind === "bullet" && b.parentId === w.itemId)
-      .map((b) => ({ p1: true, es: str(b.data, "text"), en: str(b.data, "text") })),
+      .map((b) => ({ p1: true, ...bi(b, "text") })),
   }));
 
   // El target_title de la variante manda como label; si no hay, cae al del master.
@@ -765,10 +811,11 @@ export async function buildVariantResumeData(
   // sección, no hay sección.
   const referenciasOn = referencesOptIn(basicsItem);
   const references = referenciasOn
-    ? by("reference").map((r) => {
-        const linea = referenceLine(r.data as ReferenceFields);
-        return { p1: true, es: linea, en: linea };
-      }).filter((r) => r.es.trim() !== "")
+    ? by("reference").map((r) => ({
+        p1: true,
+        es: referenceLine(r.bi.es as ReferenceFields),
+        en: referenceLine(r.bi.en as ReferenceFields),
+      })).filter((r) => r.es.trim() !== "")
     : [];
 
   return {
@@ -778,9 +825,9 @@ export async function buildVariantResumeData(
       label: i18n(label),
       email: str(basicsItem, "email"),
       phone: str(basicsItem, "phone"),
-      location: i18n(str(basicsItem, "location")),
+      location: basicsRow ? bi(basicsRow, "location") : i18n(str(basicsItem, "location")),
       links: normalizeLinks(basicsItem.links),
-      summary: i18n(str(summaryItem, "text")),
+      summary: summaryRow ? bi(summaryRow, "text") : i18n(""),
     },
     photo,
     qr: qrOn ? { mode: qrMode, url: qrUrl || undefined } : undefined,
@@ -789,27 +836,49 @@ export async function buildVariantResumeData(
     templateId: str(basicsItem, "templateId").trim() || undefined,
     paletteId: str(basicsItem, "paletteId").trim() || undefined,
     typographyId: str(basicsItem, "typographyId").trim() || undefined,
+    // ORDEN DE SECCIONES DE ESTA VARIANTE (vive donde la plantilla y la foto). Se
+    // normaliza al leer y no solo al escribir: en la base puede haber un orden
+    // guardado antes de que existieran secciones nuevas, y esa variante tiene que
+    // seguir imprimiéndolas —al final, pero imprimiéndolas— en vez de perderlas.
+    // `undefined` ⇒ manda el orden de la plantilla, que es lo de siempre.
+    sectionOrder: normalizeSectionOrder(basicsItem[SECTION_ORDER_FIELD]) ?? undefined,
     references,
-    skills: by("skill").map((s) => ({ group: i18n(str(s.data, "group")), items: i18n(str(s.data, "items")) })),
+    // El GRUPO se traduce; la LISTA de tecnologías no (Python es Python).
+    skills: by("skill").map((s) => ({ group: bi(s, "group"), items: bi(s, "items") })),
     work,
+    // La línea se compone DENTRO de cada idioma: componer y traducir después
+    // traduciría el conector, que es del documento y no del dato.
     projects: by("project").map((p) => ({
       p1: true,
-      es: [str(p.data, "name"), str(p.data, "description")].filter(Boolean).join(" — "),
-      en: [str(p.data, "name"), str(p.data, "description")].filter(Boolean).join(" — "),
+      es: [str(p.bi.es, "name"), str(p.bi.es, "description")].filter(Boolean).join(" — "),
+      en: [str(p.bi.en, "name"), str(p.bi.en, "description")].filter(Boolean).join(" — "),
     })),
     education: by("education").map((e) => ({
-      title: i18n(str(e.data, "degree")),
+      title: bi(e, "degree"),
       org: str(e.data, "institution"),
-      dates: i18n(str(e.data, "dates")),
+      dates: bi(e, "dates"),
       p1: true,
     })),
-    headings: {
-      summary: i18n("Resumen"),
-      skills: i18n("Habilidades"),
-      work: i18n("Experiencia"),
-      projects: i18n("Proyectos"),
-      education: i18n("Educación"),
-      references: i18n("Referencias"),
-    },
+    // CERTIFICACIONES · IDIOMAS · PUBLICACIONES — datos PROPIOS, sin opt-in: si el
+    // usuario los metió en la variante, se imprimen. Las líneas se componen con los
+    // MISMOS helpers puros que usan el master y el preview del editor; si cada capa
+    // las montara por su cuenta, el PDF del servidor y el que ve el usuario en
+    // pantalla dirían cosas distintas del mismo certificado.
+    certifications: by("certification").map((c) => {
+      const ces = certificationEntry(c.bi.es as CertificationFields);
+      const cen = certificationEntry(c.bi.en as CertificationFields);
+      return { title: { es: ces.title, en: cen.title }, org: ces.org, dates: { es: ces.dates, en: cen.dates }, p1: true };
+    }).filter((c) => c.title.es.trim() !== "" || c.org.trim() !== ""),
+    languages: by("language").map((l) => ({
+      p1: true,
+      es: languageLine(l.bi.es as LanguageFields),
+      en: languageLine(l.bi.en as LanguageFields),
+    })).filter((l) => l.es.trim() !== ""),
+    publications: by("publication").map((p) => ({
+      p1: true,
+      es: publicationLine(p.bi.es as PublicationFields),
+      en: publicationLine(p.bi.en as PublicationFields),
+    })).filter((p) => p.es.trim() !== ""),
+    headings: DOCUMENT_HEADINGS,
   };
 }

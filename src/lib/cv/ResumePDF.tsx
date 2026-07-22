@@ -9,6 +9,7 @@ import {
   buildVCard,
   contactLayout,
   documentSections,
+  metricsOf,
   skillLines,
   type ResumeData,
   type Locale,
@@ -415,18 +416,26 @@ export function ResumePDF({
   const loc: Locale = opts.locale ?? "es";
   const onePage = opts.onePage ?? false;
   const tt = <T extends { es: string; en: string }>(v: T) => v[loc];
-  const { work, projects, education, references } = selectContent(data, onePage);
+  const { work, projects, education, references, certifications, languages, publications } =
+    selectContent(data, onePage);
   const b = data.basics;
 
   // La plantilla EFECTIVA: lo que pida el render gana sobre lo que traiga el
   // documento, y un id desconocido cae en la de por defecto (nunca lanza).
-  const tpl = resolveTemplate({
+  const seleccion = {
     templateId: opts.templateId ?? data.templateId,
     paletteId: opts.paletteId ?? data.paletteId,
     typographyId: opts.typographyId ?? data.typographyId,
-  });
+  };
+  const tpl = resolveTemplate(seleccion);
   const s = sheetFor(tpl);
-  const m = resolveMetrics(tpl.metrics);
+  // ⚠ LA MÉTRICA SALE DE metricsOf, NO de resolveMetrics(tpl.metrics). Parece lo
+  // mismo y no lo es: metricsOf es también donde el ORDEN DE SECCIONES de la
+  // variante pisa al de la plantilla. Con la llamada directa, el texto plano
+  // (que sí usa metricsOf) reordenaba y el PDF no — el rayos-X describiendo un
+  // documento que no existe. Es la misma función para los dos renderizadores o no
+  // significa nada.
+  const m = metricsOf(data, seleccion);
 
   // Los ejes que cambian el TEXTO se resuelven con las MISMAS funciones que usa
   // toPlainText (templates.ts/resume.ts). Es deliberado: el round-trip compara el
@@ -691,13 +700,46 @@ export function ResumePDF({
     </>
   );
 
-  /** Los bloques por id, para que el ORDEN lo decida la plantilla y no el JSX. */
+  /* CERTIFICACIONES — ENTRADAS, con la misma función `entrada()` que la formación y
+     por tanto con las mismas cinco colocaciones de fecha. El título va con el cuerpo
+     de formación (`edu: true`): una certificación pesa lo que un curso, no lo que un
+     empleo, y así el documento no la anuncia más fuerte de lo que es.
+     El texto que emite es EXACTAMENTE el de `entryLines` en toPlainText. */
+  const certificationsBlock = certifications.length > 0 && (
+    <>
+      {heading("certifications")}
+      {certifications.map((c, i) => entrada(tt(c.title), tt(c.dates), c.org, true, i))}
+    </>
+  );
+
+  /* IDIOMAS y PUBLICACIONES — viñetas, como los proyectos: una línea ya compuesta,
+     sin entrada ni fechas propias. Mismo marcador que el resto del documento. */
+  const languagesBlock = languages.length > 0 && (
+    <>
+      {heading("languages")}
+      {sangrar(languages.map((l, i) => bullet(tt(l), i)))}
+    </>
+  );
+
+  const publicationsBlock = publications.length > 0 && (
+    <>
+      {heading("publications")}
+      {sangrar(publications.map((p, i) => bullet(tt(p), i)))}
+    </>
+  );
+
+  /** Los bloques por id, para que el ORDEN lo decida la plantilla y no el JSX.
+   *  ⚠ `Record<SectionId, ReactNode>` es exhaustivo: una sección nueva que no se
+   *  declare aquí NO compila. Es el único sitio del render donde TS lo garantiza. */
   const bloques: Record<SectionId, ReactNode> = {
     summary: summaryBlock,
     skills: skillsBlock,
     work: workBlock,
     projects: projectsBlock,
     education: educationBlock,
+    certifications: certificationsBlock,
+    languages: languagesBlock,
+    publications: publicationsBlock,
     references: referencesBlock,
   };
   const cuerpoOrdenado = secciones.map((id) => <Fragment key={id}>{bloques[id]}</Fragment>);
@@ -747,12 +789,22 @@ export function ResumePDF({
               {contactBlock}
               {skillsBlock}
               {educationBlock}
+              {/* Certificaciones e idiomas van a la LATERAL, junto a la formación:
+                  son bloques cortos y es donde caen en una maqueta de dos columnas.
+                  Están nombradas AQUÍ a propósito — esta rama no usa `sectionOrder`,
+                  así que una sección que no se escriba en una de las dos columnas
+                  desaparece del documento sin que nada falle. */}
+              {certificationsBlock}
+              {languagesBlock}
             </View>
             <View style={s.main}>
               {nameBlock}
               {summaryBlock}
               {workBlock}
               {projectsBlock}
+              {/* Las publicaciones, en la columna PRINCIPAL: son líneas largas y en
+                  una lateral del 33 % se partirían palabra a palabra. */}
+              {publicationsBlock}
               {/* Las referencias van en la COLUMNA PRINCIPAL también en la gama
                   visual. Esta rama no usa `sectionOrder`, así que una sección que
                   no se nombre aquí desaparece en silencio — y una referencia que

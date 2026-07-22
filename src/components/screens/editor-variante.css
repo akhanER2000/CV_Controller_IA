@@ -103,6 +103,40 @@
    blanco al 16% en oscuro): un rgba(0,0,0,.25) fijo desaparece sobre grafito y
    deja las muestras oscuras sin borde. */
 .var-design .ddot{width:9px;height:9px;border-radius:2px;flex:none;border:1px solid var(--border-strong)}
+/* ── Orden de las secciones (por variante) — misma caja que var-design ──────
+   Subir/bajar con BOTONES, no con arrastre: un <button> ya es accesible por
+   teclado sin escribir una segunda implementación, y aquí la alternativa de
+   teclado es requisito, no un extra. Los botones ↑↓ tienen 28×26 px de área
+   pulsable (el mínimo cómodo en esta densidad) y su etiqueta accesible dice
+   qué sección mueven — el glifo solo no se lee en un lector de pantalla. */
+.var-order{margin:6px 18px 6px;padding:16px 18px}
+.var-order .presh{display:flex;align-items:baseline;gap:10px}
+.var-order .presh .t-overline{font-size:10px}
+.var-order .presh .n{font:400 10px/1 var(--font-mono);color:var(--text-subtle)}
+.var-order .cfield{margin-top:12px}
+.var-order label.f{display:block;font:500 9.5px/1 var(--font-mono);letter-spacing:.1em;text-transform:uppercase;color:var(--text-subtle);margin-bottom:6px}
+.var-order .note{margin-top:7px;font:400 var(--fs-micro)/1.6 var(--font-mono);color:var(--text-subtle)}
+.var-order .dchips{display:flex;flex-wrap:wrap;gap:5px}
+.var-order .dchip{display:inline-flex;align-items:center;gap:6px;height:27px;padding:0 10px;
+  border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--surface-sunken);
+  font:400 var(--fs-micro)/1 var(--font-mono);color:var(--text-muted)}
+.var-order .dchip:hover{color:var(--text);border-color:var(--border-strong)}
+.ordlist{list-style:none;margin:12px 0 0;padding:0;display:flex;flex-direction:column}
+.ordrow{display:flex;align-items:center;gap:10px;padding:6px 0;border-top:1px solid var(--border)}
+.ordrow:first-child{border-top:0}
+.ordrow .num{flex:none;width:16px;text-align:right;font:400 10px/1 var(--font-mono);color:var(--text-subtle)}
+.ordrow .tx{flex:1;min-width:0;display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;
+  font:500 12.5px/1.4 var(--font-sans);color:var(--text)}
+/* Una sección sin contenido NO se esconde: se dice por qué no saldrá. */
+.ordrow .ordempty,.ordrow .ordpin{font:400 10px/1.3 var(--font-mono);font-style:normal;color:var(--text-subtle)}
+.ordrow.pinned .tx{color:var(--text-muted)}
+.ordacts{flex:none;display:flex;gap:2px}
+.ordacts button{width:28px;height:26px;border:1px solid var(--border);border-radius:var(--radius-sm);
+  background:var(--surface-sunken);color:var(--text-muted);font:400 12px/1 var(--font-mono)}
+.ordacts button:hover:not(:disabled){color:var(--accent-text);border-color:var(--border-patina)}
+/* El token, no un .35 inventado: un control apagado tiene que apagarse IGUAL en
+   toda la app o el usuario no aprende a leerlo. Lo vigila tests/pulido-visual. */
+.ordacts button:disabled{opacity:var(--opacity-disabled)}
 /* ── Contacto por variante — misma caja que var-obj/var-pres ── */
 .var-contact{margin:6px 18px 6px;padding:16px 18px}
 .var-contact .presh{display:flex;align-items:baseline;gap:10px}

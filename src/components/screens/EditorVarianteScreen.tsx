@@ -11,16 +11,36 @@ import {
   linkUrl,
   linkLabel,
   mergePresentationOverride,
+  normalizeSectionOrder,
+  documentSections,
+  metricsOf,
   referenceLine,
   referencesOptIn,
+  certificationEntry,
+  languageLine,
+  publicationLine,
+  DOCUMENT_HEADINGS,
+  SECTION_ORDER_FIELD,
   type PresentationPatch,
   type ResumeData,
   type ReferenceFields,
+  type CertificationFields,
+  type LanguageFields,
+  type PublicationFields,
   type I18n,
 } from "@/lib/cv/resume";
 // El catálogo se auto-registra al importarse y no toca APIs de servidor: el selector
 // del editor lee las MISMAS plantillas que usa el render, no una copia.
-import { listTemplates, listPalettes, listTypographies, getTemplate } from "@/lib/cv/templates";
+import {
+  listTemplates,
+  listPalettes,
+  listTypographies,
+  getTemplate,
+  resolveMetrics,
+  PINNED_LAST_SECTION,
+  SECTION_ORDER_PRESETS,
+  type SectionId,
+} from "@/lib/cv/templates";
 // Solo la función PURA de sugerencia y su tipo. db/references.ts importa
 // SupabaseClient con `import type`, así que esto no arrastra nada de servidor al
 // bundle del navegador — y la regla de qué se sugiere queda escrita UNA vez.
@@ -322,6 +342,10 @@ export function buildEditorResumeData({
     templateId: S(basicsData, "templateId").trim() || undefined,
     paletteId: S(basicsData, "paletteId").trim() || undefined,
     typographyId: S(basicsData, "typographyId").trim() || undefined,
+    // ORDEN DE SECCIONES de esta variante. Viaja DENTRO del documento (no por una
+    // ruta aparte), así que el preview embebido —que es el PDF— se reordena en vivo
+    // con el mismo `data` que descarga el botón Descargar.
+    sectionOrder: normalizeSectionOrder(basicsData[SECTION_ORDER_FIELD]) ?? undefined,
     skills: by("skill").map((s) => ({ group: i18nBoth(S(s.data, "group")), items: i18nBoth(S(s.data, "items")) })),
     work: by("work").map((w) => ({
       company: S(w.data, "company"),
@@ -357,14 +381,25 @@ export function buildEditorResumeData({
           })
           .filter((r) => r.es.trim() !== "")
       : [],
-    headings: {
-      summary: i18nBoth("Resumen"),
-      skills: i18nBoth("Habilidades"),
-      work: i18nBoth("Experiencia"),
-      projects: i18nBoth("Proyectos"),
-      education: i18nBoth("Educación"),
-      references: i18nBoth("Referencias"),
-    },
+    // CERTIFICACIONES · IDIOMAS · PUBLICACIONES — sin interruptor: son datos del
+    // propio usuario. Mismos helpers puros que buildVariantResumeData, para que el
+    // preview y el PDF del servidor no puedan discrepar.
+    certifications: by("certification").map((c) => {
+      const e = certificationEntry(c.data as CertificationFields);
+      return { title: i18nBoth(e.title), org: e.org, dates: i18nBoth(e.dates), p1: true };
+    }).filter((c) => c.title.es.trim() !== "" || c.org.trim() !== ""),
+    languages: by("language").map((l) => {
+      const linea = languageLine(l.data as LanguageFields);
+      return { p1: true, es: linea, en: linea };
+    }).filter((l) => l.es.trim() !== ""),
+    publications: by("publication").map((p) => {
+      const linea = publicationLine(p.data as PublicationFields);
+      return { p1: true, es: linea, en: linea };
+    }).filter((p) => p.es.trim() !== ""),
+    // Los rótulos salen de la ÚNICA fuente (resume.ts), no de una copia local: eran
+    // tres listas de literales iguales en tres capas, y ampliar dos de las tres es
+    // exactamente cómo se pierde una sección en una sola de ellas.
+    headings: DOCUMENT_HEADINGS,
   };
 }
 
@@ -480,24 +515,45 @@ type View = "master" | "mid" | "preview";
    contador cuenta lo que DE VERDAD se pinta, y saber qué grupos tienen resultados
    es lo que permite auto-desplegar solo esos. */
 
-/** Las secciones de la biblioteca, EN ORDEN de pintado. Son EXACTAMENTE los
- *  grupos que ya existían. No se inventan «Certificaciones» ni «Idiomas» como
- *  sección propia: el modelo de datos no los agrupa así (los idiomas viven como
- *  un grupo de skills, p. ej. «Idiomas: Español nativo, Inglés B2»), y pintar una
- *  sección que jamás tendrá filas sería ruido, no una ayuda. */
-export type LibSectionId = "summary" | "work" | "skills" | "projects" | "education" | "references";
+/**
+ * Las secciones de la biblioteca, EN ORDEN de pintado.
+ *
+ * ⚠ AQUÍ ESTABA EL AGUJERO. Este comentario decía que no se inventaban
+ * «Certificaciones» ni «Idiomas» porque «el modelo de datos no los agrupa así» — y
+ * era FALSO: el enum item_kind acepta certification, language y publication desde el
+ * esquema 0001, la pantalla del master deja crearlos y el corpus.md los importa. Lo
+ * que pasaba es que el DOCUMENTO no sabía pintarlos, así que la biblioteca los
+ * escondía y el usuario tenía tres certificados guardados que no podía meter en
+ * ningún CV, sin un solo aviso. Ahora que el documento tiene esas secciones, la
+ * biblioteca las ofrece como cualquier otra: un grupo sin filas no se pinta (present
+ * = false), así que quien no tenga certificados no ve nada nuevo.
+ */
+export type LibSectionId =
+  | "summary"
+  | "work"
+  | "skills"
+  | "projects"
+  | "education"
+  | "certifications"
+  | "languages"
+  | "publications"
+  | "references";
 export const LIB_SECTIONS: readonly LibSectionId[] = [
   "summary",
   "work",
   "skills",
   "projects",
   "education",
+  "certifications",
+  "languages",
+  "publications",
   "references",
 ] as const;
 
 /** El kind del master → su sección de biblioteca. 'bullet' cae en 'work' porque
- *  una viñeta se lee bajo su rol. Un kind sin grupo propio (certification,
- *  language, publication, link, basics) devuelve null: no tiene columna. */
+ *  una viñeta se lee bajo su rol. Un kind sin sección en el DOCUMENTO (link,
+ *  basics) devuelve null: `link` y `basics` son contacto, y el contacto va en la
+ *  cabecera, que no se compone ni se reordena desde aquí. */
 export function libSectionOfKind(kind: string): LibSectionId | null {
   switch (kind) {
     case "summary":
@@ -511,12 +567,43 @@ export function libSectionOfKind(kind: string): LibSectionId | null {
       return "projects";
     case "education":
       return "education";
+    case "certification":
+      return "certifications";
+    case "language":
+      return "languages";
+    case "publication":
+      return "publications";
     case "reference":
       return "references";
     default:
       return null;
   }
 }
+
+/**
+ * El rótulo de cada sección, en un mapa EXHAUSTIVO por SectionId. Si nace una
+ * sección y nadie le pone rótulo, TS lo dice aquí en vez de pintar una cabecera
+ * vacía. Lo usan los dos sitios que nombran secciones: la biblioteca (izquierda) y
+ * el reordenador (panel de diseño) — y que sea el mismo mapa no es ahorro, es que
+ * «Certificaciones» tiene que llamarse igual en los dos o el usuario cree que son
+ * dos cosas distintas.
+ *
+ * `LibSectionId` y `SectionId` son EL MISMO vocabulario a propósito: una sección de
+ * la biblioteca es una sección del documento. Cuando dejaron de serlo (el documento
+ * no tenía certificaciones y la biblioteca las escondía) el resultado fue un dato
+ * del usuario que no podía llegar a ningún CV.
+ */
+const LIB_TITLE_KEY: Record<SectionId, string> = {
+  summary: "editor.groupSummary",
+  work: "editor.groupWorkBullets",
+  skills: "editor.groupSkills",
+  projects: "editor.groupProjects",
+  education: "editor.groupEducation",
+  certifications: "editor.groupCertifications",
+  languages: "editor.groupLanguages",
+  publications: "editor.groupPublications",
+  references: "editor.groupReferences",
+};
 
 /** Texto buscable de un item del master. Módulo-scope y puro: es el MISMO texto
  *  que se pinta, para que «buscar lo que veo» encuentre «lo que hay». Espeja el
@@ -538,6 +625,17 @@ export function libTextOf(kind: string, data: Record<string, unknown>): string {
       return [S(data, "degree"), S(data, "institution")].filter(Boolean).join(" · ");
     case "reference":
       return referenceLine(data as ReferenceFields);
+    // Los tres nuevos se buscan por LO QUE SE IMPRIMIRÁ, con los mismos helpers
+    // puros del documento: buscar «AWS» encuentra el certificado que va a salir en
+    // el PDF, no una versión resumida distinta que engañe.
+    case "certification": {
+      const e = certificationEntry(data as CertificationFields);
+      return [e.title, e.org].filter(Boolean).join(" · ");
+    }
+    case "language":
+      return languageLine(data as LanguageFields);
+    case "publication":
+      return publicationLine(data as PublicationFields);
     default:
       return "";
   }
@@ -636,12 +734,18 @@ export function computeLibPlan(master: MasterRow[], query: string): LibGroupPlan
     count: roles + bullets,
   };
 
+  // Exhaustivo por tipo: una sección nueva de biblioteca no compila hasta que
+  // alguien diga QUÉ kind del master la llena. Es el mismo candado que el
+  // Record<SectionId, …> del documento, y por el mismo motivo.
   const byId: Record<LibSectionId, LibGroupPlan> = {
     summary: plain("summary", of("summary")),
     work: workGroup,
     skills: plain("skills", of("skill")),
     projects: plain("projects", of("project")),
     education: plain("education", of("education")),
+    certifications: plain("certifications", of("certification")),
+    languages: plain("languages", of("language")),
+    publications: plain("publications", of("publication")),
     references: plain("references", of("reference")),
   };
   return LIB_SECTIONS.map((id) => byId[id]);
@@ -950,6 +1054,24 @@ export function EditorVarianteScreen({ variantId = "editor" }: { variantId?: str
   const designTypographyId = S(basicsData, "typographyId").trim();
   const activeTemplate = getTemplate(designTemplateId);
 
+  /* ── ORDEN DE LAS SECCIONES, POR VARIANTE ───────────────────────────────────
+     El orden de la PLANTILLA es el valor inicial (así carga como siempre); si esta
+     variante guardó el suyo, ese manda. Se normaliza contra el de la plantilla, de
+     modo que un orden guardado hace tres versiones —cuando aún no existían
+     certificaciones— no las pierde: aparecen al final, pero aparecen. */
+  const templateOrder = useMemo(
+    () => resolveMetrics(activeTemplate.metrics).sectionOrder,
+    [activeTemplate],
+  );
+  const storedOrder = useMemo(
+    () => normalizeSectionOrder(basicsData[SECTION_ORDER_FIELD], templateOrder),
+    [basicsData, templateOrder],
+  );
+  /** El orden que el documento usará AHORA MISMO (y que pinta el reordenador). */
+  const effectiveOrder = storedOrder ?? templateOrder;
+  /** ¿Esta variante tiene orden propio? (decide si se ofrece «volver al de la plantilla») */
+  const orderIsCustom = storedOrder !== null;
+
   // Reconcilia el estado del cliente con la VERDAD del servidor tras guardar la
   // presentación: fija el id real del variant_item de basics, su override_data
   // efectivo (limpia marcas de override que en realidad quedaron canónicas), y —si
@@ -1048,6 +1170,49 @@ export function EditorVarianteScreen({ variantId = "editor" }: { variantId?: str
     },
     [master, variantId, flash, t, fail, applyPresentationTruth],
   );
+
+  /* ── Reordenar el CUERPO del documento ──────────────────────────────────────
+     Subir/bajar una sección. Es LA alternativa de teclado y no un extra: son dos
+     <button> de verdad, así que tabulador + Enter/Espacio bastan, y el anuncio del
+     movimiento va a la barra de estado, que es una live region. NO se implementó
+     arrastrar: un arrastre exige duplicar toda esta lógica en punteros y teclado, y
+     la versión con botones ya cubre a todo el mundo.
+
+     ⚠ EL FOCO NO SE PIERDE. Cada fila lleva `key={id}`, así que al reordenar React
+     MUEVE el nodo en vez de recrearlo: el botón que acabas de pulsar sigue siendo el
+     mismo elemento y conserva el foco. Sin esa key, pulsar «subir» tres veces exige
+     volver a tabular tres veces. */
+  const moveSection = useCallback(
+    (id: SectionId, dir: -1 | 1) => {
+      const cur: SectionId[] = [...effectiveOrder];
+      const i = cur.indexOf(id);
+      const j = i + dir;
+      if (i < 0 || j < 0 || j >= cur.length) return;
+      // CANDADO: las referencias van al final SIEMPRE. Ni se mueven ellas ni las
+      // desplaza otra sección al pasar por encima (una referencia no abre un CV).
+      if (cur[i] === PINNED_LAST_SECTION || cur[j] === PINNED_LAST_SECTION) return;
+      const tmp = cur[i]!;
+      cur[i] = cur[j]!;
+      cur[j] = tmp;
+      savePresentation({ sectionOrder: cur });
+      flash(
+        t("editor.stOrderMoved")
+          .replace("{s}", t(LIB_TITLE_KEY[id]))
+          .replace("{n}", String(j + 1))
+          .replace("{m}", String(cur.length)),
+      );
+    },
+    [effectiveOrder, savePresentation, flash, t],
+  );
+
+  /** Un preset de un clic. Son los órdenes que YA usa el catálogo (no una copia). */
+  const applyOrderPreset = useCallback(
+    (order: readonly SectionId[]) => savePresentation({ sectionOrder: [...order] }),
+    [savePresentation],
+  );
+
+  /** Volver al orden de la plantilla: borra el override (no guarda «el de ahora»). */
+  const resetOrder = useCallback(() => savePresentation({ sectionOrder: null }), [savePresentation]);
 
   const onPhotoFile = useCallback(
     async (file: File | null) => {
@@ -1216,6 +1381,15 @@ export function EditorVarianteScreen({ variantId = "editor" }: { variantId?: str
   const resumeData = useMemo(
     () => buildEditorResumeData({ items, basicsData, masterById, targetTitle, variantName: meta?.name }),
     [items, basicsData, masterById, targetTitle, meta?.name],
+  );
+  /* QUÉ SECCIONES SE IMPRIMEN DE VERDAD. Se calcula con la MISMA función que usa el
+     PDF (documentSections) y la MISMA métrica (metricsOf): el reordenador dice «no
+     se imprime: no tienes nada aquí» porque lo sabe, no porque lo suponga. Una
+     sección vacía sigue apareciendo en la lista —moverla es legítimo, y esconderla
+     sería descartarla en silencio— pero con su motivo escrito al lado. */
+  const printedSections = useMemo(
+    () => new Set<SectionId>(documentSections(resumeData, false, metricsOf(resumeData))),
+    [resumeData],
   );
   // Ref para que el efecto del preview y la descarga usen SIEMPRE el último
   // documento sin volverse a crear en cada render.
@@ -2029,20 +2203,7 @@ export function EditorVarianteScreen({ variantId = "editor" }: { variantId?: str
   // Etiqueta con singular/plural honesto por sección.
   const plural = (n: number, kOne: string, kMany: string) =>
     t(n === 1 ? kOne : kMany).replace("{n}", String(n));
-  const groupTitle = (id: LibSectionId): string =>
-    t(
-      id === "summary"
-        ? "editor.groupSummary"
-        : id === "work"
-          ? "editor.groupWorkBullets"
-          : id === "skills"
-            ? "editor.groupSkills"
-            : id === "projects"
-              ? "editor.groupProjects"
-              : id === "education"
-                ? "editor.groupEducation"
-                : "editor.groupReferences",
-    );
+  const groupTitle = (id: LibSectionId): string => t(LIB_TITLE_KEY[id]);
   const groupCountLabel = (g: LibGroupPlan): string =>
     g.id === "work"
       ? `${plural(g.roles, "editor.libNRole", "editor.libNRoles")} · ${plural(g.bullets, "editor.libNBullet", "editor.libNBullets")}`
@@ -2103,6 +2264,11 @@ export function EditorVarianteScreen({ variantId = "editor" }: { variantId?: str
   const projectItems = items.filter((i) => i.kind === "project").sort(bySort);
   const eduItems = items.filter((i) => i.kind === "education").sort(bySort);
   const refItems = items.filter((i) => i.kind === "reference").sort(bySort);
+  // Los tres kinds que el documento aprendió a pintar. Se listan en la composición
+  // igual que la formación: fila con su texto compuesto y su botón de quitar.
+  const certItems = items.filter((i) => i.kind === "certification").sort(bySort);
+  const langItems = items.filter((i) => i.kind === "language").sort(bySort);
+  const pubItems = items.filter((i) => i.kind === "publication").sort(bySort);
 
   /* ── B · EL INTERRUPTOR Y LA SUGERENCIA ─────────────────────────────────────
      `refsOn` sale del MISMO helper que usa el servidor (referencesOptIn): si aquí
@@ -2124,6 +2290,40 @@ export function EditorVarianteScreen({ variantId = "editor" }: { variantId?: str
     const m = masterById.get(id);
     return m ? libText(m) : id;
   };
+
+  /**
+   * Un grupo SIMPLE de la composición: rótulo + una fila por item, con su texto ya
+   * compuesto (el que se imprimirá) y el botón de quitar. Lo comparten las tres
+   * secciones nuevas; vacío no pinta nada, como el resto de grupos.
+   */
+  const simpleGroup = (titleKey: string, list: VItem[]) =>
+    list.length > 0 ? (
+      <div className="var-g" key={titleKey}>
+        <div className="gh">
+          <span className="t-overline">{t(titleKey)}</span>
+        </div>
+        <div className="var-exp">
+          {list.map((it) => (
+            <div className="var-b" data-b={it.id} key={it.id}>
+              <span className="grip" aria-hidden="true">
+                ⠿
+              </span>
+              <span className="tx">{libTextOf(it.kind, it.data)}</span>
+              <span className="bacts">
+                <button
+                  type="button"
+                  data-a="out"
+                  title={t("editor.removeFromVariant")}
+                  onClick={() => removeItem(it.id)}
+                >
+                  ×
+                </button>
+              </span>
+            </div>
+          ))}
+        </div>
+      </div>
+    ) : null;
 
   // basics es IDENTIDAD (portador de foto/QR), no una referencia que el usuario
   // compuso: se excluye de los conteos y del "¿variante vacía?".
@@ -2745,6 +2945,90 @@ export function EditorVarianteScreen({ variantId = "editor" }: { variantId?: str
             </div>
           </div>
 
+          {/* ── ORDEN DE LAS SECCIONES (solo esta variante) ──────────────────
+              Lo que se lee primero es la decisión más estratégica del documento y
+              hasta ahora venía fijada por la plantilla. Aquí se cambia SIN cambiar
+              de plantilla, y el preview —que ES el PDF— se rehace al soltar el
+              botón: no hay una vista previa distinta del documento real.
+
+              ⚠ EL COPY NO PROMETE ENTREVISTAS. No hay estudio que respalde que un
+              orden consiga más respuestas; lo único honesto que se puede decir es
+              PARA QUIÉN suele ser cada uno. */}
+          <div className="c-card var-order" data-screen-label="editor-orden">
+            <div className="presh">
+              <span className="t-overline">{t("editor.orderOverline")}</span>
+              <span className="n">{t("editor.orderHint")}</span>
+            </div>
+
+            {/* Presets: los MISMOS órdenes que ya usan las plantillas del catálogo. */}
+            <div className="cfield">
+              <label className="f">{t("editor.orderPresets")}</label>
+              <div className="dchips">
+                {SECTION_ORDER_PRESETS.map((p) => (
+                  <button
+                    key={p.id}
+                    type="button"
+                    className="dchip"
+                    title={t(`editor.orderPreset_${p.id}_who`)}
+                    onClick={() => applyOrderPreset(p.order)}
+                  >
+                    {t(`editor.orderPreset_${p.id}`)}
+                  </button>
+                ))}
+                {orderIsCustom && (
+                  <button type="button" className="dchip" onClick={resetOrder}>
+                    {t("editor.orderReset")}
+                  </button>
+                )}
+              </div>
+              <p className="note">{t("editor.orderPresetsNote")}</p>
+            </div>
+
+            {/* La lista. `key={id}` no es decorativo: conserva el foco al mover.
+                El tope de «subir» es la primera fila; el de «bajar», la última que
+                NO está anclada — nadie puede empujar a las referencias del final. */}
+            <ol className="ordlist" aria-label={t("editor.orderListAria")}>
+              {effectiveOrder.map((id, i, orden) => {
+                const anclada = id === PINNED_LAST_SECTION;
+                const nombre = t(LIB_TITLE_KEY[id]);
+                const ultimaLibre = orden.length - (orden.includes(PINNED_LAST_SECTION) ? 2 : 1);
+                return (
+                  <li className={"ordrow" + (anclada ? " pinned" : "")} key={id}>
+                    <span className="num" aria-hidden="true">
+                      {i + 1}
+                    </span>
+                    <span className="tx">
+                      {nombre}
+                      {!printedSections.has(id) && (
+                        <em className="ordempty">{t("editor.orderEmpty")}</em>
+                      )}
+                      {anclada && <em className="ordpin">{t("editor.orderPinned")}</em>}
+                    </span>
+                    <span className="ordacts">
+                      <button
+                        type="button"
+                        aria-label={t("editor.orderUpAria").replace("{s}", nombre)}
+                        disabled={anclada || i === 0}
+                        onClick={() => moveSection(id, -1)}
+                      >
+                        ↑
+                      </button>
+                      <button
+                        type="button"
+                        aria-label={t("editor.orderDownAria").replace("{s}", nombre)}
+                        disabled={anclada || i >= ultimaLibre}
+                        onClick={() => moveSection(id, 1)}
+                      >
+                        ↓
+                      </button>
+                    </span>
+                  </li>
+                );
+              })}
+            </ol>
+            <p className="note">{t("editor.orderHeaderNote")}</p>
+          </div>
+
           {hasBasics && (
             <div className="c-card var-pres" data-screen-label="editor-presentacion">
               <div className="presh">
@@ -3178,6 +3462,15 @@ export function EditorVarianteScreen({ variantId = "editor" }: { variantId?: str
                   </div>
                 </div>
               )}
+
+              {/* CERTIFICACIONES · IDIOMAS · PUBLICACIONES añadidas a la variante.
+                  Un solo helper para las tres: son filas idénticas (texto compuesto
+                  + quitar) y triplicar el JSX solo crea tres sitios donde arreglar
+                  el mismo bug. El texto es el MISMO que se imprimirá (libTextOf usa
+                  los helpers del documento). */}
+              {simpleGroup("editor.groupCertifications", certItems)}
+              {simpleGroup("editor.groupLanguages", langItems)}
+              {simpleGroup("editor.groupPublications", pubItems)}
 
               {/* Referencias AÑADIDAS a esta variante. Estar aquí no basta para que
                   se impriman: el interruptor de la tarjeta de presentación manda, y

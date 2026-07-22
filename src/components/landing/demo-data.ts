@@ -128,9 +128,16 @@ export const demoCv: ResumeData = {
     work: { es: "Experiencia", en: "Experience" },
     projects: { es: "Proyectos", en: "Projects" },
     education: { es: "Educación", en: "Education" },
-    // El rótulo existe porque `ResumeData.headings` lo exige; la landing NUNCA
-    // imprime referencias (la demo no las trae y son opt-in por variante).
+    // Estos cuatro rótulos existen porque `ResumeData.headings` los exige, y la
+    // landing NO imprime ninguna de sus secciones: la demo no trae referencias
+    // (opt-in por variante) ni certificaciones, idiomas o publicaciones, así que
+    // `documentSections` las descarta por vacías. Se escriben igual —y no se
+    // omiten con un `as`— para que el día que la demo gane un certificado el
+    // rótulo esté, en vez de salir un encabezado en blanco en la portada.
     references: { es: "Referencias", en: "References" },
+    certifications: { es: "Certificaciones", en: "Certifications" },
+    languages: { es: "Idiomas", en: "Languages" },
+    publications: { es: "Publicaciones", en: "Publications" },
   },
 };
 

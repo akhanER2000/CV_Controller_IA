@@ -86,6 +86,11 @@ function fakeSb(tablas: Record<string, Row[]>): SupabaseClient {
       update: (p: Row) => { modo = "update"; patch = p; return q; },
       delete: () => { modo = "delete"; return q; },
       eq: (k: string, v: unknown) => { preds.push((r) => r[k] === v); return q; },
+      // `neq` lo usa getMasterItems para dejar fuera las filas ESPEJO del CV
+      // bilingüe (origin='ai_translated'). Sin él, el doble revienta con «neq is
+      // not a function» — y eso es exactamente lo que este doble tiene que
+      // reproducir: si el filtro existe en producción, existe aquí.
+      neq: (k: string, v: unknown) => { preds.push((r) => r[k] !== v); return q; },
       in: (k: string, vs: unknown[]) => { preds.push((r) => vs.includes(r[k])); return q; },
       order: (k: string, o?: { ascending?: boolean }) => { orders.push({ k, asc: o?.ascending !== false }); return q; },
       limit: (n: number) => { lim = n; return q; },
