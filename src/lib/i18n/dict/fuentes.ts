@@ -59,6 +59,11 @@ export const fuentes = {
     "fuentes.report.noEvidenceK": "sin evidencia",
     "fuentes.report.cache": "servido de caché — sin coste de IA",
     "fuentes.report.failed": "No se pudo leer: {msg}",
+    // ── CERO ÍTEMS NUNCA EN VERDE. Una fuente que no aportó nada dice POR QUÉ;
+    //    el motivo lo escribe el servidor en la columna `error` al ingerirla. ──
+    "fuentes.report.empty": "Esta fuente no aportó ningún ítem. {msg}",
+    "fuentes.report.emptyUnknown":
+      "Esta fuente no aportó ningún ítem y no se guardó el motivo (se leyó antes de que lo registráramos). Pulsa «releer» para saber por qué.",
     "fuentes.report.contextOne": "1 sección se leyó como contexto y no se extrajo: {list}",
     "fuentes.report.contextMany": "{n} secciones se leyeron como contexto y no se extrajeron: {list}",
 
@@ -269,6 +274,11 @@ export const fuentes = {
     "fuentes.report.noEvidenceK": "without evidence",
     "fuentes.report.cache": "served from cache — no AI cost",
     "fuentes.report.failed": "Couldn't read: {msg}",
+    // ── ZERO ITEMS IS NEVER GREEN. A source that contributed nothing says WHY;
+    //    the server writes the reason into the `error` column at ingest time. ──
+    "fuentes.report.empty": "This source contributed no items. {msg}",
+    "fuentes.report.emptyUnknown":
+      "This source contributed no items and no reason was recorded (it was read before we started storing it). Hit “re-read” to find out why.",
     "fuentes.report.contextOne": "1 section was read as context and not extracted: {list}",
     "fuentes.report.contextMany": "{n} sections were read as context and not extracted: {list}",
 

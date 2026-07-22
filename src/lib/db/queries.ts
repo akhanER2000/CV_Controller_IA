@@ -1,7 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import type { ImportResult } from "@/lib/extract/types";
+import type { ImportResult, StagedRow } from "@/lib/extract/types";
 import { normalizeLinks, type ResumeData } from "@/lib/cv/resume";
-import { insertStagedTwoPhase, readMergeProposal, type MergeProposal } from "@/lib/db/sources";
+import { insertStagedTwoPhase, itemsPorFuente, readMergeProposal, type MergeProposal } from "@/lib/db/sources";
 import { sourceStagedCounts, ZERO_TALLY } from "@/lib/db/staging-counts";
 
 /**
@@ -31,25 +31,87 @@ export async function ensureMaster(sb: SB, userId: string): Promise<string> {
 }
 
 /**
- * Persiste el resultado de la ingesta: una fuente + los staged_items. El armado
- * de las filas (dos fases, ids propios y la sospecha de duplicado resuelta a ids
- * reales) vive en db/sources.ts y es EL MISMO que usa el alta desde Fuentes.
+ * Cómo repartir los items de una ingesta entre las fuentes que la componen.
+ *
+ * ★ EL FALLO QUE ESTO ARREGLA. persistImport creaba UNA fila kind='paste' y le
+ *   colgaba TODOS los staged_items. La ruta insertaba después cada archivo como
+ *   su propia ingestion_source… ya sin items que colgarle. Resultado medido en
+ *   la base real: 14 capturas de LinkedIn con su transcripción guardada y
+ *   «extraída · 0 ítems» en la tarjeta, mientras una única fila de texto pegado
+ *   se llevaba los 83 ítems. La visión funcionaba; la ATRIBUCIÓN no.
+ *
+ * ⚠ ORDEN. Las fuentes de archivo tienen que existir ANTES de insertar los
+ *   items (source_id es una FK): por eso el mapa llega ya resuelto a ids reales
+ *   desde la ruta, y no se crean aquí.
+ */
+export interface OpcionesPersistImport {
+  /** etiqueta de fuente (StagedRow.sourceLabel) → id de una ingestion_source YA
+   *  creada. Lo que no esté en el mapa cae en la fila principal. */
+  fuentesPorEtiqueta?: ReadonlyMap<string, string>;
+  /** id de la fuente PRINCIPAL, si ya existe. Cuando no viene, se crea la fila
+   *  kind='paste' de siempre. Se pasa cuando el volcado NO trae texto pegado:
+   *  crear entonces una fila de texto pegado vacía sería inventar una fuente. */
+  sourceIdPrincipal?: string;
+  /** raw_text de la fila principal cuando se crea aquí. Por defecto, el texto
+   *  combinado entero (que es lo que el modelo leyó de verdad). */
+  rawTextPrincipal?: string;
+}
+
+export interface ResultadoPersistImport {
+  /** la fuente PRINCIPAL de la ingesta (la que recibe la telemetría) */
+  sourceId: string;
+  staged: number;
+  /** id de fuente → items que acabaron colgando de ella. Con esto la ruta sabe
+   *  cuáles se quedaron a CERO y les escribe el motivo: una fuente vacía no
+   *  puede quedarse en verde. */
+  itemsPorFuente: Record<string, number>;
+}
+
+/**
+ * Persiste el resultado de la ingesta: la fuente principal + los staged_items,
+ * cada uno colgado de LA FUENTE DE LA QUE SALIÓ. El armado de las filas (dos
+ * fases, ids propios y la sospecha de duplicado resuelta a ids reales) vive en
+ * db/sources.ts y es EL MISMO que usa el alta desde Fuentes.
  *
  * Antes cada writer construía su fila a mano, idénticas pero separadas: por eso
  * todo lo que se añadía en un camino se olvidaba en el otro. Ahora hay una sola
  * definición de «cómo es una fila de staging».
+ *
+ * Sin `opciones` se comporta EXACTAMENTE como siempre (una fila kind='paste' con
+ * todo colgando de ella): el reparto es aditivo, no un cambio de contrato.
  */
-export async function persistImport(sb: SB, userId: string, result: ImportResult): Promise<{ sourceId: string; staged: number }> {
-  const { data: source, error: srcErr } = await sb
-    .from("ingestion_sources")
-    .insert({ user_id: userId, kind: "paste", status: "extracted", raw_text: result.rawText })
-    .select("id")
-    .single();
-  if (srcErr) throw new Error(`Fuente: ${srcErr.message}`);
-  const sourceId = source.id as string;
+export async function persistImport(
+  sb: SB,
+  userId: string,
+  result: ImportResult,
+  opciones: OpcionesPersistImport = {},
+): Promise<ResultadoPersistImport> {
+  let sourceId = opciones.sourceIdPrincipal;
+  if (!sourceId) {
+    const { data: source, error: srcErr } = await sb
+      .from("ingestion_sources")
+      .insert({
+        user_id: userId,
+        kind: "paste",
+        status: "extracted",
+        raw_text: opciones.rawTextPrincipal ?? result.rawText,
+      })
+      .select("id")
+      .single();
+    if (srcErr) throw new Error(`Fuente: ${srcErr.message}`);
+    sourceId = source.id as string;
+  }
 
-  const staged = await insertStagedTwoPhase(sb, userId, sourceId, result.staged);
-  return { sourceId, staged };
+  // La etiqueta que el pipeline puso en cada item decide su fuente. La que no
+  // tenga fila propia (un portfolio leído por Jina, o un item que no se pudo
+  // atribuir) cae en la principal: es la fila que guarda el texto combinado, así
+  // que su evidencia sigue estando donde dice que está.
+  const principal = sourceId;
+  const mapa = opciones.fuentesPorEtiqueta;
+  const dondeVa = (r: StagedRow): string => mapa?.get(r.sourceLabel) ?? principal;
+
+  const staged = await insertStagedTwoPhase(sb, userId, dondeVa, result.staged);
+  return { sourceId: principal, staged, itemsPorFuente: itemsPorFuente(result.staged, dondeVa) };
 }
 
 export interface StagedItemRow {

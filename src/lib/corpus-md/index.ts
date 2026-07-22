@@ -28,8 +28,16 @@ export {
   type ItemParaExportar,
   SECCIONES,
   CAMPOS_POR_KIND,
+  CLAVE_CABECERA,
   CLAVES_DATA,
 } from "./formato";
 
 export { parsearCorpusMd, pareceCorpusMd } from "./parser";
 export { exportarCorpusMd, plantillaVacia } from "./exportar";
+
+/**
+ * La segunda plantilla: la misma estructura RELLENA con un perfil inventado.
+ * Vive en su propio módulo porque son datos, no gramática — y porque así el
+ * test de paridad puede compararla item por item con lo que devuelve el parser.
+ */
+export { plantillaEjemplo, PERFIL_EJEMPLO } from "./ejemplo";

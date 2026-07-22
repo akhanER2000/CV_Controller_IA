@@ -139,12 +139,15 @@ export interface OpcionesAnalisis {
    3 · VOCABULARIOS CERRADOS — nada entra a un enum sin estar en su lista
    ============================================================================ */
 
-/** item_kind del esquema 0001 + 'reference' (0004). 'publication' está en el enum
- *  de la base pero NO en el union de TypeScript ni en el esqueleto de corpus/1:
- *  si apareciera, se NOMBRA en noImportados en vez de colarse con un cast. */
+/** item_kind del esquema 0001 + 'reference' (0004). Lo que no esté aquí se NOMBRA
+ *  en noImportados en vez de colarse con un cast: un kind que la base rechazaría
+ *  reventaría el INSERT entero y se llevaría por delante el resto del fichero.
+ *  'publication' ENTRA: está en el enum desde 0001, lo acepta el POST del master
+ *  y la plantilla ya ofrece su sección — faltaba solo en esta lista, así que una
+ *  publicación escrita a mano moría en el último paso del viaje. */
 const KINDS = new Set<string>([
   "basics", "summary", "work", "bullet", "education",
-  "skill", "project", "certification", "language", "link", "reference",
+  "skill", "project", "certification", "language", "link", "publication", "reference",
 ]);
 
 /** item_origin (0001). Un valor fuera de aquí reventaría el INSERT. */

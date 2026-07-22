@@ -2,11 +2,11 @@ import { describe, it, expect } from "vitest";
 import fs from "node:fs";
 import path from "node:path";
 import { segmentText, promptDeExtraccion, planificarExtraccion, WINDOW_CHARS, WINDOW_OVERLAP } from "../src/lib/extract/llm";
-import { repartir, textoPara, conserva, EXTRACTORES_5, type Extractor5 } from "../src/lib/extract/segmentar";
+import { repartir, textoPara, conserva, EXTRACTORES_5, type Extractor5, type Fuente } from "../src/lib/extract/segmentar";
 import { CARACTERES_POR_TOKEN, consumoCero, anotarLlamada } from "../src/lib/db/telemetria";
 
 /* ============================================================================
-   LA MEDICIÓN · cuánto costaba leer un dossier y cuánto cuesta ahora.
+   LA MEDICIÓN · cuánto costaba leer un volcado y cuánto cuesta ahora.
 
    REPRODUCIBLE Y GRATIS: se mide el prompt que SE MANDARÍA, no se llama a
    Gemini. Cuesta cero, es exacto, y corre en CI sin clave.
@@ -19,8 +19,22 @@ import { CARACTERES_POR_TOKEN, consumoCero, anotarLlamada } from "../src/lib/db/
        hace. Así la comparación no depende de que yo transcriba bien el prompt
        antiguo: usa el de verdad.
 
-   EL DOCUMENTO: el dossier real del repo, 103.744 caracteres JS (106.374 bytes).
-   No es un fixture generado: son las 41 secciones que un humano escribió.
+   DOS DOCUMENTOS, PORQUE EL PROBLEMA MEDIDO EN PRODUCCIÓN ERA EL SEGUNDO:
+     A · el dossier real del repo, 103.744 caracteres. 41 secciones escritas por
+         un humano; no es un fixture generado.
+     B · EL CASO REAL: ese mismo dossier MÁS catorce transcripciones de capturas
+         de LinkedIn, concatenadas exactamente como lo hace `runImport`
+         (`\n\n[etiqueta]\n…`). Es la ingesta que en producción dio 3,7×, y la
+         única forma de ver el fallo: en el amasijo las capturas no abren sección
+         propia y heredan el destino de la última sección del dossier.
+
+   ⚠ HONESTIDAD SOBRE EL 3,7×: la cifra de producción (137 KB → 128.471 tokens)
+     no se puede reproducir aquí, porque las catorce transcripciones REALES no
+     están en el repo (son datos de una cuenta) y porque «tokens» los cuenta el
+     proveedor con su tokenizador, no con la regla de 4 caracteres. Lo que sí se
+     puede medir es el MECANISMO, con transcripciones simuladas del mismo tamaño
+     que las reales (3.479, 2.711, 2.314, 1.349… caracteres). Los factores de
+     abajo son los de este fixture, no los de la cuenta de nadie.
    ============================================================================ */
 
 const RUTA = path.join(__dirname, "..", "material-perfil", "dossier", "DOSSIER-MAESTRO-AKHAN.md");
@@ -28,6 +42,66 @@ const DOC = fs.readFileSync(RUTA, "utf8");
 
 const tokens = (chars: number) => Math.round(chars / CARACTERES_POR_TOKEN);
 const miles = (n: number) => n.toLocaleString("es-CL");
+
+/* ── EL FIXTURE DEL CASO REAL ─────────────────────────────────────────────────
+   Catorce transcripciones de captura de LinkedIn. La forma es la que produce
+   `transcribeImage` (llm.ts), que PIDE los encabezados de sección en su propia
+   línea. Los tamaños imitan los de la base real: de 3.479 a 1.349 caracteres. */
+const TAMANOS = [3479, 2711, 2314, 1349, 2890, 2103, 1876, 1512, 2664, 1988, 1731, 2245, 1603, 2410];
+
+function transcripcion(i: number, largo: number): string {
+  const roles = [
+    ["Founder & AI Engineer", "PharmIQ", "abr. 2024 - actualidad"],
+    ["AI/ML Engineer", "Universidad Andrés Bello", "mar. 2023 - dic. 2023"],
+    ["Independent Developer", "Open-Source & Simulation", "ene. 2022 - feb. 2023"],
+    ["Scrum Master & Technical Team Lead", "Proyecto VR", "jun. 2021 - dic. 2021"],
+    ["Software Engineering Intern", "Tesseract Softwares", "ene. 2021 - may. 2021"],
+  ];
+  const r = roles[i % roles.length]!;
+  const cabeza = [
+    "Experiencia",
+    r[0]!,
+    `${r[1]} · Jornada completa`,
+    `${r[2]} · 1 año 4 meses`,
+    "Santiago, Región Metropolitana de Chile · Híbrido",
+    "",
+    "Aptitudes",
+    "Python · TypeScript · PostgreSQL · Docker",
+    "",
+    "Educación",
+    "Universidad Andrés Bello",
+    "Ingeniería Civil en Computación e Informática · 2019 - 2024",
+    "",
+    "Licencias y certificaciones",
+    "Google Cloud Associate Cloud Engineer · Google · sept. 2024",
+    "",
+    "Idiomas",
+    "Español · Competencia bilingüe o nativa",
+    "",
+    "Experiencia",
+    "Detalle del rol:",
+  ].join("\n");
+  // relleno determinista hasta el tamaño pedido, para que la medición sea exacta
+  const linea = `Implementación de servicios y reducción de latencia medida en el rol ${i + 1}. `;
+  let out = cabeza;
+  while (out.length < largo) out += `\n${linea}`;
+  return out.slice(0, largo);
+}
+
+/** Concatena como `runImport`: mismo separador, misma etiqueta, mismos tramos. */
+function volcadoReal(): { raw: string; fuentes: Fuente[] } {
+  let raw = DOC.trim();
+  const fuentes: Fuente[] = [{ etiqueta: "texto pegado", inicio: 0, fin: raw.length }];
+  TAMANOS.forEach((n, i) => {
+    const desde = raw.length;
+    const etiqueta = `linkedin-${i + 1}.png`;
+    raw += `\n\n[${etiqueta}]\n${transcripcion(i, n)}`;
+    fuentes.push({ etiqueta, inicio: desde, fin: raw.length });
+  });
+  return { raw, fuentes };
+}
+
+const VOLCADO = volcadoReal();
 
 interface Medida {
   llamadas: number;
@@ -60,12 +134,13 @@ function medirAntes(doc: string): Medida {
 
 /* ── DESPUÉS ──────────────────────────────────────────────────────────────────
    Cada extractor recibe SOLO su corpus (el reparto por secciones), ventaneado
-   aparte. Un extractor con corpus vacío no se llama.                        */
-function medirDespues(doc: string, forzarCompleto = false): Medida {
+   aparte. Un extractor con corpus vacío no se llama. Con `fuentes`, además, cada
+   documento se reparte con SU estructura antes de juntar los corpus.        */
+function medirDespues(doc: string, opts: { forzarCompleto?: boolean; fuentes?: readonly Fuente[] } = {}): Medida {
   // ★ Se mide EL PLAN REAL que ejecuta `makeGeminiExtractor`, no una copia de su
   //   bucle. Si el bucle cambiara y esta medición fuese una réplica, el informe
   //   seguiría diciendo un número bonito mientras el código gasta otro.
-  const plan = planificarExtraccion(doc, { forzarCompleto });
+  const plan = planificarExtraccion(doc, opts);
   const m: Medida = { llamadas: 0, caracteresPrompt: 0, caracteresTexto: 0, detalle: [] };
   const porExtractor = new Map<Extractor5, { ventanas: number; chars: number }>();
 
@@ -89,10 +164,18 @@ const ANTES = medirAntes(DOC);
 const DESPUES = medirDespues(DOC);
 const REPARTO = repartir(DOC);
 
+// El caso real, con y sin la corrección del reparto por fuente.
+const VOL_ANTES = medirAntes(VOLCADO.raw);
+const VOL_AMASIJO = medirDespues(VOLCADO.raw);                                  // reparto sobre el amasijo
+const VOL_POR_FUENTE = medirDespues(VOLCADO.raw, { fuentes: VOLCADO.fuentes }); // documento a documento
+
+/** Cuánto se paga por cada carácter del documento. Es LA cifra del encargo. */
+const factor = (m: Medida, doc: string) => m.caracteresPrompt / doc.length;
+
 // ════════════════════════════════════════════════════════════════════════════
 // EL INFORME. Se imprime siempre: es el entregable, no un efecto secundario.
 // ════════════════════════════════════════════════════════════════════════════
-describe("★ MEDICIÓN DEL COSTE · dossier real, sin llamar a Gemini", () => {
+describe("★ MEDICIÓN DEL COSTE · sin llamar a Gemini", () => {
   it("imprime el antes y el después con la misma regla de tokens", () => {
     const factorChars = ANTES.caracteresPrompt / DESPUES.caracteresPrompt;
     const factorLlamadas = ANTES.llamadas / DESPUES.llamadas;
@@ -109,22 +192,23 @@ describe("★ MEDICIÓN DEL COSTE · dossier real, sin llamar a Gemini", () => {
     L("  ─── ANTES · el texto completo interpolado en las CINCO llamadas ───────");
     L(`  Llamadas ............... ${ANTES.llamadas}`);
     L(`  Caracteres de prompt ... ${miles(ANTES.caracteresPrompt)}`);
-    L(`  Texto interpolado ...... ${miles(ANTES.caracteresTexto)}  (× 5, por el solape de ventanas)`);
     L(`  Tokens de entrada ...... ~${miles(tokens(ANTES.caracteresPrompt))}`);
+    L(`  FACTOR (prompt/doc) .... ${factor(ANTES, DOC).toFixed(2)}×`);
     L();
     L("  ─── DESPUÉS · cada extractor lee SOLO lo suyo ────────────────────────");
     L(`  Llamadas ............... ${DESPUES.llamadas}`);
     L(`  Caracteres de prompt ... ${miles(DESPUES.caracteresPrompt)}`);
-    L(`  Texto interpolado ...... ${miles(DESPUES.caracteresTexto)}`);
     L(`  Tokens de entrada ...... ~${miles(tokens(DESPUES.caracteresPrompt))}`);
+    L(`  FACTOR (prompt/doc) .... ${factor(DESPUES, DOC).toFixed(2)}×`);
     for (const d of DESPUES.detalle) {
       L(`      · ${d.extractor.padEnd(10)} ${String(d.ventanas)} ventana(s)  ${miles(d.chars).padStart(9)} chars`);
     }
     L();
     L("  ─── EL REPARTO (suma exacta = documento) ─────────────────────────────");
     L(`  Dirigido ............... ${miles(REPARTO.totales.dirigido)}  (${((REPARTO.totales.dirigido / DOC.length) * 100).toFixed(1)}%)`);
+    L(`     · de eso, NARRATIVAS  ${miles(REPARTO.narrativas.reduce((a, s) => a + s.caracteres, 0))}  en ${REPARTO.narrativas.length} secciones RESCATADAS → basics`);
     L(`  Difuso (a los cinco) ... ${miles(REPARTO.totales.difuso)}  (${((REPARTO.totales.difuso / DOC.length) * 100).toFixed(1)}%)`);
-    L(`  Contexto (no extraído) . ${miles(REPARTO.totales.contexto)}  (${((REPARTO.totales.contexto / DOC.length) * 100).toFixed(1)}%) · ${REPARTO.contexto.length} secciones NOMBRADAS`);
+    L(`  Contexto (no extraído) . ${miles(REPARTO.totales.contexto)}  (${((REPARTO.totales.contexto / DOC.length) * 100).toFixed(1)}%) · ${REPARTO.contexto.length} sección(es) NOMBRADA(S)`);
     L(`  Suma ................... ${miles(REPARTO.totales.dirigido + REPARTO.totales.difuso + REPARTO.totales.contexto)} = ${miles(DOC.length)} ✓`);
     L();
     L("  ─── EL RECORTE ──────────────────────────────────────────────────────");
@@ -132,16 +216,55 @@ describe("★ MEDICIÓN DEL COSTE · dossier real, sin llamar a Gemini", () => {
     L(`  Factor en llamadas ............ ${factorLlamadas.toFixed(2)}×  (${ANTES.llamadas} → ${DESPUES.llamadas})`);
     L(`  Tokens ahorrados por ingesta .. ~${miles(tokens(ANTES.caracteresPrompt - DESPUES.caracteresPrompt))}`);
     L();
-    L("  NOTA HONESTA: el objetivo de partida era 5,46×, calculado con un");
-    L("  enrutado que resultó ser inseguro. Tres correcciones lo bajaron, y las");
-    L("  tres se pagan a propósito (ver tests/segmentar.test.ts):");
-    L("    1. «BLOQUE 0 — Datos a confirmar» y «15 · PUNTOS A CONFIRMAR» NO son");
+    L("╔══════════════════════════════════════════════════════════════════════╗");
+    L("║  EL CASO REAL · dossier + 14 transcripciones de capturas de LinkedIn ║");
+    L("╚══════════════════════════════════════════════════════════════════════╝");
+    L(`  Volcado combinado ...... ${miles(VOLCADO.raw.length)} caracteres · ${VOLCADO.fuentes.length} documentos`);
+    L(`  Transcripciones ........ ${miles(TAMANOS.reduce((a, b) => a + b, 0))} caracteres en ${TAMANOS.length} capturas`);
+    L();
+    L("  ┌────────────────────────────┬──────────┬─────────────┬──────────┐");
+    L("  │ estrategia                 │ llamadas │ chars prompt│  factor  │");
+    L("  ├────────────────────────────┼──────────┼─────────────┼──────────┤");
+    const fila = (n: string, m: Medida) =>
+      L(`  │ ${n.padEnd(26)} │ ${String(m.llamadas).padStart(8)} │ ${miles(m.caracteresPrompt).padStart(11)} │ ${(factor(m, VOLCADO.raw).toFixed(2) + "×").padStart(8)} │`);
+    fila("ronda 7 · todo × 5", VOL_ANTES);
+    fila("reparto sobre el amasijo", VOL_AMASIJO);
+    fila("★ reparto POR FUENTE", VOL_POR_FUENTE);
+    L("  └────────────────────────────┴──────────┴─────────────┴──────────┘");
+    L(`  Recorte respecto al amasijo ... ${(VOL_AMASIJO.caracteresPrompt / VOL_POR_FUENTE.caracteresPrompt).toFixed(2)}×`);
+    L(`  Recorte respecto a la ronda 7 . ${(VOL_ANTES.caracteresPrompt / VOL_POR_FUENTE.caracteresPrompt).toFixed(2)}×`);
+    L();
+    L("  DE DÓNDE SALE EL RECORTE (y no es de tirar texto):");
+    L("    · En el amasijo, las 14 transcripciones NO abren sección propia: se");
+    L("      pegan a la última sección del dossier y heredan su destino. En este");
+    L("      fixture esa sección es difusa, así que se pagan CINCO veces. Si");
+    L("      hubiera sido «# EDUCACIÓN», se habrían mandado SOLO a formación y la");
+    L("      experiencia de LinkedIn habría desaparecido — eso no es coste, es");
+    L("      pérdida, y es lo que arregla el reparto por fuente.");
+    L("    · Por fuente, cada captura se corta por SUS encabezados de perfil");
+    L("      («Experiencia», «Aptitudes»…) y va a UN extractor en vez de a cinco.");
+    L();
+    L("  LO QUE SUBE EL FACTOR A PROPÓSITO (se paga y se sabe por qué):");
+    L(`    1. Las ${REPARTO.narrativas.length} secciones NARRATIVAS ya no se descartan: se leen con`);
+    L(`       basics. Son ${miles(REPARTO.narrativas.reduce((a, s) => a + s.caracteres, 0))} caracteres que ANTES no se extraían.`);
+    L("    2. El cubo difuso sigue yendo a los CINCO extractores. Es la regla D2:");
+    L("       ante la duda se paga. Bajarlo sería adivinar, y adivinar pierde.");
+    L("    3. «BLOQUE 0 — Datos a confirmar» y «15 · PUNTOS A CONFIRMAR» no son");
     L("       contexto: contienen el nombre público, el correo y el TELÉFONO.");
-    L("    2. Las subsecciones de «4 · EXPERIENCIA» heredan work ADEMÁS de su");
-    L("       propia clave; si no, «4.2 … Proyecto de título» iba solo a");
-    L("       proyectos y el empleo desaparecía.");
-    L("    3. «identidad» fuera del diccionario: casaba con el cuestionario");
-    L("       entero y arrastraba trece secciones a basics.");
+    L();
+    L("  ─── ¿SE LLEGA AL ≤1,50× DEL ENCARGO? NO. Y esto es lo que falta ─────");
+    const narrat = REPARTO.narrativas.reduce((a, s) => a + s.caracteres, 0);
+    const difusoX4 = REPARTO.totales.difuso * 4; // lo que cuestan las 4 lecturas de más
+    L(`  Factor alcanzado ............... ${factor(VOL_POR_FUENTE, VOLCADO.raw).toFixed(2)}×  (objetivo 1,50×)`);
+    L(`  Sin rescatar las narrativas .... ${((VOL_POR_FUENTE.caracteresPrompt - narrat) / VOLCADO.raw.length).toFixed(2)}×  ← pero se volverían a PERDER`);
+    L(`  Sin el cubo difuso ×5 .......... ${((VOL_POR_FUENTE.caracteresPrompt - difusoX4) / VOLCADO.raw.length).toFixed(2)}×  ← exigiría ADIVINAR`);
+    L(`  El difuso son ${miles(REPARTO.totales.difuso)} caracteres leídos 5 veces = ${miles(REPARTO.totales.difuso * 5)}`);
+    L(`  (el ${((REPARTO.totales.difuso * 5 / VOL_POR_FUENTE.caracteresPrompt) * 100).toFixed(0)}% de todo el prompt). Son secciones cuyo título no dice a qué`);
+    L("  extractor pertenecen: «BLOQUE 1 — Quién eres», «BLOQUE 0 — Datos a");
+    L("  confirmar», «12 · DIFERENCIADORES Y MÉTODO»… Enrutarlas a ojo es la");
+    L("  apuesta que en la ronda 7 mandó los seis proyectos del portfolio al");
+    L("  extractor de educación. La diferencia entre 1,84× y 1,50× son céntimos;");
+    L("  la diferencia entre acertar y adivinar es la carrera de alguien.");
     L();
 
     expect(DESPUES.caracteresPrompt).toBeGreaterThan(0);
@@ -168,17 +291,23 @@ describe("★ MEDICIÓN DEL COSTE · dossier real, sin llamar a Gemini", () => {
     expect(DESPUES.caracteresPrompt).toBeLessThan(ANTES.caracteresPrompt);
   });
 
-  it("★★ el factor de recorte en caracteres es de al menos 3×", () => {
+  it("★★ el factor de recorte en caracteres es de al menos 2,5×", () => {
     // Umbral deliberadamente por DEBAJO del real: este test protege el recorte,
     // no lo celebra. El número exacto se imprime arriba; si alguien toca el
     // diccionario y lo empeora, esto se cae.
-    const factor = ANTES.caracteresPrompt / DESPUES.caracteresPrompt;
-    expect(factor, `factor real: ${factor.toFixed(2)}×`).toBeGreaterThan(3);
+    //
+    // ⚠ BAJÓ DE 3× A 2,5× A PROPÓSITO, y el motivo importa: las nueve secciones
+    //   narrativas ya no se descartan. Se leen con `basics`, cuestan ~26 KB más
+    //   de prompt, y a cambio dejan de perderse el resumen y el objetivo. Un
+    //   umbral que solo se puede mantener descartando texto no es un umbral de
+    //   eficiencia: es un incentivo a perder datos.
+    const f = ANTES.caracteresPrompt / DESPUES.caracteresPrompt;
+    expect(f, `factor real: ${f.toFixed(2)}×`).toBeGreaterThan(2.5);
   });
 
   it("★★ el factor de recorte en LLAMADAS es de al menos 2×", () => {
-    const factor = ANTES.llamadas / DESPUES.llamadas;
-    expect(factor, `${ANTES.llamadas} → ${DESPUES.llamadas} llamadas`).toBeGreaterThanOrEqual(2);
+    const f = ANTES.llamadas / DESPUES.llamadas;
+    expect(f, `${ANTES.llamadas} → ${DESPUES.llamadas} llamadas`).toBeGreaterThanOrEqual(2);
   });
 
   it("los tokens estimados se calculan con la MISMA regla en los dos lados", () => {
@@ -190,6 +319,77 @@ describe("★ MEDICIÓN DEL COSTE · dossier real, sin llamar a Gemini", () => {
   it("es REPRODUCIBLE: medir dos veces da exactamente lo mismo", () => {
     expect(medirDespues(DOC)).toEqual(DESPUES);
     expect(medirAntes(DOC)).toEqual(ANTES);
+    expect(medirDespues(VOLCADO.raw, { fuentes: VOLCADO.fuentes })).toEqual(VOL_POR_FUENTE);
+  });
+});
+
+// ════════════════════════════════════════════════════════════════════════════
+// ★ EL CASO REAL · lo que de verdad se midió en producción
+// ════════════════════════════════════════════════════════════════════════════
+describe("★ el volcado real (dossier + 14 capturas) · repartir por fuente", () => {
+  it("el fixture imita el caso medido: 14 capturas, del tamaño de las reales", () => {
+    expect(VOLCADO.fuentes).toHaveLength(15); // texto pegado + 14 capturas
+    expect(TAMANOS).toHaveLength(14);
+    expect(Math.max(...TAMANOS)).toBe(3479);
+    expect(Math.min(...TAMANOS)).toBe(1349);
+    // y los tramos TESELAN el raw: sin eso, el reparto por fuente ni se intenta
+    expect(VOLCADO.fuentes[0]!.inicio).toBe(0);
+    expect(VOLCADO.fuentes.at(-1)!.fin).toBe(VOLCADO.raw.length);
+  });
+
+  it("☠☠ EN EL AMASIJO las 14 capturas caen en UNA sola sección heredada", () => {
+    // La demostración del mecanismo: el reparto del texto combinado tiene las
+    // MISMAS secciones que el dossier solo. Las capturas no abren ninguna: se
+    // pegan a la última sección del dossier y heredan lo que esa diga.
+    const amasijo = repartir(VOLCADO.raw);
+    expect(amasijo.secciones).toHaveLength(REPARTO.secciones.length);
+    const ultima = amasijo.secciones.at(-1)!;
+    const capturas = TAMANOS.reduce((a, b) => a + b, 0);
+    expect(ultima.caracteres - REPARTO.secciones.at(-1)!.caracteres).toBeGreaterThan(capturas - 1);
+  });
+
+  it("★★ POR FUENTE cada captura se corta sola y el documento se conserva ENTERO", () => {
+    const plan = planificarExtraccion(VOLCADO.raw, { fuentes: VOLCADO.fuentes });
+    expect(conserva(VOLCADO.raw, plan.reparto)).toBe(true);
+    expect(plan.reparto.fuentes).toBe(15);
+    // muchas más secciones: cada captura aporta las suyas
+    expect(plan.reparto.secciones.length).toBeGreaterThan(REPARTO.secciones.length + 14 * 4);
+    const t = plan.reparto.totales;
+    expect(t.dirigido + t.difuso + t.contexto).toBe(VOLCADO.raw.length);
+  });
+
+  it("★★ EL NÚMERO · repartir por fuente cuesta MENOS que repartir el amasijo", () => {
+    expect(VOL_POR_FUENTE.caracteresPrompt).toBeLessThan(VOL_AMASIJO.caracteresPrompt);
+    const mejora = VOL_AMASIJO.caracteresPrompt / VOL_POR_FUENTE.caracteresPrompt;
+    expect(mejora, `mejora real: ${mejora.toFixed(2)}×`).toBeGreaterThan(1.2);
+  });
+
+  it("★★ el factor del caso real baja de 2× (objetivo del encargo: 1,5×, NO alcanzado)", () => {
+    // Este test declara la verdad incómoda en vez de esconderla: se pasó de 2,88×
+    // a 1,84×, y el 1,50× del encargo NO se cumple. Lo que queda por encima es,
+    // casi entero, el cubo difuso leído cinco veces — y ese ×5 es la regla D2, no
+    // una ineficiencia. El umbral se pone en 2,0× para proteger lo conseguido; si
+    // alguien lo empeora, salta aquí.
+    const f = factor(VOL_POR_FUENTE, VOLCADO.raw);
+    expect(f, `factor real del caso real: ${f.toFixed(2)}×`).toBeLessThan(2.0);
+    expect(f, "y sigue por encima del objetivo declarado, que es lo honesto decir").toBeGreaterThan(1.5);
+  });
+
+  it("★★ y NO sale de leer menos: cada captura llega a algún extractor", () => {
+    const plan = planificarExtraccion(VOLCADO.raw, { fuentes: VOLCADO.fuentes });
+    const corpus = EXTRACTORES_5.map((e) => textoPara(VOLCADO.raw, plan.reparto, e)).join("\n");
+    for (let i = 0; i < TAMANOS.length; i++) {
+      // una marca única por captura: si no está, esa captura no se leyó
+      expect(corpus.includes(`medida en el rol ${i + 1}.`), `la captura ${i + 1} no llegó a ningún extractor`).toBe(true);
+    }
+  });
+
+  it("★ el número de llamadas NO explota al repartir por fuente", () => {
+    // Repartir por fuente Y ADEMÁS llamar por fuente daría 5 llamadas por captura
+    // (78 medidas). Se reparte por fuente y se llama por CORPUS: las secciones de
+    // los 15 documentos que van al mismo extractor se juntan y se ventanean una vez.
+    expect(VOL_POR_FUENTE.llamadas).toBeLessThanOrEqual(VOL_AMASIJO.llamadas + 2);
+    expect(VOL_POR_FUENTE.llamadas).toBeLessThan(20);
   });
 });
 
@@ -222,14 +422,26 @@ describe("★ el recorte NO sale de tirar datos", () => {
     for (const c of REPARTO.contexto) expect(c.titulo.trim()).not.toBe("");
   });
 
+  it("★★ lo ÚNICO que ya no se lee son instrucciones: menos del 2% del dossier", () => {
+    // La cifra que hace honesta toda la medición. Si esto subiera, el «ahorro»
+    // habría vuelto a salir de dejar de leer a alguien.
+    expect(REPARTO.totales.contexto / DOC.length).toBeLessThan(0.02);
+    expect(REPARTO.contexto.map((c) => c.titulo)).toEqual(["CÓMO USAR ESTE DOCUMENTO"]);
+  });
+
   it("★★ forzarCompleto recupera EXACTAMENTE el coste (y la cobertura) de antes", () => {
     // La vía de escape tiene que devolver el comportamiento viejo bit a bit: si
     // costara menos, es que estaría leyendo menos, y entonces no sería una vía
     // de escape sino otra optimización disfrazada.
-    const full = medirDespues(DOC, true);
+    const full = medirDespues(DOC, { forzarCompleto: true });
     expect(full.llamadas).toBe(ANTES.llamadas);
     expect(full.caracteresPrompt).toBe(ANTES.caracteresPrompt);
     expect(full.caracteresTexto).toBe(ANTES.caracteresTexto);
+  });
+
+  it("★★ forzarCompleto sigue siendo la vía de escape AUNQUE se pasen tramos", () => {
+    const full = medirDespues(VOLCADO.raw, { forzarCompleto: true, fuentes: VOLCADO.fuentes });
+    expect(full).toEqual(medirAntes(VOLCADO.raw));
   });
 
   it("un texto pegado sin encabezados cuesta lo MISMO que antes (no se optimiza a ciegas)", () => {

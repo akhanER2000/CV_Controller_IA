@@ -182,7 +182,9 @@ function SourceReport({ s, t }: { s: SourceView; t: (key: string) => string }) {
         {s.tokens != null ? (
           <ReportChip v={`${s.tokensAreFloor ? "≥ " : ""}${nf(s.tokens)}`} k={t("fuentes.report.tokensK")} />
         ) : null}
-        <ReportChip v={nf(s.itemsExtracted)} k={t("fuentes.report.itemsK")} />
+        {/* ★ El CERO se tiñe. «0 ítems extraídos» junto a un estado «extraída» era
+            la tarjeta diciendo que todo fue bien: aquí deja de pasar por normal. */}
+        <ReportChip v={nf(s.itemsExtracted)} k={t("fuentes.report.itemsK")} warn={s.itemsExtracted === 0} />
         <ReportChip v={nf(s.possibleDuplicates)} k={t("fuentes.report.duplicatesK")} warn={s.possibleDuplicates > 0} />
         <ReportChip v={nf(s.withoutEvidence)} k={t("fuentes.report.noEvidenceK")} warn={s.withoutEvidence > 0} />
         <ReportChip v={rel(s.createdAt, t)} k={t("fuentes.item.added")} />
@@ -206,6 +208,18 @@ function SourceReport({ s, t }: { s: SourceView; t: (key: string) => string }) {
       {s.status === "failed" && s.error ? (
         <div className="fu-status is-err" role="alert">
           <span aria-hidden="true">✕</span> {t("fuentes.report.failed").replace("{msg}", s.error)}
+        </div>
+      ) : s.itemsExtracted === 0 ? (
+        /* ★ UNA FUENTE VACÍA NUNCA SE PINTA DE VERDE. Vale para TODA fuente, no
+           solo para las que fallaron: «extraída · 0 ítems» sin explicación era la
+           pantalla afirmando que tu documento no valía nada. El motivo lo escribe
+           el servidor al ingerir (db/sources · causaSinItems) y se enseña aquí. Si
+           una fila antigua no lo tiene, se dice ESO — no se rellena con nada. */
+        <div className="fu-status is-err" role="alert">
+          <span aria-hidden="true">⚠</span>{" "}
+          {s.error
+            ? t("fuentes.report.empty").replace("{msg}", s.error)
+            : t("fuentes.report.emptyUnknown")}
         </div>
       ) : null}
     </>

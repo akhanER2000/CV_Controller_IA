@@ -10,6 +10,8 @@ import { Breadcrumb, readOrigin, withOrigin } from "@/components/Breadcrumb";
 import { createClient } from "@/lib/supabase/client";
 import { fileKindFromName, FILE_ACCEPT, type FileKind } from "@/lib/db/sources";
 import { useT, useLang } from "@/lib/i18n";
+import { useIngesta } from "@/lib/ingesta/useIngesta";
+import { estadoVisual, type LineaFuente } from "@/lib/ingesta/progreso";
 import "./importar.css";
 
 /* ============================================================================
@@ -39,7 +41,10 @@ import "./importar.css";
 
 type Screen = "idle" | "ingest" | "done";
 type Kind = "github" | "linkedin" | "web";
-type RowState = "run" | "ok" | "err";
+/* El estado visual de una fila del log ya no se declara aquí: lo deriva
+   `estadoVisual` (lib/ingesta/progreso.ts), que es puro y tiene su candado en
+   los tests. Tenerlo en un solo sitio es lo que impide que esta pantalla y el
+   indicador del shell cuenten dos historias distintas de la misma fuente. */
 type UploadStatus = "uploading" | "ok" | "error";
 
 interface Source {
@@ -68,14 +73,13 @@ interface FileItem {
   note?: string;
 }
 
-interface LogRow {
-  id: number;
-  src: string;
-  det: string;
-  st: RowState;
-  errActs?: boolean;
-  retrying?: boolean;
-}
+/* El log de la ingesta ya NO es un array local que esta pantalla va rellenando:
+   es lo que hay ESCRITO en `ingestion_sources` + `ingestion_events`, leído por
+   `useIngesta`. Por eso desapareció el `LogRow` de antes junto con sus dos
+   botones de recuperación de maqueta: aquellos eran una simulación (el PDF
+   escaneado de la persona del mock), y una simulación no puede convivir con un
+   log verdadero sin que el usuario deje de saber cuál de los dos está mirando.
+   El fallo REAL de una fuente llega ahora por su fila, con su motivo literal. */
 
 /* Texto de ejemplo — la fuente de la que sale todo lo demás (persona del mock:
    Diego Gatica). Verbatim del HTML. */
@@ -88,14 +92,19 @@ Sé Go, Python, SQL, algo de Kubernetes (lo usamos pero no lo administraba yo). 
 /* El placeholder del textarea vive en el diccionario (importar.placeholder) —
    verbatim del HTML, con el DOBLE espacio tras «Por ejemplo:» y el salto real. */
 
-/* La respuesta real de /api/import/context. El "fin" se renderiza de estos
-   conteos REALES (no de una grilla de maqueta): total y niveles de evidencia. */
-interface ImportResponse {
-  sourceId: string;
-  staged: number;
+/* ════════════════════════════════════════════════════════════════════════════
+   EL CIERRE DEL TRABAJO — GET /api/import/job/[id]
+   ════════════════════════════════════════════════════════════════════════════
+   Se pide UNA vez, cuando la ingesta termina. Todos sus números salen de filas
+   reales: los conteos, del nivel de evidencia que cada staged guardó; el
+   consumo, de la SUMA de la telemetría de cada fuente; el contexto, de las
+   secciones que no se mandaron al modelo, con su nombre.
+
+   ⚠ Esto NO es el sondeo. El progreso se lee del propio Supabase con la RLS del
+     usuario (useIngesta), sin gastar una invocación por segundo.               */
+interface ResumenTrabajo {
+  jobId: string;
   counts: { verified: number; partial: number; none: number; api: number; total: number };
-  sources: string[];
-  linkedin: { url: string; slug?: string }[];
   /* ★ El consumo real de IA de esta ingesta. Viene del campo `usage` que
      devuelve el proveedor en cada llamada, no de una estimación nuestra.
      `llamadasSinUso` > 0 significa que el proveedor no reportó tokens en alguna
@@ -109,16 +118,16 @@ interface ImportResponse {
     llamadasSinUso: number;
     desdeCache: boolean;
   } | null;
-  /* Cómo se repartió el documento. `contexto` son las secciones que NO se
-     mandaron al modelo, CON SU NOMBRE: la pantalla las lista una a una. */
-  lectura: {
-    longitud: number;
-    totales: { dirigido: number; difuso: number; contexto: number };
-    contexto: { titulo: string; caracteres: number }[];
-    forzado: boolean;
-    secciones: number;
-  } | null;
+  /* Secciones que NO se mandaron al modelo, CON SU NOMBRE: se listan una a una. */
+  contexto: { titulo: string; caracteres: number }[];
+  /* Avisos por fuente (PDF sin capa de texto, imagen ilegible, fuente fallida). */
+  avisos: string[];
 }
+
+/** Dónde se recuerda el trabajo en curso de ESTA pestaña. Solo para volver a la
+ *  vista donde ibas: la VERDAD está en la base, esto es un marcapáginas. Si se
+ *  pierde, el indicador del shell vuelve a encontrar el trabajo por su cuenta. */
+const CLAVE_JOB = "corpus.ingesta.job";
 
 /* ════════════════════════════════════════════════════════════════════════════
    PUERTA 3 · LA PLANTILLA ESTRUCTURADA — el informe previo del parseo.
@@ -335,10 +344,19 @@ export function ImportarScreen() {
   const [files, setFiles] = useState<FileItem[]>([]);
   const [isDrag, setIsDrag] = useState(false);
   const [screen, setScreen] = useState<Screen>("idle");
-  const [rows, setRows] = useState<LogRow[]>([]);
-  const [result, setResult] = useState<ImportResponse | null>(null);
+  const [result, setResult] = useState<ResumenTrabajo | null>(null);
   const [warnings, setWarnings] = useState<string[]>([]);
   const [err, setErr] = useState<string | null>(null);
+
+  /* ── EL TRABAJO DURABLE ───────────────────────────────────────────────────
+     `jobId` es lo ÚNICO que esta pantalla guarda de la ingesta. Todo lo demás
+     —qué fuente va, en qué etapa, cuántos items llevan— se lee de la base a
+     través de `useIngesta`. Por eso volver a esta pantalla (o abrirla en otra
+     pestaña) RETOMA la vista donde iba en vez de empezar de cero: el estado
+     nunca estuvo en la pestaña. */
+  const [jobId, setJobId] = useState<string | null>(null);
+  const { progreso, reanudando, error: errObs } = useIngesta(jobId, true);
+  const cerrado = useRef<string | null>(null);
 
   /* ── Puerta 3 · la plantilla estructurada ────────────────────────────────
      `plTexto` guarda el contenido leído del fichero para poder MANDARLO OTRA
@@ -358,6 +376,35 @@ export function ImportarScreen() {
   const [plRaw, setPlRaw] = useState<string | null>(null);
   const plPanelRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
+
+  /* ── ¿Hay master que exportar? ────────────────────────────────────────────
+     La descarga por defecto de /api/master/plantilla devuelve TU master cuando
+     lo hay, y el esqueleto cuando no. El botón tiene que decir cuál de las dos
+     cosas va a bajar, así que la pantalla necesita el número de items.
+
+     `null` = todavía no lo sabemos (o la consulta falló). Se rotula como
+     «plantilla» y NO se ofrece «en blanco» aparte: prometer un fichero que a lo
+     mejor está vacío es peor que no ofrecerlo. Se pide `?v=estado`, que devuelve
+     `{items:n}` y nada más, en vez de /api/master, que baja los items con su
+     `data` entero —cientos de KB— para acabar mirando un `length`. En el
+     servidor cuesta la misma lectura; lo que se ahorra es la red. */
+  const [plMasterItems, setPlMasterItems] = useState<number | null>(null);
+  useEffect(() => {
+    let vivo = true;
+    void (async () => {
+      try {
+        const res = await fetch("/api/master/plantilla?v=estado", { cache: "no-store" });
+        if (!res.ok) return; // 401 sin sesión: se queda en null, sin ruido.
+        const j = (await res.json()) as { items?: unknown };
+        if (vivo && typeof j.items === "number") setPlMasterItems(j.items);
+      } catch {
+        /* sin red: null, y la pantalla ofrece las dos versiones que no dependen
+           de la base. Un fallo aquí no puede tumbar la puerta 3. */
+      }
+    })();
+    return () => { vivo = false; };
+  }, []);
+  const plHayMaster = (plMasterItems ?? 0) > 0;
 
   /* ── De dónde vienes (?from=) ────────────────────────────────────────────────
      El <Breadcrumb> resuelve su destino solo. Aquí hace falta el MISMO origen
@@ -390,11 +437,8 @@ export function ImportarScreen() {
   const stDoneRef = useRef<HTMLElement>(null);
   const finPanelRef = useRef<HTMLDivElement>(null);
   const countRef = useRef<HTMLDivElement>(null);
-  const itemCount = useRef(0);
-  const rowId = useRef(0);
-  const revealed = useRef<Set<number>>(new Set());
+  const revealed = useRef<Set<string>>(new Set());
   const running = useRef(false);
-  const errResolve = useRef<(() => void) | null>(null);
 
   const sources = useMemo(() => detectSources(text), [text]);
   const words = useMemo(() => countWords(text), [text]);
@@ -672,9 +716,14 @@ export function ImportarScreen() {
     }
   }
 
-  // ── la espera: progreso específico y verdadero, jamás un porcentaje ────────
-  const rm = (): boolean => !!window.CorpusMotion?.rm();
-  const wait = (ms: number) => new Promise<void>((r) => window.setTimeout(r, rm() ? Math.min(ms, 120) : ms));
+  /* ══════════════════════════════════════════════════════════════════════════
+     LA ESPERA — progreso específico y verdadero, jamás un porcentaje
+     ══════════════════════════════════════════════════════════════════════════
+     Antes, esta función HACÍA la ingesta: pintaba un log a mano, esperaba una
+     respuesta que podía tardar minutos y, si te ibas de la pantalla, te
+     quedabas sin saber qué pasó. Ahora crea el trabajo, guarda su id y se
+     dedica a MIRAR. Todo lo que se enseña sale de `useIngesta`, que lee la base.
+     ══════════════════════════════════════════════════════════════════════════ */
 
   function setCount(to: number, dur: number) {
     const el = countRef.current;
@@ -683,49 +732,79 @@ export function ImportarScreen() {
     if (M) M.counter(el, to, { dur });
     else el.textContent = String(to);
   }
-  function logRow(src: string, det: string, st: RowState): number {
-    const id = ++rowId.current;
-    setRows((prev) => [...prev, { id, src, det, st }]);
-    return id;
-  }
-  function setRow(id: number, patch: Partial<Omit<LogRow, "id">>) {
-    setRows((prev) => prev.map((r) => (r.id === id ? { ...r, ...patch } : r)));
-  }
-  // reveal-once por fila cuando su nodo monta.
-  const rowRef = (id: number) => (el: HTMLDivElement | null) => {
+
+  // reveal-once por fila; la clave es el id de la FUENTE, que es estable entre
+  // sondeos (a diferencia de un índice de array, que bailaría al reordenar).
+  const rowRef = (id: string) => (el: HTMLDivElement | null) => {
     if (el && !revealed.current.has(id)) {
       revealed.current.add(id);
       window.CorpusMotion?.reveal(el);
     }
   };
 
-  function onContinue(id: number) {
-    setRow(id, { st: "ok", det: t("importar.log.onlyPage1"), errActs: false });
-    errResolve.current?.();
-    errResolve.current = null;
-  }
-  async function onRetry(id: number) {
-    setRow(id, { retrying: true });
-    await wait(1400);
-    setRow(id, {
-      st: "err",
-      det: t("importar.log.retryFail"),
-      errActs: false,
-      retrying: false,
-    });
-    errResolve.current?.();
-    errResolve.current = null;
-  }
+  /* ── Al montar: ¿había un trabajo a medias? ───────────────────────────────
+     El marcapáginas está en localStorage, pero la VERDAD la trae el sondeo: si
+     el trabajo ya no existe o ya terminó, el efecto de abajo lo resuelve. Aquí
+     solo se recupera el id y se entra en modo espera. */
+  useEffect(() => {
+    const guardado = window.localStorage.getItem(CLAVE_JOB);
+    if (guardado) {
+      setJobId(guardado);
+      setScreen("ingest");
+    }
+  }, []);
 
+  /* ── El contador y el cierre, gobernados por lo que dice la base ────────── */
+  useEffect(() => {
+    if (!progreso || screen !== "ingest") return;
+    setCount(progreso.items, 600);
+    window.CorpusAurora?.setState(progreso.pausado ? "calm" : "active");
+  }, [progreso, screen]);
+
+  useEffect(() => {
+    if (!jobId || !progreso?.terminado || screen === "done") return;
+    // Una sola vez por trabajo: sin este candado, un re-render volvería a pedir
+    // el resumen (y a gastar una invocación) en cada vuelta.
+    if (cerrado.current === jobId) return;
+    cerrado.current = jobId;
+
+    let cancelado = false;
+    void (async () => {
+      try {
+        const res = await fetch(`/api/import/job/${jobId}`);
+        const data = (await res.json()) as ResumenTrabajo & { error?: string };
+        if (!res.ok) throw new Error(data.error || t("importar.extractFailed"));
+        if (cancelado) return;
+        setResult(data);
+        setWarnings(data.avisos ?? []);
+      } catch (e) {
+        if (!cancelado) setErr(e instanceof Error ? e.message : t("importar.extractFailed"));
+      } finally {
+        if (!cancelado) {
+          // El marcapáginas se borra SIEMPRE al cerrar, incluso si el resumen
+          // falló: el trabajo terminó de verdad y dejarlo apuntado haría que la
+          // próxima visita entrara en modo espera de algo que ya no espera.
+          window.localStorage.removeItem(CLAVE_JOB);
+          window.CorpusAurora?.setState("calm");
+          setScreen("done");
+        }
+      }
+    })();
+    return () => {
+      cancelado = true;
+    };
+  }, [jobId, progreso?.terminado, screen, t]);
+
+  /** Crea el trabajo. Devuelve enseguida: el trabajo de verdad ya está en marcha
+   *  en el servidor y su estado vive en la base, no aquí. */
   async function runIngest() {
     if (running.current || uploading) return;
     running.current = true;
     setErr(null);
 
-    itemCount.current = 0;
     if (countRef.current) countRef.current.textContent = "0";
-    setRows([]);
     revealed.current.clear();
+    cerrado.current = null;
     setResult(null);
     setWarnings([]);
     setScreen("ingest");
@@ -734,63 +813,47 @@ export function ImportarScreen() {
     // Archivos ya subidos: van por referencia (path), nunca por el body.
     const sendFiles = okFiles.map((f) => ({ path: f.path, name: f.name, kind: f.kind }));
 
-    // Log HONESTO: qué se está leyendo, sin cifras inventadas por fuente. El
-    // total real llega en la respuesta (no hay SSE por-fuente todavía).
-    const src = detectSources(text);
-    const rowIds: number[] = [];
-    if (text.trim().length >= 20)
-      rowIds.push(logRow(t("importar.log.pastedText"), t("importar.log.reading"), "run"));
-    for (const f of okFiles) {
-      const det =
-        f.kind === "image"
-          ? t("importar.log.transcribing")
-          : f.kind === "pdf"
-            ? t("importar.log.readingPdf")
-            : f.kind === "text"
-              ? t("importar.log.readingText")
-              : t("importar.log.readingDocx");
-      rowIds.push(logRow(f.name, det, "run"));
-    }
-    for (const s of src) {
-      if (s.kind === "github") rowIds.push(logRow(s.label, t("importar.log.queryingApi"), "run"));
-      else if (s.kind === "web") rowIds.push(logRow(s.label, t("importar.log.readingPortfolio"), "run"));
-      // linkedin: no se lee desde el servidor (se avisa en el volcado)
-    }
-    const idAI = logRow(t("importar.log.extractingSrc"), t("importar.log.extractingDet"), "run");
-
     try {
-      const res = await fetch("/api/import/context", {
+      const res = await fetch("/api/import/job", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ text, files: sendFiles }),
       });
-      const data = (await res.json()) as ImportResponse & { error?: string; warnings?: string[] };
-      if (!res.ok) throw new Error(data.error || t("importar.extractFailed"));
+      const data = (await res.json()) as { jobId?: string; warnings?: string[]; error?: string };
+      if (!res.ok || !data.jobId) throw new Error(data.error || t("importar.extractFailed"));
 
-      for (const id of rowIds) setRow(id, { st: "ok" });
-      setRow(idAI, {
-        st: "ok",
-        det: t("importar.log.result")
-          .replace("{total}", String(data.counts.total))
-          .replace("{verified}", String(data.counts.verified)),
-      });
-      itemCount.current = data.counts.total;
-      setCount(data.counts.total, 600);
-      setResult(data);
-      setWarnings(data.warnings ?? []);
-
-      await wait(700);
-      window.CorpusAurora?.setState("calm");
-      setScreen("done");
+      window.localStorage.setItem(CLAVE_JOB, data.jobId);
+      setJobId(data.jobId);
+      if (data.warnings?.length) setWarnings(data.warnings);
     } catch (e) {
       setErr(e instanceof Error ? e.message : t("importar.extractFailed"));
-      setRows((prev) => prev.map((r) => (r.st === "run" ? { ...r, st: "err", det: t("importar.log.stopped") } : r)));
       window.CorpusAurora?.setState("calm");
       setScreen("idle");
     } finally {
       running.current = false;
     }
   }
+
+  /** El nombre visible de una fuente. El texto pegado no tiene nombre de
+   *  archivo: su etiqueta la pone AQUÍ el diccionario, no la base de datos. */
+  function nombreDe(l: LineaFuente): string {
+    return l.nombrado ? l.nombre : t("importar.log.pastedText");
+  }
+
+  /** El detalle de una fila del log: la etapa REAL, y al terminar sus items. */
+  function detalleDe(l: LineaFuente): string {
+    if (l.estado === "failed") return l.error ?? t("ingesta.etapa.fallida");
+    if (l.estado === "extracted") {
+      const n = l.items ?? 0;
+      if (n === 0) return t("importar.job.cero");
+      return n === 1 ? t("importar.job.itemsFuenteUno") : t("importar.job.itemsFuente").replace("{n}", String(n));
+    }
+    // `etapa` es la CLAVE de i18n tal cual la guardó el servidor en
+    // ingestion_events.message: se traduce directamente, sin tabla intermedia.
+    return l.etapa ? t(l.etapa) : t("ingesta.etapa.encolada");
+  }
+
+  const filas: LineaFuente[] = progreso?.fuentes ?? [];
 
   return (
     <div className="c-page">
@@ -1080,10 +1143,35 @@ export function ImportarScreen() {
                   {/* Ancla plana con `download`: el Content-Disposition lo pone
                       el servidor (mismo patrón que la descarga de datos de
                       Ajustes). Sin Blob ni createObjectURL — no hay nada que
-                      construir en el cliente ni un revoke que temporizar. */}
+                      construir en el cliente ni un revoke que temporizar.
+
+                      EL RÓTULO DICE LO QUE BAJA: esta URL sin parámetros
+                      devuelve tu master si lo tienes y el esqueleto si no, así
+                      que la etiqueta cambia con el estado. Un botón que dijera
+                      siempre «plantilla» y bajara 105 items sería una sorpresa,
+                      y las sorpresas en una descarga se pagan en confianza. */}
                   <a className="c-btn imp-pl__dl" id="btnPlantilla" href="/api/master/plantilla" download>
-                    {t("importar.pl.download")}
+                    {plHayMaster ? t("importar.pl.dl.mio") : t("importar.pl.download")}
                   </a>
+                  {/* Las otras dos versiones del MISMO fichero. Enlaces
+                      pequeños, no botones: son alternativas, no la acción
+                      principal. Cada una lleva su `title` explicando qué trae.
+                      «en blanco» solo aparece cuando el botón de arriba NO baja
+                      el esqueleto; ofrecer dos veces lo mismo es ruido. */}
+                  <p className="imp-note" style={{ marginTop: "10px" }}>
+                    <span>{t("importar.pl.dl.otras")}</span>{" "}
+                    {plHayMaster ? (
+                      <>
+                        <a href="/api/master/plantilla?v=blanco" download title={t("importar.pl.dl.blancoTitle")}>
+                          {t("importar.pl.dl.blanco")}
+                        </a>
+                        <span aria-hidden="true"> · </span>
+                      </>
+                    ) : null}
+                    <a href="/api/master/plantilla?v=ejemplo" download title={t("importar.pl.dl.ejemploTitle")}>
+                      {t("importar.pl.dl.ejemplo")}
+                    </a>
+                  </p>
                 </div>
               </li>
               <li>
@@ -1288,37 +1376,95 @@ export function ImportarScreen() {
             0
           </div>
           <div className="ing-cap">{t("importar.ing.caption")}</div>
+          {/* La fuente CONCRETA que se está leyendo, con su número de orden. No
+              hay barra de progreso porque no hay dato para dibujarla: una
+              captura tarda dos segundos y un PDF de cuarenta páginas, minuto y
+              medio. Se dice QUÉ se hace, que sí se sabe. */}
+          {progreso?.actual ? (
+            <div className="ing-cap" aria-live="polite">
+              {t("importar.job.fuente")
+                .replace("{i}", String(progreso.actual.indice))
+                .replace("{n}", String(progreso.total))}
+              {" · "}
+              {nombreDe(progreso.actual)}
+            </div>
+          ) : null}
+
           <div className="c-panel ing-log" id="log" aria-live="polite">
-            {rows.map((r) => (
-              <div key={r.id} ref={rowRef(r.id)} className={`ing-row is-${r.st}`}>
-                <span className="st">
-                  {r.st === "run" ? <span className="c-spin">⟳</span> : r.st === "ok" ? "✓" : "✕"}
-                </span>
-                <span className="src">{r.src}</span>
-                <span className="det">{r.det}</span>
-                {r.errActs && (
-                  <div className="ing-err-acts">
-                    <button type="button" onClick={() => onContinue(r.id)}>
-                      {t("importar.err.continue")}
-                    </button>
-                    <button type="button" onClick={() => onRetry(r.id)}>
-                      {r.retrying ? (
-                        <>
-                          <span className="c-spin">⟳</span> {t("importar.err.retrying")}
-                        </>
-                      ) : (
-                        t("importar.err.retry")
-                      )}
-                    </button>
-                  </div>
-                )}
-              </div>
-            ))}
+            {filas.map((l) => {
+              /* ★ El estado VISUAL no es el de la base: una fuente que terminó
+                 con CERO items no lleva ✓ verde. Ese tick sobre un cero era
+                 justo la mentira de las 14 capturas. La lógica vive en
+                 `estadoVisual` (pura, con su mutante en los tests) y no aquí:
+                 el shell y esta pantalla tienen que contar lo mismo. */
+              const st = estadoVisual(l);
+              return (
+                <div key={l.id} ref={rowRef(l.id)} className={`ing-row is-${st === "aviso" ? "err" : st}`}>
+                  <span className="st" aria-hidden="true">
+                    {st === "run" ? (
+                      <span className="c-spin">⟳</span>
+                    ) : st === "ok" ? (
+                      "✓"
+                    ) : st === "aviso" ? (
+                      "⚠"
+                    ) : (
+                      "✕"
+                    )}
+                  </span>
+                  <span className="src">{nombreDe(l)}</span>
+                  <span className="det">{detalleDe(l)}</span>
+                </div>
+              );
+            })}
           </div>
+
+          {/* ★ LA PAUSA, DICHA CON TODAS SUS LETRAS. Cuando una invocación se
+              queda sin presupuesto el trabajo NO se ha roto: está esperando. Se
+              explica y se ofrece el botón, aunque el observador ya lo esté
+              retomando solo — un usuario mirando una pantalla quieta merece
+              saber por qué está quieta y poder empujar él. */}
+          {progreso?.pausado ? (
+            <div className="c-card" style={{ width: "100%", marginTop: 14, textAlign: "left", padding: "16px 20px" }} role="status">
+              <span className="t-overline">{t("importar.job.pausadoTitle")}</span>
+              <p style={{ margin: "10px 0 0", color: "var(--text-muted)", fontSize: "var(--fs-ui)" }}>
+                {t("importar.job.pausadoBody")}
+              </p>
+              <p style={{ margin: "10px 0 0" }}>
+                <button
+                  type="button"
+                  className="c-btn"
+                  disabled={reanudando}
+                  onClick={() => {
+                    if (!jobId) return;
+                    void fetch(`/api/import/job/${jobId}/avanzar`, { method: "POST" }).catch(() => {});
+                  }}
+                >
+                  {reanudando ? (
+                    <>
+                      <span className="c-spin">⟳</span> {t("importar.job.retomando")}
+                    </>
+                  ) : (
+                    t("importar.job.pausadoCta")
+                  )}
+                </button>
+              </p>
+            </div>
+          ) : null}
+
+          {/* El fallo del SONDEO no se traga: si la pantalla no puede leer el
+              estado, lo dice — el trabajo puede seguir vivo en el servidor. */}
+          {errObs ? (
+            <p className="imp-note" role="alert" style={{ color: "var(--danger)" }}>
+              {t("importar.job.sondeoFallo").replace("{motivo}", errObs)}
+            </p>
+          ) : null}
+
           <p className="ing-hint">
             {t("importar.ing.hint1")}
             <br />
             {t("importar.ing.hint2")}
+            <br />
+            {t("importar.job.seguir")}
           </p>
         </div>
       </main>
@@ -1410,25 +1556,22 @@ export function ImportarScreen() {
               justo porque no manda a extraer el relato del cuestionario — y
               precisamente por eso el usuario tiene que VER exactamente qué se
               quedó fuera y poder pedir que se lea entero. */}
-          {result?.lectura && result.lectura.contexto.length > 0 ? (
+          {result && result.contexto.length > 0 ? (
             <div className="c-card" style={{ width: "100%", marginTop: 14, textAlign: "left", padding: "16px 20px" }}>
               <span className="t-overline">{t("importar.fin.contexto.overline")}</span>
               <p style={{ margin: "10px 0 0", color: "var(--text-muted)", fontSize: "var(--fs-ui)" }}>
-                {(result.lectura.contexto.length === 1
+                {(result.contexto.length === 1
                   ? t("importar.fin.contexto.bodyUna")
-                  : t("importar.fin.contexto.body").replace("{n}", String(result.lectura.contexto.length))
+                  : t("importar.fin.contexto.body").replace("{n}", String(result.contexto.length))
                 ).replace(
                   "{kb}",
                   String(
-                    Math.max(
-                      1,
-                      Math.round(result.lectura.contexto.reduce((n, s) => n + s.caracteres, 0) / 1024),
-                    ),
+                    Math.max(1, Math.round(result.contexto.reduce((n, s) => n + s.caracteres, 0) / 1024)),
                   ),
                 )}
               </p>
               <ul style={{ margin: "10px 0 0", paddingLeft: 18, color: "var(--text-muted)", fontSize: "var(--fs-ui)" }}>
-                {result.lectura.contexto.map((s, i) => (
+                {result.contexto.map((s, i) => (
                   <li key={i} style={{ marginBottom: 4 }}>
                     {s.titulo}{" "}
                     <span style={{ opacity: 0.7 }}>

@@ -12,7 +12,13 @@ import type { SuspicionLevel, DuplicateSignal } from "./dedup";
  */
 export type ItemKind =
   | "basics" | "summary" | "work" | "bullet" | "education"
-  | "skill" | "project" | "certification" | "language" | "link" | "reference";
+  | "skill" | "project" | "certification" | "language" | "link"
+  // 'publication' llevaba desde 0001 en el enum de la base y en ITEM_KINDS del
+  // POST del master, pero faltaba AQUÍ y en el filtro de la puerta .md. Efecto:
+  // una publicación escrita en la plantilla —que sí ofrece la sección— se
+  // quedaba fuera en el último paso. El eslabón roto eran dos listas de TS, no
+  // el modelo de datos.
+  | "publication" | "reference";
 
 export type Origin = "extracted" | "manual" | "ai_rephrased" | "ai_translated" | "api";
 

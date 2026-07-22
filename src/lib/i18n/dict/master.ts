@@ -35,6 +35,13 @@ export const master = {
     "master.plantilla.descargar": "Descargar .md",
     "master.plantilla.title":
       "Descarga tu registro en el formato .md que Corpus vuelve a leer sin IA. Edítalo donde quieras y súbelo por la puerta 3 de Importar.",
+    // Las otras dos versiones del mismo fichero, en enlace pequeño: la barra de
+    // acciones ya está llena y esto es alternativa, no acción principal.
+    "master.plantilla.blanco": "en blanco",
+    "master.plantilla.blancoTitle": "El esqueleto sin datos, con las instrucciones dentro.",
+    "master.plantilla.ejemplo": "con un ejemplo",
+    "master.plantilla.ejemploTitle":
+      "Un perfil inventado, de mentira, para ver cómo queda cada campo bien puesto: una fecha, una viñeta con cifra, trece grupos de habilidades, una referencia.",
     "master.add.role": "Rol de experiencia",
     "master.add.project": "Proyecto",
     "master.add.education": "Educación",
@@ -119,6 +126,9 @@ export const master = {
     "master.empty.plantillaNote":
       "O rellena una plantilla: sin IA y sin coste. Te bajas un .md con las secciones puestas, lo rellenas a mano o con la IA que ya pagas, y lo subes. Lo leemos con un parser, así que no hay nada que alucinar.",
     "master.empty.plantillaHow": "Cómo funciona →",
+    // Con el master vacío, el ejemplo relleno vale más que el esqueleto: enseña
+    // el nivel de detalle que se espera, no solo dónde va cada cosa.
+    "master.empty.plantillaEjemplo": "Ver una rellena de ejemplo",
 
     // Notas de guardado (transitorias)
     "master.saved.localEdit": "editado (modo local)",
@@ -339,6 +349,11 @@ export const master = {
     "master.plantilla.descargar": "Download .md",
     "master.plantilla.title":
       "Download your record in the .md format Corpus reads back without AI. Edit it wherever you like and upload it through door 3 in Import.",
+    "master.plantilla.blanco": "blank",
+    "master.plantilla.blancoTitle": "The empty skeleton, with the instructions inside.",
+    "master.plantilla.ejemplo": "with an example",
+    "master.plantilla.ejemploTitle":
+      "A made-up profile, entirely fictional, so you can see how each field looks when it's filled in properly: a date, a bullet with a number, thirteen skill groups, a reference.",
     "master.add.role": "Experience role",
     "master.add.project": "Project",
     "master.add.education": "Education",
@@ -422,6 +437,7 @@ export const master = {
     "master.empty.plantillaNote":
       "Or fill in a template: no AI, no cost. You download a .md with the sections laid out, fill it in by hand or with the AI you already pay for, and upload it. We read it with a parser, so there's nothing to hallucinate.",
     "master.empty.plantillaHow": "How it works →",
+    "master.empty.plantillaEjemplo": "See a filled-in one",
 
     // Save notes (transient)
     "master.saved.localEdit": "edited (local mode)",

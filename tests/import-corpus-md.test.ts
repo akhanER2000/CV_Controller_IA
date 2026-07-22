@@ -311,7 +311,7 @@ describe("informe previo · «Leí 5 roles, 33 viñetas, 8 grupos de habilidades
 
   it("los avisos y lo no importado se CUENTAN en la frase, no se esconden", () => {
     const { informe } = analizarCorpusMd({
-      items: [{ kind: "work", data: {} }, { kind: "publication", data: {} }],
+      items: [{ kind: "work", data: {} }, { kind: "kind-que-no-existe", data: {} }],
       avisos: ["No entendí la fecha «desde siempre» (línea 12)."],
     });
     expect(informe.frase.es).toContain("1 item no se pudo importar.");
@@ -347,13 +347,13 @@ describe("informe previo · «Leí 5 roles, 33 viñetas, 8 grupos de habilidades
 describe("★ nada se descarta en silencio", () => {
   it("un kind que la base no admite NO entra, pero se NOMBRA con su línea", () => {
     const { rows, informe } = analizarCorpusMd({
-      items: [{ kind: "publication", data: { title: "Paper" }, linea: 42 }, item({})],
+      items: [{ kind: "kind-que-no-existe", data: { title: "Paper" }, linea: 42 }, item({})],
     });
     expect(rows).toHaveLength(1); // solo el work
     expect(informe.noImportados).toHaveLength(1);
     expect(informe.noImportados[0]!.linea).toBe(42);
-    expect(informe.noImportados[0]!.es).toContain("publication");
-    expect(informe.noImportados[0]!.en).toContain("publication");
+    expect(informe.noImportados[0]!.es).toContain("kind-que-no-existe");
+    expect(informe.noImportados[0]!.en).toContain("kind-que-no-existe");
   });
 
   it("los avisos del parser (y las notas que conserva) llegan al informe", () => {

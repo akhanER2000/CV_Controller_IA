@@ -1,5 +1,6 @@
 import { Aurora } from "@/components/Aurora";
 import { UserMenu } from "@/components/UserMenu";
+import { IngestaEnCurso } from "@/components/IngestaEnCurso";
 
 /*
  * Layout del área /app.
@@ -25,6 +26,16 @@ import { UserMenu } from "@/components/UserMenu";
  *   sesión, fijo arriba a la derecha; su CSS oculta los .hd-av/.hd-lang
  *   estáticos de cada pantalla.
  *
+ * · <IngestaEnCurso> — el trabajo de ingesta, visible desde CUALQUIER pantalla.
+ *   Va aquí y no en Importar porque la promesa del producto es que cambiar de
+ *   pantalla no cancela nada: si el indicador viviera solo en la pantalla que
+ *   lanzó la ingesta, salir de ella sería quedarse sin saber si sigue viva. Y
+ *   hay una segunda razón, menos obvia y más importante: este componente es
+ *   también el que RETOMA el trabajo cuando una invocación se queda sin
+ *   presupuesto (ver lib/ingesta/useIngesta.ts). Montado en el shell, la ingesta
+ *   avanza mientras el usuario navega por donde quiera.
+ *   No pinta nada cuando no hay trabajo en marcha.
+ *
  * La protección de sesión la hace el middleware de Supabase.
  */
 export default function AppLayout({ children }: { children: React.ReactNode }) {
@@ -32,6 +43,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     <>
       <Aurora />
       <UserMenu />
+      <IngestaEnCurso />
       {children}
     </>
   );

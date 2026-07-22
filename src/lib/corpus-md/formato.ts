@@ -224,6 +224,13 @@ export interface DefSeccion {
  * no están en el encargo pero SÍ en el enum item_kind de la base: sin ellas un
  * item de esos kinds no tendría dónde escribirse, y «no tener dónde» acaba
  * siempre en «se descarta». OTROS es la red de seguridad para un kind futuro.
+ *
+ * ★ ESTA LISTA Y `CAMPOS_POR_KIND` SON LA ÚNICA FUENTE DE LA PLANTILLA. El .md
+ * que se descarga no es un texto escrito a mano en paralelo: `plantillaVacia()`
+ * RECORRE estas dos estructuras. Añadir aquí un kind (o un campo abajo) lo hace
+ * aparecer en la plantilla el mismo día, con su pista genérica si nadie le
+ * escribe una — y tests/plantilla-paridad.test.ts falla si alguien intenta
+ * volver a las dos listas paralelas.
  */
 export const SECCIONES: DefSeccion[] = [
   { kind: "basics", titulo: "CONTACTO", alias: ["contacto", "datos personales", "datos de contacto", "basics", "contact", "personal", "personal details"] },
@@ -282,10 +289,20 @@ export const CAMPOS_POR_KIND: Record<string, DefCampo[]> = {
   summary: [
     { clave: "text", nombre: "texto", alias: ["texto", "text", "resumen", "summary"] },
   ],
+  // ⚠ `location` es TAMBIÉN donde vive la modalidad. No es una licencia de este
+  // fichero: la propia pantalla del master rotula ese campo «Ciudad · modalidad
+  // (remoto, híbrido…)» (i18n master.field.location). El modelo NO tiene columna
+  // `modality`, y inventarla aquí habría producido items que el guardado rechaza
+  // (invalidItemData valida contra DATA_KEYS) — o, peor, un alias `modalidad:`
+  // que pisara `ubicacion:` en silencio. Se enseña en la pista, no en el esquema.
   work: [
     { clave: "title", nombre: "puesto", alias: ["puesto", "cargo", "titulo", "title", "position", "role"] },
     { clave: "company", nombre: "empresa", alias: ["empresa", "company", "organizacion", "organization", "employer"] },
     { clave: "location", nombre: "ubicacion", alias: ["ubicacion", "location", "localidad", "ciudad", "city"] },
+    // El enlace del rol (la web de la empresa, la oferta, el equipo). `url` ya
+    // está en DATA_KEYS del master: no es una clave nueva, es una que el formato
+    // no sabía escribir y que por eso viajaba escondida como `extra:`.
+    { clave: "url", nombre: "url", alias: ["url", "enlace", "link", "web", "sitio"] },
     { clave: "dates", nombre: "fechas", alias: ["fechas", "fecha", "dates", "date", "periodo", "period"] },
   ],
   bullet: [
@@ -300,6 +317,9 @@ export const CAMPOS_POR_KIND: Record<string, DefCampo[]> = {
     { clave: "degree", nombre: "titulo", alias: ["titulo", "grado", "degree", "carrera", "estudios", "qualification"] },
     { clave: "institution", nombre: "institucion", alias: ["institucion", "institution", "centro", "universidad", "school", "college"] },
     { clave: "location", nombre: "ubicacion", alias: ["ubicacion", "location", "localidad", "ciudad", "city"] },
+    // Mismo motivo que en work: el diploma o la malla tienen enlace, y `url` es
+    // clave válida del master. Sin campo, ese enlace acababa como nota suelta.
+    { clave: "url", nombre: "url", alias: ["url", "enlace", "link", "web", "sitio"] },
     { clave: "dates", nombre: "fechas", alias: ["fechas", "fecha", "dates", "date", "periodo", "period"] },
   ],
   project: [

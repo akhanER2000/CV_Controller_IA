@@ -9,8 +9,8 @@ import {
 import { signalsOf, compareSignals, similarityVerdict, type SignalBag } from "./similar";
 import { titlesClearlyDifferent } from "./dedup";
 import {
-  repartir, textoPara, conserva, EXTRACTORES_5,
-  type Extractor5, type Reparto,
+  repartir, repartirPorFuente, textoPara, conserva, EXTRACTORES_5,
+  type Extractor5, type Reparto, type Fuente,
 } from "./segmentar";
 import {
   BasicsSchema, WorkSchema, EducationSchema, SkillsSchema, ProjectsSchema,
@@ -36,10 +36,20 @@ export interface ResumenLectura {
   totales: { dirigido: number; difuso: number; contexto: number };
   /** las secciones NO mandadas al modelo, CON NOMBRE (regla del producto) */
   contexto: SeccionContexto[];
+  /**
+   * Las secciones de RELATO que se leyeron con `basics` en vez de descartarse.
+   * Van aparte de `contexto` porque lo que hay que decirle al usuario es lo
+   * contrario: de estas SÍ salieron items (resumen y objetivo), y conviene que
+   * los revise en el staging. Antes caían en `contexto` y el aviso decía «no se
+   * extrajeron», que sonaba —y era— a pérdida.
+   */
+  narrativas: SeccionContexto[];
   /** true si se pidió releer entero (los cinco extractores sobre todo el texto) */
   forzado: boolean;
   /** secciones totales en que se cortó */
   secciones: number;
+  /** cuántos DOCUMENTOS se repartieron por separado (D6 de segmentar.ts) */
+  fuentes: number;
 }
 
 /** Lo que devuelve un extractor: la extracción + avisos honestos sobre la LECTURA. */
@@ -50,7 +60,14 @@ export type ExtractionResult = Extraction & {
   /** cómo se repartió el documento, para que la UI lo pueda enseñar */
   lectura?: ResumenLectura;
 };
-export type Extractor = (rawText: string) => Promise<ExtractionResult>;
+
+/**
+ * `fuentes` son los tramos [inicio,fin) de CADA documento dentro de `rawText`.
+ * Es opcional a propósito: los extractores falsos de los tests siguen siendo
+ * `(rawText) => …` y no hay que tocarlos. Cuando llega, cada documento se
+ * reparte con SU estructura y ninguno arrastra al siguiente (D6 de segmentar.ts).
+ */
+export type Extractor = (rawText: string, fuentes?: readonly Fuente[]) => Promise<ExtractionResult>;
 
 /** La clave que se usa DE VERDAD. Delega en el registro único: aquí se conserva
  *  el nombre por compatibilidad con las rutas que ya la importaban. */
@@ -342,6 +359,21 @@ export function truncationWarning(seg: Segmentation): string | null {
      corpus, ventaneado aparte. Un extractor cuyo corpus queda vacío NO SE LLAMA:
      cero llamadas, decidido en código, sin preguntarle al modelo.
 
+   Y DESDE ESTA RONDA, POR FUENTE (ver D6 en segmentar.ts):
+     `runImport` concatena el texto pegado, cada archivo y cada portfolio en UN
+     `raw_text`. Repartir ese amasijo hace que una captura de LinkedIn —que no
+     trae encabezados markdown— no abra sección propia: se queda pegada a la
+     última sección del documento anterior y hereda su destino. Medido sobre el
+     caso real (dossier + 14 capturas, tests/coste.test.ts): 2,88× repartiendo el
+     amasijo, 1,84× repartiendo documento a documento. Y lo importante no es el
+     número: si esa última sección hubiera sido «# EDUCACIÓN», las catorce
+     capturas se habrían mandado SOLO al extractor de formación.
+
+     ⚠ Se reparte por fuente, pero se LLAMA por corpus: `textoPara` junta las
+       secciones de todos los documentos que van al mismo extractor y se ventanea
+       una vez. Repartir por fuente y además llamar por fuente daba 78 llamadas
+       en ese mismo caso — correcto y carísimo.
+
    Lo que NO cambia, y es deliberado:
      · Los cinco schemas siguen ahí. Existen por el límite de 24 parámetros
        opcionales de los structured outputs, y ese motivo sigue en pie.
@@ -351,9 +383,12 @@ export function truncationWarning(seg: Segmentation): string | null {
        Y entre extractores.
    ============================================================================ */
 
-/** Qué se le pide a cada extractor. El sufijo es lo único que cambiaba antes. */
+/** Qué se le pide a cada extractor. El sufijo es lo único que cambiaba antes.
+ *  ⚠ `basics` menciona el OBJETIVO desde que las secciones narrativas se enrutan
+ *    aquí (D5): «13 · QUÉ BUSCA» es literalmente el rol al que se apunta, y sin
+ *    pedirlo el extractor lo leía y no lo devolvía. */
 const FOCO: Record<Extractor5, string> = {
-  basics: "datos básicos, contacto y resumen",
+  basics: "datos básicos, contacto, objetivo profesional y resumen",
   work: "experiencia laboral, con viñetas",
   education: "formación académica",
   skills: "aptitudes técnicas agrupadas",
@@ -400,17 +435,29 @@ export function promptDeExtraccion(extractor: Extractor5, texto: string): string
    `forzarCompleto` genera otra clave, así que tampoco puede devolver lo cacheado
    de un reparto distinto. */
 
-/** Súbelo a mano si cambian los schemas o los prompts: invalida todo lo cacheado. */
-export const VERSION_EXTRACCION = "v1";
+/** Súbelo a mano si cambian los schemas o los prompts: invalida todo lo cacheado.
+ *  v2 · el foco de `basics` ahora pide el objetivo profesional, y las secciones
+ *  narrativas se enrutan a `basics` en vez de descartarse: lo cacheado con v1 fue
+ *  extraído leyendo MENOS documento. Servirlo sería servir una lectura peor. */
+export const VERSION_EXTRACCION = "v2";
 const TTL_CACHE_MS = 30 * 60_000;
 const MAX_CACHE = 20;
 
 interface EntradaCache { valor: ExtractionResult; en: number }
 const cacheExtraccion = new Map<string, EntradaCache>();
 
-function claveCache(rawText: string, forzado: boolean): string {
+/**
+ * La clave incluye CÓMO viene partido el texto en documentos, no solo el texto.
+ * Sin eso, pegar el mismo material como un bloque o como cinco archivos daría la
+ * misma clave y la caché serviría un reparto que no es el que se pidió: mismo
+ * texto, distinto reparto, distinto resultado. Una caché que devuelve otra cosa
+ * es peor que no tener caché.
+ */
+function claveCache(rawText: string, forzado: boolean, fuentes?: readonly Fuente[]): string {
   const h = createHash("sha256").update(rawText).digest("hex");
-  return `${VERSION_EXTRACCION}:${forzado ? "full" : "seg"}:${h}`;
+  const corte = fuentes?.length ? fuentes.map((f) => `${f.inicio}-${f.fin}`).join(",") : "-";
+  const hc = createHash("sha256").update(corte).digest("hex").slice(0, 12);
+  return `${VERSION_EXTRACCION}:${forzado ? "full" : "seg"}:${hc}:${h}`;
 }
 
 function leerCache(k: string): ExtractionResult | null {
@@ -439,6 +486,8 @@ export interface OpcionesExtractor {
   forzarCompleto?: boolean;
   /** Salta la caché por contenido: la usa «releer», que es una petición explícita. */
   ignorarCache?: boolean;
+  /** Los tramos de cada documento dentro del rawText combinado (D6). */
+  fuentes?: readonly Fuente[];
 }
 
 /* ── EL PLAN, SEPARADO DE LA EJECUCIÓN ────────────────────────────────────────
@@ -465,7 +514,13 @@ export interface PlanExtraccion {
  * Qué llamadas haría una extracción, sin hacer ninguna. PURO: sin red, sin LLM.
  */
 export function planificarExtraccion(rawText: string, opts: OpcionesExtractor = {}): PlanExtraccion {
-  let reparto = repartir(rawText, { forzarCompleto: opts.forzarCompleto });
+  // D6 · con la lista de documentos, cada uno se reparte con SU estructura. Sin
+  // ella (texto pegado suelto, tests, «releer» de una sola fuente) el reparto es
+  // el de siempre. `repartirPorFuente` ya se cae solo al reparto normal si los
+  // tramos no cuadran con el texto, así que esto no puede perder documento.
+  let reparto = opts.fuentes?.length
+    ? repartirPorFuente(rawText, opts.fuentes, { forzarCompleto: opts.forzarCompleto })
+    : repartir(rawText, { forzarCompleto: opts.forzarCompleto });
   const warnings: string[] = [];
 
   /* ── La invariante, comprobada en RUNTIME y no solo en el test ──────────────
@@ -500,6 +555,22 @@ export function planificarExtraccion(rawText: string, opts: OpcionesExtractor = 
     }
   }
 
+  /* ── EL AVISO DE LAS NARRATIVAS ────────────────────────────────────────────
+     Estas secciones ANTES iban al cubo «contexto» y el aviso decía que «no se
+     extrajeron»: sonaba a pérdida, y lo era. Ahora se leen con `basics` y el
+     aviso dice lo que de verdad pasó — de ellas salen el resumen y el objetivo —
+     y a dónde ir a mirarlo. Un aviso que no dice qué hacer no es un aviso.       */
+  const n = reparto.narrativas.length;
+  if (n) {
+    const nombres = reparto.narrativas.map((s) => `«${s.titulo}»`).join(", ");
+    const kb = Math.round(reparto.narrativas.reduce((a, s) => a + s.caracteres, 0) / 1024);
+    warnings.push(
+      `${n === 1 ? "Una sección de relato" : `${n} secciones de relato`} (${kb} KB) ${n === 1 ? "no describe" : "no describen"} ` +
+      `cargos ni títulos, así que ${n === 1 ? "se leyó" : "se leyeron"} con el extractor de datos básicos: de ahí salen el ` +
+      `RESUMEN y el objetivo profesional. Revísalos en el staging. ${nombres}.`,
+    );
+  }
+
   return { llamadas, reparto, warnings };
 }
 
@@ -507,8 +578,10 @@ const resumenDe = (r: Reparto): ResumenLectura => ({
   longitud: r.longitud,
   totales: r.totales,
   contexto: r.contexto,
+  narrativas: r.narrativas,
   forzado: r.forzado,
   secciones: r.secciones.length,
+  fuentes: r.fuentes,
 });
 
 /**
@@ -521,8 +594,12 @@ const resumenDe = (r: Reparto): ResumenLectura => ({
  * entero por un 429.
  */
 export function makeGeminiExtractor(apiKey?: string, opts: OpcionesExtractor = {}): Extractor {
-  return async (rawText) => {
-    const clave = claveCache(rawText, !!opts.forzarCompleto);
+  return async (rawText, fuentes) => {
+    // Los tramos llegan por la LLAMADA (los conoce el pipeline, que es quien
+    // concatena), no por la construcción (la ruta crea el extractor antes de
+    // saber qué archivos hay). Si además vinieran en `opts`, mandan esos.
+    const opciones: OpcionesExtractor = { ...opts, fuentes: opts.fuentes ?? fuentes };
+    const clave = claveCache(rawText, !!opciones.forzarCompleto, opciones.fuentes);
     if (!opts.ignorarCache) {
       const previo = leerCache(clave);
       // Se devuelve el MISMO contenido, pero con el consumo a cero y marcado como
@@ -531,7 +608,7 @@ export function makeGeminiExtractor(apiKey?: string, opts: OpcionesExtractor = {
       if (previo) return { ...previo, consumo: { ...consumoCero(), caracteresDocumento: rawText.length, desdeCache: true } };
     }
 
-    const plan = planificarExtraccion(rawText, opts);
+    const plan = planificarExtraccion(rawText, opciones);
     const model = googleModel(apiKey);
     const consumo = consumoCero();
     consumo.caracteresDocumento = rawText.length;

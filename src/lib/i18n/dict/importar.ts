@@ -77,6 +77,16 @@ export const importar = {
     "importar.pl.s1.h": "Descarga la plantilla",
     "importar.pl.s1.d": "Un fichero .md con las secciones y los campos ya escritos. Ábrelo con cualquier editor de texto.",
     "importar.pl.download": "Descargar plantilla (.md)",
+    // Las tres versiones del MISMO fichero. El botón dice lo que va a bajar: con
+    // el master poblado, la descarga por defecto ES tu master (y así se rotula),
+    // porque tu propio registro es el mejor ejemplo de plantilla que existe.
+    "importar.pl.dl.mio": "Descargar mi master (.md)",
+    "importar.pl.dl.otras": "Otras versiones:",
+    "importar.pl.dl.blanco": "en blanco",
+    "importar.pl.dl.blancoTitle": "El esqueleto sin datos, con las instrucciones dentro.",
+    "importar.pl.dl.ejemplo": "con un ejemplo relleno",
+    "importar.pl.dl.ejemploTitle":
+      "Un perfil inventado, de mentira, para ver cómo queda cada campo bien puesto: una fecha, una viñeta con cifra, trece grupos de habilidades, una referencia.",
     "importar.pl.s2.h": "Rellénala — a mano o con tu propia IA",
     "importar.pl.s2.d":
       "Si la rellenas a mano, escribe y ya está. Si prefieres que la rellene un modelo, copia estas instrucciones y pégalas en tu chat con la plantilla y tu material:",
@@ -228,6 +238,54 @@ Reglas, sin excepciones:
       "Esta sección ({kb} KB) no se mandó a extraer porque no produce items de CV. No se ha borrado: sigue en la fuente y puedes volver a leerla entera.",
     "importar.fin.contexto.chars": "{n} caracteres",
     "importar.fin.contexto.releer": "¿Crees que ahí hay datos tuyos? Vuelve a Fuentes y pulsa «Releer» con la lectura completa.",
+
+    /* ══════════════════════════════════════════════════════════════════════
+       INGESTA DURABLE · las etapas que se guardan en la BASE
+       ══════════════════════════════════════════════════════════════════════
+       ⚠ Estas claves ROMPEN a propósito el prefijo "importar." del namespace.
+         El motivo: `ingestion_events.message` guarda LA CLAVE DE I18N (así lo
+         documenta 0001_schema.sql), y la pantalla traduce con `t(evento.message)`
+         directamente. Si aquí se llamaran "importar.etapa.*" haría falta una
+         tabla de conversión clave-de-BD → clave-de-diccionario: un sitio más
+         donde desincronizarse. El catálogo cerrado vive en
+         `src/lib/ingesta/progreso.ts` (ETAPA) y `tests/ingesta-durable.test.ts`
+         comprueba que TODA etapa tiene texto en los dos idiomas.               */
+    "ingesta.etapa.encolada": "en cola",
+    "ingesta.etapa.leyendo": "leyendo la fuente…",
+    "ingesta.etapa.transcribiendo": "transcribiendo la captura, literal…",
+    "ingesta.etapa.extrayendo": "extrayendo y citando la evidencia…",
+    "ingesta.etapa.cruzando": "cruzando contra lo ya extraído…",
+    "ingesta.etapa.lista": "lista",
+    "ingesta.etapa.fallida": "no se pudo leer",
+    "ingesta.etapa.reintento": "reintentando…",
+    "ingesta.etapa.pausa": "en pausa",
+    "ingesta.etapa.reanudado": "retomando…",
+
+    // ── El observador (la pantalla mira, no ejecuta) ──────────────────────
+    "importar.job.creando": "Creando el trabajo…",
+    "importar.job.fuente": "Fuente {i} de {n}",
+    "importar.job.items": "{n} items hasta ahora",
+    "importar.job.itemsUno": "1 item hasta ahora",
+    "importar.job.seguir": "Puedes cambiar de pantalla o cerrar esto: la ingesta no se cancela.",
+    "importar.job.pausadoTitle": "La ingesta está en pausa",
+    "importar.job.pausadoBody":
+      "Una ingesta larga no cabe entera en una sola llamada al servidor. Lo hecho está guardado; esto sigue por donde iba.",
+    "importar.job.pausadoCta": "Continuar la ingesta",
+    "importar.job.retomando": "Retomando el trabajo…",
+    "importar.job.fallidas": "{n} fuentes no se pudieron leer — las verás nombradas abajo.",
+    "importar.job.fallidaUna": "1 fuente no se pudo leer — la verás nombrada abajo.",
+    "importar.job.reanudarFallo": "No se pudo retomar la ingesta: {motivo}",
+    "importar.job.sondeoFallo": "No se pudo leer el estado de la ingesta: {motivo}",
+    "importar.job.itemsFuente": "{n} items",
+    "importar.job.itemsFuenteUno": "1 item",
+    "importar.job.cero": "0 items — esta fuente no aportó nada",
+
+    // ── Indicador del shell (visible desde cualquier pantalla) ────────────
+    "ingesta.shell.aria": "Ingesta en curso",
+    "ingesta.shell.enCurso": "Ingesta en curso",
+    "ingesta.shell.detalle": "{listas} de {total} fuentes · {items} items",
+    "ingesta.shell.pausada": "Ingesta en pausa — continúa sola al mirarla",
+    "ingesta.shell.ver": "Ver",
   } as Record<string, string>,
   en: {
     // ── Header (dynamic step) ─────────────────────────────────────────────
@@ -300,6 +358,13 @@ Reglas, sin excepciones:
     "importar.pl.s1.h": "Download the template",
     "importar.pl.s1.d": "A .md file with the sections and fields already written. Open it with any text editor.",
     "importar.pl.download": "Download template (.md)",
+    "importar.pl.dl.mio": "Download my master (.md)",
+    "importar.pl.dl.otras": "Other versions:",
+    "importar.pl.dl.blanco": "blank",
+    "importar.pl.dl.blancoTitle": "The empty skeleton, with the instructions inside.",
+    "importar.pl.dl.ejemplo": "with a filled-in example",
+    "importar.pl.dl.ejemploTitle":
+      "A made-up profile, entirely fictional, so you can see how each field looks when it's filled in properly: a date, a bullet with a number, thirteen skill groups, a reference.",
     "importar.pl.s2.h": "Fill it in — by hand or with your own AI",
     "importar.pl.s2.d":
       "Filling it by hand is just typing. If you'd rather have a model do it, copy these instructions and paste them into your chat together with the template and your material:",
@@ -445,5 +510,45 @@ Rules, no exceptions:
       "This section ({kb} KB) wasn't sent for extraction because it doesn't produce CV items. Nothing was deleted: it's still in the source and you can re-read it in full.",
     "importar.fin.contexto.chars": "{n} characters",
     "importar.fin.contexto.releer": "Think your data is in there? Go back to Sources and hit \"Re-read\" with full reading.",
+
+    // ── Durable intake · the stages stored in the DATABASE ────────────────
+    // These keys deliberately break the "importar." prefix: they ARE the value
+    // stored in `ingestion_events.message`. See the ES block for the reasoning.
+    "ingesta.etapa.encolada": "queued",
+    "ingesta.etapa.leyendo": "reading the source…",
+    "ingesta.etapa.transcribiendo": "transcribing the screenshot, verbatim…",
+    "ingesta.etapa.extrayendo": "extracting and citing the evidence…",
+    "ingesta.etapa.cruzando": "cross-checking against what's already extracted…",
+    "ingesta.etapa.lista": "done",
+    "ingesta.etapa.fallida": "couldn't be read",
+    "ingesta.etapa.reintento": "retrying…",
+    "ingesta.etapa.pausa": "paused",
+    "ingesta.etapa.reanudado": "resuming…",
+
+    // ── The observer (the screen watches, it doesn't execute) ─────────────
+    "importar.job.creando": "Creating the job…",
+    "importar.job.fuente": "Source {i} of {n}",
+    "importar.job.items": "{n} items so far",
+    "importar.job.itemsUno": "1 item so far",
+    "importar.job.seguir": "You can switch screens or close this: the intake won't be cancelled.",
+    "importar.job.pausadoTitle": "The intake is paused",
+    "importar.job.pausadoBody":
+      "A long intake doesn't fit in a single server call. What's done is saved; this picks up where it left off.",
+    "importar.job.pausadoCta": "Continue the intake",
+    "importar.job.retomando": "Resuming the job…",
+    "importar.job.fallidas": "{n} sources couldn't be read — you'll see them named below.",
+    "importar.job.fallidaUna": "1 source couldn't be read — you'll see it named below.",
+    "importar.job.reanudarFallo": "Couldn't resume the intake: {motivo}",
+    "importar.job.sondeoFallo": "Couldn't read the intake status: {motivo}",
+    "importar.job.itemsFuente": "{n} items",
+    "importar.job.itemsFuenteUno": "1 item",
+    "importar.job.cero": "0 items — this source contributed nothing",
+
+    // ── Shell indicator (visible from any screen) ─────────────────────────
+    "ingesta.shell.aria": "Intake in progress",
+    "ingesta.shell.enCurso": "Intake in progress",
+    "ingesta.shell.detalle": "{listas} of {total} sources · {items} items",
+    "ingesta.shell.pausada": "Intake paused — it continues on its own when you look at it",
+    "ingesta.shell.ver": "View",
   } as Record<string, string>,
 } as const;

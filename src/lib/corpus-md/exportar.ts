@@ -19,6 +19,7 @@ import {
   CAMPO_TIPO,
   CLAVE_CABECERA,
   FORMATO_ID,
+  MARCA_INTERNA,
   MARCA_PROC,
   SECCIONES,
   campoDeClaveData,
@@ -231,82 +232,344 @@ export function exportarCorpusMd(items: ItemParaExportar[]): string {
   return lineas.join("\n").replace(/\n{3,}/g, "\n\n").trimEnd() + "\n";
 }
 
-/* ── La plantilla vacía ───────────────────────────────────────────────────── */
+/* ============================================================================
+   LA PLANTILLA VACÍA · DERIVADA, NO ESCRITA A MANO
+
+   Antes esto era un literal de 70 líneas. Con el vocabulario en `formato.ts` y
+   el texto aquí, eran DOS LISTAS QUE MANTENER A LA VEZ, y las dos listas
+   divergieron exactamente como divergen siempre: el formato sabía escribir
+   PUBLICACIONES y ENLACES desde el primer día y la plantilla no los ofrecía, así
+   que quien la rellenaba a mano producía menos de lo que el sistema admite —
+   perder un dato por no tener dónde escribirlo es perderlo igual.
+
+   Ahora el fichero se GENERA recorriendo SECCIONES y CAMPOS_POR_KIND. Añadir un
+   kind al vocabulario lo hace aparecer aquí el mismo día; añadir un campo a un
+   kind lo hace aparecer en su bloque. Si nadie le escribe una pista, sale con la
+   genérica `[nombre]`: fea, pero PRESENTE. La fealdad se ve; la ausencia no.
+
+   Los valores van entre corchetes a propósito: se ven a la legua y quien no los
+   sustituya verá `[Tu nombre]` en su CV — un fallo evidente, no uno silencioso.
+   ========================================================================== */
 
 /**
- * El esqueleto para quien empieza de cero. Las instrucciones van como comentario
- * del propio formato (`corpus:` — el parser los ignora sin ruido), así que el
- * fichero se puede rellenar y subir tal cual sin borrar nada.
+ * Lo que se escribe a la derecha de un campo de la plantilla.
+ *  · `string`      → una línea `campo: valor`.
+ *  · `string[]`    → una línea POR ELEMENTO (los repetibles, hoy `enlace:`).
+ *  · `{desde,hasta}` → el azúcar de fechas, que el exportador nunca escribe pero
+ *    la plantilla SÍ enseña: es la forma cómoda para quien escribe a mano.
+ */
+type ValorPista = string | string[] | { desde: string; hasta: string };
+
+interface BloquePlantilla {
+  /** valores por CLAVE DE `data`. Lo que falte sale con su pista genérica. */
+  campos?: Record<string, ValorPista>;
+  /** viñetas de ejemplo del bloque (solo tienen sentido en ADMITEN_VINETAS). */
+  vinetas?: string[];
+}
+
+interface SeccionPlantilla {
+  /** comentario `corpus:` que va justo bajo el «## TÍTULO». */
+  nota?: string[];
+  /** líneas literales antes de los bloques. Hoy solo HABILIDADES (ver abajo). */
+  crudas?: string[];
+  bloques: BloquePlantilla[];
+}
+
+/**
+ * El comentario del formato: `corpus:` lo hace INTERNO y el parser lo ignora sin
+ * ruido, así que el fichero se puede subir con las instrucciones dentro.
  *
- * Los valores de ejemplo van entre corchetes a propósito: se ven a la legua y
- * quien no los sustituya verá `[Tu nombre]` en su CV, que es un fallo evidente y
- * no uno silencioso.
+ * Exportado porque `ejemplo.ts` escribe los suyos con la MISMA forma: dos copias
+ * de esta función acabarían con dos dialectos de comentario en el mismo formato.
+ * La línea en blanco se queda en blanco de verdad (sin la sangría): un fichero
+ * con espacios al final de línea ensucia el primer diff que le hagan.
+ */
+export function comentarioCorpus(lineas: string[]): string[] {
+  if (lineas.length === 1) return [`<!-- ${MARCA_INTERNA} ${lineas[0]} -->`];
+  return [
+    `<!-- ${MARCA_INTERNA} ${lineas[0]}`,
+    ...lineas.slice(1).map((l) => (l === "" ? "" : `     ${l}`)),
+    "-->",
+  ];
+}
+
+const INSTRUCCIONES = [
+  "CÓMO SE RELLENA ESTO",
+  "· Cada «## SECCIÓN» agrupa un tipo de dato. Cada «### entrada» es un item.",
+  "· Los campos son «clave: valor». Los logros van como viñetas «- …».",
+  "· Lo que no sepas, DÉJALO VACÍO o borra la línea. No lo inventes.",
+  "· Puedes borrar las secciones que no uses, y repetir un «###» tantas veces como haga falta.",
+  "· Las fechas: «fechas: 2022 – 2024», o «desde: 2022-03» y «hasta: actualidad».",
+  "· Este bloque y los demás comentarios NO se importan: puedes dejarlos.",
+  "· This template is written in Spanish, but the parser also accepts English",
+  "  field names (name, company, dates, skills…) and English section titles.",
+];
+
+/**
+ * Las pistas de cada sección. Es TEXTO, no estructura: la estructura sale del
+ * vocabulario. Un kind que no esté aquí se dibuja igual, con un bloque de pistas
+ * genéricas — que es justo lo que impide que un kind nuevo se quede fuera.
+ */
+const ESQUELETO: Record<string, SeccionPlantilla> = {
+  basics: {
+    bloques: [{
+      campos: {
+        name: "[Tu nombre completo]",
+        label: "[Tu título profesional, p. ej. AI/ML Engineer]",
+        email: "[tu@correo.cl]",
+        phone: "[+56 9 0000 0000]",
+        location: "[Ciudad, País]",
+        // Repetible: `enlace:` se ACUMULA (regla 3), no se pisa. La forma
+        // «Etiqueta | url» y la url pelada valen las dos.
+        links: [
+          "LinkedIn | [https://www.linkedin.com/in/usuario]",
+          "GitHub | [https://github.com/usuario]",
+          "[Portfolio] | [https://tusitio.cl]",
+        ],
+        // ⚠ VACÍO A PROPÓSITO. `photo` es una clave real del master (la usa
+        // buildResumeData para el PDF) y por eso el campo se enseña; pero se
+        // rellena desde el editor de la variante, no escribiendo aquí. Con una
+        // pista entre corchetes, quien no la borrara acabaría con «[…]» de src
+        // de la foto y una imagen rota en su CV.
+        photo: "",
+      },
+    }],
+    nota: [
+      "«enlace» se puede repetir tantas veces como quieras: no se pisan.",
+      "«foto» se deja vacío: la foto se sube desde el editor de la variante.",
+    ],
+  },
+
+  summary: {
+    bloques: [{
+      campos: {
+        text: "[Dos o tres líneas sobre quién eres profesionalmente. Sin adjetivos vacíos: qué haces, con qué, y para quién.]",
+      },
+    }],
+  },
+
+  work: {
+    nota: [
+      "La MODALIDAD va en «ubicacion», que es donde la guarda el master:",
+      "«ubicacion: Santiago, Chile · híbrido» (o remoto, o presencial).",
+      "Copia el bloque «###» entero por cada rol que hayas tenido.",
+    ],
+    bloques: [
+      {
+        campos: {
+          title: "[Tu cargo] — [Empresa]",
+          company: "[Empresa]",
+          location: "[Ciudad, País]",
+          url: "[https://empresa.cl — opcional]",
+          // Con desde:/hasta: en el rol en curso y `fechas:` en el anterior, la
+          // plantilla enseña LAS DOS formas sin explicar ninguna.
+          dates: { desde: "[2024-01]", hasta: "[actualidad]" },
+        },
+        vinetas: [
+          "[Un logro concreto. Si tiene una cifra, ponla: es lo que lo hace verificable.]",
+          "[Otro logro. Qué hiciste, con qué, y qué cambió.]",
+        ],
+      },
+      {
+        campos: {
+          title: "[Cargo anterior] — [Empresa anterior]",
+          company: "[Empresa anterior]",
+          location: "[Ciudad, País · remoto]",
+          url: "",
+          dates: "[2021 – 2024]",
+        },
+        vinetas: ["[Qué dejaste mejor de lo que estaba. Con cifra si la tienes.]"],
+      },
+    ],
+  },
+
+  skill: {
+    nota: [
+      "LA FORMA CORTA: «Grupo: uno, dos, tres». Una línea por grupo.",
+      "Un master real tiene entre 10 y 15 grupos, no dos: añade los tuyos.",
+      "Regla 7: lo que escribas aquí es una HABILIDAD, no se reclasifica sola.",
+    ],
+    // ⚠ LITERALES, y no derivadas del vocabulario, por una razón del formato: la
+    // forma corta usa el NOMBRE DEL GRUPO como clave («Lenguajes: …»), así que no
+    // hay ningún `def.nombre` que escribir. El bloque largo de abajo sí sale del
+    // vocabulario y es el que garantiza que ningún campo de skill se quede fuera.
+    crudas: [
+      "[Lenguajes]: [Python, TypeScript, SQL]",
+      "[Herramientas]: [Docker, Git, PostgreSQL]",
+      "[Frameworks]: [React, Next.js, FastAPI]",
+      "[Datos]: [PostgreSQL, pandas, dbt]",
+      "[Nube y DevOps]: [AWS, Terraform, GitHub Actions]",
+      "[IA aplicada]: [RAG, embeddings, evaluación]",
+      "[Metodologías]: [Scrum, revisión de código, TDD]",
+      "[Blandas]: [mentoría, documentación técnica, hablar en público]",
+    ],
+    bloques: [{
+      campos: {
+        group: "[Nombre del grupo, si prefieres la forma larga]",
+        items: "[uno, dos, tres]",
+        sourceContext: "[de qué rol o proyecto salió este grupo — opcional]",
+      },
+    }],
+  },
+
+  education: {
+    bloques: [{
+      campos: {
+        degree: "[Tu título]",
+        institution: "[Universidad]",
+        location: "[Ciudad, País]",
+        url: "[https://enlace-al-programa — opcional]",
+        dates: { desde: "[2020-03]", hasta: "[2024-12]" },
+      },
+    }],
+  },
+
+  project: {
+    bloques: [{
+      campos: {
+        name: "[Nombre del proyecto]",
+        description: "[Qué es y qué resuelve, en una línea.]",
+        url: "[https://github.com/usuario/proyecto]",
+        dates: "[2025]",
+      },
+      vinetas: ["[Un detalle con cifra, si lo tiene.]"],
+    }],
+  },
+
+  certification: {
+    bloques: [{
+      campos: {
+        name: "[Nombre de la certificación]",
+        issuer: "[Quién la emite]",
+        url: "[https://enlace-a-la-credencial — opcional]",
+        dates: "[2025]",
+      },
+    }],
+  },
+
+  language: {
+    bloques: [
+      { campos: { language: "[Español]", level: "[nativo]" } },
+      { campos: { language: "[Inglés]", level: "[profesional (B2)]" } },
+    ],
+  },
+
+  // ★ La sección que faltaba y que más pesa en un perfil de investigación: un
+  // paper, una ponencia, un capítulo. El kind existe en el enum item_kind desde
+  // el esquema 0001 y el formato sabía escribirlo; sin sección en la plantilla,
+  // quien la rellenaba a mano no tenía dónde ponerlo.
+  publication: {
+    nota: ["Artículos, ponencias, capítulos, informes técnicos publicados."],
+    bloques: [{
+      campos: {
+        name: "[Título de la publicación]",
+        description: "[Dónde salió y de qué va, en una línea. Revisada por pares o no.]",
+        url: "[https://doi.org/… o el enlace donde se lee]",
+        dates: "[2025]",
+      },
+      vinetas: ["[Lo que la hace citable: dónde se presentó, cuántas citas, qué datos abriste.]"],
+    }],
+  },
+
+  link: {
+    nota: ["Enlaces que no son de contacto: una charla, un repo suelto, una entrevista."],
+    bloques: [{
+      campos: {
+        label: "[Cómo se llama ese enlace]",
+        url: "[https://…]",
+      },
+    }],
+  },
+
+  reference: {
+    nota: ["Pídele permiso a la persona antes de incluirla. Son datos suyos, no tuyos."],
+    bloques: [{
+      campos: {
+        name: "[Nombre de la persona]",
+        role: "[Su cargo]",
+        org: "[Su organización]",
+        relation: "[jefe directo, cliente, profesor…]",
+        email: "[su@correo.cl]",
+        phone: "",
+      },
+    }],
+  },
+};
+
+/**
+ * OTROS no se dibuja: es la red de seguridad del EXPORTADOR (dónde escribir un
+ * kind que no tiene sección propia), no un sitio donde un humano deba escribir
+ * nada. Ofrecérselo sería invitarle a poner `tipo: loQueSea` y a que el master
+ * se lo rechace con un 400. La exclusión está declarada aquí —y comprobada en
+ * el test de paridad— para que sea una decisión y no un olvido.
+ */
+const SIN_PLANTILLA = new Set(["otros"]);
+
+/** Un bloque `###` con todos los campos de su kind, en el orden del vocabulario. */
+function lineasDeBloquePlantilla(kind: string, b: BloquePlantilla): string[] {
+  const out: string[] = [];
+  const campos = b.campos ?? {};
+  const claveCab = CLAVE_CABECERA[kind];
+  // Misma condición que en lineasDeItem: CONTACTO y RESUMEN cuelgan sus campos
+  // directos de la sección. Si fueran dos decisiones parecidas en vez de la
+  // misma, la plantilla enseñaría una forma que el exportador no escribe.
+  const conTitulo = kind !== "basics" && kind !== "summary" && claveCab != null;
+
+  if (conTitulo) {
+    const rot = campos[claveCab];
+    out.push(`### ${typeof rot === "string" && rot !== "" ? rot : `[${claveCab}]`}`);
+  }
+
+  for (const def of CAMPOS_POR_KIND[kind] ?? []) {
+    if (conTitulo && def.clave === claveCab) continue; // ya está en el ###
+    // ★ EL FALLBACK QUE HACE QUE ESTO NO SE PUDRA: un campo nuevo del que nadie
+    // escribió pista sale igual, con su nombre entre corchetes.
+    const v = campos[def.clave] ?? `[${def.nombre}]`;
+
+    if (Array.isArray(v)) {
+      for (const l of v) out.push(`${def.nombre}: ${l}`);
+      continue;
+    }
+    if (typeof v === "object") {
+      // El azúcar solo significa algo donde hay `dates`; en cualquier otro campo
+      // sería una línea que el parser no sabría colocar.
+      if (def.clave === "dates") out.push(`desde: ${v.desde}`, `hasta: ${v.hasta}`);
+      else out.push(...lineasDeCampo(def.nombre, ""));
+      continue;
+    }
+    out.push(...lineasDeCampo(def.nombre, v));
+  }
+
+  for (const t of b.vinetas ?? []) out.push(`- ${t}`);
+  return out;
+}
+
+/**
+ * El esqueleto para quien empieza de cero, generado desde el vocabulario. Las
+ * instrucciones van como comentario del propio formato (`corpus:` — el parser
+ * los ignora sin ruido), así que el fichero se puede rellenar y subir tal cual
+ * sin borrar nada.
  */
 export function plantillaVacia(): string {
-  return `# CORPUS · Perfil profesional
-formato: ${FORMATO_ID}
+  const lineas: string[] = [
+    "# CORPUS · Perfil profesional",
+    `formato: ${FORMATO_ID}`,
+    "",
+    ...comentarioCorpus(INSTRUCCIONES),
+    "",
+  ];
 
-<!-- corpus: CÓMO SE RELLENA ESTO
-     · Cada «## SECCIÓN» agrupa un tipo de dato. Cada «### entrada» es un item.
-     · Los campos son «clave: valor». Los logros van como viñetas «- …».
-     · Lo que no sepas, DÉJALO VACÍO o borra la línea. No lo inventes.
-     · Puedes borrar las secciones que no uses.
-     · Las fechas: «fechas: 2022 – 2024», o «desde: 2022-03» y «hasta: actualidad».
-     · Este bloque y los demás comentarios NO se importan: puedes dejarlos.
--->
+  for (const sec of SECCIONES) {
+    if (SIN_PLANTILLA.has(sec.kind)) continue;
+    const esq = ESQUELETO[sec.kind] ?? { bloques: [{}] };
+    lineas.push(`## ${sec.titulo}`);
+    if (esq.nota) lineas.push(...comentarioCorpus(esq.nota));
+    if (esq.crudas) lineas.push(...esq.crudas, "");
+    for (const b of esq.bloques) {
+      lineas.push(...lineasDeBloquePlantilla(sec.kind, b));
+      lineas.push("");
+    }
+  }
 
-## CONTACTO
-nombre: [Tu nombre completo]
-titular: [Tu título profesional, p. ej. AI/ML Engineer]
-email: [tu@correo.cl]
-telefono: [+56 9 0000 0000]
-ubicacion: [Ciudad, País]
-enlace: LinkedIn | [https://www.linkedin.com/in/usuario]
-enlace: GitHub | [https://github.com/usuario]
-
-## RESUMEN
-texto: [Dos o tres líneas sobre quién eres profesionalmente. Sin adjetivos vacíos: qué haces, con qué, y para quién.]
-
-## EXPERIENCIA
-### [Tu cargo] — [Empresa]
-empresa: [Empresa]
-ubicacion: [Ciudad, País]
-desde: [2024-01]
-hasta: [actualidad]
-- [Un logro concreto. Si tiene una cifra, ponla: es lo que lo hace verificable.]
-- [Otro logro. Qué hiciste, con qué, y qué cambió.]
-
-## HABILIDADES
-[Lenguajes]: [Python, TypeScript, SQL]
-[Herramientas]: [Docker, Git, PostgreSQL]
-
-## EDUCACION
-### [Tu título]
-institucion: [Universidad]
-desde: [2020-03]
-hasta: [2024-12]
-
-## PROYECTOS
-### [Nombre del proyecto]
-descripcion: [Qué es y qué resuelve, en una línea.]
-enlace: [https://github.com/usuario/proyecto]
-- [Un detalle con cifra, si lo tiene.]
-
-## CERTIFICACIONES
-### [Nombre de la certificación]
-emisor: [Quién la emite]
-fechas: [2025]
-
-## IDIOMAS
-### [Español]
-nivel: [nativo]
-
-## REFERENCIAS
-<!-- corpus: pídele permiso a la persona antes de incluirla. Son datos suyos, no tuyos. -->
-### [Nombre de la persona]
-cargo: [Su cargo]
-organizacion: [Su organización]
-relacion: [jefe directo | cliente | profesor]
-email: [su@correo.cl]
-`;
+  return lineas.join("\n").replace(/\n{3,}/g, "\n\n").trimEnd() + "\n";
 }

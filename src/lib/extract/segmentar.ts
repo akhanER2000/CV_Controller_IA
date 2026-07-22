@@ -47,12 +47,33 @@
  *        equivocado y el usuario los PIERDE. Aquí se comparan TOKENS, no
  *        subcadenas: un stem solo casa si el token EMPIEZA por él.
  *
- *   D4 · EL CUBO «CONTEXTO» NUNCA SE CALLA. Las secciones que no producen items
- *        de CV (relato del cuestionario: «Tu historia», «Preguntas incómodas»…)
- *        no se mandan al modelo, pero quedan REGISTRADAS, CONTADAS y NOMBRADAS
- *        en el reparto para que la ingesta se las enseñe al usuario por su
- *        nombre. Y `repartir(texto, { forzarCompleto: true })` las devuelve todas
- *        a los cinco: siempre existe la forma de volver a pagarlo todo.
+ *   D4 · EL CUBO «CONTEXTO» NUNCA SE CALLA, Y AHORA CASI NO EXISTE. Lo único que
+ *        se deja de mandar al modelo son INSTRUCCIONES E ÍNDICES: texto sobre el
+ *        documento, no sobre la persona. Aun así queda REGISTRADO, CONTADO y
+ *        NOMBRADO en el reparto. Y `repartir(texto, { forzarCompleto: true })` lo
+ *        devuelve todo a los cinco: siempre existe la forma de volver a pagarlo.
+ *
+ *   D5 · UNA SECCIÓN DE RELATO NO SE DESCARTA, SE LEE CON OTRO EXTRACTOR. Nueve
+ *        secciones del dossier real («13 · QUÉ BUSCA», «14 · CONTEXTO QUE
+ *        HUMANIZA», «BLOQUE 2 — Tu historia», «BLOQUE 6 — Visión y futuro»,
+ *        «BLOQUE 7 — Qué buscas AHORA», «BLOQUE 9 — Fuera de la computación»,
+ *        «BLOQUE 10 — Pruebas sociales», «BLOQUE 12 — Preguntas incómodas»)
+ *        acababan en el cubo «contexto» y NO se extraían. Eso es exactamente lo
+ *        que da VOZ a un CV: «QUÉ BUSCA» es el rol objetivo y «Tu historia» es la
+ *        materia del resumen. Ahora van al extractor `basics`, que es el que sabe
+ *        leer prosa y el que produce `summary` y `label`. Cuestan ×1, no ×5, y
+ *        dejan de perderse. La única lista que sigue descartando es
+ *        `CLAVES_DESCARTABLES`, y es MÍNIMA y LITERAL a propósito.
+ *
+ *   D6 · CADA FUENTE SE REPARTE CON SU PROPIA ESTRUCTURA (`repartirPorFuente`).
+ *        La ingesta concatena todo —dossier + capturas + portfolio— en UN
+ *        `raw_text`, y repartir sobre el amasijo tiene dos consecuencias, una cara
+ *        y otra GRAVE: una captura sin encabezados propios se pega a la ÚLTIMA
+ *        sección del documento anterior y hereda su destino. Si esa sección era
+ *        difusa, la captura se paga cinco veces; si era «# EDUCACIÓN», las catorce
+ *        capturas de LinkedIn se mandan SOLO al extractor de formación y el
+ *        empleo desaparece. Repartiendo documento a documento, la estructura de
+ *        uno no puede contaminar al siguiente.
  * ════════════════════════════════════════════════════════════════════════════
  */
 
@@ -69,7 +90,8 @@ export type MotivoReparto =
   | "sin-encabezados"     // el documento no tiene títulos: entero al fallback
   | "titulo-clave"        // el título dijo a qué extractor pertenece
   | "heredado"            // subsección sin claves: hereda del encabezado padre
-  | "contexto-narrativo"  // relato/cuestionario: no produce items de CV
+  | "narrativa"           // relato: no es una lista de cargos, pero SÍ es resumen y objetivo → basics
+  | "instrucciones"       // texto SOBRE el documento (cómo usarlo, índice): lo único que no se lee
   | "sin-clave"           // título sin señal: al fallback de los cinco
   | "forzado";            // forzarCompleto: todo a los cinco, sin excepción
 
@@ -78,7 +100,7 @@ export interface Seccion {
   indice: number;
   /** el encabezado tal cual (sin las almohadillas). "" si es preámbulo. */
   titulo: string;
-  /** 1..6 para markdown; 1 para líneas en MAYÚSCULAS; 0 para el preámbulo. */
+  /** 1..6 para markdown; 1 para líneas en MAYÚSCULAS o encabezados de perfil; 0 para el preámbulo. */
   nivel: number;
   /** offset de inicio en el texto ORIGINAL (incluye la línea del encabezado) */
   inicio: number;
@@ -92,6 +114,14 @@ export interface Seccion {
   motivo: MotivoReparto;
   /** las claves que dispararon el enrutado (auditable: por qué fue ahí) */
   claves: string[];
+  /** de qué DOCUMENTO salió el tramo. Solo lo rellena `repartirPorFuente` (D6). */
+  fuente?: string;
+}
+
+/** Una sección nombrada y contada, para poder enseñársela al usuario. */
+export interface SeccionNombrada {
+  titulo: string;
+  caracteres: number;
 }
 
 export interface Reparto {
@@ -102,10 +132,18 @@ export interface Reparto {
   totales: Record<Cubo, number>;
   /** caracteres que acabará leyendo CADA extractor (el difuso suma en los cinco) */
   porExtractor: Record<Extractor5, number>;
-  /** las secciones tratadas como contexto, CON NOMBRE, para enseñárselas al usuario */
-  contexto: { titulo: string; caracteres: number }[];
+  /** las secciones NO mandadas al modelo (instrucciones/índices), CON NOMBRE */
+  contexto: SeccionNombrada[];
+  /**
+   * Las secciones de RELATO que ANTES se descartaban y ahora se leen con `basics`
+   * (D5). Van aparte de `contexto` porque el aviso al usuario es distinto: de
+   * estas SÍ salieron items (resumen y objetivo), y hay que decírselo.
+   */
+  narrativas: SeccionNombrada[];
   /** true si se pidió forzarCompleto (todo a los cinco) */
   forzado: boolean;
+  /** cuántos DOCUMENTOS se repartieron por separado. 1 = reparto sobre un texto único. */
+  fuentes: number;
 }
 
 export interface OpcionesReparto {
@@ -145,6 +183,76 @@ function esEncabezadoMayusculas(linea: string): boolean {
   return /\p{Lu}{3,}/u.test(t);
 }
 
+/* ── ENCABEZADOS DE UN PERFIL TRANSCRITO ──────────────────────────────────────
+   Una captura de LinkedIn no trae markdown ni MAYÚSCULAS: trae «Experiencia»,
+   «Aptitudes», «Educación» en caja de título, cada uno en su línea. Y no es
+   casualidad: `transcribeImage`/`transcribePdf` (llm.ts) le PIDEN literalmente al
+   modelo de visión que los transcriba así, «para saber qué es habilidad y qué es
+   logro». El sistema los fabrica a propósito y el enrutador no sabía leerlos: las
+   catorce capturas del caso real caían enteras al cubo difuso y se pagaban cinco
+   veces cada una.
+
+   ⚠ ES UNA HEURÍSTICA PELIGROSA Y VA CON DOS CANDADOS, porque un falso positivo
+     aquí no cuesta dinero: MANDA TEXTO A UN SOLO EXTRACTOR. Medido sobre el
+     dossier real, la línea 2364 dice exactamente «Experiencia» — es un jirón de
+     una tabla a dos columnas dentro de «BLOQUE 12 — Preguntas incómodas», no un
+     título. Con el detector suelto, media sección se habría ido a `work`.
+
+     C1 · EL DOCUMENTO TIENE QUE PARECER UN PERFIL: hacen falta DOS encabezados
+          de perfil DISTINTOS. Un «Experiencia» suelto en 103 KB de prosa no lo es.
+     C2 · Y TIENE QUE SER CORTO (≤ 20.000 caracteres). Una transcripción de
+          pantalla ronda 1–4 KB; un dossier, cien veces más.
+
+   Los dos candados solo pueden distinguir de verdad cuando cada documento se
+   reparte POR SEPARADO (D6): en el amasijo, el dossier y las capturas son un
+   único texto y el gate no tiene nada que separar. Por eso las dos correcciones
+   van juntas.
+
+   Ojo: esta lista decide «esta línea ES un encabezado», NO a dónde va. El destino
+   lo sigue decidiendo `clasificarTitulo` con el diccionario de siempre — por eso
+   se pueden incluir sin miedo nombres como «Destacado» o «Recomendaciones», que
+   no casan con ninguna clave y acaban en el difuso.                             */
+export const ENCABEZADOS_PERFIL: readonly string[] = [
+  "experiencia", "experience",
+  "aptitudes", "skills",
+  "educacion", "education",
+  "acerca de", "about",
+  "licencias y certificaciones", "licenses certifications", "licenses and certifications",
+  "certificaciones", "certifications",
+  "proyectos", "projects",
+  "idiomas", "languages",
+  "recomendaciones", "recommendations",
+  "publicaciones", "publications",
+  "cursos", "courses",
+  "voluntariado", "volunteering",
+  "premios y reconocimientos", "honors and awards", "honors awards",
+  "destacado", "featured",
+  "intereses", "interests",
+  "actividad", "activity",
+];
+const SET_PERFIL = new Set(ENCABEZADOS_PERFIL);
+
+/** Caracteres máximos para que un documento pueda considerarse un perfil (C2). */
+export const MAX_CHARS_PERFIL = 20_000;
+/** Encabezados de perfil DISTINTOS que hacen falta para activar el detector (C1). */
+export const MIN_ENCABEZADOS_PERFIL = 2;
+
+/**
+ * Si la línea es EXACTAMENTE uno de los encabezados de perfil, su clave; si no, null.
+ * Exige línea entera: «Experiencia» sí, «Experiencia laboral en Chile» no (esa ya
+ * la coge el diccionario por otra vía si toca).
+ */
+function claveDePerfil(linea: string): string | null {
+  const t = linea.trim();
+  if (!t || t.length > 48) return null;
+  // Viñetas, tablas, citas, markdown y las etiquetas de archivo («[captura.png]»)
+  // nunca son encabezados de perfil.
+  if (/^[-*•·>|#[(]/.test(t)) return null;
+  if (/[.;:,]$/.test(t)) return null;
+  const clave = tokensDeTitulo(t).join(" ");
+  return SET_PERFIL.has(clave) ? clave : null;
+}
+
 interface Corte {
   inicio: number;   // offset del PRIMER carácter de la línea del encabezado
   titulo: string;
@@ -157,29 +265,46 @@ interface Corte {
  * reconstrucción sea exacta y D1 no dependa de adivinar cuántos `\n` había.
  */
 function localizarEncabezados(texto: string): Corte[] {
-  const cortes: Corte[] = [];
   // Se recorre línea a línea conservando el offset acumulado, incluidos los
   // separadores (\r\n o \n), que se cuentan al avanzar. Nunca se hace
   // `split`+`join`: la reconstrucción exacta (D1) no puede depender de adivinar
   // cuántos saltos había ni de qué tipo eran.
+  const lineas: { texto: string; inicio: number }[] = [];
   const re = /\r?\n/g;
   let desde = 0;
   let m: RegExpExecArray | null;
-  const empujar = (linea: string, inicio: number) => {
-    const md = RE_MD.exec(linea);
-    if (md) {
-      cortes.push({ inicio, titulo: md[2]!.trim(), nivel: md[1]!.length });
-      return;
-    }
-    if (esEncabezadoMayusculas(linea)) {
-      cortes.push({ inicio, titulo: linea.trim(), nivel: 1 });
-    }
-  };
   while ((m = re.exec(texto)) !== null) {
-    empujar(texto.slice(desde, m.index), desde);
+    lineas.push({ texto: texto.slice(desde, m.index), inicio: desde });
     desde = m.index + m[0].length;
   }
-  if (desde < texto.length) empujar(texto.slice(desde), desde);
+  if (desde < texto.length) lineas.push({ texto: texto.slice(desde), inicio: desde });
+
+  // C1 + C2: ¿este documento parece un perfil transcrito? Se decide ANTES de
+  // cortar, mirando el documento entero, no línea a línea.
+  const distintos = new Set<string>();
+  if (texto.length <= MAX_CHARS_PERFIL) {
+    for (const l of lineas) {
+      const k = claveDePerfil(l.texto);
+      if (k) distintos.add(k);
+    }
+  }
+  const esPerfil = distintos.size >= MIN_ENCABEZADOS_PERFIL;
+
+  const cortes: Corte[] = [];
+  for (const l of lineas) {
+    const md = RE_MD.exec(l.texto);
+    if (md) {
+      cortes.push({ inicio: l.inicio, titulo: md[2]!.trim(), nivel: md[1]!.length });
+      continue;
+    }
+    if (esEncabezadoMayusculas(l.texto)) {
+      cortes.push({ inicio: l.inicio, titulo: l.texto.trim(), nivel: 1 });
+      continue;
+    }
+    if (esPerfil && claveDePerfil(l.texto)) {
+      cortes.push({ inicio: l.inicio, titulo: l.texto.trim(), nivel: 1 });
+    }
+  }
   return cortes;
 }
 
@@ -284,16 +409,52 @@ export const DICCIONARIO: Readonly<Record<Extractor5, readonly string[]>> = {
 };
 
 /**
- * Secciones de RELATO que no producen items de CV. Es el cubo que más ahorra y
- * el único que puede hacer daño, así que la lista es CERRADA y literal: son
- * títulos del cuestionario de identidad y encabezados de instrucciones, no una
- * heurística. Nada que se parezca «un poco» entra aquí.
+ * ★ LO ÚNICO QUE SE DESCARTA. Texto SOBRE el documento, no sobre la persona:
+ * instrucciones de uso e índices. Un lector humano tampoco los leería para
+ * escribir un CV, y no contienen ni un hecho de la carrera de nadie.
+ *
+ * La lista es MÍNIMA y LITERAL, y esa es la regla: ANTE LA DUDA, SE EXTRAE.
+ * Descartar cuesta cero y puede borrar una carrera; leer de más cuesta unos
+ * céntimos. La asimetría no admite «me suena a relleno».
+ *
+ * Ausencias deliberadas, para que nadie las «arregle» luego:
+ *   · «nota del autor» / «disclaimer» — estuvieron aquí y salieron. Un
+ *     disclaimer puede decir «los nombres de cliente están anonimizados», que es
+ *     información sobre los hechos. No es un índice. Cae al difuso y se paga.
+ *   · «contenidos» / «contents» a secas — «BLOQUE 13 — Contenido para las
+ *     secciones nuevas» es material del CV, no una tabla de contenidos.
  *
  * Y una regla que manda sobre esta lista: si el título casa ADEMÁS con cualquier
  * clave de los cinco extractores, GANA EL EXTRACTOR (ver `clasificarTitulo`).
- * «BLOQUE 3 — Experiencia real» es relato y es experiencia: se extrae.
  */
-export const CLAVES_CONTEXTO: readonly string[] = [
+export const CLAVES_DESCARTABLES: readonly string[] = [
+  "como usar este documento", "how to use this document", "how to use",
+  "instrucciones", "instructions", "instrucciones de uso",
+  "indice", "index", "tabla de contenidos", "table of contents",
+];
+
+/**
+ * ★ SECCIONES DE RELATO. NO producen una lista de cargos ni de títulos… pero son
+ * exactamente la materia del RESUMEN y del OBJETIVO PROFESIONAL. Se enrutan a
+ * `basics`, que es el extractor que sabe leer prosa (produce `summary` y `label`).
+ *
+ * ANTES ESTABAN JUNTO A LAS DESCARTABLES Y SE PERDÍAN. En el dossier real eso
+ * eran 26.498 caracteres: «QUÉ BUSCA» (el rol objetivo), «CONTEXTO QUE HUMANIZA»,
+ * «Tu historia», «Visión y futuro», «Qué buscas AHORA», «Fuera de la
+ * computación», «Pruebas sociales» y «Preguntas incómodas». Se perdía justo lo
+ * que distingue un CV de una tabla de fechas.
+ *
+ * ⚠ Una sección narrativa NO se convierte en ancestro heredable: sus hijas
+ *   deciden solas y, si no saben, caen al difuso. Heredar «esto es prosa» le
+ *   quitaría a un cargo escondido bajo «Tu historia» sus otros cuatro extractores.
+ *
+ * ⚠ «a confirmar» / «puntos a confirmar» NO están aquí ni entre las descartables,
+ *   y se quitaron tras mirar el documento real: «BLOQUE 0 — Datos a confirmar»
+ *   contiene el nombre público, la ubicación, la disponibilidad y el correo, y
+ *   «15 · PUNTOS A CONFIRMAR» contiene el TELÉFONO. Una sección sobre «cosas por
+ *   confirmar» es justo donde viven los hechos en disputa. Van al difuso.
+ */
+export const CLAVES_NARRATIVAS: readonly string[] = [
   "tu historia", "your story", "historia personal",
   "vision y futuro", "vision and future",
   "que buscas", "que busca", "what you are looking for", "what you want",
@@ -301,14 +462,6 @@ export const CLAVES_CONTEXTO: readonly string[] = [
   "fuera de la computacion", "outside of tech", "hobbies", "hobby",
   "intereses personales", "personal interests", "tiempo libre",
   "prueba* social*", "social proof",
-  // ⚠ «a confirmar» / «puntos a confirmar» ESTUVIERON aquí y se quitaron tras
-  //   mirar el documento real: «BLOQUE 0 — Datos a confirmar» contiene el nombre
-  //   público, la ubicación, la disponibilidad y el correo del usuario, y
-  //   «15 · PUNTOS A CONFIRMAR» contiene su TELÉFONO. Una sección sobre «cosas
-  //   por confirmar» es justo donde viven los hechos en disputa: es el último
-  //   sitio del que se puede prescindir. Van al difuso y se pagan.
-  "como usar este documento", "how to use this document",
-  "instrucciones", "instructions", "nota del autor", "disclaimer",
   "contexto que humaniza",
 ];
 
@@ -316,18 +469,30 @@ export const CLAVES_CONTEXTO: readonly string[] = [
    4 · CLASIFICACIÓN DE UN TÍTULO
    ══════════════════════════════════════════════════════════════════════════ */
 
+/** Qué clase de sección es, mirando solo el título. */
+export type TipoTitulo =
+  | "extractor"     // casó con el diccionario: va a esos extractores
+  | "narrativa"     // relato: va a `basics` (resumen y objetivo)
+  | "descartable"   // instrucciones o índice: no se manda al modelo
+  | "nada";         // sin señal: lo decide el llamador (difuso)
+
 export interface Clasificacion {
   destinos: Extractor5[];
   claves: string[];
-  esContexto: boolean;
+  tipo: TipoTitulo;
 }
 
 /**
  * Mira SOLO el título. Devuelve a qué extractores va y por qué.
  * Orden de decisión (el orden ES la política de seguridad):
  *   1. ¿casa con algún extractor? → va ahí. Aunque también suene a relato.
- *   2. ¿casa con el relato del cuestionario? → contexto.
- *   3. nada → sin destinos y sin contexto: que decida el llamador (difuso).
+ *   2. ¿es instrucciones/índice? → descartable. Es la única salida sin extractor.
+ *   3. ¿es relato? → narrativa: a `basics`, que sabe leer prosa.
+ *   4. nada → sin destinos: que decida el llamador (difuso, a los cinco).
+ *
+ * El paso 2 va ANTES del 3 porque es el más específico y el más literal: las dos
+ * listas no se solapan hoy, y si algún día lo hicieran, «cómo usar este
+ * documento» debe seguir siendo instrucciones y no relato.
  */
 export function clasificarTitulo(titulo: string): Clasificacion {
   const tokens = tokensDeTitulo(titulo);
@@ -342,12 +507,17 @@ export function clasificarTitulo(titulo: string): Clasificacion {
       }
     }
   }
-  if (destinos.length) return { destinos, claves, esContexto: false };
+  if (destinos.length) return { destinos, claves, tipo: "extractor" };
 
-  const ctx = CLAVES_CONTEXTO.filter((c) => casa(tokens, c));
-  if (ctx.length) return { destinos: [], claves: ctx.map((c) => `contexto:${c}`), esContexto: true };
+  const fuera = CLAVES_DESCARTABLES.filter((c) => casa(tokens, c));
+  if (fuera.length) return { destinos: [], claves: fuera.map((c) => `descartable:${c}`), tipo: "descartable" };
 
-  return { destinos: [], claves: [], esContexto: false };
+  const relato = CLAVES_NARRATIVAS.filter((c) => casa(tokens, c));
+  // El destino NO es un descarte disfrazado: es `basics`, y de ahí salen el
+  // resumen y el objetivo profesional del CV.
+  if (relato.length) return { destinos: ["basics"], claves: relato.map((c) => `narrativa:${c}`), tipo: "narrativa" };
+
+  return { destinos: [], claves: [], tipo: "nada" };
 }
 
 /* ══════════════════════════════════════════════════════════════════════════
@@ -364,15 +534,7 @@ export function repartir(texto: string, opts: OpcionesReparto = {}): Reparto {
   const forzado = !!opts.forzarCompleto;
   const longitud = texto.length;
 
-  const vacio = (): Reparto => ({
-    secciones: [],
-    longitud,
-    totales: { dirigido: 0, difuso: 0, contexto: 0 },
-    porExtractor: { basics: 0, work: 0, education: 0, skills: 0, projects: 0 },
-    contexto: [],
-    forzado,
-  });
-  if (longitud === 0) return vacio();
+  if (longitud === 0) return armar([], 0, forzado);
 
   const cortes = localizarEncabezados(texto);
 
@@ -426,8 +588,14 @@ export function repartir(texto: string, opts: OpcionesReparto = {}): Reparto {
     } else {
       const c = clasificarTitulo(b.titulo);
       const heredado = ancestros.length ? ancestros[ancestros.length - 1]!.destinos : [];
+      /* Solo un título que casó con el DICCIONARIO aporta destinos propios a la
+         herencia. Una NARRATIVA no matiza a su padre: «Tu historia en la empresa»
+         colgado de «EXPERIENCIA» es experiencia, y añadirle `basics` sería pagar
+         una segunda lectura por una corazonada sobre la prosa. Si hay padre
+         dirigido, manda el padre; si no lo hay, se cae al caso `narrativa`.     */
+      const propios = c.tipo === "extractor" ? c.destinos : [];
 
-      if (c.destinos.length || heredado.length) {
+      if (propios.length || heredado.length) {
         /* ── La herencia SUMA, no sustituye ─────────────────────────────────
            Este es el bug que casi cuesta un empleo. «4.2 AI/ML Engineer —
            Proyecto de título (AeroFit)» cuelga de «4 · EXPERIENCIA PROFESIONAL»
@@ -437,15 +605,19 @@ export function repartir(texto: string, opts: OpcionesReparto = {}): Reparto {
            MATIZA a su padre, no lo contradice — así que va a los destinos de los
            dos. Cuesta una llamada más y no pierde el rol.                     */
         const union = [...heredado];
-        for (const d of c.destinos) if (!union.includes(d)) union.push(d);
+        for (const d of propios) if (!union.includes(d)) union.push(d);
         cubo = "dirigido";
         destinos = EXTRACTORES_5.filter((e) => union.includes(e)); // orden estable
-        motivo = c.destinos.length ? "titulo-clave" : "heredado";
-        claves = c.claves;
-      } else if (c.esContexto) {
-        // El contexto solo se aplica si NO hay herencia dirigida: una subsección
-        // narrativa colgada de «EXPERIENCIA» sigue siendo experiencia.
-        cubo = "contexto"; destinos = []; motivo = "contexto-narrativo"; claves = c.claves;
+        motivo = propios.length ? "titulo-clave" : "heredado";
+        claves = propios.length ? c.claves : [];
+      } else if (c.tipo === "descartable") {
+        // Lo ÚNICO que no se manda al modelo, y solo si NO hay herencia dirigida:
+        // una subsección colgada de «EXPERIENCIA» sigue siendo experiencia.
+        cubo = "contexto"; destinos = []; motivo = "instrucciones"; claves = c.claves;
+      } else if (c.tipo === "narrativa") {
+        // D5 · relato → `basics`. Es DIRIGIDO: se lee, se paga una vez, y de ahí
+        // salen el resumen y el objetivo. Antes esto caía en «contexto» y se perdía.
+        cubo = "dirigido"; destinos = ["basics"]; motivo = "narrativa"; claves = c.claves;
       } else {
         cubo = "difuso"; destinos = TODOS(); motivo = "sin-clave"; claves = [];
       }
@@ -456,28 +628,109 @@ export function repartir(texto: string, opts: OpcionesReparto = {}): Reparto {
       inicio, fin, caracteres: fin - inicio, cubo, destinos, motivo, claves,
     });
 
-    // Solo un encabezado DIRIGIDO se convierte en ancestro heredable. Un padre
-    // difuso o de contexto deja a sus hijos decidir solos (y si no saben, al
-    // difuso): heredar «no sé» no es información.
+    /* Solo un encabezado dirigido POR SU TÍTULO O POR HERENCIA se convierte en
+       ancestro heredable. Un padre difuso o de instrucciones deja a sus hijos
+       decidir solos (y si no saben, al difuso): heredar «no sé» no es información.
+
+       ⚠ Y una NARRATIVA tampoco hereda, aunque su cubo sea «dirigido». Es el
+         mismo razonamiento: «esto es prosa» no es un destino, es la ausencia de
+         uno. Si heredara, una subsección de «Tu historia» que describiera un
+         cargo iría SOLO a `basics` y perdería los otros cuatro extractores. Así
+         cae al difuso: cuesta más y no pierde nada.                              */
     if (b.nivel > 0) {
-      ancestros.push({ nivel: b.nivel, destinos: cubo === "dirigido" ? destinos : [] });
+      const heredable = cubo === "dirigido" && motivo !== "narrativa";
+      ancestros.push({ nivel: b.nivel, destinos: heredable ? destinos : [] });
     }
   }
 
   return armar(secciones, longitud, forzado);
 }
 
-function armar(secciones: Seccion[], longitud: number, forzado: boolean): Reparto {
+function armar(secciones: Seccion[], longitud: number, forzado: boolean, fuentes = 1): Reparto {
   const totales: Record<Cubo, number> = { dirigido: 0, difuso: 0, contexto: 0 };
   const porExtractor: Record<Extractor5, number> = { basics: 0, work: 0, education: 0, skills: 0, projects: 0 };
-  const contexto: { titulo: string; caracteres: number }[] = [];
+  const contexto: SeccionNombrada[] = [];
+  const narrativas: SeccionNombrada[] = [];
 
   for (const s of secciones) {
     totales[s.cubo] += s.caracteres;
     for (const d of s.destinos) porExtractor[d] += s.caracteres;
     if (s.cubo === "contexto") contexto.push({ titulo: s.titulo, caracteres: s.caracteres });
+    else if (s.motivo === "narrativa") narrativas.push({ titulo: s.titulo, caracteres: s.caracteres });
   }
-  return { secciones, longitud, totales, porExtractor, contexto, forzado };
+  return { secciones, longitud, totales, porExtractor, contexto, narrativas, forzado, fuentes };
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   5-bis · EL REPARTO POR FUENTE (D6)
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/** Un DOCUMENTO dentro del `raw_text` combinado: su etiqueta y su tramo. */
+export interface Fuente {
+  /** etiqueta legible: «texto pegado», «captura-linkedin-3.png», «misitio.cl» */
+  etiqueta: string;
+  /** offset de inicio en el texto COMBINADO */
+  inicio: number;
+  /** offset de fin, exclusivo */
+  fin: number;
+}
+
+/**
+ * ¿Los tramos TESELAN el texto? Contiguos, en orden, sin huecos ni solapes, del
+ * carácter 0 al último. Si no, el reparto por fuente no puede conservar el
+ * documento (D1) y no se usa: se cae al reparto normal, que es siempre correcto.
+ */
+export function fuentesTeselan(fuentes: readonly Fuente[], longitud: number): boolean {
+  if (!fuentes.length) return false;
+  let cursor = 0;
+  for (const f of fuentes) {
+    if (f.inicio !== cursor || f.fin < f.inicio) return false;
+    cursor = f.fin;
+  }
+  return cursor === longitud;
+}
+
+/**
+ * ★ Reparte DOCUMENTO A DOCUMENTO y devuelve UN solo `Reparto` sobre el texto
+ * combinado, con los offsets ya trasladados.
+ *
+ * POR QUÉ IMPORTA (D6, medido): la ingesta pega el dossier y las catorce capturas
+ * de LinkedIn en un único `raw_text`. Una captura transcrita no trae markdown, así
+ * que al repartir el amasijo NO abre sección propia: se queda pegada a la última
+ * sección del dossier y hereda su destino. En el caso real esa última sección era
+ * difusa y las catorce capturas se pagaron cinco veces cada una; si hubiera sido
+ * «# EDUCACIÓN», se habrían mandado SOLO al extractor de formación y toda la
+ * experiencia de LinkedIn habría desaparecido sin un aviso.
+ *
+ * Lo que NO cambia, y es lo que mantiene el coste bajo: el resultado sigue siendo
+ * UN reparto. `textoPara` junta después las secciones de TODOS los documentos que
+ * van al mismo extractor en un solo corpus, y se ventanea una vez. Repartir por
+ * fuente Y ADEMÁS llamar por fuente daría 5 llamadas por captura (78 en el caso
+ * real, medido): correcto y carísimo. Se reparte por fuente; se llama por corpus.
+ */
+export function repartirPorFuente(
+  texto: string,
+  fuentes: readonly Fuente[],
+  opts: OpcionesReparto = {},
+): Reparto {
+  // La vía de escape no se toca: forzarCompleto debe seguir costando y cubriendo
+  // EXACTAMENTE lo mismo que la lectura antigua, sin importar cómo venga partido.
+  if (opts.forzarCompleto || !fuentesTeselan(fuentes, texto.length)) return repartir(texto, opts);
+
+  const secciones: Seccion[] = [];
+  for (const f of fuentes) {
+    const trozo = texto.slice(f.inicio, f.fin);
+    for (const s of repartir(trozo, opts).secciones) {
+      secciones.push({
+        ...s,
+        indice: secciones.length,
+        inicio: s.inicio + f.inicio,
+        fin: s.fin + f.inicio,
+        fuente: f.etiqueta,
+      });
+    }
+  }
+  return armar(secciones, texto.length, false, fuentes.length);
 }
 
 /* ══════════════════════════════════════════════════════════════════════════

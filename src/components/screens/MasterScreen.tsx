@@ -3439,6 +3439,27 @@ export function MasterScreen() {
               <a className="c-btn" id="btnMasterMd" href="/api/master/plantilla" download title={t("master.plantilla.title")}>
                 {t("master.plantilla.descargar")}
               </a>
+              {/* Las otras dos versiones del MISMO fichero: el esqueleto en
+                  blanco y el ejemplo relleno. Van como enlaces pequeños y no
+                  como botones porque esta barra ya tiene tres acciones; un
+                  cuarto botón con el mismo peso visual convertiría una elección
+                  en un menú de bar. El estilo va en línea porque master.css es
+                  frontera de otro bloque: solo tokens, ningún color literal.
+
+                  «en blanco» solo cuando hay registro: con el master vacío, el
+                  botón de al lado ya baja exactamente eso. */}
+              <span
+                style={{ display: "inline-flex", gap: "8px", alignItems: "baseline", font: "400 var(--fs-ui)/1 var(--font-sans)", color: "var(--text-muted)" }}
+              >
+                {!loading && !isEmpty ? (
+                  <a href="/api/master/plantilla?v=blanco" download title={t("master.plantilla.blancoTitle")}>
+                    {t("master.plantilla.blanco")}
+                  </a>
+                ) : null}
+                <a href="/api/master/plantilla?v=ejemplo" download title={t("master.plantilla.ejemploTitle")}>
+                  {t("master.plantilla.ejemplo")}
+                </a>
+              </span>
               {/* B · «Revisar mi master con IA»: el barrido en dos pasos. Solo con
                   registro poblado (vacío no hay nada que barrer). */}
               {!loading && !isEmpty ? (
@@ -3775,6 +3796,13 @@ export function MasterScreen() {
               <div className="ms-empty__plrow">
                 <a className="c-btn" href="/api/master/plantilla" download>
                   {t("master.empty.plantilla")}
+                </a>
+                {/* ★ Con el master vacío, el ejemplo relleno vale MÁS que el
+                    esqueleto: enseña el nivel de detalle que se espera (una
+                    viñeta con cifra, trece grupos de habilidades), no solo
+                    dónde va cada cosa. Por eso está aquí y no escondido. */}
+                <a className="ms-empty__pllink" href="/api/master/plantilla?v=ejemplo" download title={t("master.plantilla.ejemploTitle")}>
+                  {t("master.empty.plantillaEjemplo")}
                 </a>
                 <Link className="ms-empty__pllink" href="/app/importar#plantilla">
                   {t("master.empty.plantillaHow")}

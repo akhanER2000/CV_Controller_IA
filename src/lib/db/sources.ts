@@ -140,6 +140,93 @@ export function sourceInsert(userId: string, meta: SourceMeta) {
 }
 
 /* ============================================================================
+   ★ UNA FUENTE VACÍA NUNCA SE PINTA DE VERDE
+   ============================================================================
+   «Extraída · 0 ítems» sin más es una MENTIRA: dice que todo fue bien y que tu
+   documento no valía nada. Casi siempre lo que pasó es otra cosa, y esa otra
+   cosa se sabe. Aquí se decide, con los hechos de la lectura, POR QUÉ una fuente
+   acabó sin un solo item. El texto va a la columna `error` (que ya existía y ya
+   se pintaba) y la tarjeta deja de mentir.
+
+   Son TRES causas distintas y hasta hoy daban todas el mismo silencio:
+
+     · 'no-se-pudo-leer' — la descarga o la extracción REVENTARON (Storage caído,
+       el modelo de visión sin responder, un DOCX corrupto). No es culpa del
+       archivo del usuario y no se le puede echar encima.
+     · 'sin-texto' — se leyó, pero no salió ni un carácter legible (una captura
+       borrosa, un PDF sin capa de texto y sin IA para transcribirlo). El aviso
+       que escribe extract/files ES el motivo: lo firma quien lo sabe.
+     · 'sin-items' — sí había texto, y la extracción no encontró NADA que
+       proponer. Es el único caso en que el cero es «normal», y aun así se dice
+       con su cifra de caracteres delante para que se pueda auditar.
+
+   PURA a propósito: es la regla, y una regla que solo existe dentro de un Route
+   Handler no se puede probar con mutantes.
+   ============================================================================ */
+
+export type CausaVacia = "no-se-pudo-leer" | "sin-texto" | "sin-items";
+
+export interface FuenteVacia {
+  causa: CausaVacia;
+  /** el texto que va a `error` y que la tarjeta enseña, en español */
+  motivo: string;
+  /** el estado con el que queda la fuente ('failed' solo si de verdad falló) */
+  status: "failed" | "extracted";
+}
+
+/** Los hechos de la lectura de UNA fuente, tal como los conoce quien la leyó. */
+export interface HechosLectura {
+  /** items que la ingesta acabó atribuyendo a esta fuente */
+  items: number;
+  /** caracteres de texto que se sacaron de ella (raw_text.length) */
+  caracteres: number;
+  /** aviso honesto de la extracción (extract/files lo escribe). null si no hubo. */
+  aviso?: string | null;
+  /** mensaje de la excepción, si la lectura reventó. null si no reventó. */
+  fallo?: string | null;
+}
+
+/**
+ * Por qué esta fuente acabó con cero items — o `null` si produjo alguno, que es
+ * el caso en que la tarjeta no tiene nada que explicar.
+ */
+export function causaSinItems(h: HechosLectura): FuenteVacia | null {
+  // Un fallo de lectura se cuenta SIEMPRE, aunque por otro camino hubieran
+  // entrado items: si reventó, reventó, y el usuario tiene que poder reintentar.
+  if (h.fallo) {
+    return {
+      causa: "no-se-pudo-leer",
+      motivo: `No se pudo leer esta fuente: ${h.fallo}. No es un problema de tu archivo — reintenta la subida.`,
+      status: "failed",
+    };
+  }
+  if (h.caracteres <= 0) {
+    // El aviso de extract/files es la causa CONCRETA (imagen ilegible, el modelo
+    // que no respondió, PDF sin capa de texto) y lo firma quien lo sabe. Va
+    // delante, pero NUNCA solo: un aviso escueto no le explica nada a nadie, así
+    // que la consecuencia se dice siempre y el motivo nunca queda en dos palabras.
+    const causa = h.aviso?.trim();
+    return {
+      causa: "sin-texto",
+      motivo:
+        (causa ? `${causa} ` : "") +
+        "No se obtuvo ni un carácter legible de esta fuente, así que no había nada que extraer. " +
+        "No inventamos lo que no se lee.",
+      status: "failed",
+    };
+  }
+  if (h.items > 0) return null;
+  const detalle = h.aviso?.trim() ? ` ${h.aviso.trim()}` : "";
+  return {
+    causa: "sin-items",
+    motivo:
+      `Se leyeron ${h.caracteres.toLocaleString("es-CL")} caracteres de esta fuente, ` +
+      `pero la extracción no encontró ningún dato de CV que proponer.${detalle}`,
+    status: "extracted",
+  };
+}
+
+/* ============================================================================
    LA SOSPECHA DE DUPLICADO, PERSISTIDA (§A2)
    ============================================================================
    El detector (extract/dedup.ts) ya emparejaba bien, pero su veredicto moría en
@@ -222,8 +309,17 @@ export function mergeProposalFor(r: StagedRow, keyToId: Map<string, string>): Me
    y pasa a ser un dato: se conoce ANTES de hablar con la base, lo que además
    permite resolver `duplicateOf` en el mismo insert, sin un UPDATE posterior.   */
 
-/** uuid v4 con la criptografía de la plataforma. Falla RUIDOSO antes que colisionar. */
-function nuevoId(): string {
+/**
+ * uuid v4 con la criptografía de la plataforma. Falla RUIDOSO antes que colisionar.
+ *
+ * EXPORTADO porque el mismo argumento vale para las FUENTES, no solo para los
+ * items: al crear varias ingestion_sources de golpe (los archivos de un volcado)
+ * hay que saber el id de cada una ANTES de insertar, para poder colgarle sus
+ * items. Correlacionar por el orden en que PostgREST devuelve un insert múltiple
+ * es la misma suposición sin contrato que ya nos costó viñetas colgadas del rol
+ * equivocado.
+ */
+export function nuevoId(): string {
   const c = globalThis.crypto;
   if (c?.randomUUID) return c.randomUUID();
   if (c?.getRandomValues) {
@@ -286,6 +382,22 @@ export function bulletRow(
   return { ...parentRow(userId, sourceId, r, extra), parent_staged_id: parentStagedId };
 }
 
+/* ── A QUÉ FUENTE VA CADA FILA ────────────────────────────────────────────────
+   Antes esto era un `string`: TODA la ingesta colgaba de una sola fuente. Con
+   un volcado de 14 capturas + un dossier eso significaba 14 tarjetas diciendo
+   «extraída · 0 ítems» mientras una sola se llevaba todo — el dato existía, solo
+   estaba mal atribuido. Ahora se admite además un RESOLUTOR por fila: el
+   pipeline ya sabe de qué documento salió cada item (StagedRow.sourceLabel) y
+   aquí se traduce esa etiqueta al id de su fuente.
+
+   ⚠ El mapa clave→id sigue siendo UNO para toda la ingesta aunque las filas se
+     repartan entre varias fuentes: una viñeta puede venir del cuestionario y su
+     rol de LinkedIn, y el enlace parent_staged_id tiene que seguir cuadrando
+     por encima de la frontera entre fuentes.                                   */
+export type FuenteDeFila = string | ((r: StagedRow) => string);
+
+const resolverFuente = (f: FuenteDeFila) => (typeof f === "function" ? f : () => f);
+
 /**
  * Las filas de UNA ingesta, en dos fases y con la sospecha ya resuelta a ids
  * reales. PURO: es el armado que comparten los dos writers (persistImport de
@@ -295,7 +407,7 @@ export function bulletRow(
  */
 export function stagedRowsFor(
   userId: string,
-  sourceId: string,
+  sourceId: FuenteDeFila,
   rows: StagedRow[],
   gen?: () => string,
   /** clave local → id del profile_item del master que ya la contiene (solo releer). */
@@ -303,6 +415,7 @@ export function stagedRowsFor(
 ): { keyToId: Map<string, string>; parents: ReturnType<typeof parentRow>[]; bullets: ReturnType<typeof bulletRow>[] } {
   const { parents, bullets } = splitStaged(rows);
   const keyToId = assignIds(rows, gen);
+  const fuente = resolverFuente(sourceId);
   const extraDe = (r: StagedRow): RowExtra => ({
     id: keyToId.get(r.key),
     mergeProposal: mergeProposalFor(r, keyToId),
@@ -310,11 +423,26 @@ export function stagedRowsFor(
   });
   return {
     keyToId,
-    parents: parents.map((r) => parentRow(userId, sourceId, r, extraDe(r))),
+    parents: parents.map((r) => parentRow(userId, fuente(r), r, extraDe(r))),
     bullets: bullets.map((r) =>
-      bulletRow(userId, sourceId, r, r.parentKey ? keyToId.get(r.parentKey) ?? null : null, extraDe(r)),
+      bulletRow(userId, fuente(r), r, r.parentKey ? keyToId.get(r.parentKey) ?? null : null, extraDe(r)),
     ),
   };
+}
+
+/**
+ * Cuántas filas quedan atribuidas a cada fuente. PURO. Es lo que permite a la
+ * ruta cumplir la regla capital: una fuente con CERO items no puede quedarse en
+ * verde, así que primero hay que saber cuáles se quedaron a cero.
+ */
+export function itemsPorFuente(rows: StagedRow[], sourceId: FuenteDeFila): Record<string, number> {
+  const fuente = resolverFuente(sourceId);
+  const out: Record<string, number> = {};
+  for (const r of rows) {
+    const id = fuente(r);
+    out[id] = (out[id] ?? 0) + 1;
+  }
+  return out;
 }
 
 /** Separa los padres de las viñetas conservando el orden (patrón de dos fases). */
@@ -338,7 +466,7 @@ export function splitStaged(rows: StagedRow[]): { parents: StagedRow[]; bullets:
 export async function insertStagedTwoPhase(
   sb: SB,
   userId: string,
-  sourceId: string,
+  sourceId: FuenteDeFila,
   rows: StagedRow[],
   dupMap?: Map<string, string>,
 ): Promise<number> {
