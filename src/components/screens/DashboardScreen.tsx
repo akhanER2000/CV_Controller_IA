@@ -276,11 +276,18 @@ export function DashboardScreen() {
           <Link href="/app/fuentes">{t("nav.fuentes")}</Link>
         </nav>
         <div className="hd-right">
-          <Link href="/app/ajustes" className="hd-nav" style={{ display: "inline-flex" }}>
-            <span style={{ font: "500 var(--fs-ui)/1 var(--font-sans)", color: "var(--text-muted)", padding: "9px 12px" }}>
-              {t("nav.ajustes")}
-            </span>
-          </Link>
+          {/* Bloque C · espaciado. Aquí había un <Link className="hd-nav"> con un
+              <span> dentro que RECOPIABA a mano las declaraciones de `.hd-nav a`
+              (globals.css:449) en un `style` en línea: la misma fuente, el mismo
+              color y el mismo padding, escritos otra vez. Y la copia salía
+              incompleta —sin border-radius y sin :hover—, así que el enlace de
+              Ajustes era el único del encabezado que no se encendía al pasar por
+              encima. Se pasa a la forma que ya usan Fuentes, Salud, Tailor y
+              Variantes: un <nav class="hd-nav"> de un solo enlace. Ninguna
+              declaración repetida y los estados los da el sistema. */}
+          <nav className="hd-nav" style={{ display: "flex" }}>
+            <Link href="/app/ajustes">{t("nav.ajustes")}</Link>
+          </nav>
           <div className="hd-lang">
             <span data-on>ES</span>
             <span>EN</span>
@@ -370,7 +377,14 @@ export function DashboardScreen() {
                   {data.variants.length ? (
                     data.variants.map((v) => <VariantRow key={v.nm} v={v} />)
                   ) : (
-                    <div className="db-fine" style={{ padding: "12px 0" }}>
+                    /* Bloque C · el `style={{padding:"12px 0"}}` que había aquí
+                       pisaba el canalón de .db-fine y dejaba «Aún no hay variantes ·
+                       Crea la primera →» pegado al borde de la celda, desalineado
+                       con la cabecera de su propia tarjeta. Un padding en línea gana
+                       SIEMPRE a la hoja: por eso el candado de tests/espaciado.test.ts
+                       prohíbe escribir padding en el `style` de esta pantalla. Sin él,
+                       la clase ya trae el canalón del sistema. */
+                    <div className="db-fine">
                       {t("dashboard.variants.emptyRow")}
                       <Link href="/app/variantes">{t("dashboard.variants.createFirst")}</Link>
                     </div>

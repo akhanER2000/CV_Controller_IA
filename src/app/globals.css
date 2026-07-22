@@ -310,6 +310,22 @@
   --sp-6: 32px; --sp-7: 48px; --sp-8: 64px; --sp-9: 96px; --sp-10: 160px;
   /* 160px = ritmo de sección de lectura/ceremonia. La app trabaja a 48–64px. */
 
+  /* Canalón interior de una tarjeta densa, eje X (bloque C · espaciado).
+     NO es un valor nuevo: es EL 20px que ya estaba escrito A MANO en veintitantas
+     reglas de dashboard, master, staging, variantes, tailor, ajustes y salud. El
+     problema de tenerlo veintitantas veces no es estético, es que se DESVÍA: en
+     master convivían 20px (tarjeta de experiencia), 18px (filas densas, grupos de
+     aptitudes) y 16px (referencias, comparador de duplicados), así que el texto
+     de dos secciones contiguas de la MISMA columna arrancaba en dos x distintas.
+     Y en el Panel una tarjeta llegó a quedarse en 0 (un `style` en línea que
+     pisaba la regla) sin que nada lo cazara.
+     Vive FUERA de la escala --sp-* a propósito: la escala salta 16 → 24 y la
+     referencia de diseño cortó en 20. Forzarlo a 24 volvería a cortar cada celda
+     de una maqueta portada literalmente sin que el usuario gane nada; lo que sí
+     gana es que el próximo componente ya no tenga que adivinar si su tarjeta
+     lleva 16, 18, 20 ó 22. Si un día el canalón cambia, cambia aquí. */
+  --card-pad-x: 20px;
+
   /* Tipo (px / line-height) */
   --fs-micro: 11px;  /* meta, overlines, chips */
   --fs-data: 12px;   /* filas densas, mono */

@@ -35,6 +35,10 @@ import type {
   HallazgoVineta,
   HallazgoAptitud,
 } from "@/lib/master/barrido";
+// SOLO TIPOS, por la misma razón que los dos de arriba: traducir.ts trae las tablas
+// de meses, el diccionario de equivalencias y el candado entero. La pantalla no
+// traduce nada — recibe la propuesta YA construida y verificada por el servidor.
+import type { Idioma, ResultadoTraduccion, PropuestaTraduccion } from "@/lib/cv/traducir";
 import "./master.css";
 
 /* ============================================================================
@@ -943,6 +947,41 @@ export function MasterScreen() {
   const [barResult, setBarResult] = useState<ResultadoBarrido | null>(null);
   const [barError, setBarError] = useState("");
   const [barSel, setBarSel] = useState<ReadonlySet<string>>(new Set());
+
+  /* ── A · EL CV BILINGÜE (ES ⇄ EN) ──────────────────────────────────────────
+     Mismo patrón que el barrido y que el «acortar» del editor de variantes: se
+     PROPONE, se REVISA con el original al lado, y se aplica lo que el usuario
+     marque. Nada se traduce al importar (eso sería pagar por 71 items que quizá
+     no se usen nunca) y nada se aplica sin verlo — un CV en un idioma que no
+     dominas no se manda a ciegas.
+
+     `trEstado` viene del GET y NO cuesta IA: dice en qué idioma está el registro,
+     cuál sería el destino y cuántos items están PENDIENTES DE TRADUCCIÓN. Es lo
+     que hace que el botón diga la verdad antes de pulsarlo. */
+  const [trEstado, setTrEstado] = useState<{
+    idiomaMaster: Idioma;
+    idiomaDetectado: boolean;
+    destino: Idioma;
+    items: number;
+    pendientes: number;
+    traducidos: { es: number; en: number };
+  } | null>(null);
+  const [trOpen, setTrOpen] = useState(false);
+  const [trBusy, setTrBusy] = useState(false);
+  const [trError, setTrError] = useState("");
+  const [trResult, setTrResult] = useState<ResultadoTraduccion | null>(null);
+  // Los itemIds que el usuario deja marcados. Por defecto TODOS los que traen algo
+  // traducido; cada uno se puede desmarcar antes de aplicar el lote.
+  const [trSel, setTrSel] = useState<ReadonlySet<string>>(new Set());
+  // El PRESUPUESTO: cuántos campos cuestan de verdad. Se pide antes de analizar,
+  // y no gasta un token — que el usuario vea la factura antes de pagarla.
+  const [trPlan, setTrPlan] = useState<{
+    camposModelo: number;
+    camposCopiados: number;
+    camposTabla: number;
+    items: number;
+    yaTraducidos: number;
+  } | null>(null);
 
   /* ── B · REFERENCIAS ────────────────────────────────────────────────────────
      Los ITEMS viven en `view.references` (salen de /api/master como cualquier otro
@@ -1919,6 +1958,153 @@ export function MasterScreen() {
     });
   }, [barResult, barSel, barAplicable, barKey, barCorreccion, undo, t, noteSaved, refrescarMaster]);
 
+  /* ── A · EL CV BILINGÜE: estado, presupuesto, propuesta, aplicar, revertir ──
+     Cinco llamadas y una sola regla: las tres primeras NO escriben nada, y las dos
+     últimas solo hacen lo que el usuario acaba de marcar con las dos versiones
+     delante. */
+
+  /** El estado del idioma. Se pide al cargar: es de solo lectura y no cuesta IA. */
+  const cargarEstadoIdioma = useCallback(() => {
+    if (!supabaseEnabled) return;
+    void (async () => {
+      try {
+        const res = await fetch("/api/master/traducir");
+        if (!res.ok) return; // sin registro o sin sesión: el botón simplemente no aparece
+        setTrEstado(await res.json());
+      } catch {
+        /* que falle el estado no puede romper la pantalla: solo oculta el botón */
+      }
+    })();
+  }, []);
+  useEffect(cargarEstadoIdioma, [cargarEstadoIdioma]);
+
+  /** El PRESUPUESTO, sin llamar al modelo. Abre el panel con la factura delante. */
+  const verPresupuesto = useCallback(() => {
+    if (!supabaseEnabled) {
+      setTrOpen(true);
+      setTrError(t("master.tr.localOff"));
+      return;
+    }
+    setTrOpen(true);
+    setTrBusy(true);
+    setTrError("");
+    setTrResult(null);
+    void (async () => {
+      try {
+        const res = await fetch("/api/master/traducir", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ accion: "plan", hacia: trEstado?.destino ?? "en" }),
+        });
+        const j = await res.json();
+        if (!res.ok) throw new Error(j?.error ?? "");
+        setTrPlan(j.plan);
+      } catch (e) {
+        setTrError(e instanceof Error && e.message ? e.message : t("master.tr.fail"));
+      } finally {
+        setTrBusy(false);
+      }
+    })();
+  }, [t, trEstado]);
+
+  /** ANALIZAR: llama al modelo SOLO con lo que hay que pagar y trae la propuesta. */
+  const proponerTraduccion = useCallback(() => {
+    if (!supabaseEnabled || !trEstado) return;
+    setTrBusy(true);
+    setTrError("");
+    void (async () => {
+      try {
+        const res = await fetch("/api/master/traducir", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ accion: "analizar", hacia: trEstado.destino }),
+        });
+        const j = await res.json();
+        if (!res.ok) throw new Error(j?.error ?? "");
+        const r = j.traduccion as ResultadoTraduccion;
+        setTrResult(r);
+        // Por defecto TODO queda marcado: el usuario desmarca lo que no quiera.
+        setTrSel(new Set(r.propuestas.map((p) => p.itemId)));
+      } catch (e) {
+        setTrError(e instanceof Error && e.message ? e.message : t("master.tr.fail"));
+        setTrResult(null);
+      } finally {
+        setTrBusy(false);
+      }
+    })();
+  }, [t, trEstado]);
+
+  const toggleTrSel = useCallback((id: string) => {
+    setTrSel((prev) => {
+      const n = new Set(prev);
+      if (n.has(id)) n.delete(id);
+      else n.add(id);
+      return n;
+    });
+  }, []);
+
+  /* APLICAR. Se DIFIERE con el UndoToast igual que el barrido: hasta que la ventana
+     de gracia expira NO se ha escrito nada, así que un solo «deshacer» cancela el
+     lote entero. Y el candado vuelve a correr EN EL SERVIDOR contra el original de
+     la base, así que lo que aquí se manda no es lo que acaba escrito por decreto. */
+  const aplicarTraduccion = useCallback(() => {
+    if (!supabaseEnabled || !trResult) return;
+    const items = trResult.propuestas
+      .filter((p) => trSel.has(p.itemId))
+      .map((p) => ({ itemId: p.itemId, data: p.data }));
+    if (!items.length) return;
+
+    setTrOpen(false);
+    undo.show({
+      message: t("master.tr.undoBatch").replace("{n}", String(items.length)),
+      onUndo: () => setTrOpen(true), // nada se aplicó: el panel vuelve intacto
+      onCommit: async () => {
+        try {
+          const res = await fetch("/api/master/traducir", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ accion: "aplicar", hacia: trResult.hacia, items }),
+          });
+          const j = await res.json();
+          if (!res.ok) throw new Error(j?.error ?? "");
+          let msg = t("master.tr.applied").replace("{n}", String(j.insertadas ?? 0));
+          const rech = Array.isArray(j.rechazados) ? j.rechazados.length : 0;
+          if (rech > 0) msg += " · " + t("master.tr.rejectedN").replace("{n}", String(rech));
+          noteSaved(msg);
+          setTrResult(null);
+          cargarEstadoIdioma();
+        } catch (e) {
+          noteSaved(e instanceof Error && e.message ? e.message : t("master.tr.fail"));
+          setTrOpen(true);
+        }
+      },
+    });
+  }, [trResult, trSel, undo, t, noteSaved, cargarEstadoIdioma]);
+
+  /** REVERTIR: borra las filas espejo del idioma destino. El registro no se toca. */
+  const revertirTraduccion = useCallback(() => {
+    if (!supabaseEnabled || !trEstado) return;
+    setTrBusy(true);
+    void (async () => {
+      try {
+        const res = await fetch("/api/master/traducir", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ accion: "revertir", hacia: trEstado.destino }),
+        });
+        const j = await res.json();
+        if (!res.ok) throw new Error(j?.error ?? "");
+        noteSaved(t("master.tr.reverted").replace("{n}", String(j.revertidas ?? 0)));
+        setTrResult(null);
+        cargarEstadoIdioma();
+      } catch (e) {
+        setTrError(e instanceof Error && e.message ? e.message : t("master.tr.fail"));
+      } finally {
+        setTrBusy(false);
+      }
+    })();
+  }, [t, trEstado, noteSaved, cargarEstadoIdioma]);
+
   /* ── B · las tres escrituras de una referencia ──────────────────────────────
      Todas pasan por /api/references, NUNCA por /api/master/[id]: esa ruta valida
      el `data` contra un vocabulario cerrado que no conoce `role`, `org` ni
@@ -2741,6 +2927,161 @@ export function MasterScreen() {
     );
   };
 
+  /* ── A · EL PANEL DEL CV BILINGÜE ───────────────────────────────────────────
+     Tres zonas, en el orden en que se decide:
+       1. EL PRESUPUESTO — cuántos campos se copian, cuántos van por tabla
+          determinista y cuántos cuestan de verdad. Antes de pagar.
+       2. LA PROPUESTA — original ⇄ traducción, campo a campo, con casilla por item.
+          Es el mismo patrón de revisión que el «acortar» del editor de variantes:
+          nada se aplica sin verlo al lado de lo que sustituye.
+       3. LO RECHAZADO — lo que el candado tumbó, con el motivo exacto y el texto
+          que NO se ofreció. Sin esta zona, «la IA no tradujo esto» y «la IA
+          escribió una mentira y la paramos» se verían exactamente igual. */
+  const trIdiomaNombre = (l: Idioma): string => t(l === "es" ? "master.tr.spanish" : "master.tr.english");
+
+  const trFilaPropuesta = (p: PropuestaTraduccion): ReactNode => {
+    // Solo se enseñan los campos que CAMBIAN: repetir «PharmIQ → PharmIQ» treinta
+    // veces enterraría lo que de verdad hay que revisar.
+    const campos = p.campos.filter((c) => c.propuesto !== c.original || c.sinTraducir);
+    if (!campos.length) return null;
+    return (
+      <label className={`ms-bar__row${p.incompleta ? " ms-tr__row--parcial" : ""}`} key={p.itemId}>
+        <input
+          type="checkbox"
+          checked={trSel.has(p.itemId)}
+          onChange={() => toggleTrSel(p.itemId)}
+          aria-label={t("master.tr.include")}
+        />
+        <span className="ms-bar__body">
+          <span className="ms-bar__tipo">{p.kind}</span>
+          {campos.map((c) => (
+            <span className="ms-tr__par" key={`${p.itemId}:${c.campo}`}>
+              <span className="ms-tr__campo">
+                {c.campo}
+                <em className="ms-tr__via">{t(`master.tr.via.${c.via}`)}</em>
+              </span>
+              <span className="ms-tr__orig">{c.original}</span>
+              <span className={`ms-tr__nuevo${c.sinTraducir ? " sin" : ""}`}>
+                {c.sinTraducir ? t("master.tr.keptOriginal") : c.propuesto}
+              </span>
+              {c.aviso ? <span className="ms-tr__aviso">⚠ {c.aviso}</span> : null}
+            </span>
+          ))}
+        </span>
+      </label>
+    );
+  };
+
+  const traduccionPanel = (): ReactNode => {
+    if (!trOpen) return null;
+    const destino = trEstado?.destino ?? "en";
+    const filas = trResult ? trResult.propuestas.map(trFilaPropuesta).filter(Boolean) : [];
+    const nSel = trResult ? trResult.propuestas.filter((p) => trSel.has(p.itemId)).length : 0;
+
+    return (
+      <div className="ms-bar ms-tr" role="group" aria-label={t("master.tr.title")}>
+        <div className="ms-bar__h">
+          <span className="t-overline">{t("master.tr.title")}</span>
+          <button type="button" className="ms-bar__x" onClick={() => setTrOpen(false)}>
+            {t("master.tr.close")}
+          </button>
+        </div>
+        <p className="ms-bar__intro">
+          {t("master.tr.intro").replace("{destino}", trIdiomaNombre(destino))}
+        </p>
+
+        {trBusy ? <p className="ms-bar__busy" role="status">{t("master.tr.busy")}</p> : null}
+        {trError ? <p className="ms-bar__err" role="alert">{trError}</p> : null}
+
+        {/* 1 · EL PRESUPUESTO. Cifras REALES del plan, no una estimación. */}
+        {trPlan && !trResult && !trBusy ? (
+          <>
+            <ul className="ms-bar__walk">
+              <li>{t("master.tr.plan.items").replace("{n}", String(trPlan.items))}</li>
+              <li>{t("master.tr.plan.copiados").replace("{n}", String(trPlan.camposCopiados))}</li>
+              <li>{t("master.tr.plan.tabla").replace("{n}", String(trPlan.camposTabla))}</li>
+              <li>
+                <b>{t("master.tr.plan.modelo").replace("{n}", String(trPlan.camposModelo))}</b>
+              </li>
+              {trPlan.yaTraducidos > 0 ? (
+                <li>{t("master.tr.plan.ya").replace("{n}", String(trPlan.yaTraducidos))}</li>
+              ) : null}
+            </ul>
+            <div className="ms-bar__acts">
+              <button
+                type="button"
+                className="ms-bar__apply"
+                disabled={trPlan.items === 0}
+                onClick={proponerTraduccion}
+              >
+                {t("master.tr.propose").replace("{destino}", trIdiomaNombre(destino))}
+              </button>
+              <span className="ms-bar__never">{t("master.tr.never")}</span>
+            </div>
+          </>
+        ) : null}
+
+        {/* 2 · LA PROPUESTA, revisable campo a campo. */}
+        {trResult && !trBusy ? (
+          <>
+            {filas.length === 0 ? <p className="ms-bar__empty">{t("master.tr.empty")}</p> : null}
+            {filas.length > 0 ? (
+              <div className="ms-bar__sec">
+                <span className="t-overline">{t("master.tr.sec.propuesta")}</span>
+                <div className="ms-bar__list">{filas}</div>
+                <div className="ms-bar__acts">
+                  <button type="button" className="ms-bar__apply" disabled={nSel === 0} onClick={aplicarTraduccion}>
+                    {t("master.tr.apply").replace("{n}", String(nSel))}
+                  </button>
+                  <span className="ms-bar__never">{t("master.tr.never")}</span>
+                </div>
+              </div>
+            ) : null}
+
+            {/* 3 · LO RECHAZADO. Nunca en silencio. */}
+            {trResult.descartados.length > 0 ? (
+              <div className="ms-bar__sec ms-bar__sec--adv">
+                <span className="t-overline">{t("master.tr.sec.rechazadas")}</span>
+                <p className="ms-bar__advhint">{t("master.tr.rejectedHint")}</p>
+                <div className="ms-bar__list">
+                  {trResult.descartados.map((d, i) => (
+                    <div className="ms-bar__row ms-bar__row--adv" key={`tx-${i}-${d.itemId}-${d.campo}`}>
+                      <span className="ms-bar__body">
+                        <span className="ms-bar__tipo">{d.campo}</span>
+                        <span className="ms-bar__prop">{d.razon}</span>
+                        <span className="ms-tr__orig">{d.original}</span>
+                        {d.propuesto ? <span className="ms-tr__nuevo sin">{d.propuesto}</span> : null}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+
+            {/* Los campos que el mapa de traducción no conoce: se copiaron literal
+                y se dice cuáles. Un campo nuevo no puede colarse sin que se vea. */}
+            {trResult.noDeclarados.length > 0 ? (
+              <p className="ms-bar__advhint">
+                {t("master.tr.undeclared").replace("{campos}", trResult.noDeclarados.join(", "))}
+              </p>
+            ) : null}
+          </>
+        ) : null}
+
+        {/* REVERTIR: solo tiene sentido si ya hay algo escrito en ese idioma. */}
+        {trEstado && trEstado.traducidos[destino] > 0 ? (
+          <div className="ms-bar__acts">
+            <button type="button" className="ms-bar__rerun" disabled={trBusy} onClick={revertirTraduccion}>
+              {t("master.tr.revert")
+                .replace("{n}", String(trEstado.traducidos[destino]))
+                .replace("{destino}", trIdiomaNombre(destino))}
+            </button>
+          </div>
+        ) : null}
+      </div>
+    );
+  };
+
   // A4: la viñeta sin cifra que PARECE una etiqueta ⇒ sugerencia «esto parece una
   // habilidad» con acción de un clic; si no, el nudge «sin cifra» de siempre.
   const nudge = (b: VBullet): ReactNode => {
@@ -3473,6 +3814,26 @@ export function MasterScreen() {
                   {barBusy ? t("master.barrido.ctaBusy") : t("master.barrido.cta")}
                 </button>
               ) : null}
+              {/* A · «Generar versión en inglés/español». El botón DICE la verdad
+                  antes de pulsarlo: el idioma destino sale de detectar en qué
+                  idioma está escrito tu registro (no de una columna que hoy es una
+                  constante), y el contador dice cuántos items están pendientes.
+                  Solo con registro poblado: sin items no hay nada que traducir. */}
+              {!loading && !isEmpty && trEstado && trEstado.items > 0 ? (
+                <button
+                  type="button"
+                  className="c-btn c-btn--patina ms-barrido-cta"
+                  aria-expanded={trOpen}
+                  disabled={trBusy}
+                  title={t("master.tr.ctaTitle")
+                    .replace("{n}", String(trEstado.pendientes))
+                    .replace("{destino}", trIdiomaNombre(trEstado.destino))}
+                  onClick={verPresupuesto}
+                >
+                  {t("master.tr.cta").replace("{destino}", trIdiomaNombre(trEstado.destino))}
+                  {trEstado.pendientes > 0 ? ` · ${trEstado.pendientes}` : ""}
+                </button>
+              ) : null}
               <div className="ms-addwrap">
               <button
                 type="button"
@@ -3528,6 +3889,7 @@ export function MasterScreen() {
           </div>
 
           {barridoPanel()}
+          {traduccionPanel()}
 
           <div id="groups" ref={groupsRef}>
             {loading || !v || isEmpty ? null : (

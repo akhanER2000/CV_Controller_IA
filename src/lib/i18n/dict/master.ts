@@ -252,6 +252,48 @@ export const master = {
        Revisar los 105 items DE UNA en dos pasos: analizar (propone) y aplicar
        (el usuario confirma). El progreso es HONESTO: se dice qué se examinó con
        cifras reales, nunca un porcentaje inventado. */
+    /* A · EL CV BILINGÜE (ES ⇄ EN). El botón dice el idioma DESTINO, que se decide
+       detectando en qué idioma está escrito tu registro — no leyendo una columna.
+       Y dice cuántos items están PENDIENTES DE TRADUCCIÓN: un hueco que no se
+       nombra es un hueco que descubres cuando ya mandaste el CV. */
+    "master.tr.cta": "Generar versión en {destino}",
+    "master.tr.ctaTitle":
+      "Traduce tu registro al {destino} sin tocar las cifras ni los nombres propios. {n} items pendientes. Nada se aplica sin que lo revises.",
+    "master.tr.title": "Versión bilingüe del registro",
+    "master.tr.intro":
+      "Traduzco tu registro al {destino}. Las cifras y los nombres propios son intocables: si una traducción los pierde o se inventa otros, no te la ofrezco. Nada se aplica hasta que lo confirmes.",
+    "master.tr.close": "cerrar",
+    "master.tr.busy": "Traduciendo…",
+    "master.tr.fail": "No se pudo traducir",
+    "master.tr.localOff": "La traducción necesita tu registro en la nube. En modo local no hay nada que traducir.",
+    "master.tr.spanish": "español",
+    "master.tr.english": "inglés",
+    // El PRESUPUESTO: lo que cuesta, antes de pagarlo. Cifras del plan real.
+    "master.tr.plan.items": "{n} items sin versión en el otro idioma",
+    "master.tr.plan.copiados": "{n} campos se copian tal cual (empresas, tecnologías, URLs): cero coste",
+    "master.tr.plan.tabla": "{n} campos se traducen con tabla fija (fechas, «actualidad»): cero coste",
+    "master.tr.plan.modelo": "{n} campos necesitan traducción real: son los únicos que cuestan",
+    "master.tr.plan.ya": "{n} items ya traducidos — no se vuelven a traducir ni se vuelven a pagar",
+    "master.tr.propose": "Traducir al {destino}",
+    "master.tr.never": "Nada se aplica sin que lo confirmes.",
+    "master.tr.sec.propuesta": "Original ⇄ traducción",
+    "master.tr.sec.rechazadas": "Rechazadas por el candado",
+    "master.tr.rejectedHint":
+      "Estas traducciones perdían una cifra, cambiaban una magnitud o metían un nombre que no estaba. No se ofrecen: el campo se queda con tu texto original.",
+    "master.tr.include": "incluir en la traducción",
+    "master.tr.keptOriginal": "(se queda tu texto original)",
+    "master.tr.via.modelo": "traducido",
+    "master.tr.via.tabla": "tabla fija",
+    "master.tr.via.copiar": "sin tocar",
+    "master.tr.empty": "No hay nada que traducir: tu registro ya está completo en los dos idiomas.",
+    "master.tr.apply": "Aplicar {n}",
+    "master.tr.undoBatch": "Se van a guardar {n} traducciones",
+    "master.tr.applied": "{n} traducciones guardadas",
+    "master.tr.rejectedN": "{n} campos se quedaron con tu texto original",
+    "master.tr.revert": "Borrar las {n} traducciones al {destino}",
+    "master.tr.reverted": "{n} traducciones borradas. Tu registro no se ha tocado.",
+    "master.tr.undeclared": "Campos que no sé traducir todavía y se copiaron literal: {campos}",
+
     "master.barrido.cta": "Revisar mi master con IA",
     "master.barrido.ctaBusy": "Revisando tu registro…",
     "master.barrido.title": "Barrido del master",
@@ -559,6 +601,47 @@ export const master = {
     // B · AI MASTER SWEEP — review the 105 items in two steps: analyze (proposes)
     // and apply (you confirm). Progress is HONEST: it says what was examined with
     // real counts, never an invented percentage.
+    // A · THE BILINGUAL CV (ES ⇄ EN). The button names the TARGET language, which
+    // comes from detecting what language your record is written in — not from
+    // reading a column. And it says how many items are PENDING TRANSLATION.
+    "master.tr.cta": "Generate {destino} version",
+    "master.tr.ctaTitle":
+      "Translates your record into {destino} without touching figures or proper nouns. {n} items pending. Nothing is applied until you review it.",
+    "master.tr.title": "Bilingual version of your record",
+    "master.tr.intro":
+      "I translate your record into {destino}. Figures and proper nouns are untouchable: if a translation drops them or invents new ones, I don't offer it. Nothing is applied until you confirm.",
+    "master.tr.close": "close",
+    "master.tr.busy": "Translating…",
+    "master.tr.fail": "Couldn't translate",
+    "master.tr.localOff": "Translation needs your record in the cloud. In local mode there's nothing to translate.",
+    "master.tr.spanish": "Spanish",
+    "master.tr.english": "English",
+    // The BUDGET: what it costs, before paying. Real numbers from the plan.
+    "master.tr.plan.items": "{n} items with no version in the other language",
+    "master.tr.plan.copiados": "{n} fields are copied as-is (companies, technologies, URLs): zero cost",
+    "master.tr.plan.tabla": "{n} fields use a fixed table (dates, «present»): zero cost",
+    "master.tr.plan.modelo": "{n} fields need real translation: these are the only ones that cost",
+    "master.tr.plan.ya": "{n} items already translated — never translated (or paid for) twice",
+    "master.tr.propose": "Translate into {destino}",
+    "master.tr.never": "Nothing is applied until you confirm.",
+    "master.tr.sec.propuesta": "Original ⇄ translation",
+    "master.tr.sec.rechazadas": "Rejected by the lock",
+    "master.tr.rejectedHint":
+      "These translations dropped a figure, changed a magnitude, or added a name that wasn't there. They aren't offered: the field keeps your original text.",
+    "master.tr.include": "include in the translation",
+    "master.tr.keptOriginal": "(keeps your original text)",
+    "master.tr.via.modelo": "translated",
+    "master.tr.via.tabla": "fixed table",
+    "master.tr.via.copiar": "untouched",
+    "master.tr.empty": "Nothing to translate: your record is already complete in both languages.",
+    "master.tr.apply": "Apply {n}",
+    "master.tr.undoBatch": "{n} translations will be saved",
+    "master.tr.applied": "{n} translations saved",
+    "master.tr.rejectedN": "{n} fields kept your original text",
+    "master.tr.revert": "Delete the {n} {destino} translations",
+    "master.tr.reverted": "{n} translations deleted. Your record is untouched.",
+    "master.tr.undeclared": "Fields I can't translate yet, copied verbatim: {campos}",
+
     "master.barrido.cta": "Review my master with AI",
     "master.barrido.ctaBusy": "Reviewing your record…",
     "master.barrido.title": "Master sweep",
