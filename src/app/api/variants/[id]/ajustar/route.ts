@@ -4,7 +4,7 @@ import { modeloPara } from "@/lib/ai/modelos";
 import { createClient } from "@/lib/supabase/server";
 import { getVariant, getVariantItem, setAiOverride, buildVariantResumeData } from "@/lib/db/variants";
 import { geminiApiKey } from "@/lib/extract/llm";
-import { getUserLlmKey } from "@/lib/account/byok";
+import { getUserLlmKey, getUserLlmKey3 } from "@/lib/account/byok";
 // Cuántas páginas quiere el usuario: 1, 2 o 3 (objetivoDe vive en autofit.ts, con
 // su test; un route.ts de Next no puede exportar nada que no sea del contrato).
 import { autofit, objetivoDe, plantillaDe } from "@/lib/cv/autofit";
@@ -43,12 +43,15 @@ export const maxDuration = 300;
 const fallo = (msg: string, status: number) => NextResponse.json({ error: msg }, { status });
 const motivo = (e: unknown) => (e instanceof Error ? e.message : "Error");
 
-/** El LLM real (Gemini) como función inyectable. Clave BYOK del usuario o del servidor. */
-function geminiAjusteLLM(apiKey?: string): AjusteLLM {
+/**
+ * El LLM real como función inyectable. Clave BYOK del usuario o del servidor.
+ * apiKey3 = clave de Anthropic: con ella redacta Claude; sin ella, el fallback Gemini.
+ */
+function geminiAjusteLLM(apiKey?: string, apiKey3?: string): AjusteLLM {
   const key = apiKey || geminiApiKey();
   if (!key) throw new Error("Falta GEMINI_API_KEY");
   // Acortar/seleccionar sin inventar es redaccion-preserva-hechos: por el registro.
-  const model = modeloPara("redaccion-preserva-hechos", key);
+  const model = modeloPara("redaccion-preserva-hechos", key, undefined, undefined, apiKey3);
   const SYS =
     "Eres un asistente que ayuda a que un CV QUEPA en un número de páginas. Te doy los items " +
     "VISIBLES de la variante (id, tipo y texto), el rol objetivo y CUÁNTAS LÍNEAS SOBRAN (medidas " +
@@ -163,7 +166,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
 
     const propuesta = await construirAjuste(
       { targetTitle, items, paginas: medida.porPagina.length, paginasObjetivo, sobran },
-      { llm: geminiAjusteLLM(byok) },
+      { llm: geminiAjusteLLM(byok, (await getUserLlmKey3(sb, user.id)) ?? undefined) },
     );
 
     // Los descartes se registran EN EL SERVIDOR además de viajar al cliente: si un
