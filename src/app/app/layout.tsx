@@ -22,9 +22,11 @@ import { IngestaEnCurso } from "@/components/IngestaEnCurso";
  *   el fondo congelado toda la sesión, y eso ya pasó de verdad.
  *   Si alguna pantalla vuelve a montar <Aurora> por su cuenta, sobra: quítala.
  *
- * · <UserMenu> — avatar + toggles idioma/tema + menú Perfil · Ajustes · Cerrar
- *   sesión, fijo arriba a la derecha; su CSS oculta los .hd-av/.hd-lang
- *   estáticos de cada pantalla.
+ * · <UserMenu> — EL LATERAL del shell (rediseño "Forja"): navegación principal,
+ *   identidad con su menú Perfil · Ajustes · Cerrar sesión, la tarjeta «Una
+ *   oferta nueva» y los toggles de idioma y tema. Su CSS oculta la nav, el logo
+ *   y los .hd-av/.hd-lang estáticos que cada pantalla pinta en su <header>, y
+ *   .sh-main desplaza el contenido lo que ocupa el lateral.
  *
  * · <IngestaEnCurso> — el trabajo de ingesta, visible desde CUALQUIER pantalla.
  *   Va aquí y no en Importar porque la promesa del producto es que cambiar de
@@ -44,7 +46,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       <Aurora />
       <UserMenu />
       <IngestaEnCurso />
-      {children}
+      {/* .sh-main desplaza cada pantalla lo que ocupa el lateral (UserMenu.css). */}
+      <div className="sh-main">{children}</div>
     </>
   );
 }

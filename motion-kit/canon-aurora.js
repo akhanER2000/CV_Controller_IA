@@ -32,11 +32,20 @@
 
   const REDUCED = matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-  /* ── LOS TRES METALES CONDUCTORES (+ el sustrato) ────────────────────────── */
-  const OBSIDIAN = [0.020, 0.020, 0.031];   // #050508  el sustrato
-  const GOLD     = [0.831, 0.686, 0.216];   // #D4AF37  oro de marca
-  const COPPER   = [0.722, 0.451, 0.200];   // #B87333  cobre — el metal cálido
-  const SILVER   = [0.678, 0.714, 0.761];   // #ADB6C2  plata — el metal frío
+  /* ── LA FRAGUA (rediseño "Forja"): se VIRA EL COLOR, no la visibilidad ─────
+     Los nombres de las constantes y uniforms se conservan (contrato del shader);
+     cambian los valores. La normalización del campo (clamp((f-0.05)/0.37)) y el
+     velo (0.28; radial 0.55) NO se tocan: el humo se ve igual de fuerte, solo
+     que en brasa y ámbar sobre grafito.
+       humo quieto  → ámbar claro (el metal tibio)
+       humo torcido → brasa       (el metal al rojo)
+       la cresta    → ámbar       (el filamento)
+     Cada tono iguala la luminancia percibida del metal que sustituye
+     (plata .710→.721 · cobre .490→.552 · oro .683→.659): mismo humo, otro calor. */
+  const OBSIDIAN = [0.055, 0.047, 0.043];   // #0E0C0B  grafito — el sustrato
+  const GOLD     = [0.898, 0.631, 0.235];   // #E5A13C  ámbar — la cresta
+  const COPPER   = [0.949, 0.471, 0.184];   // #F2782F  brasa — el metal al rojo
+  const SILVER   = [0.941, 0.690, 0.376];   // #F0B060  ámbar claro — el humo en reposo
 
   const TRAILS = 16;                        // puntos de estela del ratón
 

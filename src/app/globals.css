@@ -90,176 +90,169 @@
 }
 
 /* ============================================================================
-   §1 · tokens.css  ── COPIA ÍNTEGRA DE corpus-design/02-sistema/tokens.css
+   §1 · tokens  ── REDISEÑO "FORJA" (lote motor-cv-rediseno). Ya NO es copia del
+   paquete corpus-design: los valores cambiaron; los nombres viejos son alias.
    ============================================================================ */
 
 /* ============================================================================
-   CORPUS · Sistema "GRAFITO · PÁTINA · PORCELANA"
-   Tokens verificados. Cada ratio calculado con la fórmula de luminancia WCAG.
-   NO alteres estos valores: los contrastes están comprobados uno a uno.
+   CORPUS · Sistema "GRAFITO · BRASA · ORO · PORCELANA"  (rediseño de la app)
+   Tokens verificados. Cada ratio calculado con la fórmula de luminancia WCAG y
+   fijado en tests/tema-porcelana.test.ts (lee ESTE archivo, no una copia).
 
-   ── EL CONCEPTO ──────────────────────────────────────────────────────────
-   El COBRE es el conductor de la electrónica. No el oro: las pistas de todo
-   circuito impreso del mundo son de cobre. Y el cobre, con el tiempo, se
-   oxida y se vuelve VERDE — esa es la pátina, el cardenillo, el verde de la
-   Estatua de la Libertad.
+   ── EL CONCEPTO: LA FORJA ────────────────────────────────────────────────
+   El sistema anterior era la pátina: la marca que el tiempo deja sobre el
+   metal. Este es el momento anterior, el de la FORJA: el metal se calienta
+   hasta la brasa y se le da forma. Corpus hace eso con una carrera — toma el
+   material en bruto (fuentes, capturas, PDFs) y lo forja en un CV.
 
-   La pátina es LA MARCA QUE EL TIEMPO DEJA SOBRE EL METAL.
-   Y una carrera es exactamente eso: la marca que el tiempo deja sobre alguien.
+     GRAFITO   — la piedra de la fragua. El sustrato. Negro con sesgo cálido.
+     BRASA     — el naranja del metal al rojo. EL acento: valor y acción.
+     ORO       — el contraste del orfebre: el punzón que certifica una pieza.
+                 Acento SECUNDARIO y puntual: sellos de verificación, la
+                 evidencia, una cifra que importa. Nunca un botón.
+     PORCELANA — el blanco cocido. El texto sobre grafito y el tema claro.
 
-   Por eso el acento es verde y no dorado. No es un cambio de gusto:
-   es una metáfora más exacta para lo que este producto hace.
+   El DOCUMENTO CV no cambia con esto: su paleta vive en src/lib/cv/ y se
+   imprime sobre papel. Esto es la APP.
 
-   Tres minerales, tres roles:
-     GRAFITO   — la piedra. El sustrato. Negro con sesgo frío, no negro puro.
-     PÁTINA    — el verde del cobre oxidado. El acento. Valor y acción.
-     PORCELANA — el blanco cocido. El tema claro. El papel del documento.
-
-   Metales de apoyo (COBRE, PLATA, ACERO): viven SOLO en la atmósfera del
-   shader de fondo. NUNCA en la UI. Atmósfera ≠ señal.
+   ── ALIAS ────────────────────────────────────────────────────────────────
+   Los nombres antiguos (--patina-*, --ink-on-patina, --border-patina,
+   --glow-patina, --copper/--silver/--steel) se CONSERVAN como alias de los
+   valores nuevos: hay decenas de pantallas que los usan y ninguna debe
+   romperse. Código nuevo: usa los nombres nuevos.
    ============================================================================ */
 
 :root {
-  /* ── ESCALA DE PÁTINA (el acento — compartida entre temas) ─────────────── */
-  --patina-100: #7FD1BE;  /* brillos, shimmer, extremo claro de gradientes    · 10.99:1 sobre grafito */
-  --patina-300: #5FC6A9;  /* pátina luminosa · ENLACES Y FOCUS EN GRAFITO     ·  9.47:1 ✓ AA          */
-  --patina-500: #43B3A0;  /* ★ PÁTINA DE MARCA · acento, CTA                  ·  7.66:1 ✓ AA          */
-  --patina-700: #1F6E5A;  /* pátina profunda · TEXTO/ENLACES SOBRE PORCELANA  ·  5.74:1 ✓ AA sobre claro */
-  --patina-900: #17564A;  /* verde bronce · hover de enlaces en claro         ·  7.99:1 sobre porcelana */
+  /* ── ESCALA DE BRASA (acento primario — compartida entre temas) ────────── */
+  --brasa-100: #FFC49A;  /* brillo, extremo claro de gradientes               · 12.65:1 sobre grafito */
+  --brasa-300: #FF9A55;  /* brasa luminosa · ENLACES Y FOCUS EN GRAFITO       ·  9.30:1 ✓ AA          */
+  --brasa-500: #F2782F;  /* ★ BRASA DE MARCA · acento, CTA                    ·  6.97:1 ✓ AA          */
+  --brasa-700: #A9470F;  /* brasa profunda · TEXTO/ENLACES SOBRE PORCELANA    ·  5.41:1 ✓ AA sobre claro */
+  --brasa-900: #7E330A;  /* hierro templado · hover de enlaces en claro       ·  8.23:1 sobre porcelana */
 
-  /* Texto sobre pátina: SIEMPRE tinta, NUNCA blanco.
-     #06110E sobre patina-500 → 7.49:1 ✓    ·    blanco sobre patina-500 → 2.56:1 ✗ FALLA */
-  --ink-on-patina: #06110E;
+  /* ── ESCALA DE ORO (acento secundario — compartida entre temas) ────────── */
+  --oro-100: #F3DC9C;
+  --oro-300: #E5BE5C;    /* ★ oro sobre grafito (sellos, evidencia)          · 11.01:1 ✓ */
+  --oro-500: #C99A2E;    /* oro de relleno / hairlines                        ·  7.57:1 ✓ */
+  --oro-700: #7D5C0E;    /* oro como TEXTO sobre porcelana                    ·  5.71:1 ✓ */
+  --oro-900: #5E450A;
 
-  /* ── METALES DE ATMÓSFERA (solo el shader de fondo. Prohibidos en la UI) ── */
-  --copper:  #B87333;   /* cobre crudo — el conductor antes de oxidarse */
-  --silver:  #ADB6C2;   /* plata/platino — el metal frío */
-  --steel:   #7C8794;   /* acero — el metal en reposo */
+  /* Tinta sobre acento: SIEMPRE tinta, NUNCA blanco (los dos acentos son claros).
+       #160A03 sobre brasa-500 → 6.95:1 ✓    ·  blanco sobre brasa-500 → 2.80:1 ✗ FALLA
+       #160A03 sobre oro-300   → 10.99:1 ✓   ·  blanco sobre oro-300   → 1.77:1 ✗ FALLA */
+  --ink-on-brasa: #160A03;
+  --ink-on-oro:   #160A03;
+
+  /* ── ATMÓSFERA (solo el shader de fondo y su fallback. Prohibidos en la UI) ── */
+  --rescoldo: #B8431A;  /* el rojo de la brasa que se apaga */
+  --ambar:    #E5A13C;  /* el ámbar del metal al calentarse */
+  --hollin:   #6B4A2E;  /* el hollín cálido de la fragua */
+
+  /* ── ALIAS (nombres del sistema anterior → valores nuevos) ─────────────────
+     La escala --patina-* repite el HEX de --brasa-* en vez de var(): hay tests
+     (pulido-visual) que la leen como hex literal para medir contrastes. Que sean
+     el MISMO valor lo garantiza tests/tema-porcelana.test.ts («alias»). */
+  --patina-100: #FFC49A;  /* = --brasa-100 */
+  --patina-300: #FF9A55;  /* = --brasa-300 */
+  --patina-500: #F2782F;  /* = --brasa-500 */
+  --patina-700: #A9470F;  /* = --brasa-700 */
+  --patina-900: #7E330A;  /* = --brasa-900 */
+  --ink-on-patina: var(--ink-on-brasa);
+  --copper: var(--rescoldo);
+  --silver: var(--ambar);
+  --steel:  var(--hollin);
 }
 
 /* ══════════════════════════════════════════════════════════════════════════
    TEMA OSCURO — "GRAFITO" (por defecto)
    ══════════════════════════════════════════════════════════════════════════ */
 [data-theme="dark"], :root {
-  --bg:               #0A0C0B;   /* grafito. Negro con sesgo verde-frío: es piedra, no vacío. */
-  --surface:          #121615;
-  --surface-elevated: #1A201E;
-  --surface-sunken:   #070908;
+  --bg:               #0E0C0B;   /* grafito. Negro con sesgo cálido: es piedra de fragua, no vacío. */
+  --surface:          #171412;
+  --surface-elevated: #211D1A;
+  --surface-sunken:   #090807;
 
-  --text:        #F2F4F2;   /* 16.50:1 sobre surface ✓ */
-  --text-muted:  #AFB6B3;   /*  8.83:1 ✓               */
-  --text-subtle: #7E8784;   /*  4.94:1 ✓ AA (límite)   */
+  /* Texto: PORCELANA. Medido sobre bg / surface / elevated / sunken. */
+  --text:        #F5F1EB;   /* 17.34 / 16.30 / 14.87 / 17.79 ✓ AAA */
+  --text-muted:  #BDB4AA;   /*  9.55 /  8.97 /  8.18 /  9.79 ✓ AAA */
+  --text-subtle: #8F857C;   /*  5.40 /  5.08 /  4.63 /  5.54 ✓ AA  */
 
   --border:        rgba(255, 255, 255, 0.08);
   --border-strong: rgba(255, 255, 255, 0.16);
-  --border-patina: rgba(95, 198, 169, 0.55);   /* ★ el "hairline de pátina" — el sistema de estados */
+  --border-brasa:  rgba(255, 154, 85, 0.55);   /* ★ el hairline de brasa — el sistema de estados */
+  --border-oro:    rgba(229, 190, 92, 0.40);   /* hairline de oro — solo sellos y evidencia */
 
-  --accent:      var(--patina-500);
-  --accent-text: var(--patina-300);   /* la pátina como TEXTO sobre oscuro (luminosa) */
-  --link:        var(--patina-300);
-  --link-hover:  var(--patina-100);
-  --focus-ring:  var(--patina-300);
+  --accent:      var(--brasa-500);
+  --accent-text: var(--brasa-300);   /* la brasa como TEXTO sobre oscuro (luminosa) */
+  --oro-text:    var(--oro-300);     /* el oro como TEXTO sobre oscuro */
+  --link:        var(--brasa-300);
+  --link-hover:  var(--brasa-100);
+  --focus-ring:  var(--brasa-300);
 
-  --danger:       #E06055;
-  --danger-quiet: rgba(224, 96, 85, 0.18);
-  /* Texto sobre un relleno de --danger. En grafito el peligro es un salmón CLARO,
-     así que encima va TINTA: #06110E → 5.46:1 ✓ AA.
-     Lo que había escrito a mano (#FFF) da 3.52:1 ✗ y FALLA. */
-  --text-on-danger: #06110E;
+  /* Peligro: un ROSA-ROJO, no un salmón. Con el acento naranja, el salmón de
+     antes (#E06055) se confundía con la brasa; este se separa por tono. */
+  --danger:       #F2606E;   /* 6.20:1 sobre bg ✓ */
+  --danger-quiet: rgba(242, 96, 110, 0.18);
+  /* Texto sobre relleno de --danger: tinta. #160A03 sobre #F2606E → 6.19:1 ✓.
+     Blanco daría 3.15:1 ✗. */
+  --text-on-danger: #160A03;
 }
 
 /* ══════════════════════════════════════════════════════════════════════════
    TEMA CLARO — "PORCELANA"
    ══════════════════════════════════════════════════════════════════════════ */
 [data-theme="light"] {
-  --bg:             #F7F8F6;   /* porcelana: blanco cocido, con cuerpo. No #FFF. */
+  --bg:             #F8F6F2;   /* porcelana: blanco cocido, con cuerpo y un punto cálido. No #FFF. */
   --surface:        #FFFFFF;
-  /* ⚠ ESTE TOKEN FALTABA. Es la causa raíz de que Porcelana estuviera roto.
-     Al no definirse aquí, caía al valor de :root (#1A201E, casi negro) y todo lo
-     que se pinta sobre él con color:var(--text) daba 1.08:1 — texto negro sobre
-     negro. Afectaba a .c-btn BASE (o sea TODO botón sin modificador), .c-chip,
-     .c-kbd, .c-skel, .hd-av, .c-card--elevated y los hover/pressed de nueve
-     pantallas: 51 usos en 15 ficheros. Se veía a simple vista en el propio
-     selector de tema (ajustes.css .aj-seg button[aria-pressed="true"]): al pulsar
-     "Claro" el botón que acababas de pulsar se volvía invisible.
+  /* --surface-elevated en claro cae ENTRE --surface y --surface-sunken (la
+     historia está en tests/tema-porcelana.test.ts: faltar este token dejó el
+     tema claro con texto negro sobre negro). En porcelana no se puede "subir"
+     más allá del blanco, así que elevar es medio paso hacia abajo. */
+  --surface-elevated: #F2EFEA;
+  --surface-sunken:   #EDE9E3;
 
-     POR QUÉ #F1F3F0 y no un blanco:
-     en grafito "elevar" es ALEJARSE del fondo hacia la luz (bg #0A0C0B →
-     elevated #1A201E). En porcelana no se puede subir: --surface ya es #FFFFFF,
-     el techo. Así que la elevación se lee como un medio paso hacia abajo, entre
-     --surface y --surface-sunken, que es justo donde cae este valor:
-       vs --surface #FFFFFF → 1.12   ·   vs --bg #F7F8F6 → 1.05
-       vs --surface-sunken #EDEFEC → 1.04
-     Separación suficiente para distinguirse TANTO del papel blanco de una tarjeta
-     COMO del fondo porcelana, que es la doble exigencia de este token.
+  /* Medido sobre bg / surface / elevated / sunken. */
+  --text:        #1A1613;   /* 16.66 / 17.98 / 15.68 / 14.87 ✓ AAA */
+  --text-muted:  #4D4640;   /*  8.59 /  9.27 /  8.08 /  7.66 ✓ AAA */
+  --text-subtle: #6E655C;   /*  5.29 /  5.71 /  4.98 /  4.72 ✓ AA  */
 
-     CONTRASTES CALCULADOS (fórmula WCAG, no estimados) sobre #F1F3F0:
-       --text        #14181A → 16.01:1 ✓ AAA
-       --text-muted  #454B49 →  7.99:1 ✓ AAA
-       --accent-text #1F6E5A →  5.48:1 ✓ AA
-       --text-subtle #6C7370 →  4.35:1 ✗  ← ver la nota de abajo
-     --text-subtle NO llega a AA sobre este token, pero tampoco llegaba sobre el
-     elevated de grafito (#7E8784 sobre #1A201E = 4.48:1, también por debajo).
-     O sea: el par subtle-sobre-elevated ya estaba mal en el tema que SÍ funciona.
-     Había exactamente UN uso (staging.css .stg-mhead>div) y se ha subido a
-     --text-muted allí, que pasa en los dos temas (8.01 grafito / 7.99 porcelana).
-     No se ha aclarado el token para salvar ese único caso: aclararlo lo dejaría
-     indistinguible de --surface y perdería su función.
+  --border:        rgba(26, 22, 19, 0.08);
+  --border-strong: rgba(26, 22, 19, 0.16);
+  --border-brasa:  rgba(169, 71, 15, 0.55);
+  --border-oro:    rgba(125, 92, 14, 0.40);
 
-     TRADE-OFF ACEPTADO: .c-card--elevated queda un paso por DEBAJO de --bg en vez
-     de por encima. Un solo token sirve aquí a dos semánticas opuestas (tarjeta
-     "levantada" quiere ser más blanca; relleno de botón/chip quiere destacar
-     contra el blanco). Con un token no se pueden satisfacer las dos; se prioriza
-     la de botón/chip/kbd/skel porque es la que tiene 51 usos y la que estaba
-     produciendo texto ilegible. */
-  --surface-elevated: #F1F3F0;
-  --surface-sunken: #EDEFEC;
+  --accent:      var(--brasa-700);   /* sobre claro, la brasa se templa: hierro */
+  --accent-text: var(--brasa-700);   /* 4.83–5.84:1 ✓ AA — brasa-500 aquí FALLA */
+  --oro-text:    var(--oro-700);     /* 5.09–6.16:1 ✓ AA */
+  --link:        var(--brasa-700);
+  --link-hover:  var(--brasa-900);
+  --focus-ring:  var(--brasa-700);
 
-  --text:        #14181A;   /* 16.77:1 ✓ */
-  --text-muted:  #454B49;   /*  8.37:1 ✓ */
-  --text-subtle: #6C7370;   /*  4.56:1 ✓ AA (límite) */
-
-  --border:        rgba(20, 24, 26, 0.08);
-  --border-strong: rgba(20, 24, 26, 0.16);
-  --border-patina: rgba(31, 110, 90, 0.55);
-
-  --accent:      var(--patina-700);   /* sobre claro, la pátina se vuelve TINTA */
-  --accent-text: var(--patina-700);   /* 5.74:1 ✓ AA — patina-500 aquí FALLA (2.41:1) */
-  --link:        var(--patina-700);
-  --link-hover:  var(--patina-900);
-  --focus-ring:  var(--patina-700);
-
-  --danger:       #B23B31;
-  --danger-quiet: rgba(178, 59, 49, 0.12);
-  /* ⚠ ESTE TOKEN SE INVIERTE ENTRE TEMAS, y no es un descuido: es que el propio
-     --danger se invierte. En grafito es un salmón claro (#E06055) y pide tinta;
-     en porcelana es un ladrillo oscuro (#B23B31) y pide blanco.
-       #FFFFFF sobre #B23B31 → 5.89:1 ✓ AA
-       #06110E sobre #B23B31 → 3.26:1 ✗ FALLA
-     Por eso se llama --text-on-danger y no --ink-on-danger: el valor NO es tinta
-     en los dos temas, al revés que --ink-on-patina (que sí es tinta siempre
-     porque la pátina es clara en ambos). Quien "corrija" esto igualándolo a
-     --ink-on-patina rompe AA en claro. */
+  --danger:       #B3202E;   /* 6.15:1 sobre bg ✓ */
+  --danger-quiet: rgba(179, 32, 46, 0.12);
+  /* ⚠ ESTE TOKEN SE INVIERTE ENTRE TEMAS porque el propio --danger se invierte:
+     en grafito es claro y pide tinta; en porcelana es oscuro y pide blanco.
+       #FFFFFF sobre #B3202E → 6.64:1 ✓ AA */
   --text-on-danger: #FFFFFF;
 }
 
+/* ── Alias de estado que siguen al tema (definidos una vez, resuelven solos) ── */
+:root {
+  --border-patina: var(--border-brasa);
+}
+
 /* ══════════════════════════════════════════════════════════════════════════
-   REGLAS DE LA PÁTINA (heredadas del sistema original, con el nuevo mineral)
+   REGLAS DE LOS ACENTOS
    ══════════════════════════════════════════════════════════════════════════
 
-   ESCASA      · ≤ 1 elemento de pátina dominante por vista. El resto,
-                 hairlines y texto. Si todo es verde, nada lo es.
-   INTENCIONAL · La pátina SIEMPRE significa "valor o acción": enlace, CTA,
-                 foco, métrica destacada, borde activo. Nunca relleno, nunca
-                 fondo masivo.
-   VIVA        · En grafito brilla (patina-300/500, glow, shimmer).
-                 En porcelana se vuelve tinta (patina-700/900).
+   BRASA · ESCASA      ≤ 1 elemento de brasa dominante por vista.
+           INTENCIONAL Siempre "valor o acción": CTA, enlace, foco, ítem activo.
+           VIVA        En grafito brilla (300/500, glow). En porcelana se templa (700/900).
+   ORO   · PUNTUAL     Solo certifica: sello de verificación, evidencia, una cifra
+                       clave, el anillo del avatar. Nunca un botón ni un relleno grande.
 
-   ⚠️ NUNCA texto blanco sobre un botón de pátina: 2.56:1, falla clamorosamente.
-      Usa --ink-on-patina (#06110E → 7.49:1).
-
-   ⚠️ NUNCA patina-500 como texto sobre porcelana: 2.41:1, falla.
-      Sobre claro, el acento es patina-700.
+   ⚠️ NUNCA texto blanco sobre brasa u oro: falla AA. Usa --ink-on-brasa / --ink-on-oro.
+   ⚠️ NUNCA brasa-500 ni oro-300 como texto sobre porcelana: falla AA.
    ══════════════════════════════════════════════════════════════════════════ */
 
 /* ── MOTION (el easing real de la referencia, verificado en su CSS) ───────── */
@@ -362,10 +355,11 @@
   /* Sombras y glow (grafito) */
   --shadow-1: 0 1px 2px rgba(0,0,0,.45);
   --shadow-2: 0 12px 40px rgba(0,0,0,.4);
-  --glow-patina: 0 12px 40px rgba(67,179,160,.15);
+  --glow-brasa: 0 12px 40px rgba(242,120,47,.18);
+  --glow-patina: var(--glow-brasa);
 
   /* Verificación — nunca solo color: siempre icono + texto + (en "sin evidencia") borde punteado */
-  --ver-ok: var(--patina-300);
+  --ver-ok: var(--oro-300);   /* el sello de verificación es ORO: el contraste del orfebre */
   --ver-partial: var(--text-muted);
   --ver-none: var(--danger);
 }
@@ -387,7 +381,7 @@
        sobre --bg       #F7F8F6 → 5.74:1 ✓
        sobre --surface-elevated #F1F3F0 → 5.48:1 ✓
        sobre --surface-sunken   #EDEFEC → 5.28:1 ✓ (el más justo, con holgura) */
-  --ver-ok: var(--patina-700);
+  --ver-ok: var(--oro-700);
 
   /* Sombras: en grafito son negro al 40-45%, que sobre porcelana no lee como
      profundidad sino como suciedad. Se cambian por la tinta del tema (#14181A)
@@ -397,7 +391,7 @@
   /* El glow de pátina en claro: patina-500 sobre blanco es casi invisible y lo
      poco que se ve enturbia. Se usa la pátina profunda, que es la que "brilla"
      en porcelana según la regla VIVA del sistema. */
-  --glow-patina: 0 12px 40px rgba(31, 110, 90, .18);
+  --glow-brasa: 0 12px 40px rgba(169, 71, 15, .18);
 }
 
 
@@ -420,12 +414,12 @@ h2{font:500 var(--fs-h2)/1.18 var(--font-display);letter-spacing:-.01em}
 h3{font:600 var(--fs-h3)/1.3 var(--font-sans)}
 a{color:var(--link);text-decoration:none}
 a:hover{color:var(--link-hover);text-decoration:underline;text-underline-offset:3px}
-::selection{background:rgba(67,179,160,.28)}
+::selection{background:rgba(242,120,47,.30)}
 /* La selección en claro: patina-500 al 28% sobre blanco queda lavada y casi no se
    ve que hay algo seleccionado. Con pátina profunda a menos alfa el bloque se lee
    como selección y el texto sigue siendo tinta legible: el mezclado resultante es
    #D2E2DE sobre --surface y #CCDCD7 sobre --bg, y --text da 13.34:1 y 12.58:1. */
-[data-theme="light"] ::selection{background:rgba(31,110,90,.20)}
+[data-theme="light"] ::selection{background:rgba(169,71,15,.18)}
 :focus-visible{outline:2px solid var(--focus-ring);outline-offset:2px;border-radius:2px}
 button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:pointer}
 ::-webkit-scrollbar{width:10px;height:10px}
@@ -470,7 +464,7 @@ a.c-logo:hover{text-decoration:none;color:var(--text)}
 
 /* ── Botones ─────────────────────────────────────────────────────────────────
    ⚠ Sobre relleno de pátina el texto es SIEMPRE tinta (--ink-on-patina).
-   Blanco sobre patina-500 = 2.56:1, falla. */
+   Blanco sobre brasa-500 (alias patina-500) = 2.80:1, falla. */
 .c-btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;
   height:var(--control-h);padding:0 18px;border-radius:var(--radius-sm);
   font:500 var(--fs-ui)/1 var(--font-sans);letter-spacing:.01em;white-space:nowrap;
@@ -481,10 +475,10 @@ a.c-logo:hover{text-decoration:none;color:var(--text)}
    Parece una incoherencia (en claro --accent es patina-700, "la pátina se vuelve
    tinta") pero cambiarlo NO es sustituir un token: arrastra una decisión de
    diseño que no se puede tomar sin romper una regla escrita del sistema.
-     ink-on-patina sobre patina-500 → 7.49:1 ✓  (lo que hay hoy, en los dos temas)
-     ink-on-patina sobre patina-700 → 3.14:1 ✗  (el swap ingenuo: FALLA AA)
+     ink-on-brasa sobre brasa-500 → 6.95:1 ✓  (lo que hay hoy, en los dos temas)
+     ink-on-brasa sobre brasa-700 → 3.33:1 ✗  (el swap ingenuo: FALLA AA)
    Para usar var(--accent) habría que poner texto BLANCO en claro
-   (#FFFFFF sobre patina-700 → 6.11:1 ✓), y eso contradice literalmente la regla
+   (#FFFFFF sobre brasa-700 → 5.84:1 ✓), y eso contradice literalmente la regla
    de dos líneas más arriba: "Sobre relleno de pátina el texto es SIEMPRE tinta".
    Entre romper AA y romper una regla explícita del sistema, se deja como está y
    se documenta: el contraste PASA, y la elección es de quien mantiene el sistema
@@ -599,15 +593,35 @@ a.c-logo:hover{text-decoration:none;color:var(--text)}
   background:var(--bg)}
 .c-aurora canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
 
+/* ── LAS ZONAS DE LA FRAGUA (rediseño "Forja") ─────────────────────────────
+   La base del rediseño: brasa sobre grafito con ZONAS DIFUMINADAS fijas — el
+   resplandor de la fragua arriba a la derecha, un rescoldo a la izquierda y el
+   ámbar abajo (las mismas tres de la maqueta FigCraft rediseno-01). Es una capa
+   ESTÁTICA bajo el canvas del humo: no toca el shader ni su visibilidad (el humo
+   se mueve encima, igual que antes), y como vive en .c-aurora —que monta UNA vez
+   el shell— está en todas las pantallas. Cero coste: gradientes, sin filtro. */
+.c-aurora::before{content:"";position:absolute;inset:0;pointer-events:none;
+  background:
+    radial-gradient(48% 52% at 88% 4%,  rgba(242,120,47,.20), transparent 72%),
+    radial-gradient(36% 44% at 2% 46%,  rgba(184,67,26,.14),  transparent 72%),
+    radial-gradient(44% 38% at 50% 104%, rgba(229,161,60,.12), transparent 72%)}
+/* En porcelana la brasa no ilumina: tiñe. Mismas tres zonas, el extremo claro
+   de cada escala y alfas bajas, para que se lea como calor y no como mancha. */
+[data-theme="light"] .c-aurora::before{
+  background:
+    radial-gradient(48% 52% at 88% 4%,  rgba(255,196,154,.38), transparent 72%),
+    radial-gradient(36% 44% at 2% 46%,  rgba(242,120,47,.10),  transparent 72%),
+    radial-gradient(44% 38% at 50% 104%, rgba(243,220,156,.34), transparent 72%)}
+
 /* Fallback estático (sin WebGL2 o con prefers-reduced-motion):
    misma información atmosférica, cero movimiento. */
 .c-aurora-fallback{position:absolute;inset:-12%;
   opacity:calc(var(--aurora-strength)*.5);filter:blur(48px);
   background:
-    radial-gradient(42% 34% at 22% 30%, rgba(67,179,160,.34), transparent 70%),
-    radial-gradient(30% 26% at 74% 18%, rgba(184,115,51,.16), transparent 70%),
-    radial-gradient(36% 30% at 62% 78%, rgba(173,182,194,.12), transparent 70%),
-    radial-gradient(26% 22% at 38% 66%, rgba(31,110,90,.28), transparent 70%)}
+    radial-gradient(42% 34% at 22% 30%, rgba(242,120,47,.34), transparent 70%),
+    radial-gradient(30% 26% at 74% 18%, rgba(184,67,26,.20), transparent 70%),
+    radial-gradient(36% 30% at 62% 78%, rgba(229,161,60,.16), transparent 70%),
+    radial-gradient(26% 22% at 38% 66%, rgba(169,71,15,.28), transparent 70%)}
 /* El fallback en PORCELANA. Los cuatro manchones de arriba están calibrados para
    pintar LUZ sobre grafito; sobre blanco pintan verde y cobre oscuros y
    traslúcidos, que no se leen como atmósfera sino como papel sucio.
@@ -621,10 +635,10 @@ a.c-logo:hover{text-decoration:none;color:var(--text)}
 [data-theme="light"] .c-aurora-fallback{
   opacity:calc(var(--aurora-strength)*.38);
   background:
-    radial-gradient(42% 34% at 22% 30%, rgba(127,209,190,.30), transparent 70%),
-    radial-gradient(30% 26% at 74% 18%, rgba(184,115,51,.05), transparent 70%),
-    radial-gradient(36% 30% at 62% 78%, rgba(173,182,194,.14), transparent 70%),
-    radial-gradient(26% 22% at 38% 66%, rgba(67,179,160,.16), transparent 70%)}
+    radial-gradient(42% 34% at 22% 30%, rgba(255,196,154,.34), transparent 70%),
+    radial-gradient(30% 26% at 74% 18%, rgba(184,67,26,.05), transparent 70%),
+    radial-gradient(36% 30% at 62% 78%, rgba(243,220,156,.20), transparent 70%),
+    radial-gradient(26% 22% at 38% 66%, rgba(242,120,47,.12), transparent 70%)}
 /* El fallback también sigue el dial: al cambiar de pestaña la intensidad baja o
    sube sin salto. Bajo reduced-motion se queda el salto seco a propósito (ahí el
    fallback ES la equivalencia estática: se pierde el movimiento, no la info). */
@@ -765,10 +779,10 @@ a.c-logo:hover{text-decoration:none;color:var(--text)}
 
 /* ── EL shimmer. Hay UNO en todo el producto (fin de ingesta). C3 · 1.15s ── */
 .c-shimmer.is-play::after{content:"";position:absolute;inset:-2px;pointer-events:none;mix-blend-mode:screen;
-  background:linear-gradient(100deg,transparent 32%,rgba(127,209,190,.14) 44%,rgba(127,209,190,.55) 50%,rgba(127,209,190,.14) 56%,transparent 68%);
+  background:linear-gradient(100deg,transparent 32%,rgba(255,196,154,.14) 44%,rgba(255,196,154,.55) 50%,rgba(255,196,154,.14) 56%,transparent 68%);
   transform:translateX(-130%);animation:cShimmer 1.15s var(--ease-signature) 1 both}
 [data-theme="light"] .c-shimmer.is-play::after{mix-blend-mode:multiply;
-  background:linear-gradient(100deg,transparent 32%,rgba(31,110,90,.08) 44%,rgba(31,110,90,.28) 50%,rgba(31,110,90,.08) 56%,transparent 68%)}
+  background:linear-gradient(100deg,transparent 32%,rgba(169,71,15,.08) 44%,rgba(169,71,15,.28) 50%,rgba(169,71,15,.08) 56%,transparent 68%)}
 @keyframes cShimmer{to{transform:translateX(130%)}}
 
 /* ── Rayos-X: la transición ── */
@@ -798,12 +812,12 @@ a.c-logo:hover{text-decoration:none;color:var(--text)}
   transition:.6s var(--ease-signature)}
 .c-btn--forge:hover{transform:translateY(-2px);box-shadow:var(--glow-patina)}
 .c-btn--forge:hover::before{opacity:1;height:2px;top:35%;
-  box-shadow:0 0 20px var(--patina-500),0 0 40px rgba(67,179,160,.3)}
+  box-shadow:0 0 20px var(--patina-500),0 0 40px rgba(242,120,47,.3)}
 /* El filamento en claro: un halo de patina-500 sobre porcelana no se lee como
    brillo (no hay oscuridad que iluminar), solo emborrona. Se cambia por pátina
    profunda, que sobre blanco sí marca el filamento. */
 [data-theme="light"] .c-btn--forge:hover::before{
-  box-shadow:0 0 20px var(--patina-700),0 0 40px rgba(31,110,90,.22)}
+  box-shadow:0 0 20px var(--patina-700),0 0 40px rgba(169,71,15,.22)}
 .c-btn--forge:active{transform:translateY(0)}
 
 /* Lift genérico de tarjeta interactiva (C1) — solo transform/opacity */

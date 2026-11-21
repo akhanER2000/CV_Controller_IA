@@ -94,7 +94,22 @@ const refsDe = (v: string) => [...v.matchAll(/var\(\s*(--[\w-]+)/g)].map((m) => 
  * una lista de excepciones sin motivos es donde van a morir los bugs futuros.
  */
 const COMPARTIDOS = new Map<string, string>([
-  ["--patina-100", "la escala de pátina es el acento y es COMPARTIDA (lo dice tokens.css)"],
+  ["--brasa-100", "la escala de brasa es el acento primario y es COMPARTIDA entre temas"],
+  ["--brasa-300", "ídem — por eso apuntar a ella NO es seguir el tema"],
+  ["--brasa-500", "ídem · la brasa de marca"],
+  ["--brasa-700", "ídem · la brasa que usa el tema claro"],
+  ["--brasa-900", "ídem"],
+  ["--oro-100", "la escala de oro (acento secundario) es COMPARTIDA entre temas"],
+  ["--oro-300", "ídem · el oro sobre grafito"],
+  ["--oro-500", "ídem"],
+  ["--oro-700", "ídem · el oro que usa el tema claro"],
+  ["--oro-900", "ídem"],
+  ["--ink-on-brasa", "la brasa es clara en AMBOS temas, así que encima siempre va tinta"],
+  ["--ink-on-oro", "ídem para el oro"],
+  ["--rescoldo", "atmósfera: solo vive en el shader y su fallback, nunca en la UI"],
+  ["--ambar", "ídem"],
+  ["--hollin", "ídem"],
+  ["--patina-100", "alias de --brasa-100 (nombre del sistema anterior, conservado)"],
   ["--patina-300", "ídem — por eso apuntar a ella NO es seguir el tema"],
   ["--patina-500", "ídem · la pátina de marca"],
   ["--patina-700", "ídem · la pátina que usa el tema claro"],
@@ -156,8 +171,8 @@ describe("porcelana · paridad de tokens entre los dos temas", () => {
     // paridad pasarían por vacuidad. Es la comprobación que protege al resto.
     expect(BASE.size).toBeGreaterThan(30);
     expect(CLARO.size).toBeGreaterThan(15);
-    expect(BASE.get("--bg")).toBe("#0A0C0B");
-    expect(CLARO.get("--bg")).toBe("#F7F8F6");
+    expect(BASE.get("--bg")).toBe("#0E0C0B");
+    expect(CLARO.get("--bg")).toBe("#F8F6F2");
   });
 
   it("2 · ningún token de color del ámbito base se queda sin valor en porcelana", () => {
@@ -181,7 +196,7 @@ describe("porcelana · paridad de tokens entre los dos temas", () => {
   });
 
   it("5 · las sombras y el glow de grafito tienen recalibrado claro", () => {
-    for (const t of ["--shadow-1", "--shadow-2", "--glow-patina"]) {
+    for (const t of ["--shadow-1", "--shadow-2", "--glow-brasa"]) {
       expect(CLARO.has(t), `${t} está calibrado para grafito y no tiene versión clara`).toBe(true);
       // El negro puro de grafito no debe sobrevivir en porcelana.
       expect(CLARO.get(t)).not.toMatch(/rgba?\(\s*0\s*,\s*0\s*,\s*0/);
@@ -198,7 +213,7 @@ describe("porcelana · paridad de tokens entre los dos temas", () => {
    ══════════════════════════════════════════════════════════════════════════ */
 describe("porcelana · mutantes: la red tiene que saber fallar", () => {
   it("1 · MUTANTE quitar --surface-elevated del bloque claro → lo detecta y lo nombra", () => {
-    const mutante = CSS_CRUDO.replace(/^\s*--surface-elevated:\s*#F1F3F0;.*$/m, "");
+    const mutante = CSS_CRUDO.replace(/^\s*--surface-elevated:\s*#F2EFEA;.*$/m, "");
     expect(mutante, "el mutante no llegó a aplicarse").not.toBe(CSS_CRUDO);
     const claroMutado = tokensDe(mutante, (s) =>
       partes(s).every((p) => p === '[data-theme="light"]'),
@@ -263,7 +278,7 @@ describe("porcelana · contraste calculado de los pares texto/fondo", () => {
     // Antes: 1.08:1 — texto negro sobre negro. Es LA regresión a vigilar.
     const r = ratio("--text", "--surface-elevated", "light");
     expect(r).toBeGreaterThan(4.5);
-    expect(r).toBeCloseTo(16.01, 1);
+    expect(r).toBeCloseTo(15.68, 1);
   });
 
   it("4 · --accent-text pasa AA sobre todas las superficies, en los dos temas", () => {
@@ -302,20 +317,83 @@ describe("porcelana · contraste calculado de los pares texto/fondo", () => {
     // Lo que había escrito a mano fallaba en grafito, y su "gemelo" fallaba en claro.
     expect(meetsAA(contrastRatio("#FFFFFF", resolver("--danger", "dark")))).toBe(false);
     expect(
-      meetsAA(contrastRatio(BASE.get("--ink-on-patina")!, resolver("--danger", "light"))),
+      meetsAA(contrastRatio(resolver("--ink-on-patina", "dark"), resolver("--danger", "light"))),
     ).toBe(false);
     // Y el token no es el mismo valor en los dos temas: invierte, a propósito.
     expect(resolver("--text-on-danger", "dark")).not.toBe(resolver("--text-on-danger", "light"));
   });
 
-  it("8 · sobre relleno de pátina el texto sigue siendo tinta y pasa AA (la regla del sistema)", () => {
-    const tinta = BASE.get("--ink-on-patina")!;
-    for (const p of ["--patina-100", "--patina-300", "--patina-500"]) {
-      const r = contrastRatio(tinta, BASE.get(p)!);
-      expect(meetsAA(r), `--ink-on-patina sobre ${p} mide ${ratioText(r)}`).toBe(true);
+  it("8 · sobre relleno de brasa u oro el texto es tinta y pasa AA (la regla del sistema)", () => {
+    const tinta = resolver("--ink-on-brasa", "dark");
+    for (const p of ["--brasa-100", "--brasa-300", "--brasa-500"]) {
+      const r = contrastRatio(tinta, resolver(p, "dark"));
+      expect(meetsAA(r), `--ink-on-brasa sobre ${p} mide ${ratioText(r)}`).toBe(true);
     }
-    // Y blanco sobre patina-500 sigue fallando: la regla no es una opinión.
-    expect(meetsAA(contrastRatio("#FFFFFF", BASE.get("--patina-500")!))).toBe(false);
+    const tintaOro = resolver("--ink-on-oro", "dark");
+    for (const p of ["--oro-100", "--oro-300", "--oro-500"]) {
+      const r = contrastRatio(tintaOro, resolver(p, "dark"));
+      expect(meetsAA(r), `--ink-on-oro sobre ${p} mide ${ratioText(r)}`).toBe(true);
+    }
+    // Y blanco sobre brasa-500 u oro-300 falla: la regla no es una opinión.
+    expect(meetsAA(contrastRatio("#FFFFFF", resolver("--brasa-500", "dark")))).toBe(false);
+    expect(meetsAA(contrastRatio("#FFFFFF", resolver("--oro-300", "dark")))).toBe(false);
+  });
+
+  it("9 · --oro-text (el oro como texto) pasa AA sobre todas las superficies, en los dos temas", () => {
+    for (const tema of ["dark", "light"] as const) {
+      for (const s of SUPERFICIES) {
+        const r = ratio("--oro-text", s, tema);
+        expect(meetsAA(r), `${tema}: --oro-text sobre ${s} mide ${ratioText(r)}`).toBe(true);
+      }
+    }
+  });
+
+  it("10 · --text-subtle y --danger como texto pasan AA sobre todas las superficies, en los dos temas", () => {
+    for (const tema of ["dark", "light"] as const) {
+      for (const t of ["--text-subtle", "--danger"]) {
+        for (const s of SUPERFICIES) {
+          const r = ratio(t, s, tema);
+          expect(meetsAA(r), `${tema}: ${t} sobre ${s} mide ${ratioText(r)}`).toBe(true);
+        }
+      }
+    }
+  });
+
+  it("11 · el botón de brasa (.c-btn--patina) pasa AA en los dos temas: relleno brasa-500 + tinta", () => {
+    // El botón lleva patina-500 QUEMADO en ambos temas (decisión documentada en §2).
+    const r = contrastRatio(resolver("--ink-on-patina", "light"), resolver("--patina-500", "light"));
+    expect(meetsAA(r), `botón de brasa mide ${ratioText(r)}`).toBe(true);
+    expect(r).toBeCloseTo(6.95, 1);
+  });
+});
+
+/* ══════════════════════════════════════════════════════════════════════════
+   3b · ALIAS — los nombres del sistema anterior siguen vivos y valen lo nuevo
+   ══════════════════════════════════════════════════════════════════════════ */
+describe("porcelana · alias del sistema anterior (rediseño Forja)", () => {
+  it("1 · cada --patina-N vale EXACTAMENTE lo mismo que --brasa-N", () => {
+    for (const n of [100, 300, 500, 700, 900]) {
+      expect(resolver(`--patina-${n}`, "dark"), `--patina-${n} se despegó de --brasa-${n}`).toBe(
+        resolver(`--brasa-${n}`, "dark"),
+      );
+    }
+  });
+
+  it("2 · --ink-on-patina, --border-patina, --glow-patina y los metales apuntan a lo nuevo", () => {
+    expect(BASE.get("--ink-on-patina")).toBe("var(--ink-on-brasa)");
+    expect(BASE.get("--border-patina")).toBe("var(--border-brasa)");
+    expect(BASE.get("--glow-patina")).toBe("var(--glow-brasa)");
+    expect(BASE.get("--copper")).toBe("var(--rescoldo)");
+    expect(BASE.get("--silver")).toBe("var(--ambar)");
+    expect(BASE.get("--steel")).toBe("var(--hollin)");
+  });
+
+  it("3 · el acento ya no es verde: la brasa es naranja (R alto, B bajo) en los dos temas", () => {
+    for (const tema of ["dark", "light"] as const) {
+      const hex = resolver("--accent", tema);
+      const [r, , b] = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16)) as [number, number, number];
+      expect(r, `${tema}: --accent ${hex} no es brasa`).toBeGreaterThan(b * 2);
+    }
   });
 });
 
@@ -347,12 +425,14 @@ describe("porcelana · regresiones concretas", () => {
     expect(meetsAA(r), `el botón de tema pulsado mide ${ratioText(r)} en porcelana`).toBe(true);
   });
 
-  it("3 · el ÚNICO --text-subtle sobre --surface-elevated se subió a muted (fallaba en AMBOS temas)", () => {
+  it("3 · el ÚNICO --text-subtle sobre --surface-elevated se subió a muted, y hoy subtle ya pasa", () => {
     const staging = lee("../src/components/screens/staging.css");
     expect(staging).toMatch(/\.stg-mhead>div\{background:var\(--surface-elevated\)[^}]*--text-muted\)\}/);
-    // El motivo, medido: subtle no llega a AA sobre elevated en ninguno de los dos.
-    expect(meetsAA(ratio("--text-subtle", "--surface-elevated", "dark"))).toBe(false);
-    expect(meetsAA(ratio("--text-subtle", "--surface-elevated", "light"))).toBe(false);
+    // Con la paleta Pátina subtle NO llegaba a AA sobre elevated en ningún tema
+    // (4.48 y 4.35). La paleta Forja lo sube (4.63 y 4.98): el arreglo de staging
+    // se queda, y ahora además el par es legible por sí mismo.
+    expect(meetsAA(ratio("--text-subtle", "--surface-elevated", "dark"))).toBe(true);
+    expect(meetsAA(ratio("--text-subtle", "--surface-elevated", "light"))).toBe(true);
     // Y muted sí, en los dos.
     expect(meetsAA(ratio("--text-muted", "--surface-elevated", "dark"))).toBe(true);
     expect(meetsAA(ratio("--text-muted", "--surface-elevated", "light"))).toBe(true);
@@ -362,6 +442,13 @@ describe("porcelana · regresiones concretas", () => {
     expect(quitarComentarios(CSS_CRUDO)).toMatch(
       /\[data-theme="light"\]\s*\.c-aurora-fallback\s*\{/,
     );
+  });
+
+  it("4b · las zonas de la fragua (.c-aurora::before) tienen versión clara", () => {
+    // Sin ella, en porcelana la brasa al 20% sobre blanco se lee como mancha.
+    const css = quitarComentarios(CSS_CRUDO);
+    expect(css).toMatch(/\.c-aurora::before\s*\{/);
+    expect(css).toMatch(/\[data-theme="light"\]\s*\.c-aurora::before\s*\{/);
   });
 
   it("5 · ThemeToggle.tsx sigue borrado (escribía data-theme=porcelain en la clave compartida)", () => {

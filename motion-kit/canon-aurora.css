@@ -7,7 +7,7 @@
    No era el shader. Lo ejecuté en GPU y leí los píxeles: luminancia máxima
    73/255, 53% de píxeles visibles. El shader pintaba humo perfectamente.
    EL VELO SE LO COMÍA:
-       .c-scrim--radial  →  rgba(5,5,8, .86)   ← 86% de negro encima
+       .c-scrim--radial  →  rgba(14,12,11, .86)   ← 86% de negro encima
        73 * (1 - 0.86)   =   10/255            ← invisible
    Más los degradados de borde de 120px, que tapaban media sección.
    Verificado con captura comparativa: velo .86 = negro · velo .25 = humo.
@@ -15,7 +15,7 @@
    ── EL MECANISMO (forense de la referencia) ──────────────────────────────
    No hay un "blackout" encima del humo. Es al revés:
      1. El humo vive en una capa FIJA al fondo (z-index: 0).
-     2. El contenedor de página es OPACO (#050508). Eso lo TAPA.
+     2. El contenedor de página es OPACO (#0E0C0B). Eso lo TAPA.
      3. Algunas secciones se declaran TRANSPARENTES → son VENTANAS.
    Verificado sección por sección en su página:
      🔓 Hero · 🧱 Audience · 🧱 Transmutation · 🔓 Features · 🔓 Speed ·
@@ -44,17 +44,17 @@
 /* Sin WebGL2 o con reduce-motion → degradado estático, mismos metales, cero GPU */
 .c-aurora-gl.is-static{
   background:
-    radial-gradient(58% 48% at 18% 12%, rgba(212,175,55,.16), transparent 70%),
-    radial-gradient(45% 40% at 78% 30%, rgba(184,115,51,.11), transparent 70%),
-    radial-gradient(50% 45% at 60% 88%, rgba(173,182,194,.08), transparent 70%),
-    var(--bg,#0B0B0D);
+    radial-gradient(58% 48% at 18% 12%, rgba(229,161,60,.16), transparent 70%),
+    radial-gradient(45% 40% at 78% 30%, rgba(242,120,47,.11), transparent 70%),
+    radial-gradient(50% 45% at 60% 88%, rgba(184,67,26,.08), transparent 70%),
+    var(--bg,#0E0C0B);
 }
 
 /* ── 2 · EL MURO — donde hay trabajo que leer ─────────────────────────────── */
 /* El contenido denso va SIEMPRE sobre muro. El humo no compite con el trabajo. */
 .c-wall{
   position:relative; z-index:1;
-  background:var(--obsidian-deep,#050508);
+  background:var(--obsidian-deep,#0E0C0B);
 }
 
 /* ── 3 · LA VENTANA — donde el humo asoma ─────────────────────────────────── */
@@ -71,8 +71,8 @@
   content:""; position:absolute; left:0; right:0; height:64px;
   pointer-events:none; z-index:0;
 }
-.c-window::before{ top:0;    background:linear-gradient(to bottom, var(--obsidian-deep,#050508), transparent); }
-.c-window::after { bottom:0; background:linear-gradient(to top,    var(--obsidian-deep,#050508), transparent); }
+.c-window::before{ top:0;    background:linear-gradient(to bottom, var(--obsidian-deep,#0E0C0B), transparent); }
+.c-window::after { bottom:0; background:linear-gradient(to top,    var(--obsidian-deep,#0E0C0B), transparent); }
 
 /* ── 4 · EL VELO (scrim) — cuando hay TEXTO encima del humo ───────────────── */
 /* ★ VALORES CALIBRADOS MIRANDO CAPTURAS REALES, no a ojo.
@@ -81,17 +81,17 @@
 .c-scrim{ position:relative; z-index:1; }
 .c-scrim::before{
   content:""; position:absolute; inset:0; z-index:-1; pointer-events:none;
-  background:rgba(5,5,8,.28);            /* ★ era .55 → invisibilizaba el humo */
+  background:rgba(14,12,11,.28);            /* ★ era .55 → invisibilizaba el humo */
 }
-.c-scrim--light::before { background:rgba(5,5,8,.15); }   /* casi nada */
-.c-scrim--heavy::before { background:rgba(5,5,8,.45); }   /* texto denso */
+.c-scrim--light::before { background:rgba(14,12,11,.15); }   /* casi nada */
+.c-scrim--heavy::before { background:rgba(14,12,11,.45); }   /* texto denso */
 
 /* Velo radial: oscurece bajo el texto y deja los bordes limpios.
    El mejor para un titular centrado sobre humo. */
 .c-scrim--radial::before{
   background:radial-gradient(65% 75% at 50% 50%,
-    rgba(5,5,8,.55),                     /* ★ era .86 → negro total */
-    rgba(5,5,8,.18) 70%,
+    rgba(14,12,11,.55),                     /* ★ era .86 → negro total */
+    rgba(14,12,11,.18) 70%,
     transparent);
 }
 
@@ -100,7 +100,7 @@
    Es lo que permite tener un dashboard legible Y un fondo vivo a la vez. */
 .c-panel{
   position:relative; z-index:1;
-  background:rgba(20,20,24,.72);
+  background:rgba(23,20,18,.72);
   backdrop-filter:blur(14px) saturate(1.1);
   -webkit-backdrop-filter:blur(14px) saturate(1.1);
   border:1px solid var(--border,rgba(255,255,255,.08));
@@ -109,11 +109,11 @@
 /* Panel sólido: listas densas y el editor. CERO transparencia.
    Con 200 items que leer, el humo detrás es ruido. Punto. */
 .c-panel--solid{
-  background:var(--surface,#141418);
+  background:var(--surface,#171412);
   backdrop-filter:none; -webkit-backdrop-filter:none;
 }
 @supports not (backdrop-filter: blur(1px)){
-  .c-panel{ background:rgba(20,20,24,.94); }
+  .c-panel{ background:rgba(23,20,18,.94); }
 }
 
 /* ── 6 · REGLA DE ORO ─────────────────────────────────────────────────────── */

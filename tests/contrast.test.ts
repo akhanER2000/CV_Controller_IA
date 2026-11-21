@@ -120,6 +120,49 @@ describe("contraste WCAG · los acentos del catálogo, medidos", () => {
   });
 });
 
+/**
+ * LA PALETA DE LA APP (rediseño "Forja": grafito · brasa · oro · porcelana).
+ *
+ * Ancla numérica de los pares que globals.css documenta en comentarios. Es la
+ * APP, no el documento: los acentos del CV de arriba no cambian. El cálculo
+ * sobre los valores leídos del CSS real vive en tema-porcelana.test.ts; aquí se
+ * fija cada ratio al decimal para que retocar un hex no pase en silencio.
+ */
+describe("contraste WCAG · la paleta de la app (Forja), medida", () => {
+  const GRAFITO = "#0E0C0B";
+  const PORCELANA = "#F8F6F2";
+  const TINTA = "#160A03";
+
+  const PARES: [string, string, string, number][] = [
+    ["porcelana (texto) sobre grafito", "#F5F1EB", GRAFITO, 17.34],
+    ["brasa-500 sobre grafito", "#F2782F", GRAFITO, 6.97],
+    ["brasa-300 (enlaces) sobre grafito", "#FF9A55", GRAFITO, 9.3],
+    ["oro-300 (sellos) sobre grafito", "#E5BE5C", GRAFITO, 11.01],
+    ["tinta sobre brasa-500 (botón)", TINTA, "#F2782F", 6.95],
+    ["tinta sobre oro-300", TINTA, "#E5BE5C", 10.99],
+    ["brasa-700 sobre porcelana", "#A9470F", PORCELANA, 5.41],
+    ["oro-700 sobre porcelana", "#7D5C0E", PORCELANA, 5.71],
+    ["peligro (grafito) sobre grafito", "#F2606E", GRAFITO, 6.2],
+    ["blanco sobre peligro (porcelana)", "#FFFFFF", "#B3202E", 6.64],
+  ];
+
+  it("1 · cada par mide EXACTAMENTE lo que dice globals.css, y pasa AA", () => {
+    for (const [par, fg, bg, esperado] of PARES) {
+      const r = contrastRatio(fg, bg);
+      expect(r, `${par}: mide ${ratioText(r)}, no ${esperado}:1`).toBeCloseTo(esperado, 1);
+      expect(meetsAA(r), `${par} en ${ratioText(r)}`).toBe(true);
+    }
+  });
+
+  it("2 · blanco sobre los acentos FALLA: por eso existe la tinta sobre acento", () => {
+    expect(meetsAA(contrastRatio("#FFFFFF", "#F2782F"))).toBe(false); // 2.80
+    expect(meetsAA(contrastRatio("#FFFFFF", "#E5BE5C"))).toBe(false); // 1.77
+    // …y los acentos luminosos como texto sobre porcelana también fallan.
+    expect(meetsAA(contrastRatio("#F2782F", PORCELANA))).toBe(false);
+    expect(meetsAA(contrastRatio("#E5BE5C", PORCELANA))).toBe(false);
+  });
+});
+
 describe("contraste WCAG · umbrales y parseo", () => {
   it("1 · los umbrales AA son 4,5 (normal) y 3 (grande), y el límite pasa", () => {
     expect(AA_NORMAL).toBe(4.5);

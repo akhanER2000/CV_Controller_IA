@@ -31,10 +31,13 @@ void main(){
   float f=fbm(p+2.9*r);
   float mCu=smoothstep(.58,.86,fbm(p*.62+r*1.4+vec2(11.3,4.7)));
   float mAg=smoothstep(.62,.90,fbm(p*.85-q*1.1+vec2(3.1,17.9)));
-  vec3 patina=vec3(.263,.702,.627);   /* #43B3A0 */
-  vec3 deep  =vec3(.090,.340,.290);   /* pátina profunda */
-  vec3 copper=vec3(.722,.451,.200);   /* #B87333 — solo atmósfera */
-  vec3 silver=vec3(.678,.714,.761);   /* #ADB6C2 — solo atmósfera */
+  /* Rediseño Forja: se vira el COLOR, no la visibilidad. Cada tono nuevo iguala
+     la luminancia percibida (.2126R+.7152G+.0722B) del que sustituye:
+     pátina .603→.600 · profunda .283→.296 · cobre .490→.555 · plata .710→.750 */
+  vec3 patina=vec3(1.0,.522,.200);    /* #FF8533 brasa */
+  vec3 deep  =vec3(.580,.235,.070);   /* #943C12 rescoldo */
+  vec3 copper=vec3(.800,.520,.180);   /* #CC852E ámbar — solo atmósfera */
+  vec3 silver=vec3(.898,.745,.361);   /* #E5BE5C oro — solo atmósfera */
   vec3 col=mix(deep,patina,smoothstep(.25,.95,f));
   col=mix(col,copper,mCu*.38);
   col=mix(col,silver,mAg*.24);

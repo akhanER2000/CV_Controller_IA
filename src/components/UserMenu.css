@@ -11,12 +11,9 @@
           izquierda, que también usa .hd-nav pero cuelga fuera de .hd-right.
       Mayor especificidad que las definiciones sueltas de los *.css de pantalla
       (+ !important), así que gana sin depender del orden de carga.
-   2) Monta el menú real como barra fija sobre el header, alineada al mismo
-      contenedor (.c-container) para que caiga justo donde estaban los estáticos.
-
-   Nota: /app/ingesta pinta en su .hd-right un botón propio ("Seguir usando
-   Corpus…") que NO es un duplicado; ahí la barra fija puede solaparlo. Resolverlo
-   exige editar esa pantalla (fuera de la frontera de este agente).
+   2) Monta EL LATERAL (rediseño "Forja"): navegación, identidad, la tarjeta de
+      la oferta y los toggles de idioma y tema. Ya no hay barra fija arriba a la
+      derecha, así que el solape con el .hd-right de /app/ingesta desaparece.
    ============================================================================ */
 
 .c-header .hd-av,
@@ -25,31 +22,339 @@
   display: none !important;
 }
 
-/* ── Barra fija, alineada al contenedor del header ─────────────────────────── */
-.um-bar {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: var(--header-h);
-  z-index: var(--z-overlay);
-  pointer-events: none; /* deja pasar los clics al header salvo en los controles */
-  display: flex;
-  justify-content: center;
+/* ── EL LATERAL (rediseño "Forja") ─────────────────────────────────────────
+   Un panel flotante de vidrio ahumado sobre la aurora, separado del borde: la
+   atmósfera se ve ALREDEDOR y a través de él. El contenido de cada pantalla
+   vive en .sh-main (layout.tsx), desplazado lo que ocupa el lateral.
+   Medidas: 248px de ancho, 16px de aire al borde (las de la maqueta FigCraft
+   prompts/lotes-fable5/_diseno/rediseno-01-shell-panel.png). */
+:root {
+  --lt-w: 248px;
+  --lt-gap: 16px;
+  --lt-z: 50; /* sobre el header (10), bajo los overlays y modales (100) */
 }
-.um-inner {
-  width: 100%;
-  max-width: var(--container);
-  padding-inline: var(--container-pad);
+
+.sh-main {
+  position: relative;
+  padding-left: calc(var(--lt-w) + var(--lt-gap));
+}
+/* La navegación principal y el logo ya los da el lateral: fuera los duplicados
+   del <header> de cada pantalla (algunas llevan display en línea → !important). */
+.sh-main .c-header .hd-nav,
+.sh-main .c-header .c-logo {
+  display: none !important;
+}
+
+.lt-side {
+  position: fixed;
+  z-index: var(--lt-z);
+  top: var(--lt-gap);
+  bottom: var(--lt-gap);
+  left: var(--lt-gap);
+  width: var(--lt-w);
+  display: flex;
+  flex-direction: column;
+  padding: 18px 14px 14px;
+  background: color-mix(in srgb, var(--surface) 80%, transparent);
+  backdrop-filter: blur(24px) saturate(1.2);
+  -webkit-backdrop-filter: blur(24px) saturate(1.2);
+  border: 1px solid color-mix(in srgb, var(--text) 9%, transparent);
+  border-radius: 18px;
+  box-shadow: var(--shadow-2);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+}
+
+.lt-brand.c-logo {
+  display: block;
+  padding: 0 10px 14px;
+  font-size: 21px;
+}
+
+/* Identidad: el avatar lleva el anillo de ORO (sello, no acción). */
+.lt-id {
+  position: relative;
+}
+.lt-idbtn {
   display: flex;
   align-items: center;
-  justify-content: flex-end;
-  gap: 14px;
+  gap: 10px;
+  width: 100%;
+  padding: 10px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: color-mix(in srgb, var(--text) 3%, transparent);
+  text-align: left;
+  transition: border-color var(--dur-fast) var(--ease-standard);
 }
-.um-lang,
-.um-theme,
-.um-menu {
-  pointer-events: auto;
+.lt-idbtn:hover,
+.lt-idbtn[aria-expanded="true"] {
+  border-color: var(--border-brasa);
+}
+.lt-idbtn .um-av {
+  width: 34px;
+  height: 34px;
+  border-color: var(--border-oro);
+  color: var(--oro-text);
+}
+.lt-idtxt {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+.lt-idtxt b,
+.lt-idtxt span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.lt-idtxt b {
+  font: 500 var(--fs-ui) / 1.2 var(--font-sans);
+  color: var(--text);
+}
+.lt-idtxt span {
+  font: 400 var(--fs-micro) / 1.2 var(--font-sans);
+  color: var(--text-subtle);
+}
+.lt-id .um-pop {
+  left: 0;
+  right: 0;
+  min-width: 0;
+  z-index: 1;
+}
+
+/* Navegación */
+.lt-nav {
+  flex: 1 0 auto;
+}
+.lt-grupo {
+  padding: 18px 12px 8px;
+  font: 500 var(--fs-micro) / 1 var(--font-sans);
+  color: var(--text-subtle);
+}
+.lt-ul,
+.lt-rama {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.lt-ul {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.lt-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  height: 38px;
+  padding: 0 12px;
+  border-radius: 10px;
+  border: 1px solid transparent;
+  color: var(--text-muted);
+  font: 500 var(--fs-ui) / 1 var(--font-sans);
+  transition: color var(--dur-fast) var(--ease-standard), background-color var(--dur-fast) var(--ease-standard);
+}
+.lt-ico {
+  flex: none;
+}
+.lt-item:hover {
+  color: var(--text);
+  background: color-mix(in srgb, var(--text) 5%, transparent);
+  text-decoration: none;
+}
+.lt-item[data-rama] {
+  color: var(--text);
+}
+.lt-item[data-on] {
+  color: var(--text);
+  background: var(--surface-elevated);
+  border-color: color-mix(in srgb, var(--accent) 24%, transparent);
+}
+.lt-item[data-on] .lt-ico {
+  color: var(--accent-text);
+}
+
+/* La rama: la guía vertical cuelga del centro del icono del padre (12 + 9 px). */
+.lt-rama {
+  margin: 2px 0 4px 21px;
+  border-left: 1px solid var(--border-strong);
+}
+.lt-hijo {
+  display: block;
+  margin-left: -1px;
+  padding: 8px 10px 8px 16px;
+  border-left: 1px solid transparent;
+  border-radius: 0 8px 8px 0;
+  font: 400 12.5px / 1.2 var(--font-sans);
+  color: var(--text-muted);
+}
+.lt-hijo:hover {
+  color: var(--text);
+  background: color-mix(in srgb, var(--text) 4%, transparent);
+  text-decoration: none;
+}
+.lt-hijo[data-on] {
+  color: var(--text);
+  border-left-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+}
+
+/* La tarjeta de la oferta: hairline de oro, botón de brasa (el único). */
+.lt-cta {
+  margin-top: 16px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  border-radius: 14px;
+  border: 1px solid var(--border-oro);
+  background: color-mix(in srgb, var(--surface-elevated) 80%, transparent);
+}
+.lt-cta-t {
+  font: 600 var(--fs-body) / 1.3 var(--font-sans);
+  color: var(--text);
+}
+.lt-cta-b {
+  font: 400 var(--fs-data) / 1.5 var(--font-sans);
+  color: var(--text-muted);
+}
+.lt-cta-btn {
+  width: 100%;
+  height: 38px;
+  margin-top: 4px;
+  border-radius: 10px;
+  box-shadow: var(--glow-brasa);
+}
+.lt-cta-btn:hover {
+  text-decoration: none;
+}
+
+.lt-foot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 4px 0;
+}
+
+/* ── Carril de iconos (768–1099px) ─────────────────────────────────────── */
+@media (max-width: 1099px) {
+  :root {
+    --lt-w: 72px;
+  }
+  .lt-side {
+    padding: 16px 10px 12px;
+    align-items: center;
+    overflow: visible;
+  }
+  .lt-brand.c-logo {
+    padding: 0 0 14px;
+    font-size: 0;
+  }
+  .lt-brand.c-logo::before {
+    content: "C";
+    font-size: 22px;
+  }
+  .lt-txt,
+  .lt-idtxt,
+  .lt-rama,
+  .lt-cta-t,
+  .lt-cta-b {
+    display: none;
+  }
+  .lt-grupo {
+    height: 1px;
+    margin: 12px 8px;
+    padding: 0;
+    overflow: hidden;
+    color: transparent;
+    background: var(--border);
+  }
+  .lt-idbtn {
+    padding: 4px;
+    border-radius: 50%;
+    background: none;
+    border-color: transparent;
+  }
+  .lt-item {
+    justify-content: center;
+    width: 44px;
+    padding: 0;
+  }
+  .lt-cta {
+    padding: 0;
+    border: 0;
+    background: none;
+  }
+  .lt-cta-btn {
+    width: 44px;
+    padding: 0;
+  }
+  .lt-foot {
+    flex-direction: column;
+  }
+  .lt-foot .um-lang {
+    flex-direction: column;
+  }
+  .lt-id .um-pop {
+    top: 0;
+    left: calc(100% + 12px);
+    right: auto;
+    min-width: 216px;
+  }
+}
+
+/* ── Barra inferior (<768px) ───────────────────────────────────────────── */
+@media (max-width: 767px) {
+  .sh-main {
+    padding-left: 0;
+    padding-bottom: 84px;
+  }
+  .lt-side {
+    top: auto;
+    left: 8px;
+    right: 8px;
+    bottom: 8px;
+    width: auto;
+    height: 60px;
+    flex-direction: row;
+    justify-content: space-between;
+    padding: 8px;
+    border-radius: 16px;
+  }
+  .lt-brand,
+  .lt-grupo,
+  .lt-cta,
+  .lt-foot {
+    display: none !important;
+  }
+  .lt-nav,
+  .lt-ul {
+    display: flex;
+    flex-direction: row;
+    flex: 1 1 auto;
+    justify-content: space-around;
+  }
+  .lt-id {
+    order: 2;
+  }
+  .lt-id .um-pop {
+    top: auto;
+    bottom: calc(100% + 12px);
+    left: auto;
+    right: 0;
+  }
+}
+
+@media print {
+  .lt-side {
+    display: none;
+  }
+  .sh-main {
+    padding: 0;
+  }
 }
 
 /* ── Toggle de idioma (mismo lenguaje visual que .hd-lang) ──────────────────── */
@@ -194,10 +499,4 @@
   border: 0;
   background: var(--border);
   margin: 4px 0;
-}
-
-@media (max-width: 640px) {
-  .um-inner {
-    gap: 10px;
-  }
 }

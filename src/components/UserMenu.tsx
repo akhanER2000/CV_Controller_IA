@@ -1,15 +1,24 @@
 "use client";
 
 /* ============================================================================
-   UserMenu — avatar + controles persistentes, arriba a la derecha, en TODAS las
-   páginas de /app. Vive en el layout (no en cada pantalla), como elemento
-   position:fixed sobre el header. Su CSS oculta los .hd-av/.hd-lang estáticos y
-   duplicados que cada pantalla sigue pintando en su propio <header>.
+   UserMenu — EL LATERAL del shell (rediseño "Forja").
 
-   Contiene, de izquierda a derecha:
-     · toggle de idioma  ES ⇄ EN  (motor i18n en vivo, useLang)
-     · toggle de tema    grafito ⇄ porcelana  (escribe data-theme, persiste)
-     · avatar → menú     Perfil · Ajustes · Cerrar sesión
+   Antes era una barra fija arriba a la derecha (idioma, tema, avatar). Ahora es
+   el lateral flotante de toda el área /app: la navegación principal vive aquí
+   y no en el <header> de cada pantalla (su CSS oculta esas .hd-nav duplicadas,
+   igual que ya ocultaba los .hd-av/.hd-lang estáticos). Conserva el nombre del
+   archivo y del componente porque el layout y los tests lo importan así.
+
+   De arriba abajo:
+     · marca Corpus → /app
+     · identidad     avatar (anillo de oro) + nombre → menú Perfil · Ajustes · Salir
+     · navegación    Trabajo: Panel · Master (└ Revisión) · Variantes ·
+                     Fuentes (└ Volcar material) · Cuenta: Ajustes
+     · tarjeta       «Una oferta nueva» → Variantes (el único botón de brasa)
+     · pie           toggle de idioma ES ⇄ EN y de tema grafito ⇄ porcelana
+
+   Responsive: ≥1100px lateral completo · 768–1099px carril de iconos ·
+   <768px barra inferior con los cinco destinos.
 
    El menú es navegable por teclado (flechas/Home/End/Esc), con roles ARIA
    correctos (button aria-expanded / role=menu / role=menuitem), se cierra con
@@ -20,7 +29,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { supabaseEnabled } from "@/lib/supabase/config";
 import { useLang, useT } from "@/lib/i18n";
@@ -43,8 +52,94 @@ function initialsFrom(name: string | null, email: string | null): string {
   return (letters || src.slice(0, 2)).toUpperCase();
 }
 
+/* ── Navegación ──────────────────────────────────────────────────────────────
+   Iconos propios: 18px, trazo 1.5, currentColor — afinados al peso de Geist 500
+   a 13px, no un set genérico. */
+const ICONOS = {
+  panel: "M2 2h6v6H2z M12 2h6v6h-6z M2 12h6v6H2z M12 12h6v6h-6z",
+  master: "M4 2h8l4 4v12H4z M7 9h6 M7 12h6 M7 15h4",
+  variantes: "M10 2l8 4-8 4-8-4z M2 10l8 4 8-4 M2 14l8 4 8-4",
+  fuentes: "M2 5h6l2 2h8v10H2z",
+  ajustes: "M2 5h16 M2 10h16 M2 15h16 M6 3v4 M13 8v4 M8 13v4",
+  mas: "M10 4v12 M4 10h12",
+} as const;
+
+function Icono({ d }: { d: string }) {
+  return (
+    <svg className="lt-ico" width="18" height="18" viewBox="0 0 20 20" aria-hidden="true" focusable="false">
+      <path d={d} fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+type Item = {
+  href: string;
+  key: string;
+  icon: keyof typeof ICONOS;
+  activo: (p: string) => boolean;
+  hijos?: { href: string; key: string; activo: (p: string) => boolean }[];
+};
+
+const empieza = (base: string) => (p: string) => p === base || p.startsWith(base + "/");
+
+const TRABAJO: Item[] = [
+  { href: "/app", key: "nav.panel", icon: "panel", activo: (p) => p === "/app" },
+  {
+    href: "/app/master",
+    key: "nav.master",
+    icon: "master",
+    activo: empieza("/app/master"),
+    hijos: [{ href: "/app/staging", key: "nav.staging", activo: empieza("/app/staging") }],
+  },
+  {
+    href: "/app/variantes",
+    key: "nav.variantes",
+    icon: "variantes",
+    activo: (p) => empieza("/app/variantes")(p) || empieza("/app/cv")(p),
+  },
+  {
+    href: "/app/fuentes",
+    key: "nav.fuentes",
+    icon: "fuentes",
+    activo: empieza("/app/fuentes"),
+    hijos: [
+      {
+        href: "/app/importar",
+        key: "nav.importar",
+        activo: (p) => empieza("/app/importar")(p) || empieza("/app/ingesta")(p),
+      },
+    ],
+  },
+];
+const CUENTA: Item[] = [
+  { href: "/app/ajustes", key: "nav.ajustes", icon: "ajustes", activo: empieza("/app/ajustes") },
+];
+
+/** Textos propios del lateral (el diccionario común solo trae los nombres de ruta). */
+const TXT = {
+  es: {
+    aria: "Navegación principal",
+    trabajo: "Trabajo",
+    cuenta: "Cuenta",
+    ofertaT: "Una oferta nueva",
+    ofertaB: "Pega la oferta y Corpus arma la variante desde tu master, sin inventar nada.",
+    ofertaBtn: "Nueva variante",
+    invitado: "Modo local",
+  },
+  en: {
+    aria: "Main navigation",
+    trabajo: "Work",
+    cuenta: "Account",
+    ofertaT: "A new job post",
+    ofertaB: "Paste the post and Corpus builds the variant from your master, inventing nothing.",
+    ofertaBtn: "New variant",
+    invitado: "Local mode",
+  },
+} as const;
+
 export function UserMenu() {
   const router = useRouter();
+  const pathname = usePathname() || "/app";
   const t = useT();
   const { lang, setLang } = useLang();
 
@@ -229,6 +324,7 @@ export function UserMenu() {
 
   const initials = initialsFrom(displayName, email);
   const showSignOut = supabaseEnabled && authed;
+  const tx = TXT[lang === "en" ? "en" : "es"];
 
   // Índices estables de los items para el foco por teclado.
   let idx = 0;
@@ -236,28 +332,155 @@ export function UserMenu() {
   const settingsIdx = idx++;
   const signOutIdx = showSignOut ? idx++ : -1;
 
-  return (
-    <div className="um-bar" aria-label="Cuenta y preferencias">
-      <div className="um-inner">
-        {/* Toggle de idioma — motor i18n en vivo */}
-        <div
-          className="um-lang"
-          role="group"
-          aria-label={t("menu.lang")}
-          title={t("menu.lang")}
+  function enlace(item: Item) {
+    const on = item.activo(pathname);
+    const hijoOn = item.hijos?.some((h) => h.activo(pathname)) ?? false;
+    return (
+      <li key={item.href} className="lt-li">
+        <Link
+          href={item.href}
+          className="lt-item"
+          data-on={on || undefined}
+          data-rama={hijoOn || undefined}
+          aria-current={on ? "page" : undefined}
+          title={t(item.key)}
         >
-          <button
-            type="button"
-            aria-pressed={lang === "es"}
-            onClick={() => setLang("es")}
-          >
+          <Icono d={ICONOS[item.icon]} />
+          <span className="lt-txt">{t(item.key)}</span>
+        </Link>
+        {item.hijos ? (
+          <ul className="lt-rama">
+            {item.hijos.map((h) => {
+              const hon = h.activo(pathname);
+              return (
+                <li key={h.href}>
+                  <Link
+                    href={h.href}
+                    className="lt-hijo"
+                    data-on={hon || undefined}
+                    aria-current={hon ? "page" : undefined}
+                  >
+                    {t(h.key)}
+                  </Link>
+                </li>
+              );
+            })}
+          </ul>
+        ) : null}
+      </li>
+    );
+  }
+
+  return (
+    <aside className="lt-side" aria-label={tx.aria}>
+      <Link className="lt-brand c-logo" href="/app">
+        Corpus
+      </Link>
+
+      {/* Identidad + menú de cuenta */}
+      <div className="um-menu lt-id" ref={rootRef}>
+        <button
+          type="button"
+          ref={buttonRef}
+          className="lt-idbtn"
+          aria-haspopup="menu"
+          aria-expanded={open}
+          aria-label={open ? t("menu.close") : t("menu.open")}
+          onClick={() => setOpen((v) => !v)}
+          onKeyDown={onButtonKeyDown}
+        >
+          <span className="um-av" aria-hidden="true">
+            {avatarSrc ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={avatarSrc} alt="" />
+            ) : (
+              <span>{initials}</span>
+            )}
+          </span>
+          <span className="lt-idtxt">
+            <b>{displayName || (email ? email.split("@")[0] : "Corpus")}</b>
+            <span>{email || tx.invitado}</span>
+          </span>
+        </button>
+
+        {open ? (
+          <div className="um-pop" role="menu" aria-label={t("menu.open")} onKeyDown={onMenuKeyDown}>
+            {(displayName || email) && (
+              <div className="um-id" role="presentation">
+                {displayName ? <b>{displayName}</b> : null}
+                {email ? <span>{email}</span> : null}
+              </div>
+            )}
+
+            <Link
+              href="/app/cuenta"
+              role="menuitem"
+              className="um-item"
+              ref={(el) => {
+                itemRefs.current[profileIdx] = el;
+              }}
+              onClick={() => setOpen(false)}
+            >
+              {t("menu.profile")}
+            </Link>
+
+            <Link
+              href="/app/ajustes"
+              role="menuitem"
+              className="um-item"
+              ref={(el) => {
+                itemRefs.current[settingsIdx] = el;
+              }}
+              onClick={() => setOpen(false)}
+            >
+              {t("menu.settings")}
+            </Link>
+
+            {showSignOut ? (
+              <>
+                <hr className="um-sep" />
+                <button
+                  type="button"
+                  role="menuitem"
+                  className="um-item um-item--danger"
+                  ref={(el) => {
+                    itemRefs.current[signOutIdx] = el;
+                  }}
+                  disabled={signingOut}
+                  onClick={signOut}
+                >
+                  {signingOut ? t("menu.signingOut") : t("menu.signout")}
+                </button>
+              </>
+            ) : null}
+          </div>
+        ) : null}
+      </div>
+
+      <nav className="lt-nav" aria-label={tx.aria}>
+        <p className="lt-grupo">{tx.trabajo}</p>
+        <ul className="lt-ul">{TRABAJO.map(enlace)}</ul>
+        <p className="lt-grupo">{tx.cuenta}</p>
+        <ul className="lt-ul">{CUENTA.map(enlace)}</ul>
+      </nav>
+
+      {/* La única llamada de brasa del lateral */}
+      <div className="lt-cta">
+        <p className="lt-cta-t">{tx.ofertaT}</p>
+        <p className="lt-cta-b">{tx.ofertaB}</p>
+        <Link href="/app/variantes" className="c-btn c-btn--patina lt-cta-btn" title={tx.ofertaBtn}>
+          <Icono d={ICONOS.mas} />
+          <span className="lt-txt">{tx.ofertaBtn}</span>
+        </Link>
+      </div>
+
+      <div className="lt-foot">
+        {/* Toggle de idioma — motor i18n en vivo */}
+        <div className="um-lang" role="group" aria-label={t("menu.lang")} title={t("menu.lang")}>
+          <button type="button" aria-pressed={lang === "es"} onClick={() => setLang("es")}>
             ES
           </button>
-          <button
-            type="button"
-            aria-pressed={lang === "en"}
-            onClick={() => setLang("en")}
-          >
+          <button type="button" aria-pressed={lang === "en"} onClick={() => setLang("en")}>
             EN
           </button>
         </div>
@@ -272,86 +495,7 @@ export function UserMenu() {
         >
           <span aria-hidden="true">{theme === "dark" ? "☾" : "☀"}</span>
         </button>
-
-        {/* Avatar + menú */}
-        <div className="um-menu" ref={rootRef}>
-          <button
-            type="button"
-            ref={buttonRef}
-            className="um-av"
-            aria-haspopup="menu"
-            aria-expanded={open}
-            aria-label={open ? t("menu.close") : t("menu.open")}
-            onClick={() => setOpen((v) => !v)}
-            onKeyDown={onButtonKeyDown}
-          >
-            {avatarSrc ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={avatarSrc} alt={t("menu.avatarAlt")} />
-            ) : (
-              <span aria-hidden="true">{initials}</span>
-            )}
-          </button>
-
-          {open ? (
-            <div
-              className="um-pop"
-              role="menu"
-              aria-label={t("menu.open")}
-              onKeyDown={onMenuKeyDown}
-            >
-              {(displayName || email) && (
-                <div className="um-id" role="presentation">
-                  {displayName ? <b>{displayName}</b> : null}
-                  {email ? <span>{email}</span> : null}
-                </div>
-              )}
-
-              <Link
-                href="/app/cuenta"
-                role="menuitem"
-                className="um-item"
-                ref={(el) => {
-                  itemRefs.current[profileIdx] = el;
-                }}
-                onClick={() => setOpen(false)}
-              >
-                {t("menu.profile")}
-              </Link>
-
-              <Link
-                href="/app/ajustes"
-                role="menuitem"
-                className="um-item"
-                ref={(el) => {
-                  itemRefs.current[settingsIdx] = el;
-                }}
-                onClick={() => setOpen(false)}
-              >
-                {t("menu.settings")}
-              </Link>
-
-              {showSignOut ? (
-                <>
-                  <hr className="um-sep" />
-                  <button
-                    type="button"
-                    role="menuitem"
-                    className="um-item um-item--danger"
-                    ref={(el) => {
-                      itemRefs.current[signOutIdx] = el;
-                    }}
-                    disabled={signingOut}
-                    onClick={signOut}
-                  >
-                    {signingOut ? t("menu.signingOut") : t("menu.signout")}
-                  </button>
-                </>
-              ) : null}
-            </div>
-          ) : null}
-        </div>
       </div>
-    </div>
+    </aside>
   );
 }
