@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { decryptSecret, encryptionAvailable, encryptSecret } from "@/lib/crypto";
-import { estadoLlmKey2 } from "@/lib/account/byok";
+import { estadoLlmKey2, estadoLlmKey3 } from "@/lib/account/byok";
 
 export const runtime = "nodejs";
 
@@ -34,6 +34,8 @@ export async function GET() {
 
   // La 2ª clave se sondea aparte (columna que puede faltar). Solo la PRESENCIA.
   const est2 = await estadoLlmKey2(sb, user.id);
+  // La 3ª (Anthropic · migración 0007) igual: consulta propia, columna que puede faltar.
+  const est3 = await estadoLlmKey3(sb, user.id);
 
   // ★ ¿Hay candado? Se expone el ESTADO del cifrado (un booleano de configuración),
   //   nunca la clave maestra ni nada derivado de ella. Lo necesita la UI para CERRAR
@@ -70,6 +72,9 @@ export async function GET() {
     keyParked: !!blob1 && !clave1Usable,
     key2Parked: est2.aparcada, // guardada pero indescifrable (falta CORPUS_ENCRYPTION_KEY)
     key2Unavailable: est2.columnaAusente, // migración 0006 sin aplicar
+    hasKey3: est3.almacenada, // 3ª clave (Anthropic): tampoco se devuelve, solo si existe
+    key3Parked: est3.aparcada,
+    key3Unavailable: est3.columnaAusente, // migración 0007 sin aplicar
   });
 }
 
@@ -136,6 +141,29 @@ export async function POST(req: Request) {
     }
   }
 
+  // ── 3ª clave (Anthropic · migración 0007): misma regla, su propia escritura ──────
+  let key3Parked = false;
+  let key3Unavailable = false;
+  if ("llm_api_key_3" in body) {
+    const v = body["llm_api_key_3"];
+    let cifrada: string | null = null;
+    let escribir = true;
+    if (v == null || v === "") {
+      cifrada = null; // limpiar → la redacción vuelve a Gemini
+    } else if (encryptionAvailable()) {
+      cifrada = encryptSecret(String(v)); // ★ CIFRADA igual que las otras
+    } else {
+      key3Parked = true; // sin cifrado no se persiste un secreto en claro
+      escribir = false;
+    }
+    if (escribir) {
+      const { error: e3 } = await sb
+        .from("user_settings")
+        .upsert({ user_id: user.id, llm_api_key_3: cifrada }, { onConflict: "user_id" });
+      if (e3) key3Unavailable = true; // columna sin aplicar: se dice, no se traga
+    }
+  }
+
   // `encryptionAvailable` viaja también en la respuesta del POST: si el estado que
   // tenía el cliente estaba viejo (se guardó ANTES de que el servidor perdiera la
   // clave maestra), la pantalla puede cerrar el campo en el acto en vez de esperar
@@ -145,6 +173,8 @@ export async function POST(req: Request) {
     keyParked,
     key2Parked,
     key2Unavailable,
+    key3Parked,
+    key3Unavailable,
     encryptionAvailable: encryptionAvailable(),
   });
 }

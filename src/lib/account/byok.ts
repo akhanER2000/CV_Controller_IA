@@ -88,3 +88,54 @@ export async function getUserLlmKey2(sb: SupabaseClient, userId: string): Promis
   if (!encryptionAvailable()) return null; // sin cifrado no hay clave usable
   return (await estadoLlmKey2(sb, userId)).clave;
 }
+
+/**
+ * ════════════════════════════════════════════════════════════════════════════
+ * TERCERA CLAVE BYOK — la de ANTHROPIC (Claude), solo para la redacción.
+ *
+ * Mismo candado y mismas degradaciones que la 2ª, columna distinta
+ * (user_settings.llm_api_key_3, migración 0007): columna ausente, aparcada (sin
+ * CORPUS_ENCRYPTION_KEY o blob indescifrable) y formato que no es "v1:…". Siempre
+ * cifrada; la clave descifrada vive solo en el servidor y no vuelve al cliente.
+ * ════════════════════════════════════════════════════════════════════════════
+ */
+
+/** Estado de la 3ª clave, sin devolverla nunca. `columnaAusente` ⇒ falta la migración 0007. */
+export type EstadoClave3 = EstadoClave2;
+
+/** Lee el estado de la 3ª clave con TODAS las degradaciones (columna, cifrado, blob). */
+export async function estadoLlmKey3(sb: SupabaseClient, userId: string): Promise<EstadoClave3> {
+  const vacio: EstadoClave3 = { almacenada: false, aparcada: false, columnaAusente: false, clave: null };
+  // ⚠ Consulta AISLADA, como la 2ª: si la columna no existe el error es solo de esta
+  //   lectura y no contamina la de los demás ajustes.
+  const { data, error } = await sb
+    .from("user_settings")
+    .select("llm_api_key_3")
+    .eq("user_id", userId)
+    .maybeSingle();
+  if (error) return { ...vacio, columnaAusente: true };
+
+  const blob = (data as { llm_api_key_3?: string | null } | null)?.llm_api_key_3 ?? null;
+  if (!blob || !blob.startsWith("v1:")) return vacio;
+
+  if (!encryptionAvailable()) return { almacenada: true, aparcada: true, columnaAusente: false, clave: null };
+  try {
+    const key = decryptSecret(blob).trim();
+    return { almacenada: true, aparcada: false, columnaAusente: false, clave: key || null };
+  } catch {
+    return { almacenada: true, aparcada: true, columnaAusente: false, clave: null };
+  }
+}
+
+/**
+ * La 3ª clave DESCIFRADA (Anthropic), o null si no hay / no se puede.
+ *
+ * ★ HELPER PARA LOS LLAMADORES DE REDACCIÓN. Un llamador solo hace:
+ *     const key3 = (await getUserLlmKey3(sb, user.id)) ?? undefined;
+ *     modeloPara("redaccion-preserva-hechos", key, undefined, undefined, key3)
+ *   Sin clave (o sin columna) devuelve null y modeloPara cae a Gemini: no rompe.
+ */
+export async function getUserLlmKey3(sb: SupabaseClient, userId: string): Promise<string | null> {
+  if (!encryptionAvailable()) return null; // sin cifrado no hay clave usable
+  return (await estadoLlmKey3(sb, userId)).clave;
+}

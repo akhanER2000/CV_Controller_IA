@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import { generateText } from "ai";
 import { createGoogleGenerativeAI } from "@ai-sdk/google";
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
+import { createAnthropic } from "@ai-sdk/anthropic";
 
 /**
  * ════════════════════════════════════════════════════════════════════════════
@@ -33,11 +34,17 @@ import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
  *   ⚠ DEGRADAR CON HONESTIDAD: sin 2ª clave configurada, la tarea barata CAE al
  *     proveedor por defecto (Gemini) — no rompe, no calla. `rutaDe` lo dice con el
  *     flag `degradado` para que el panel de salud no mienta sobre quién atiende qué.
+ *
+ * ★ TERCER PROVEEDOR · ANTHROPIC (Claude), SOLO para `redaccion-preserva-hechos`.
+ *   Extracción y visión siguen en Gemini (el A/B de abajo es de Gemini y la visión
+ *   no se ha probado en otro). La 3ª clave BYOK (user_settings.llm_api_key_3,
+ *   migración 0007) activa la redacción en Claude; sin ella la redacción CAE a
+ *   Gemini con su `modeloFallback` y `rutaDe` la marca `degradado`, igual que Groq.
  * ════════════════════════════════════════════════════════════════════════════
  */
 
-/** Los proveedores del router. "google" = Gemini (por defecto); el barato es Groq. */
-export type Proveedor = "google" | "groq";
+/** Los proveedores del router. "google" = Gemini (por defecto); barato = Groq; redacción = Anthropic. */
+export type Proveedor = "google" | "groq" | "anthropic";
 
 /** El proveedor BARATO del router de dos niveles. Un solo sitio lo nombra. */
 export const PROVEEDOR_BARATO: Proveedor = "groq";
@@ -68,14 +75,14 @@ export const TAREAS: readonly Tarea[] = [
 ] as const;
 
 export interface Definicion {
-  /** El proveedor PREFERENTE de la tarea. "groq" solo en las tareas baratas. */
+  /** El proveedor PREFERENTE de la tarea. "groq" solo en las baratas; "anthropic" solo en la redacción. */
   proveedor: Proveedor;
   /** El modelo del proveedor preferente. */
   modelo: string;
   /**
    * SOLO en tareas cuyo `proveedor` NO es "google": el modelo de Gemini al que la
-   * tarea CAE cuando no hay 2ª clave configurada. Sin este campo, degradar dejaría
-   * a `modeloPara` sin un modelo de google válido que instanciar.
+   * tarea CAE cuando no hay clave de su proveedor (2ª Groq · 3ª Anthropic). Sin este
+   * campo, degradar dejaría a `modeloPara` sin un modelo de google válido que instanciar.
    */
   modeloFallback?: string;
   /** Por qué ESTE modelo para ESTA tarea. Sin esto el registro es una tabla muda. */
@@ -148,11 +155,13 @@ export const REGISTRO: Readonly<Record<Tarea, Definicion>> = {
       "evidencia verificada aquí contra 30% en 3.5-flash-lite, que parafrasea en vez de citar.",
   },
   "redaccion-preserva-hechos": {
-    proveedor: "google",
-    modelo: "gemini-3.6-flash",
+    proveedor: "anthropic",
+    modelo: "claude-sonnet-5-5",
+    modeloFallback: "gemini-3.6-flash",
     motivo:
       "aquí se juega la promesa del producto: NO se baja a lite. preservesFacts corre después e " +
-      "impide la invención igual, pero un modelo débil redacta peor. Es el sitio donde pagar bien vale.",
+      "impide la invención igual, pero un modelo débil redacta peor. Es el sitio donde pagar bien vale: " +
+      "Claude Sonnet, ID versionado. Sin 3ª clave (Anthropic) cae a Gemini y se marca degradado.",
   },
   "clasificacion-barata": {
     proveedor: "groq",
@@ -230,23 +239,37 @@ export interface RutaTarea {
   proveedor: Proveedor;
   /** modelo que la atiende de verdad (el fallback de google si degradó) */
   modelo: string;
-  /** true si la tarea PREFERÍA el barato pero cayó a Gemini por falta de 2ª clave */
+  /** true si la tarea PREFERÍA otro proveedor (Groq/Anthropic) pero cayó a Gemini por falta de su clave */
   degradado: boolean;
 }
 
 /**
- * Resuelve QUIÉN atiende una tarea según haya o no 2ª clave (Groq). Es la verdad
- * que el panel de salud enseña: sin 2ª clave, la tarea barata CAE a Gemini y se
- * marca `degradado` para no fingir que Groq atiende algo que no atiende.
+ * Resuelve QUIÉN atiende una tarea según haya o no clave de su proveedor: 2ª (Groq)
+ * o 3ª (Anthropic). Es la verdad que el panel de salud enseña: sin la clave, la tarea
+ * CAE a Gemini y se marca `degradado` para no fingir que atiende quien no atiende.
+ * `anthropicDisponible` es opcional y por defecto false: quien no lo pase ve la
+ * redacción degradada (la verdad sin clave), nunca un Claude fingido.
  */
-export function rutaDe(tarea: Tarea, opts: { groqDisponible: boolean }): RutaTarea {
+export function rutaDe(
+  tarea: Tarea,
+  opts: { groqDisponible: boolean; anthropicDisponible?: boolean },
+): RutaTarea {
   const def = REGISTRO[tarea];
-  if (def.proveedor === PROVEEDOR_BARATO && !opts.groqDisponible) {
+  const disponible =
+    def.proveedor === "groq" ? opts.groqDisponible
+    : def.proveedor === "anthropic" ? opts.anthropicDisponible === true
+    : true;
+  if (!disponible) {
     // Degrada al modelo de Gemini declarado como fallback (o al preferente si, por
     // un error de registro, faltara: nunca se deja a `modeloPara` sin modelo).
     return { tarea, proveedor: "google", modelo: def.modeloFallback ?? def.modelo, degradado: true };
   }
   return { tarea, proveedor: def.proveedor, modelo: def.modelo, degradado: false };
+}
+
+/** Instancia el modelo de REDACCIÓN (Anthropic) con la 3ª clave del usuario. */
+function modeloRedaccion(modelo: string, apiKey3: string) {
+  return createAnthropic({ apiKey: apiKey3 })(modelo);
 }
 
 /** Instancia el modelo BARATO (Groq) con la 2ª clave del usuario. */
@@ -270,9 +293,24 @@ function modeloBarato(modelo: string, apiKey2: string) {
  *     el parámetro es opcional: quien no lo pasa se comporta EXACTAMENTE igual que
  *     antes. Es un parámetro y no un estado global a propósito — un override
  *     guardado en el módulo se filtraría entre peticiones de usuarios distintos.
+ *   · `apiKey3` — la 3ª clave BYOK (Anthropic). Si la tarea es de Anthropic
+ *     (redaccion-preserva-hechos) Y hay 3ª clave → se instancia Claude. Si no, CAE
+ *     a Gemini con su modelo fallback. Va la última para no mover a nadie.
  */
-export function modeloPara(tarea: Tarea, apiKey?: string, apiKey2?: string, elegido?: string | null) {
+export function modeloPara(
+  tarea: Tarea,
+  apiKey?: string,
+  apiKey2?: string,
+  elegido?: string | null,
+  apiKey3?: string,
+) {
   const def = REGISTRO[tarea];
+
+  // Tarea de redacción + 3ª clave presente ⇒ Anthropic. Con clave de Anthropic NO
+  // hace falta clave de Gemini: son proveedores independientes.
+  if (def.proveedor === "anthropic" && apiKey3) {
+    return modeloRedaccion(def.modelo, apiKey3);
+  }
 
   // Tarea barata + 2ª clave presente ⇒ proveedor barato (Groq). La elección del
   // usuario es un modelo de Gemini: no toca esta rama (TAREAS_ELEGIBLES es google).
@@ -418,6 +456,28 @@ export async function pingProveedorBarato(apiKey2: string, forzar = false): Prom
       const { text } = await generateText({
         // La tarea barata + 2ª clave ⇒ modeloPara devuelve el modelo de Groq.
         model: modeloPara("clasificacion-barata", undefined, apiKey2),
+        prompt: "Responde exactamente con la palabra: OK",
+      });
+      return text;
+    },
+    forzar,
+  );
+}
+
+/**
+ * Comprueba de verdad que ANTHROPIC responde (3ª clave). Misma ventana compartida,
+ * indexada por proveedor + huella de clave. Solo con 3ª clave: sin ella el panel dice
+ * «no configurado» SIN llegar aquí (no se llama a nadie sin clave).
+ */
+export async function pingProveedorAnthropic(apiKey3: string, forzar = false): Promise<ResultadoPing> {
+  const modelo = REGISTRO["redaccion-preserva-hechos"].modelo; // el modelo Claude del registro
+  return ejecutarPing(
+    `anthropic:${huella(apiKey3)}:${modelo}`,
+    modelo,
+    async () => {
+      const { text } = await generateText({
+        // Redacción + 3ª clave ⇒ modeloPara devuelve el modelo de Anthropic.
+        model: modeloPara("redaccion-preserva-hechos", undefined, undefined, undefined, apiKey3),
         prompt: "Responde exactamente con la palabra: OK",
       });
       return text;

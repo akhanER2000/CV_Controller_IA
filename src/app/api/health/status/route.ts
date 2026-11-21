@@ -1,12 +1,13 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
-import { getUserLlmKey, estadoLlmKey2 } from "@/lib/account/byok";
+import { getUserLlmKey, estadoLlmKey2, estadoLlmKey3 } from "@/lib/account/byok";
 import {
   claveGemini,
   nombreVarClave,
   modeloDe,
   pingProveedor,
   pingProveedorBarato,
+  pingProveedorAnthropic,
   rutaDe,
   TAREAS,
 } from "@/lib/ai/modelos";
@@ -140,10 +141,11 @@ async function checkGemini(sb: SupabaseClient, uid: string): Promise<Service> {
 async function checkRouterBarato(sb: SupabaseClient, uid: string): Promise<Service> {
   const est2 = await estadoLlmKey2(sb, uid);
   const groqDisponible = !!est2.clave;
+  const anthropicDisponible = !!(await estadoLlmKey3(sb, uid)).clave;
 
   // El mapa tarea → proveedor → modelo, con las claves REALES de este usuario.
   const routing = TAREAS.map((tarea) => {
-    const r = rutaDe(tarea, { groqDisponible });
+    const r = rutaDe(tarea, { groqDisponible, anthropicDisponible });
     return { tarea, proveedor: r.proveedor, modelo: r.modelo, degradado: r.degradado };
   });
   const metaBase = {
@@ -185,14 +187,53 @@ async function checkRouterBarato(sb: SupabaseClient, uid: string): Promise<Servi
   };
 }
 
-/** Anthropic: sin red. La verdad verificada por grep — ninguna ruta la usa hoy.
- *  Presente o no, hoy no aporta nada: estado `warn` (informativo, no roto). */
-function checkAnthropic(): Service {
-  const present = !!process.env.ANTHROPIC_API_KEY;
-  const detail = present
-    ? "Clave presente, pero ningún código la usa todavía — prevista para «Adaptar a un aviso»."
-    : "No configurada · opcional. Prevista para «Adaptar a un aviso»; sin uso en el código todavía.";
-  return { id: "anthropic", ok: true, status: "warn", detail, meta: { present, usedInCode: false } };
+/**
+ * ★ ANTHROPIC (3ª clave) — atiende SOLO `redaccion-preserva-hechos`. Sin clave:
+ * «no configurado» SIN llamar a nadie, y la redacción va a Gemini (degrada, no rompe).
+ * Con clave: llamada REAL con la ventana compartida (indexada por proveedor + huella).
+ * La variable de entorno ANTHROPIC_API_KEY del servidor NO se usa: solo la BYOK cifrada.
+ */
+async function checkAnthropic(sb: SupabaseClient, uid: string): Promise<Service> {
+  const est3 = await estadoLlmKey3(sb, uid);
+  const disponible = !!est3.clave;
+  const r = rutaDe("redaccion-preserva-hechos", { groqDisponible: false, anthropicDisponible: disponible });
+  const metaBase = {
+    configured: disponible,
+    parked: est3.aparcada,
+    columnAusente: est3.columnaAusente,
+    task: r.tarea,
+    provider: r.proveedor,
+    model: r.modelo,
+    degraded: r.degradado,
+  };
+
+  if (!disponible) {
+    const detail = est3.columnaAusente
+      ? "Falta aplicar la migración 0007 (llm_api_key_3). La redacción va a Gemini."
+      : est3.aparcada
+        ? "Tu clave de Anthropic está APARCADA: falta CORPUS_ENCRYPTION_KEY para descifrarla. La redacción va a Gemini."
+        : "No configurado · sin clave de Anthropic la redacción va a Gemini (degrada, no rompe).";
+    return { id: "anthropic", ok: true, status: "warn", detail, meta: metaBase };
+  }
+
+  const ping = await pingProveedorAnthropic(est3.clave!);
+  const meta = {
+    ...metaBase,
+    latencyMs: ping.latenciaMs,
+    sample: ping.muestra,
+    cached: ping.reutilizado,
+    checkedAgoMs: ping.edadMs,
+  };
+  if (!ping.ok) {
+    return { id: "anthropic", ok: false, status: "fail", detail: ping.error ?? "Anthropic no respondió.", meta };
+  }
+  return {
+    id: "anthropic",
+    ok: true,
+    status: "ok",
+    detail: "Responde. Atiende la redacción que no puede inventar hechos; extracción y visión siguen en Gemini.",
+    meta,
+  };
 }
 
 /** GitHub: rate_limit público (sin OAuth). ok si responde; reporta el cupo. */
@@ -268,7 +309,7 @@ export async function GET() {
   const services = await Promise.all([
     run("gemini", 15000, () => checkGemini(sb, uid)),
     run("groq", 15000, () => checkRouterBarato(sb, uid)),
-    run("anthropic", 2000, async () => checkAnthropic()),
+    run("anthropic", 15000, () => checkAnthropic(sb, uid)),
     run("github", 8000, () => checkGithub()),
     run("supabase", 8000, () => checkSupabase(sb, uid)),
     run("storage", 8000, () => checkStorage(sb, uid)),

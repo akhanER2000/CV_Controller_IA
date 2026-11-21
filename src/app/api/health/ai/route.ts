@@ -1,4 +1,4 @@
-import { claveGemini, nombreVarClave, modeloDe, pingProveedor } from "@/lib/ai/modelos";
+import { claveGemini, nombreVarClave, pingProveedor, rutaDe } from "@/lib/ai/modelos";
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
@@ -47,7 +47,9 @@ export async function GET() {
     // ocurrió hace `checkedAgoMs` milisegundos, no ahora mismo.
     cached: ping.reutilizado,
     checkedAgoMs: ping.edadMs,
-    anthropicKeyLoaded: !!process.env.ANTHROPIC_API_KEY, // solo para tailoring (Fase 6)
-    tailoringModel: modeloDe("redaccion-preserva-hechos"),
+    anthropicKeyLoaded: !!process.env.ANTHROPIC_API_KEY, // informativo: el código usa la BYOK cifrada, no esta variable
+    // Sin sesión no hay BYOK: se dice quién redacta SIN 3ª clave (el fallback). Con la
+    // clave de Anthropic del usuario, /api/health/status lo muestra como atendido por Claude.
+    tailoringModel: rutaDe("redaccion-preserva-hechos", { groqDisponible: false, anthropicDisponible: false }).modelo,
   });
 }

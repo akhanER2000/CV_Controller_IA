@@ -1,0 +1,21 @@
+-- ============================================================================
+-- Corpus · 0007_byok_anthropic.sql
+-- Una tercera clave BYOK: Anthropic (Claude), solo para la tarea
+-- «redaccion-preserva-hechos» del router por coste (§H).
+--
+-- Gemini sigue haciendo la visión y la extracción; Groq (2ª clave, 0006) las tareas
+-- baratas; Claude redacta —variantes, «Ajustar», adaptar a un aviso, traducir—, que
+-- es donde se juega la promesa del producto. La clave se guarda IGUAL que las otras:
+-- cifrada en reposo (formato "v1:…"), nunca en claro, nunca de vuelta al cliente.
+-- Reutiliza todo el candado de crypto.ts / byok.ts.
+--
+-- Sin esta columna —o sin clave dentro— nada se rompe: la redacción cae a Gemini y el
+-- panel de salud lo marca como degradado. Aplicarla es a mano (la hace AKHAN).
+--
+-- Idempotente: se puede re-ejecutar sin error.
+-- ============================================================================
+
+-- La clave del tercer proveedor. Misma semántica que llm_api_key (0001:173) y
+-- llm_api_key_2 (0006): BYOK, CIFRADA, nunca al cliente. Nombre neutro (no
+-- "anthropic_") porque el proveedor concreto lo elige el registro de modelos.
+alter table user_settings add column if not exists llm_api_key_3 text;

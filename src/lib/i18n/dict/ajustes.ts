@@ -90,6 +90,23 @@ export const ajustes = {
     "ajustes.byok2.clear": "Quitar",
     "ajustes.byok2.note": "Solo abarata clasificar y desempatar duplicados. Sin ella, todo va a Gemini (no se rompe nada).",
 
+    // Tercera clave · Anthropic (Claude) · solo la redacción que no puede inventar hechos.
+    "ajustes.flash.key3Saved": "Clave de Anthropic guardada ✓ (cifrada, no se muestra)",
+    "ajustes.flash.key3Parked":
+      "Falta configurar CORPUS_ENCRYPTION_KEY en el servidor. Hasta entonces no se guarda ninguna clave — a propósito, para no dejar secretos en claro.",
+    "ajustes.flash.key3Unavailable": "Falta aplicar la migración 0007 (llm_api_key_3): la clave de Anthropic no se pudo guardar.",
+    "ajustes.flash.key3Cleared": "Clave de Anthropic quitada ✓ — la redacción vuelve a Gemini",
+    "ajustes.byok3.label": "Tercera clave · Anthropic (Claude)",
+    "ajustes.byok3.hint": "BYOK — opcional · redacción",
+    "ajustes.byok3.hintSaved": " · hay una guardada",
+    "ajustes.byok3.placeholder": "sk-ant-… (Anthropic · se cifra, solo la redacción)",
+    "ajustes.byok3.placeholderSaved": "•••••••••• (guardada — escribe para cambiarla)",
+    "ajustes.byok3.aria": "Clave de Anthropic (BYOK)",
+    "ajustes.byok3.save": "Guardar clave de Anthropic",
+    "ajustes.byok3.clear": "Quitar",
+    "ajustes.byok3.note": "Solo redacta variantes, «Ajustar», avisos y traducciones. Extracción y visión siguen en Gemini. Sin ella, la redacción va a Gemini (no se rompe nada).",
+    "ajustes.byok3.unavailable": "Falta aplicar la migración 0007 (llm_api_key_3): hasta entonces la clave de Anthropic no se puede guardar.",
+
     // ★ Selector de modelos PROBADOS. El listado de la API miente (20 listados, 11
     //   responden), así que aquí solo se ofrece lo que contestó a una llamada real.
     "ajustes.modelo.label": "Modelo de extracción",
@@ -139,7 +156,7 @@ export const ajustes = {
     "ajustes.conn.fail": "caído",
     "ajustes.conn.svc.gemini": "Gemini · extracción",
     "ajustes.conn.svc.groq": "Groq · router barato",
-    "ajustes.conn.svc.anthropic": "Anthropic",
+    "ajustes.conn.svc.anthropic": "Anthropic · redacción",
     "ajustes.conn.svc.github": "GitHub",
     "ajustes.conn.svc.supabase": "Supabase · RLS",
     "ajustes.conn.svc.storage": "Storage · archivos",
@@ -263,6 +280,23 @@ export const ajustes = {
     "ajustes.byok2.clear": "Remove",
     "ajustes.byok2.note": "It only makes classifying and de-duplicating cheaper. Without it, everything goes to Gemini (nothing breaks).",
 
+    // Third key · Anthropic (Claude) · only the writing that must not invent facts.
+    "ajustes.flash.key3Saved": "Anthropic key saved ✓ (encrypted, never shown)",
+    "ajustes.flash.key3Parked":
+      "CORPUS_ENCRYPTION_KEY isn't set on the server. Until it is, no key gets saved — on purpose, so no secret is ever stored in plaintext.",
+    "ajustes.flash.key3Unavailable": "Migration 0007 (llm_api_key_3) isn't applied yet: the Anthropic key couldn't be saved.",
+    "ajustes.flash.key3Cleared": "Anthropic key removed ✓ — writing goes back to Gemini",
+    "ajustes.byok3.label": "Third key · Anthropic (Claude)",
+    "ajustes.byok3.hint": "BYOK — optional · writing",
+    "ajustes.byok3.hintSaved": " · one is saved",
+    "ajustes.byok3.placeholder": "sk-ant-… (Anthropic · encrypted, writing only)",
+    "ajustes.byok3.placeholderSaved": "•••••••••• (saved — type to change it)",
+    "ajustes.byok3.aria": "Anthropic key (BYOK)",
+    "ajustes.byok3.save": "Save Anthropic key",
+    "ajustes.byok3.clear": "Remove",
+    "ajustes.byok3.note": "It only writes variants, “Adjust”, job-post tailoring and translations. Extraction and vision stay on Gemini. Without it, writing goes to Gemini (nothing breaks).",
+    "ajustes.byok3.unavailable": "Migration 0007 (llm_api_key_3) isn't applied yet: until then the Anthropic key can't be saved.",
+
     // ★ Probed-model selector. The API listing lies (20 listed, 11 answer), so only
     //   what answered a real call is offered here.
     "ajustes.modelo.label": "Extraction model",
@@ -312,7 +346,7 @@ export const ajustes = {
     "ajustes.conn.fail": "down",
     "ajustes.conn.svc.gemini": "Gemini · extraction",
     "ajustes.conn.svc.groq": "Groq · cheap router",
-    "ajustes.conn.svc.anthropic": "Anthropic",
+    "ajustes.conn.svc.anthropic": "Anthropic · writing",
     "ajustes.conn.svc.github": "GitHub",
     "ajustes.conn.svc.supabase": "Supabase · RLS",
     "ajustes.conn.svc.storage": "Storage · files",

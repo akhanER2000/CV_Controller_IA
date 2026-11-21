@@ -3,7 +3,7 @@ import { generateObject } from "ai";
 import { createClient } from "@/lib/supabase/server";
 import { modeloPara } from "@/lib/ai/modelos";
 import { geminiApiKey } from "@/lib/extract/llm";
-import { getUserLlmKey } from "@/lib/account/byok";
+import { getUserLlmKey, getUserLlmKey3 } from "@/lib/account/byok";
 import { ensureMaster } from "@/lib/db/queries";
 import {
   ORIGEN_TRADUCCION,
@@ -157,10 +157,11 @@ function paraTraducir(originales: FilaItem[], espejos: FilaItem[], hacia: Idioma
  * la invención igual, pero un modelo débil traduce literal («I led a team of 6
  * people») y eso delata al candidato en la primera línea. Aquí pagar bien vale.
  */
-function geminiTraduccionLLM(apiKey?: string): TraduccionLLM {
+function geminiTraduccionLLM(apiKey?: string, apiKey3?: string): TraduccionLLM {
   const key = apiKey || geminiApiKey();
   if (!key) throw new Error("Falta GEMINI_API_KEY");
-  const model = modeloPara("redaccion-preserva-hechos", key);
+  // apiKey3 = la clave de Anthropic: con ella redacta Claude; sin ella, el fallback Gemini.
+  const model = modeloPara("redaccion-preserva-hechos", key, undefined, undefined, apiKey3);
   return async (peticion) => {
     const { object } = await generateObject({
       model,
@@ -391,9 +392,10 @@ export async function POST(req: Request) {
       return fallo("Falta configurar la clave de IA (BYOK o GEMINI_API_KEY del servidor).", 503);
     }
 
+    const key3 = (await getUserLlmKey3(sb, user.id)) ?? undefined;
     const resultado = await construirTraduccion(
       { items, hacia, desde },
-      { llm: geminiTraduccionLLM(byok) },
+      { llm: geminiTraduccionLLM(byok, key3) },
     );
     for (const d of resultado.descartados) {
       console.warn("[api/traducir] propuesta RECHAZADA por el candado", {

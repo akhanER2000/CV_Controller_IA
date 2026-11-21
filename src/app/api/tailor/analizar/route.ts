@@ -4,7 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getMasterItems, type MasterItem } from "@/lib/db/queries";
 import { geminiApiKey } from "@/lib/extract/llm";
 import { modeloPara } from "@/lib/ai/modelos";
-import { getUserLlmKey } from "@/lib/account/byok";
+import { getUserLlmKey, getUserLlmKey3 } from "@/lib/account/byok";
 import { fetchViaJina } from "@/lib/extract/web";
 import { extractFile, extractDepsFor, type FileKind } from "@/lib/extract/files";
 import {
@@ -43,7 +43,7 @@ const fallo = (msg: string, status: number) => NextResponse.json({ error: msg },
 const motivo = (e: unknown) => (e instanceof Error ? e.message : "Error");
 
 /** El LLM real (Gemini) como función inyectable de construirTailor. */
-function geminiOfertaLLM(apiKey?: string): OfertaLLM {
+function geminiOfertaLLM(apiKey?: string, apiKey3?: string): OfertaLLM {
   const SYS =
     "Eres un asistente que ADAPTA un CV a una OFERTA de empleo. Te doy el TEXTO DEL AVISO y los items " +
     "del master del candidato (cada uno con su id, tipo y texto). Tu tarea, y NINGUNA parte es escribir " +
@@ -58,7 +58,7 @@ function geminiOfertaLLM(apiKey?: string): OfertaLLM {
     "NUNCA inventes ids, cifras ni tecnologías. NUNCA des un porcentaje ni un score de encaje.";
   return async ({ offerText, items }) => {
     const { object } = await generateObject({
-      model: modeloPara("redaccion-preserva-hechos", apiKey),
+      model: modeloPara("redaccion-preserva-hechos", apiKey, undefined, undefined, apiKey3),
       schema: OfertaPlanSchema,
       // El aviso se recorta para el prompt; la VERIFICACIÓN corre sobre el texto entero
       // (lo que el modelo cite saldrá de lo que vio, que es ⊆ del total).
@@ -188,7 +188,7 @@ export async function POST(req: Request) {
       itemTailorDe({ id: m.id, item_id: m.id, kind: m.kind, data: masterData(m), enVariante: false }),
     );
 
-    const analisis = await construirTailor({ offerText: oferta.text, items }, { llm: geminiOfertaLLM(byok) });
+    const analisis = await construirTailor({ offerText: oferta.text, items }, { llm: geminiOfertaLLM(byok, (await getUserLlmKey3(sb, user.id)) ?? undefined) });
 
     // Los descartes de reformulación se registran en el servidor: si el modelo empieza
     // a inventar en masa, tiene que verse en los logs, no solo en la pantalla de quien lo sufre.

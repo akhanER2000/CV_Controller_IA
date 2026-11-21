@@ -107,6 +107,8 @@ type SaveResult = {
   keyParked?: boolean;
   key2Parked?: boolean;
   key2Unavailable?: boolean;
+  key3Parked?: boolean;
+  key3Unavailable?: boolean;
   /** ★ ¿el servidor puede cifrar? (hay CORPUS_ENCRYPTION_KEY válida) */
   encryptionAvailable?: boolean;
 };
@@ -155,6 +157,13 @@ function connMeta(s: ConnService): string | null {
     if (typeof m.latencyMs === "number") parts.push(`${m.latencyMs} ms`);
     return parts.filter(Boolean).join(" · ");
   }
+  if (s.id === "anthropic") {
+    const parts = [String(m.model ?? "")];
+    if (m.degraded) parts.push("degradado → Gemini");
+    if (m.parked) parts.push("clave aparcada");
+    if (typeof m.latencyMs === "number") parts.push(`${m.latencyMs} ms`);
+    return parts.filter(Boolean).join(" · ");
+  }
   if (s.id === "github" && (m.remaining != null || m.limit != null)) {
     return `${m.remaining ?? "?"}/${m.limit ?? "?"} req · sin OAuth`;
   }
@@ -192,6 +201,11 @@ export function AjustesScreen() {
   // de la primera: existe o no, se guarda o se quita, sin depender del segmento.
   const [byok2, setByok2] = useState("");
   const [hasKey2, setHasKey2] = useState(false);
+  // 3ª clave BYOK (Anthropic · solo la redacción). `key3Falta` = migración 0007 sin aplicar.
+  const [byok3, setByok3] = useState("");
+  const [hasKey3, setHasKey3] = useState(false);
+  const [clave3Aparcada, setClave3Aparcada] = useState(false);
+  const [key3Falta, setKey3Falta] = useState(false);
   const [flash, setFlash] = useState<string | null>(null);
 
   const [delOpen, setDelOpen] = useState(false);
@@ -248,6 +262,9 @@ export function AjustesScreen() {
         setCifradoOk(d.encryptionAvailable !== false);
         setClaveAparcada(!!d.keyParked);
         setClave2Aparcada(!!d.key2Parked);
+        setHasKey3(!!d.hasKey3);
+        setClave3Aparcada(!!d.key3Parked);
+        setKey3Falta(!!d.key3Unavailable);
         if (d.hasKey) setProvider("Anthropic");
         const t = (d.theme as ThemeSel) ?? "dark";
         setThemeSel(t);
@@ -327,6 +344,27 @@ export function AjustesScreen() {
         setHasKey2(!!value);
         setByok2("");
         note(value ? t("ajustes.flash.key2Saved") : t("ajustes.flash.key2Cleared"));
+      }
+    });
+  }
+
+  // 3ª clave (Anthropic · redacción): mismas degradaciones que la 2ª, ninguna se traga.
+  // Tras guardar bien se limpia el campo; recargar la pantalla la sigue mostrando
+  // como guardada porque el GET manda `hasKey3` (la clave nunca vuelve).
+  function saveKey3(value: string | null) {
+    void saveSettings({ llm_api_key_3: value }).then((res) => {
+      if (res && res.encryptionAvailable !== undefined) setCifradoOk(res.encryptionAvailable);
+      if (value && res?.key3Unavailable) {
+        setHasKey3(false);
+        setKey3Falta(true);
+        note(t("ajustes.flash.key3Unavailable"));
+      } else if (value && res?.key3Parked) {
+        setHasKey3(false);
+        note(t("ajustes.flash.key3Parked"));
+      } else {
+        setHasKey3(!!value);
+        setByok3("");
+        note(value ? t("ajustes.flash.key3Saved") : t("ajustes.flash.key3Cleared"));
       }
     });
   }
@@ -761,6 +799,65 @@ export function AjustesScreen() {
                   ) : null}
                   <span style={{ font: "400 var(--fs-micro)/1.5 var(--font-mono)", color: "var(--text-subtle)" }}>
                     {t("ajustes.byok2.note")}
+                  </span>
+                </span>
+              </div>
+              {/* Tercera clave: Anthropic (Claude), SOLO la redacción que no inventa hechos.
+                  Sin ella la redacción va a Gemini. Si falta la columna, se dice con su número. */}
+              <div className="aj-row">
+                <span className="k">
+                  <b>{t("ajustes.byok3.label")}</b>
+                  <span>{t("ajustes.byok3.hint")}{hasKey3 ? t("ajustes.byok3.hintSaved") : ""}</span>
+                </span>
+                <span className="v">
+                  <span style={{ display: "flex", gap: "10px", alignItems: "center", flexWrap: "wrap" }}>
+                    <input
+                      className="c-input"
+                      id="byok3"
+                      type="password"
+                      placeholder={
+                        byokCerrado
+                          ? t("ajustes.byok.lockedPlaceholder")
+                          : hasKey3
+                            ? t("ajustes.byok3.placeholderSaved")
+                            : t("ajustes.byok3.placeholder")
+                      }
+                      style={{ maxWidth: "320px" }}
+                      aria-label={t("ajustes.byok3.aria")}
+                      disabled={byokCerrado}
+                      aria-describedby={byokCerrado ? "byok3Candado" : undefined}
+                      value={byok3}
+                      onChange={(e) => setByok3(e.target.value)}
+                    />
+                    <button
+                      className="c-btn"
+                      onClick={() => saveKey3(byok3.trim() || null)}
+                      disabled={byokCerrado}
+                    >
+                      {t("ajustes.byok3.save")}
+                    </button>
+                    {hasKey3 ? (
+                      <button className="c-btn c-btn--quiet" onClick={() => saveKey3(null)}>
+                        {t("ajustes.byok3.clear")}
+                      </button>
+                    ) : null}
+                  </span>
+                  {byokCerrado ? <CandadoCifrado id="byok3Candado" /> : null}
+                  {key3Falta ? (
+                    <span className="aj-note show" role="status">
+                      {t("ajustes.byok3.unavailable")}
+                    </span>
+                  ) : null}
+                  {clave3Aparcada ? (
+                    <span
+                      role="status"
+                      style={{ font: "400 var(--fs-micro)/1.5 var(--font-mono)", color: "var(--text-subtle)" }}
+                    >
+                      {t("ajustes.byok.parkedSaved")}
+                    </span>
+                  ) : null}
+                  <span style={{ font: "400 var(--fs-micro)/1.5 var(--font-mono)", color: "var(--text-subtle)" }}>
+                    {t("ajustes.byok3.note")}
                   </span>
                 </span>
               </div>

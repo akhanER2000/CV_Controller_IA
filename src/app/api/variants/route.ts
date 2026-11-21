@@ -6,7 +6,7 @@ import { listVariants, countMasterItems, getMasterItems, type MasterItem } from 
 import { createVariant, updateVariant, addItem, setAiOverride } from "@/lib/db/variants";
 import { preservesFacts } from "@/lib/verify";
 import { geminiApiKey } from "@/lib/extract/llm";
-import { getUserLlmKey } from "@/lib/account/byok";
+import { getUserLlmKey, getUserLlmKey3 } from "@/lib/account/byok";
 import {
   buildAiVariant,
   VariantPlanSchema,
@@ -51,12 +51,13 @@ function masterItemText(m: MasterItem): string {
 
 /** El LLM real (Gemini) como función inyectable de buildAiVariant. La clave es la
  *  BYOK del usuario (ya descifrada) o, si no, la del servidor. */
-function geminiVariantLLM(apiKey?: string): VariantLLM {
+function geminiVariantLLM(apiKey?: string, apiKey3?: string): VariantLLM {
   const key = apiKey || geminiApiKey();
   if (!key) throw new Error("Falta GEMINI_API_KEY");
   // Armar la variante es redacción/selección que no puede inventar: pasa por el
-  // registro (redaccion-preserva-hechos), no por un alias flotante propio.
-  const model = modeloPara("redaccion-preserva-hechos", key);
+  // registro (redaccion-preserva-hechos), no por un alias flotante propio. apiKey3 =
+  // clave de Anthropic: con ella redacta Claude; sin ella, el fallback Gemini.
+  const model = modeloPara("redaccion-preserva-hechos", key, undefined, undefined, apiKey3);
   const SYS =
     "Eres un asistente que arma una VARIANTE de CV a partir de un MASTER canónico. " +
     "Te doy los items del master (cada uno con su id, tipo y texto) y un rol/descripción objetivo. " +
@@ -196,7 +197,7 @@ export async function POST(req: Request) {
     }
 
     const aiItems: AiMasterItem[] = master.map((m) => ({ id: m.id, kind: m.kind, text: masterItemText(m) }));
-    const plan = await buildAiVariant({ master: aiItems, prompt }, { llm: geminiVariantLLM(byok) });
+    const plan = await buildAiVariant({ master: aiItems, prompt }, { llm: geminiVariantLLM(byok, (await getUserLlmKey3(sb, user.id)) ?? undefined) });
 
     const variant = await createVariant(sb, user.id, body.name ?? plan.targetTitle);
 

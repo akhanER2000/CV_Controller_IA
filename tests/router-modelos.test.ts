@@ -28,6 +28,8 @@ import {
 } from "../src/lib/ai/modelos";
 
 const MODELO_GROQ = "llama-3.3-70b-versatile";
+// El modelo de redacción (3ª clave · Anthropic). Versionado, nunca un alias.
+const MODELO_CLAUDE = "claude-sonnet-5-5";
 // El modelo de Gemini fijado en el registro (versionado, NUNCA un alias -latest).
 // Si el A/B lo cambia, se actualiza aquí; que no compile con -latest lo garantiza
 // tests/modelos-registro.test.ts, no este.
@@ -42,12 +44,21 @@ describe("registro · una tarea, un proveedor, un modelo", () => {
     expect([...TAREAS].sort()).toEqual(Object.keys(REGISTRO).sort());
   });
 
-  it("SOLO la tarea barata es del 2º proveedor; el resto siguen en Gemini", () => {
+  it("SOLO la tarea barata es de Groq y SOLO la redacción de Anthropic; el resto siguen en Gemini", () => {
     expect(PROVEEDOR_BARATO).toBe("groq");
     expect(REGISTRO["clasificacion-barata"].proveedor).toBe("groq");
-    for (const t of ["transcripcion-vision", "extraccion-estructurada", "redaccion-preserva-hechos", "ping-salud"] as Tarea[]) {
+    expect(REGISTRO["redaccion-preserva-hechos"].proveedor).toBe("anthropic");
+    for (const t of ["transcripcion-vision", "extraccion-estructurada", "ping-salud"] as Tarea[]) {
       expect(REGISTRO[t].proveedor).toBe("google");
     }
+  });
+
+  it("la redacción declara Claude Sonnet versionado y su fallback de Gemini (nunca -latest)", () => {
+    const def = REGISTRO["redaccion-preserva-hechos"];
+    expect(def.modelo).toBe(MODELO_CLAUDE);
+    expect(def.modeloFallback).toBe(MODELO_GEMINI);
+    expect(def.modelo).not.toMatch(/latest/);
+    expect(def.modeloFallback).not.toMatch(/latest/);
   });
 
   it("la tarea barata declara su modelo Groq CON salida estructurada y su fallback de Gemini", () => {
@@ -90,6 +101,67 @@ describe("rutaDe · quién atiende de verdad cada tarea", () => {
       degradado: false,
     });
     expect(rutaDe("ping-salud", { groqDisponible: false }).degradado).toBe(false);
+  });
+
+  it("★ redacción + 3ª clave (Anthropic disponible) → Claude, sin degradar", () => {
+    expect(rutaDe("redaccion-preserva-hechos", { groqDisponible: false, anthropicDisponible: true })).toEqual({
+      tarea: "redaccion-preserva-hechos",
+      proveedor: "anthropic",
+      modelo: MODELO_CLAUDE,
+      degradado: false,
+    });
+  });
+
+  it("★★ redacción SIN 3ª clave → CAE a Gemini y se marca degradado (omitir el flag también)", () => {
+    const esperado = {
+      tarea: "redaccion-preserva-hechos",
+      proveedor: "google",
+      modelo: MODELO_GEMINI,
+      degradado: true,
+    };
+    expect(rutaDe("redaccion-preserva-hechos", { groqDisponible: true, anthropicDisponible: false })).toEqual(esperado);
+    expect(rutaDe("redaccion-preserva-hechos", { groqDisponible: true })).toEqual(esperado);
+  });
+
+  it("la 3ª clave NO mueve a Claude ni la extracción ni la visión (siguen en Gemini)", () => {
+    for (const t of ["extraccion-estructurada", "transcripcion-vision"] as Tarea[]) {
+      const r = rutaDe(t, { groqDisponible: true, anthropicDisponible: true });
+      expect(r.proveedor).toBe("google");
+      expect(r.degradado).toBe(false);
+    }
+  });
+});
+
+/* ── modeloPara · la redacción en Anthropic con la 3ª clave (sin red) ────────── */
+describe("modeloPara · 3ª clave (Anthropic) solo para la redacción", () => {
+  it("★ redacción + 3ª clave → instancia el modelo de ANTHROPIC", () => {
+    const m = modeloPara("redaccion-preserva-hechos", "gkey", undefined, undefined, "akey");
+    expect(String(m.provider)).toMatch(/^anthropic/);
+    expect(m.modelId).toBe(MODELO_CLAUDE);
+  });
+
+  it("★ la extracción con 3ª clave sigue en GEMINI (Claude no la atiende)", () => {
+    const m = modeloPara("extraccion-estructurada", "gkey", undefined, undefined, "akey");
+    expect(String(m.provider)).toMatch(/^google/);
+    expect(m.modelId).toBe(MODELO_GEMINI);
+    const v = modeloPara("transcripcion-vision", "gkey", undefined, undefined, "akey");
+    expect(String(v.provider)).toMatch(/^google/);
+  });
+
+  it("★★ redacción SIN 3ª clave → CAE a Gemini con su fallback, no a Claude", () => {
+    const m = modeloPara("redaccion-preserva-hechos", "gkey");
+    expect(String(m.provider)).toMatch(/^google/);
+    expect(m.modelId).toBe(MODELO_GEMINI);
+  });
+
+  it("la 2ª clave (Groq) no activa Claude: la redacción sigue degradada a Gemini", () => {
+    const m = modeloPara("redaccion-preserva-hechos", "gkey", "qkey");
+    expect(String(m.provider)).toMatch(/^google/);
+  });
+
+  it("la tarea barata con 3ª clave sigue su propia regla (Groq con 2ª clave)", () => {
+    const m = modeloPara("clasificacion-barata", "gkey", "qkey", undefined, "akey");
+    expect(String(m.provider)).toMatch(/^groq/);
   });
 });
 
@@ -147,5 +219,11 @@ describe("modeloPara · sin clave de Gemini y sin 2ª clave, la ruta a Gemini la
 
   it("★ barata SIN 2ª clave y SIN Gemini → también lanza (degrada a una ruta que exige Gemini)", () => {
     expect(() => modeloPara("clasificacion-barata")).toThrow(/GEMINI_API_KEY/);
+  });
+
+  it("★ redacción SIN 3ª clave y SIN Gemini → lanza; CON 3ª clave no necesita Gemini", () => {
+    expect(() => modeloPara("redaccion-preserva-hechos")).toThrow(/GEMINI_API_KEY/);
+    const m = modeloPara("redaccion-preserva-hechos", undefined, undefined, undefined, "akey");
+    expect(String(m.provider)).toMatch(/^anthropic/);
   });
 });

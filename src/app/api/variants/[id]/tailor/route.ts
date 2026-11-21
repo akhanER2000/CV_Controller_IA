@@ -4,7 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getVariant, getVariantItem, setAiOverride } from "@/lib/db/variants";
 import { geminiApiKey } from "@/lib/extract/llm";
 import { modeloPara } from "@/lib/ai/modelos";
-import { getUserLlmKey } from "@/lib/account/byok";
+import { getUserLlmKey, getUserLlmKey3 } from "@/lib/account/byok";
 import { fetchViaJina } from "@/lib/extract/web";
 import { extractFile, extractDepsFor, type FileKind } from "@/lib/extract/files";
 import { campoDe } from "@/lib/cv/ajuste";
@@ -45,7 +45,7 @@ const fallo = (msg: string, status: number) => NextResponse.json({ error: msg },
 const motivo = (e: unknown) => (e instanceof Error ? e.message : "Error");
 
 /** El LLM real (Gemini) como función inyectable de construirTailor. */
-function geminiOfertaLLM(apiKey?: string): OfertaLLM {
+function geminiOfertaLLM(apiKey?: string, apiKey3?: string): OfertaLLM {
   const SYS =
     "Eres un asistente que ADAPTA un CV a una OFERTA de empleo. Te doy el TEXTO DEL AVISO y los items del " +
     "candidato (id, tipo, texto, y si ya están en la variante o solo en el master). Tu tarea, y NINGUNA parte " +
@@ -59,7 +59,7 @@ function geminiOfertaLLM(apiKey?: string): OfertaLLM {
     "NUNCA inventes ids, cifras ni tecnologías. NUNCA des un porcentaje ni un score de encaje.";
   return async ({ offerText, items }) => {
     const { object } = await generateObject({
-      model: modeloPara("redaccion-preserva-hechos", apiKey),
+      model: modeloPara("redaccion-preserva-hechos", apiKey, undefined, undefined, apiKey3),
       schema: OfertaPlanSchema,
       prompt: `${SYS}\n\nAVISO:\n${offerText.slice(0, 16000)}\n\nITEMS:\n${lineasDelPrompt(items)}`,
       temperature: 0.2,
@@ -225,7 +225,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       .map((m) => itemTailorDe({ id: m.id, item_id: m.id, kind: m.kind, data: m.data, enVariante: false }));
 
     const items = [...enVariante, ...soloMaster];
-    const analisis = await construirTailor({ offerText: oferta.text, items }, { llm: geminiOfertaLLM(byok) });
+    const analisis = await construirTailor({ offerText: oferta.text, items }, { llm: geminiOfertaLLM(byok, (await getUserLlmKey3(sb, user.id)) ?? undefined) });
 
     for (const d of analisis.descartados) {
       if (d.tipo === "reformular" || d.tipo === "resumen") {

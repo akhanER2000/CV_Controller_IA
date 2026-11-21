@@ -4,7 +4,7 @@ import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { decryptSecret, encryptSecret, encryptionAvailable, generarClaveMaestra } from "../src/lib/crypto";
-import { getUserLlmKey, getUserLlmKey2 } from "../src/lib/account/byok";
+import { getUserLlmKey, getUserLlmKey2, getUserLlmKey3, estadoLlmKey3 } from "../src/lib/account/byok";
 import { GET, POST } from "../src/app/api/account/settings/route";
 
 /* ============================================================================
@@ -38,6 +38,8 @@ const h = vi.hoisted(() => {
     escrituras: [] as Record<string, unknown>[],
     /** simula la migración 0006 sin aplicar (columna llm_api_key_2 inexistente) */
     columna2Ausente: false,
+    /** simula la migración 0007 sin aplicar (columna llm_api_key_3 inexistente) */
+    columna3Ausente: false,
   };
 
   const crear = () => ({
@@ -55,11 +57,18 @@ const h = vi.hoisted(() => {
             if (estado.columna2Ausente && cols.includes("llm_api_key_2")) {
               return { data: null, error: { message: 'column "llm_api_key_2" does not exist' } };
             }
+            if (estado.columna3Ausente && cols.includes("llm_api_key_3")) {
+              return { data: null, error: { message: 'column "llm_api_key_3" does not exist' } };
+            }
             return { data: { ...estado.fila }, error: null };
           },
         }),
       }),
       upsert: async (payload: Record<string, unknown>) => {
+        // Como PostgREST: escribir una columna que no existe es un error, y no se guarda nada.
+        if (estado.columna3Ausente && "llm_api_key_3" in payload) {
+          return { error: { message: 'column "llm_api_key_3" does not exist' } };
+        }
         estado.escrituras.push({ ...payload });
         Object.assign(estado.fila, payload);
         return { error: null };
@@ -106,6 +115,7 @@ beforeEach(() => {
   h.estado.fila = {};
   h.estado.escrituras = [];
   h.estado.columna2Ausente = false;
+  h.estado.columna3Ausente = false;
 });
 afterAll(() => {
   if (claveOriginal === undefined) delete process.env.CORPUS_ENCRYPTION_KEY;
@@ -278,6 +288,106 @@ describe("candado · con CORPUS_ENCRYPTION_KEY el ciclo entero funciona", () => 
     expect(d.keyParked).toBe(true); // no empieza por "v1:" → jamás se trata como clave
     expect(await getUserLlmKey(sbFalso(), "u-1")).toBeNull();
     expect(JSON.stringify(d)).not.toContain("sk-metida-a-mano-en-la-base");
+  });
+});
+
+/* ══════════════════════════════════════════════════════════════════════════
+   2b · LA 3ª CLAVE (Anthropic · migración 0007): mismo candado, mismas degradaciones
+   ══════════════════════════════════════════════════════════════════════════ */
+describe("candado · 3ª clave (Anthropic, llm_api_key_3)", () => {
+  const CLAVE3 = "sk-ant-api03-clave-de-anthropic-789";
+
+  it("sin cifrado se APARCA: ni en claro ni cifrada; la columna ni se toca", async () => {
+    sinCifrado();
+    const r = await post({ llm_api_key_3: CLAVE3 });
+    expect(r.key3Parked).toBe(true);
+    expect(r.key3Unavailable).toBe(false); // la columna existe; el motivo es el cifrado
+    expect(secretoEnEscrituras(CLAVE3)).toBe(false);
+    expect(columnaTocada("llm_api_key_3")).toBe(false);
+  });
+
+  it("con cifrado: se guarda como blob v1:, persiste al recargar y NUNCA vuelve al cliente", async () => {
+    conCifrado();
+    const r = await post({ llm_api_key_3: CLAVE3 });
+    expect(r.key3Parked).toBe(false);
+    expect(r.key3Unavailable).toBe(false);
+
+    const guardado = h.estado.fila.llm_api_key_3 as string;
+    expect(guardado.startsWith("v1:")).toBe(true);
+    expect(guardado).not.toContain(CLAVE3);
+    expect(decryptSecret(guardado)).toBe(CLAVE3);
+    expect(secretoEnEscrituras(CLAVE3)).toBe(false); // en la base solo hubo el blob
+
+    // «Recargar»: un GET nuevo sigue diciendo que hay clave, sin devolverla.
+    const d = await get();
+    const crudo = JSON.stringify(d);
+    expect(d.hasKey3).toBe(true);
+    expect(d.key3Parked).toBe(false);
+    expect(d.key3Unavailable).toBe(false);
+    expect(crudo).not.toContain(CLAVE3);
+    expect(crudo).not.toContain("v1:");
+    // …y el camino REAL del servidor la recupera descifrada.
+    expect(await getUserLlmKey3(sbFalso(), "u-1")).toBe(CLAVE3);
+  });
+
+  it("quitarla (null) la borra, sin cifrado también", async () => {
+    conCifrado();
+    await post({ llm_api_key_3: CLAVE3 });
+    sinCifrado();
+    const r = await post({ llm_api_key_3: null });
+    expect(r.key3Parked).toBe(false);
+    expect(h.estado.fila.llm_api_key_3).toBeNull();
+    expect((await get()).hasKey3).toBe(false);
+  });
+
+  it("★ columna ausente (0007 sin aplicar): el GET no se rompe y lo dice; el resto de ajustes se leen", async () => {
+    conCifrado();
+    await post({ display_name: "Diego", llm_api_key: "sk-primera", llm_api_key_2: "gsk-segunda" });
+    h.estado.columna3Ausente = true;
+
+    const d = await get();
+    expect(d.key3Unavailable).toBe(true);
+    expect(d.hasKey3).toBe(false);
+    // Nada de lo demás se cae por esa columna:
+    expect(d.display_name).toBe("Diego");
+    expect(d.hasKey).toBe(true);
+    expect(d.hasKey2).toBe(true);
+    expect(d.key2Unavailable).toBe(false);
+  });
+
+  it("★ columna ausente: guardar la 3ª se informa (key3Unavailable) y el resto del POST SÍ se guarda", async () => {
+    conCifrado();
+    h.estado.columna3Ausente = true;
+    const r = await post({ display_name: "Diego", llm_api_key_3: CLAVE3 });
+    expect(r.key3Unavailable).toBe(true); // se dice, no se traga
+    expect(h.estado.fila.display_name).toBe("Diego");
+    expect(secretoEnEscrituras(CLAVE3)).toBe(false);
+  });
+
+  it("estadoLlmKey3 · degradaciones: columna ausente, aparcada y formato no-v1", async () => {
+    conCifrado();
+    // Formato que NO es v1: jamás se trata como clave ni se marca guardada.
+    h.estado.fila.llm_api_key_3 = CLAVE3;
+    expect(await estadoLlmKey3(sbFalso(), "u-1")).toEqual({
+      almacenada: false, aparcada: false, columnaAusente: false, clave: null,
+    });
+    expect(await getUserLlmKey3(sbFalso(), "u-1")).toBeNull();
+
+    // Guardada con cifrado y luego perdida la maestra ⇒ aparcada, no usable.
+    h.estado.fila = {};
+    await post({ llm_api_key_3: CLAVE3 });
+    sinCifrado();
+    expect(await estadoLlmKey3(sbFalso(), "u-1")).toMatchObject({ almacenada: true, aparcada: true, clave: null });
+    expect(await getUserLlmKey3(sbFalso(), "u-1")).toBeNull();
+    expect((await get()).key3Parked).toBe(true);
+
+    // Otra maestra ⇒ blob ilegible ⇒ también aparcada.
+    conCifrado();
+    expect(await estadoLlmKey3(sbFalso(), "u-1")).toMatchObject({ almacenada: true, aparcada: true, clave: null });
+
+    // Columna ausente.
+    h.estado.columna3Ausente = true;
+    expect(await estadoLlmKey3(sbFalso(), "u-1")).toMatchObject({ columnaAusente: true, clave: null });
   });
 });
 
