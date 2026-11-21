@@ -5,6 +5,7 @@ import example from "@/lib/cv/fixtures/datos-ejemplo.json";
 import { createClient } from "@/lib/supabase/server";
 import { buildResumeData } from "@/lib/db/queries";
 import { buildVariantResumeData } from "@/lib/db/variants";
+import { autofit, plantillaDe, type ResultadoAutofit } from "@/lib/cv/autofit";
 
 // react-pdf necesita el runtime de Node (fontkit, streams). unpdf también.
 export const runtime = "nodejs";
@@ -31,6 +32,12 @@ export const runtime = "nodejs";
  *                         documento que se ve y el texto del rayos-X no pueden
  *                         derivar porque son el mismo artefacto.
  *
+ * Páginas (`paginas`: 1, 2 o 3; opcional): si viene, el documento pasa por el
+ * AUTOFIT (autofit.ts) — el cuerpo más grande, entre 10 pt y el de la plantilla,
+ * con el que cabe en esas páginas — y ESE render es el que se devuelve. Preview y
+ * descarga mandan el mismo `paginas`, así que siguen siendo el mismo artefacto.
+ * 'text'/'preview' añaden `autofit: { bodySize, base, noCabe, objetivo, sobran }`.
+ *
  * Errores: SIEMPRE con el motivo real en el cuerpo → { error }. Un preview en
  * blanco y mudo es peor que un error legible (documento-cv.md §7).
  */
@@ -44,6 +51,8 @@ interface CvBody {
   opts?: RenderOpts;
   download?: boolean;
   as?: As;
+  /** Páginas objetivo (1, 2 o 3). Sin él, el cuerpo de la plantilla tal cual. */
+  paginas?: number;
 }
 
 /** El motivo REAL de un fallo, en texto. Nunca "algo salió mal". */
@@ -95,8 +104,15 @@ export async function POST(req: Request) {
 
   // ── 2 · UN render. Todo lo que sigue sale de ESTE buffer ───────────────────
   let buf: Buffer;
+  let ajuste: ResultadoAutofit | null = null;
   try {
-    buf = await renderResumeToBuffer(data, body.opts ?? {});
+    const opts = body.opts ?? {};
+    if (body.paginas != null) {
+      ajuste = await autofit(data, plantillaDe(data, opts), body.paginas, opts);
+      buf = Buffer.from(ajuste.buf);
+    } else {
+      buf = await renderResumeToBuffer(data, opts);
+    }
   } catch (e) {
     // El motivo sube tal cual: fuente que no carga, imagen corrupta, QR imposible…
     // El usuario tiene derecho a leer QUÉ falló.
@@ -113,6 +129,17 @@ export async function POST(req: Request) {
         {
           text,
           pages: pdf.numPages,
+          ...(ajuste
+            ? {
+                autofit: {
+                  bodySize: ajuste.bodySize,
+                  base: ajuste.base,
+                  noCabe: ajuste.noCabe,
+                  objetivo: ajuste.objetivo,
+                  sobran: ajuste.sobran,
+                },
+              }
+            : {}),
           ...(as === "preview" ? { pdf: buf.toString("base64") } : {}),
         },
         { headers: { "Cache-Control": "no-store" } },

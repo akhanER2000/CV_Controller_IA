@@ -162,6 +162,18 @@ interface Fit {
 /** decisión del usuario sobre UNA propuesta. No existe "todas". */
 type FitMark = "ok" | "no" | "undo";
 
+/** Páginas que el usuario puede pedir (el servidor normaliza igual: autofit.objetivoDe). */
+type Objetivo = 1 | 2 | 3;
+const OBJETIVOS: readonly Objetivo[] = [1, 2, 3];
+/** Lo que /api/cv dice del autofit del PDF que devuelve (autofit.ts). */
+interface AutofitInfo {
+  bodySize: number;
+  base: number;
+  noCabe: boolean;
+  objetivo: number;
+  sobran: number;
+}
+
 /** Etiqueta de cada hueco. El texto lo pone i18n; aquí solo el mapa. */
 const FIT_GAP_KEY: Record<FitTipoFalta, string> = {
   "sin-cifra": "editor.fitGapNumber",
@@ -815,6 +827,8 @@ export function saveFoldedTo(
 
 export function EditorVarianteScreen({ variantId = "editor" }: { variantId?: string } = {}) {
   const t = useT();
+  const paginasTxt = (n: number) =>
+    n === 1 ? t("editor.objOne") : t("editor.objMany").replace("{n}", String(n));
   const router = useRouter();
   const [fb] = useState(() => (supabaseEnabled ? null : buildFallback(variantId)));
   const [master, setMaster] = useState<MasterRow[]>(() => fb?.master ?? []);
@@ -1407,6 +1421,35 @@ export function EditorVarianteScreen({ variantId = "editor" }: { variantId?: str
   const [pvError, setPvError] = useState("");
   const [pvRetry, setPvRetry] = useState(0);
   const pdfUrlRef = useRef("");
+  // Páginas que pide el usuario (1, 2 o 3). Preview y descarga mandan ESTE objetivo
+  // a /api/cv, que pasa el documento por el autofit (autofit.ts): el cuerpo más
+  // grande entre 10 pt y el de la plantilla con el que cabe. Mismo body, mismo PDF.
+  const [objetivo, setObjetivo] = useState<Objetivo>(2);
+  const objetivoRef = useRef(objetivo);
+  objetivoRef.current = objetivo;
+  const [autofitInfo, setAutofitInfo] = useState<AutofitInfo | null>(null);
+  const claveObjetivo = `corpus.paginas.${variantId}`;
+  // Se hidrata ya montado (como el plegado): leer localStorage en el inicializador
+  // haría discrepar servidor y cliente. Puede lanzar (modo privado): se degrada a 2.
+  useEffect(() => {
+    try {
+      const v = Number(window.localStorage.getItem(claveObjetivo));
+      if (v === 1 || v === 3) setObjetivo(v);
+    } catch {
+      /* sin almacenamiento: 2 páginas */
+    }
+  }, [claveObjetivo]);
+  const elegirObjetivo = useCallback(
+    (n: Objetivo) => {
+      setObjetivo(n);
+      try {
+        window.localStorage.setItem(claveObjetivo, String(n));
+      } catch {
+        /* la preferencia no sobrevive a la sesión, y no pasa nada */
+      }
+    },
+    [claveObjetivo],
+  );
 
   // Un object URL vivo por PDF: se revoca el anterior al llegar el nuevo y el
   // último al desmontar (si no, cada tecleo filtraría un blob).
@@ -1433,10 +1476,15 @@ export function EditorVarianteScreen({ variantId = "editor" }: { variantId?: str
             // `data` (y no `variantId`) para que el preview refleje lo que ves
             // AHORA, incluso antes de que el guardado optimista llegue al servidor,
             // y para que funcione igual sin Supabase (modo local).
-            body: JSON.stringify({ data: resumeRef.current, as: "preview" }),
+            body: JSON.stringify({ data: resumeRef.current, as: "preview", paginas: objetivoRef.current }),
           });
           if (!res.ok) throw new Error(await readApiError(res));
-          const json = (await res.json()) as { pdf?: string; text?: string; pages?: number };
+          const json = (await res.json()) as {
+            pdf?: string;
+            text?: string;
+            pages?: number;
+            autofit?: AutofitInfo;
+          };
           if (cancelled) return;
           if (!json.pdf) throw new Error("La respuesta no trae el PDF.");
           const url = URL.createObjectURL(pdfBlobFromBase64(json.pdf));
@@ -1447,6 +1495,7 @@ export function EditorVarianteScreen({ variantId = "editor" }: { variantId?: str
           // mismo PDF en el servidor. Y las páginas son su numPages real.
           setXrayText(json.text ?? "");
           setPageCount(Number(json.pages ?? 0));
+          setAutofitInfo(json.autofit ?? null);
           setPvError("");
         } catch (e) {
           if (cancelled) return;
@@ -1464,7 +1513,7 @@ export function EditorVarianteScreen({ variantId = "editor" }: { variantId?: str
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [docSig, loading, pvRetry, flash]);
+  }, [docSig, loading, pvRetry, flash, objetivo]);
 
   // ── El master, CONTADO — la entrada de la recomendación ────────────────────
   /**
@@ -1899,7 +1948,7 @@ export function EditorVarianteScreen({ variantId = "editor" }: { variantId?: str
         const res = await fetch(`/api/variants/${variantId}/ajustar`, {
           method: "POST",
           headers: JSON_HEADERS,
-          body: JSON.stringify({ accion: "analizar", paginas: 2 }),
+          body: JSON.stringify({ accion: "analizar", paginas: objetivo }),
         });
         if (!res.ok) throw new Error(await readApiError(res));
         const { ajuste } = (await res.json()) as { ajuste?: Fit };
@@ -1915,7 +1964,25 @@ export function EditorVarianteScreen({ variantId = "editor" }: { variantId?: str
         setFitBusy(false);
       }
     })();
-  }, [variantId, t, flash]);
+  }, [variantId, t, flash, objetivo]);
+
+  // Si ni a 10 pt cabe, el autofit ya no puede hacer nada: se abre el panel de
+  // recorte (que sigue siendo manual: abrir no analiza). Solo en la TRANSICIÓN a
+  // «no cabe»: si el usuario lo cierra, no se le vuelve a abrir en cada tecleo.
+  const noCabe = autofitInfo?.noCabe === true;
+  const noCabeAntes = useRef(false);
+  useEffect(() => {
+    if (noCabe && !noCabeAntes.current) {
+      setFitOpen(true);
+      setView("mid");
+    }
+    noCabeAntes.current = noCabe;
+  }, [noCabe]);
+  // Un análisis hecho para otro objetivo ya no describe este documento.
+  useEffect(() => {
+    setFit(null);
+    setFitDone({});
+  }, [objetivo]);
 
   const fitAcceptDrop = useCallback(
     (p: FitQuitar) => {
@@ -2049,7 +2116,7 @@ export function EditorVarianteScreen({ variantId = "editor" }: { variantId?: str
       const res = await fetch("/api/cv", {
         method: "POST",
         headers: JSON_HEADERS,
-        body: JSON.stringify({ data: resumeRef.current, download: true }),
+        body: JSON.stringify({ data: resumeRef.current, download: true, paginas: objetivoRef.current }),
       });
       if (!res.ok) throw new Error(await readApiError(res));
       const blob = await res.blob();
@@ -2547,7 +2614,7 @@ export function EditorVarianteScreen({ variantId = "editor" }: { variantId?: str
           {fitOpen && (
             <section className="c-card fit" id="edFit" aria-label={t("editor.fitAria")}>
               <div className="fith">
-                <span className="t-overline">{t("editor.fitTitle").replace("{p}", "2")}</span>
+                <span className="t-overline">{t("editor.fitTitle").replace("{p}", paginasTxt(objetivo))}</span>
                 <button type="button" className="c-btn c-btn--quiet fitx" onClick={() => setFitOpen(false)}>
                   {t("editor.fitClose")}
                 </button>
@@ -2567,7 +2634,7 @@ export function EditorVarianteScreen({ variantId = "editor" }: { variantId?: str
                     </>
                   ) : (
                     <>
-                      <b className="big ok">{t("editor.fitFits").replace("{o}", String(fit.paginasObjetivo))}</b>
+                      <b className="big ok">{t("editor.fitFits").replace("{o}", paginasTxt(fit.paginasObjetivo).toUpperCase())}</b>
                       <span className="sub">{t("editor.fitFitsSub").replace("{n}", String(-fit.sobran))}</span>
                     </>
                   )}
@@ -3527,6 +3594,15 @@ export function EditorVarianteScreen({ variantId = "editor" }: { variantId?: str
                 {t("editor.viewRaw")}
               </button>
             </div>
+            {/* Páginas objetivo. El documento se autoajusta (cuerpo ≥ 10 pt) a ESTE
+                número; si no cabe ni así, se abre el panel de recorte. */}
+            <div className="pv-seg" role="group" aria-label={t("editor.objAria")} id="pvObjetivo">
+              {OBJETIVOS.map((n) => (
+                <button key={n} type="button" aria-pressed={objetivo === n} onClick={() => elegirObjetivo(n)}>
+                  {t("editor.objShort").replace("{n}", String(n))}
+                </button>
+              ))}
+            </div>
             {/* Estado HONESTO del preview: actualizando · error · páginas reales
                 (numPages del PDF que estás viendo, no una estimación del DOM). */}
             <span className="pv-pages" id="pvPages">
@@ -3536,15 +3612,30 @@ export function EditorVarianteScreen({ variantId = "editor" }: { variantId?: str
                 <span className="warn">{t("editor.pvFailedShort")}</span>
               ) : pageCount === 0 ? (
                 t("editor.pvNoPages")
-              ) : pageCount <= 2 ? (
-                t("editor.pageLabel")
-                  .replace("{a}", String(Math.min(pageCount, 1)))
-                  .replace("{b}", String(pageCount))
+              ) : pageCount <= objetivo ? (
+                <>
+                  {t("editor.pageLabel")
+                    .replace("{a}", String(Math.min(pageCount, 1)))
+                    .replace("{b}", String(pageCount))}
+                  {autofitInfo && autofitInfo.bodySize < autofitInfo.base && (
+                    <> · {t("editor.autofitSize").replace("{s}", String(autofitInfo.bodySize).replace(".", ","))}</>
+                  )}
+                </>
               ) : (
-                <span className="warn">{t("editor.pagesWarn").replace("{n}", String(pageCount))}</span>
+                <span className="warn">
+                  {pageCount >= 3 && objetivo < 3
+                    ? t("editor.pagesWarn").replace("{n}", String(pageCount))
+                    : t("editor.pagesOver").replace("{n}", String(pageCount)).replace("{o}", String(objetivo))}
+                  {noCabe && <> · {t("editor.autofitNoFit").replace("{o}", paginasTxt(objetivo))}</>}
+                </span>
               )}
             </span>
           </div>
+          {objetivo === 3 && (
+            <p className="t-micro t-muted" role="note" style={{ margin: 0, padding: "6px 16px" }}>
+              {t("editor.obj3Note")}
+            </p>
+          )}
           <div className="pv-scroll" ref={pvScrollRef}>
             <div className="pv-fit c-xray" id="xray" data-mode={mode}>
               <div className="c-xray__doc pv-doc" id="pvDoc">

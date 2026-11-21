@@ -5,9 +5,9 @@ import { createClient } from "@/lib/supabase/server";
 import { getVariant, getVariantItem, setAiOverride, buildVariantResumeData } from "@/lib/db/variants";
 import { geminiApiKey } from "@/lib/extract/llm";
 import { getUserLlmKey } from "@/lib/account/byok";
-import { renderResumeToBuffer } from "@/lib/cv/ResumePDF";
-import { medirPdf, lineasQueSobran } from "@/lib/cv/medir";
-import { resolveMetrics, resolveTemplate } from "@/lib/cv/templates";
+// Cuántas páginas quiere el usuario: 1, 2 o 3 (objetivoDe vive en autofit.ts, con
+// su test; un route.ts de Next no puede exportar nada que no sea del contrato).
+import { autofit, objetivoDe, plantillaDe } from "@/lib/cv/autofit";
 import {
   construirAjuste,
   itemDeAjuste,
@@ -24,7 +24,7 @@ export const runtime = "nodejs";
 export const maxDuration = 300;
 
 /**
- * «AJUSTAR A DOS PÁGINAS» — la ruta. Dos acciones, las dos MANUALES:
+ * «AJUSTAR A N PÁGINAS» (1, 2 o 3) — la ruta. Dos acciones, las dos MANUALES:
  *
  *   POST { accion:'analizar' }                    → una PROPUESTA revisable.
  *   POST { accion:'acortar', id, propuesto }      → aplica UN acortado, ya aceptado.
@@ -75,13 +75,6 @@ function geminiAjusteLLM(apiKey?: string): AjusteLLM {
     });
     return object;
   };
-}
-
-/** Cuántas páginas quiere el usuario. Se acepta 1 o 2 y nada más: el resto no es
- *  «ajustar», es otro documento, y no hay medida que lo respalde. */
-function objetivoDe(v: unknown): number {
-  const n = Number(v);
-  return n === 1 ? 1 : 2;
 }
 
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -157,15 +150,11 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     // 1 · MEDIR. El mismo motor que el preview, el mismo buffer, la misma métrica
     //     de la plantilla que el usuario eligió. Si esto fallara, no hay número —
     //     y sin número no hay propuesta, porque «sobran N líneas» ES la propuesta.
+    //     Se mide DESPUÉS del autofit: si bajando el cuerpo (hasta 10 pt) ya cabe,
+    //     no sobra nada; si no, «sobran» se cuenta a 10 pt, que es el documento que
+    //     el usuario está viendo en el preview.
     const resume = await buildVariantResumeData(sb, user.id, variantId);
-    const buf = await renderResumeToBuffer(resume, {});
-    const tpl = resolveTemplate({
-      templateId: resume.templateId,
-      paletteId: resume.paletteId,
-      typographyId: resume.typographyId,
-    });
-    const medida = await medirPdf(new Uint8Array(buf), resolveMetrics(tpl.metrics));
-    const sobran = lineasQueSobran(medida, paginasObjetivo);
+    const { medida, sobran } = await autofit(resume, plantillaDe(resume), paginasObjetivo);
 
     // 2 · PROPONER. Solo los VISIBLES: lo oculto no ocupa líneas y proponer quitarlo
     //     sería teatro.

@@ -547,6 +547,62 @@ export function resolveMetrics(m: TemplateMetrics): ResolvedMetrics {
   };
 }
 
+/** El cuerpo más pequeño que el autofit se permite. Por debajo no se ajusta: se recorta. */
+export const CUERPO_MIN_PT = 10;
+
+/** Ancho de página en pt: el documento se emite en LETTER (ResumePDF). */
+const ANCHO_LETTER_PT = 612;
+
+/** Un margen de la plantilla ("22mm", "18pt") en pt; NaN si la unidad no se conoce.
+ *  (Copia mínima de medir.enPuntos: templates.ts viaja al cliente y medir.ts trae unpdf.) */
+function mmAPuntos(v: string): number {
+  const x = /^\s*(\d+(?:\.\d+)?)\s*(mm|pt|cm|in)?\s*$/i.exec(v);
+  if (!x) return NaN;
+  const n = parseFloat(x[1]!);
+  const u = (x[2] ?? "pt").toLowerCase();
+  return u === "mm" ? (n * 72) / 25.4 : u === "cm" ? (n * 72) / 2.54 : u === "in" ? n * 72 : n;
+}
+
+/**
+ * La métrica de la plantilla con OTRO cuerpo — la pieza que mueve el autofit.
+ *
+ * Solo encoge (un cuerpo por encima del de la plantilla devuelve la métrica tal
+ * cual: la plantilla es el techo, no una sugerencia) y nunca por debajo de 10 pt.
+ * Con el cuerpo bajan en la misma proporción los TÍTULOS (nombre, subtítulo,
+ * rótulos de sección, cargo y título de formación), para que la jerarquía no se
+ * aplaste. El interlineado es un factor (`bodyLeading` × cuerpo), así que la altura
+ * de línea ya escala sola.
+ *
+ * ★ LA MEDIDA DE LÍNEA SE CONSERVA. La medida se cuenta en caracteres: con el
+ * cuerpo a 10 pt y la caja igual de ancha, las plantillas de 11 pt pasaban de
+ * p90 = 90 (medido: 92-93). Por eso la caja de texto se estrecha en la misma
+ * proporción que el cuerpo (el margen horizontal crece) y la línea sigue llevando
+ * los mismos caracteres. El autofit gana sitio en VERTICAL, que es donde se cuentan
+ * las páginas. Lo que NO se toca: contacto y fechas (ya están por debajo del
+ * cuerpo; encogerlos los dejaría bajo el umbral de lectura), el margen vertical y
+ * el aire entre bloques (el ritmo de espaciado es del sistema, no del contenido).
+ */
+export function escalarMetricas(m: TemplateMetrics, bodySize: number): TemplateMetrics {
+  const destino = Math.max(CUERPO_MIN_PT, bodySize);
+  if (!(destino < m.bodySize)) return m;
+  const k = destino / m.bodySize;
+  const r = resolveMetrics(m);
+  const e = (v: number) => Math.round(v * k * 100) / 100;
+  const margenH = mmAPuntos(r.pageMarginH);
+  const caja = ANCHO_LETTER_PT - 2 * margenH;
+  const nuevoMargenMm = (((ANCHO_LETTER_PT - caja * k) / 2) * 25.4) / 72;
+  return {
+    ...m,
+    bodySize: destino,
+    ...(Number.isFinite(margenH) ? { pageMarginH: `${Math.round(nuevoMargenMm * 100) / 100}mm` } : null),
+    nameSize: e(r.nameSize),
+    labelSize: e(r.labelSize),
+    headingSize: e(r.headingSize),
+    entryTitleSize: e(r.entryTitleSize),
+    eduTitleSize: e(r.eduTitleSize),
+  };
+}
+
 /** Proporción de la foto de CV: 3,5 × 4,5 cm (el estándar de foto de documento). */
 export const PHOTO_RATIO = 45 / 35;
 

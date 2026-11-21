@@ -117,6 +117,16 @@ export const editor = {
     "editor.pvBuilding": "Generando el PDF…",
     "editor.pvNoPages": "sin páginas",
     "editor.pvFailedShort": "⚠ preview no disponible",
+    // Páginas objetivo (1, 2 o 3) + autofit del cuerpo (10 pt como suelo).
+    "editor.objAria": "Páginas objetivo",
+    "editor.objShort": "{n} pág",
+    "editor.objOne": "1 página",
+    "editor.objMany": "{n} páginas",
+    "editor.obj3Note":
+      "3 páginas conviene solo para perfiles académicos o de investigación; en un puesto estándar diluye la atención.",
+    "editor.pagesOver": "⚠ {n} páginas — pediste {o}",
+    "editor.autofitSize": "cuerpo {s} pt",
+    "editor.autofitNoFit": "no cabe en {o} ni a 10 pt — toca recortar",
     "editor.pvErrTitle": "El PDF no se pudo generar",
     "editor.pvRetry": "Reintentar",
     "editor.pvFrameTitle": "El PDF de esta variante",
@@ -347,8 +357,8 @@ export const editor = {
     // MANUAL, SIEMPRE. El copy no promete un ajuste: promete una PROPUESTA. Y el
     // único número que aparece es el de líneas MEDIDAS sobre el PDF ({n}), nunca
     // un porcentaje de nada.
-    "editor.fitOpen": "Ajustar a dos páginas",
-    "editor.fitTitle": "Ajustar a {p} páginas",
+    "editor.fitOpen": "Ajustar páginas",
+    "editor.fitTitle": "Ajustar a {p}",
     "editor.fitAria": "Propuesta para ajustar el documento",
     "editor.fitClose": "Cerrar",
     "editor.fitRun": "Analizar",
@@ -359,7 +369,7 @@ export const editor = {
     // El número: MEDIDO, contando las líneas del PDF real. Verificable.
     "editor.fitOver": "SOBRAN ~{n} LÍNEAS",
     "editor.fitOverSub": "medidas sobre el PDF real ({p} páginas hoy · objetivo {o})",
-    "editor.fitFits": "CABE EN {o} PÁGINAS",
+    "editor.fitFits": "CABE EN {o}",
     "editor.fitFitsSub": "y aún quedan ~{n} líneas libres, medidas sobre el PDF real",
     "editor.fitManual": "Nada se aplica solo. Aceptas o rechazas cada cambio, uno a uno.",
     "editor.fitNotes": "Notas",
@@ -515,6 +525,16 @@ export const editor = {
     "editor.pvBuilding": "Generating the PDF…",
     "editor.pvNoPages": "no pages",
     "editor.pvFailedShort": "⚠ preview unavailable",
+    // Target pages (1, 2 or 3) + body autofit (10 pt floor).
+    "editor.objAria": "Target pages",
+    "editor.objShort": "{n} pg",
+    "editor.objOne": "1 page",
+    "editor.objMany": "{n} pages",
+    "editor.obj3Note":
+      "3 pages only makes sense for academic or research profiles; for a standard role it dilutes attention.",
+    "editor.pagesOver": "⚠ {n} pages — you asked for {o}",
+    "editor.autofitSize": "body {s} pt",
+    "editor.autofitNoFit": "doesn't fit in {o} even at 10 pt — time to trim",
     "editor.pvErrTitle": "The PDF couldn't be generated",
     "editor.pvRetry": "Try again",
     "editor.pvFrameTitle": "This variant's PDF",
@@ -739,8 +759,8 @@ export const editor = {
     // ALWAYS MANUAL. The copy doesn't promise a fit: it promises a PROPOSAL. And
     // the only number on screen is lines MEASURED off the real PDF ({n}), never a
     // percentage of anything.
-    "editor.fitOpen": "Fit to two pages",
-    "editor.fitTitle": "Fit to {p} pages",
+    "editor.fitOpen": "Fit pages",
+    "editor.fitTitle": "Fit to {p}",
     "editor.fitAria": "Proposal to fit the document",
     "editor.fitClose": "Close",
     "editor.fitRun": "Analyse",
@@ -750,7 +770,7 @@ export const editor = {
     "editor.fitLocal": "no analysis in local mode: it needs your master on the server",
     "editor.fitOver": "~{n} LINES OVER",
     "editor.fitOverSub": "measured on the real PDF ({p} pages today · target {o})",
-    "editor.fitFits": "FITS IN {o} PAGES",
+    "editor.fitFits": "FITS IN {o}",
     "editor.fitFitsSub": "with ~{n} lines to spare, measured on the real PDF",
     "editor.fitManual": "Nothing applies itself. You accept or reject each change, one by one.",
     "editor.fitNotes": "Notes",

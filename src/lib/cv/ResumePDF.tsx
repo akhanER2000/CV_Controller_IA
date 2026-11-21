@@ -16,6 +16,7 @@ import {
 } from "./resume";
 import {
   bulletMark,
+  escalarMetricas,
   headingLabelText,
   nameText,
   photoHeight,
@@ -385,7 +386,7 @@ function stylesFor(tpl: CvTemplate) {
 /** Una hoja por combinación plantilla+paleta+pareja (el render se repite mucho). */
 const SHEETS = new Map<string, ReturnType<typeof stylesFor>>();
 function sheetFor(tpl: CvTemplate) {
-  const key = `${tpl.id}|${tpl.palette.id}|${tpl.typography.id}`;
+  const key = `${tpl.id}|${tpl.palette.id}|${tpl.typography.id}|${tpl.metrics.bodySize}`;
   let sheet = SHEETS.get(key);
   if (!sheet) {
     sheet = stylesFor(tpl);
@@ -401,6 +402,8 @@ export interface RenderOpts {
   templateId?: string;
   paletteId?: string;
   typographyId?: string;
+  /** Cuerpo en pt elegido por el autofit (≥ 10, ≤ el de la plantilla). */
+  bodySize?: number;
 }
 
 export function ResumePDF({
@@ -427,7 +430,10 @@ export function ResumePDF({
     paletteId: opts.paletteId ?? data.paletteId,
     typographyId: opts.typographyId ?? data.typographyId,
   };
-  const tpl = resolveTemplate(seleccion);
+  // El cuerpo lo puede bajar el autofit (autofit.ts) para que el documento quepa en
+  // las páginas elegidas. Sin `bodySize`, la plantilla tal cual: mismos bytes.
+  const base = resolveTemplate(seleccion);
+  const tpl = opts.bodySize ? { ...base, metrics: escalarMetricas(base.metrics, opts.bodySize) } : base;
   const s = sheetFor(tpl);
   // ⚠ LA MÉTRICA SALE DE metricsOf, NO de resolveMetrics(tpl.metrics). Parece lo
   // mismo y no lo es: metricsOf es también donde el ORDEN DE SECCIONES de la
