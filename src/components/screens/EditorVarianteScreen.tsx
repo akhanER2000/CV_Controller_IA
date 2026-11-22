@@ -48,6 +48,22 @@ import { suggestReferences, type ReferenceView } from "@/lib/db/references";
 import { recommendTemplates, type MasterSummary } from "@/lib/cv/recommend";
 import { TemplateGallery, TemplateThumb, docHashFromSig } from "@/components/TemplateGallery";
 import { AuroraTune, AURORA_TRABAJO } from "@/components/Aurora";
+import {
+  contarPendientes,
+  estadoDoc,
+  huecosPorItem,
+  propuestasEnLinea,
+  siguienteIndice,
+  type AutofitInfo,
+  type Fit,
+  type FitAcortar,
+  type FitFalta,
+  type FitMark,
+  type FitQuitar,
+  type FitReordenar,
+  type PropEnLinea,
+} from "@/components/flujo-cv";
+import { GuiaAjuste, Huecos, HuecosAptitud, PropuestaEnLinea, SelloVerificado } from "@/components/FlujoCv";
 import "./editor-variante.css";
 
 // Listas estables (el catálogo no cambia en runtime): fuera del componente.
@@ -133,53 +149,14 @@ interface VMeta {
   master_updated_at?: string;
 }
 
-/* ── Contrato de POST /api/variants/[id]/ajustar (src/lib/cv/ajuste.ts) ──────
-   Se redeclara aquí, como el resto de shapes de esta pantalla, para no arrastrar
-   zod ni verify.ts al bundle del cliente por un puñado de campos. Ojo: NO hay
-   ningún `score` ni ningún porcentaje, y no es un olvido — el único número del
-   panel es `sobran`, que sale de MEDIR el PDF. */
-interface FitQuitar { id: string; kind: string; texto: string; motivo: string }
-interface FitReordenar { id: string; kind: string; texto: string; parentId: string; desde: number; hasta: number }
-interface FitAcortar {
-  id: string; kind: string; campo: string;
-  original: string; propuesto: string; motivo: string; ahorro: number;
-}
-type FitTipoFalta = "sin-cifra" | "sin-fecha" | "sin-respaldo";
-interface FitFalta { id: string; kind: string; texto: string; tipo: FitTipoFalta; detalle: string }
-interface FitDescartado { tipo: string; id: string; propuesto: string; razon: string }
-interface Fit {
-  paginas: number;
-  paginasObjetivo: number;
-  /** líneas que sobran, MEDIDAS sobre el PDF. Negativo = sobra sitio. */
-  sobran: number;
-  quitar: FitQuitar[];
-  reordenar: FitReordenar[];
-  acortar: FitAcortar[];
-  falta: FitFalta[];
-  descartados: FitDescartado[];
-  notas: string;
-}
-/** decisión del usuario sobre UNA propuesta. No existe "todas". */
-type FitMark = "ok" | "no" | "undo";
+/* El contrato de /ajustar, el del autofit y el reparto de la propuesta sobre los
+   items viven en src/components/flujo-cv.ts (puro, probado en flujo-cv.test.ts). */
 
 /** Páginas que el usuario puede pedir (el servidor normaliza igual: autofit.objetivoDe). */
 type Objetivo = 1 | 2 | 3;
 const OBJETIVOS: readonly Objetivo[] = [1, 2, 3];
-/** Lo que /api/cv dice del autofit del PDF que devuelve (autofit.ts). */
-interface AutofitInfo {
-  bodySize: number;
-  base: number;
-  noCabe: boolean;
-  objetivo: number;
-  sobran: number;
-}
-
-/** Etiqueta de cada hueco. El texto lo pone i18n; aquí solo el mapa. */
-const FIT_GAP_KEY: Record<FitTipoFalta, string> = {
-  "sin-cifra": "editor.fitGapNumber",
-  "sin-fecha": "editor.fitGapDate",
-  "sin-respaldo": "editor.fitGapEvidence",
-};
+/** Las dos funciones de ajuste.ts que el cliente usa para «qué falta». */
+type MotorFaltas = Pick<typeof import("@/lib/cv/ajuste"), "calcularFaltas" | "itemDeAjuste">;
 
 // Campo de texto editable por kind (override "por campo").
 const EDIT_FIELD: Record<string, string> = { summary: "text", bullet: "text", project: "description" };
@@ -1908,24 +1885,23 @@ export function EditorVarianteScreen({ variantId = "editor" }: { variantId?: str
     [bulletsForWork, reorder, flash, t],
   );
 
-  /* ── «Ajustar a dos páginas» — una PROPUESTA, nunca una aplicación ─────────
+  /* ── Ajustar: una PROPUESTA, nunca una aplicación — repartida EN el documento ──
      MANUAL, SIEMPRE. El servidor mide el PDF real y devuelve qué quitar, qué
-     reordenar, qué acortar y qué falta. Aquí no se aplica NADA hasta que el
-     usuario pulsa Aceptar en UNA fila concreta. No hay «aceptar todo» y no es un
-     hueco del diseño: un CV que se reordena solo es un CV en el que se deja de
-     confiar.
+     reordenar y qué acortar. Aquí no se aplica NADA hasta que el usuario pulsa en
+     UNA propuesta concreta. No hay «aceptar todo» y no es un hueco del diseño: un
+     CV que se reordena solo es un CV en el que se deja de confiar.
 
      Cada acción reutiliza el camino que ya existía y que ya estaba probado:
      quitar → removeItem, reordenar → reorder (el mismo que el arrastre y las
      flechas), acortar → la ruta, que VUELVE a pasar el candado antes de escribir.
 
-     Por qué vive DENTRO del editor y no en una pantalla propia: la propuesta solo
-     significa algo al lado del documento que la motiva. El número que la encabeza
-     («sobran ~14 líneas») sale de medir el PDF que está en la tercera columna, y
-     el efecto de aceptar se ve ahí mismo, en el preview, sin cambiar de pantalla y
-     sin volver a cargar nada. Una ruta aparte habría convertido una revisión en un
-     viaje de ida y vuelta — que es exactamente lo que le pasa a /tailor. */
-  const [fitOpen, setFitOpen] = useState(false);
+     FLUJO DEL CV (prompts/lotes-fable5/_diseno/flujo-cv.md): la propuesta ya no
+     es un panel de cuatro listas. Cada decisión aparece BAJO el item al que afecta
+     (flujo-cv.ts la reparte; FlujoCv.tsx la pinta) y desaparece al tomarla; «qué
+     falta» se calcula en el cliente con la MISMA calcularFaltas del servidor y se
+     pinta sobre la viñeta, el rol o la aptitud; la guía de arriba dice cómo está
+     el documento y lleva a la siguiente decisión. El panel anterior está en
+     _to_delete/flujo-cv/. */
   const [fitBusy, setFitBusy] = useState(false);
   const [fitErr, setFitErr] = useState("");
   const [fit, setFit] = useState<Fit | null>(null);
@@ -1966,16 +1942,14 @@ export function EditorVarianteScreen({ variantId = "editor" }: { variantId?: str
     })();
   }, [variantId, t, flash, objetivo]);
 
-  // Si ni a 10 pt cabe, el autofit ya no puede hacer nada: se abre el panel de
-  // recorte (que sigue siendo manual: abrir no analiza). Solo en la TRANSICIÓN a
-  // «no cabe»: si el usuario lo cierra, no se le vuelve a abrir en cada tecleo.
+  // Si ni a 10 pt cabe, el autofit ya no puede hacer nada: la guía lo dice y
+  // «Proponer recortes» pasa a botón principal (sigue siendo manual: nadie gasta
+  // una llamada al modelo sin pulsarlo). En móvil se vuelve a la composición, que
+  // es donde se decide. Solo en la TRANSICIÓN a «no cabe», no en cada tecleo.
   const noCabe = autofitInfo?.noCabe === true;
   const noCabeAntes = useRef(false);
   useEffect(() => {
-    if (noCabe && !noCabeAntes.current) {
-      setFitOpen(true);
-      setView("mid");
-    }
+    if (noCabe && !noCabeAntes.current) setView("mid");
     noCabeAntes.current = noCabe;
   }, [noCabe]);
   // Un análisis hecho para otro objetivo ya no describe este documento.
@@ -2068,6 +2042,109 @@ export function EditorVarianteScreen({ variantId = "editor" }: { variantId?: str
     },
     [patchItem, mark, flash, t],
   );
+
+  // ── QUÉ FALTA, en el cliente y sin IA ─────────────────────────────────────
+  // La MISMA calcularFaltas que usa el servidor (ajuste.ts): un hueco es un hecho
+  // comprobable, no una opinión, así que no necesita «Analizar» ni una llamada al
+  // modelo. Se carga con import dinámico para que zod (que ajuste.ts arrastra por
+  // su esquema) no entre en el bundle inicial del editor.
+  const [motorFaltas, setMotorFaltas] = useState<MotorFaltas | null>(null);
+  useEffect(() => {
+    let vivo = true;
+    import("@/lib/cv/ajuste")
+      .then((m) => {
+        if (vivo) setMotorFaltas({ calcularFaltas: m.calcularFaltas, itemDeAjuste: m.itemDeAjuste });
+      })
+      .catch((e) => console.error("[editor] no se pudo cargar el cálculo de huecos", e));
+    return () => {
+      vivo = false;
+    };
+  }, []);
+  const faltas = useMemo<FitFalta[]>(
+    () => (motorFaltas ? motorFaltas.calcularFaltas(items.map((i) => motorFaltas.itemDeAjuste(i))) : []),
+    [motorFaltas, items],
+  );
+  const huecos = useMemo(() => huecosPorItem(faltas), [faltas]);
+
+  // ── La propuesta, repartida sobre los items ───────────────────────────────
+  // Posición actual de cada viñeta entre sus hermanas VISIBLES (la base de
+  // desde/hasta en ajuste.ts): un reordenado que ya se cumple no pide decisión.
+  const posicion = useMemo(() => {
+    const grupos = new Map<string, VItem[]>();
+    for (const i of items) {
+      if (i.kind !== "bullet" || !i.visible || !i.parent_id) continue;
+      const g = grupos.get(i.parent_id);
+      if (g) g.push(i);
+      else grupos.set(i.parent_id, [i]);
+    }
+    const m = new Map<string, number>();
+    for (const g of grupos.values()) g.sort(bySort).forEach((it, k) => m.set(it.id, k));
+    return m;
+  }, [items]);
+  const enLinea = useMemo(() => propuestasEnLinea(fit, items, fitDone, posicion), [fit, items, fitDone, posicion]);
+  const pendientes = contarPendientes(enLinea);
+
+  /** Aceptar UNA propuesta: el mismo manejador que tenía su fila en el panel. */
+  const aceptarProp = useCallback(
+    (pr: PropEnLinea) => {
+      if (pr.tipo === "q") fitAcceptDrop(pr.p);
+      else if (pr.tipo === "r") fitAcceptMove(pr.p);
+      else fitAcceptShorten(pr.p);
+    },
+    [fitAcceptDrop, fitAcceptMove, fitAcceptShorten],
+  );
+
+  /** Las propuestas abiertas de un item, bajo él. */
+  const propsDe = (id: string) =>
+    (enLinea.get(id) ?? []).map((pr) => (
+      <PropuestaEnLinea
+        key={pr.clave}
+        prop={pr}
+        revertida={fitDone[pr.clave] === "undo"}
+        onAceptar={() => aceptarProp(pr)}
+        onRechazar={() => mark(pr.clave, "no")}
+      />
+    ));
+
+  /** El sello de lo verificado. «deshacer» solo si se aceptó en esta sesión. */
+  const selloDe = (it: VItem) => {
+    if (!it.override_verified || it.override_data == null) return null;
+    const p = fitDone[`a:${it.id}`] === "ok" ? fit?.acortar.find((a) => a.id === it.id) : undefined;
+    return <SelloVerificado onDeshacer={p ? () => fitRevertShorten(p) : undefined} />;
+  };
+
+  // «Siguiente ↓»: la próxima decisión del DOCUMENTO, en orden de lectura.
+  const ultimaDecision = useRef<HTMLElement | null>(null);
+  const irASiguiente = useCallback(() => {
+    const els = Array.from(document.querySelectorAll<HTMLElement>("#mid [data-pendiente]"));
+    const ult = ultimaDecision.current && document.contains(ultimaDecision.current) ? ultimaDecision.current : null;
+    const desde = ult
+      ? ult.getBoundingClientRect().top
+      : document.getElementById("edGuia")?.getBoundingClientRect().bottom ?? 0;
+    const i = siguienteIndice(
+      els.map((e) => e.getBoundingClientRect().top),
+      desde,
+    );
+    if (i < 0) return;
+    const el = els[i]!;
+    ultimaDecision.current = el;
+    const suave = !window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    el.scrollIntoView({ block: "center", behavior: suave ? "smooth" : "auto" });
+    // El foco va al botón PRUDENTE (mantener / no): Intro nunca aplica un cambio
+    // que el usuario no ha leído.
+    el.querySelector<HTMLButtonElement>(".fl-acts button")?.focus({ preventScroll: true });
+  }, []);
+
+  // Las notas de la IA al crear la variante (VariantesScreen las deja aquí al
+  // saltar directo al editor). Se hidrata ya montado; sin almacenamiento, no hay.
+  const [notasIA, setNotasIA] = useState<string | null>(null);
+  useEffect(() => {
+    try {
+      setNotasIA(window.sessionStorage.getItem(`corpus.notasIA.${variantId}`));
+    } catch {
+      /* sin sessionStorage: las notas se vieron en Variantes y no se repiten */
+    }
+  }, [variantId]);
 
   const onDragStart = useCallback(
     (id: string) => {
@@ -2163,7 +2240,13 @@ export function EditorVarianteScreen({ variantId = "editor" }: { variantId?: str
     return (
       <Fragment key={b.id}>
         <div
-          className={"var-b" + (ov ? " ovr" : "") + (hidden ? " hid" : "") + (draggingId === b.id ? " dragging" : "")}
+          className={
+            "var-b" +
+            (ov ? " ovr" : "") +
+            (ov && b.override_verified ? " flu-ok" : "") +
+            (hidden ? " hid" : "") +
+            (draggingId === b.id ? " dragging" : "")
+          }
           data-b={b.id}
           draggable={canDrag && !editing}
           onDragStart={canDrag ? () => onDragStart(b.id) : undefined}
@@ -2197,6 +2280,8 @@ export function EditorVarianteScreen({ variantId = "editor" }: { variantId?: str
           >
             {text}
           </span>
+          <Huecos faltas={huecos.get(b.id)} />
+          {selloDe(b)}
           <span className="bacts">
             <button type="button" data-a="hide" title={t("editor.hideTitle")} onClick={() => toggleHide(b.id)}>
               {hidden ? t("editor.show") : t("editor.hide")}
@@ -2221,6 +2306,7 @@ export function EditorVarianteScreen({ variantId = "editor" }: { variantId?: str
             </button>
           </div>
         )}
+        {propsDe(b.id)}
       </Fragment>
     );
   };
@@ -2387,7 +2473,7 @@ export function EditorVarianteScreen({ variantId = "editor" }: { variantId?: str
                 </button>
               </span>
             </div>
-          ))}
+          )).flatMap((row, k) => [row, ...propsDe(list[k]!.id)])}
         </div>
       </div>
     ) : null;
@@ -2485,14 +2571,15 @@ export function EditorVarianteScreen({ variantId = "editor" }: { variantId?: str
             <button
               type="button"
               className="c-btn c-btn--quiet ed-fit-open"
-              aria-expanded={fitOpen}
-              aria-controls="edFit"
+              aria-controls="edGuia"
+              disabled={fitBusy}
               onClick={() => {
-                const abrir = !fitOpen;
-                setFitOpen(abrir);
-                // Abrir NO analiza: analizar cuesta un render de PDF y una llamada al
-                // modelo, y nadie pidió nada todavía. Se analiza al pulsar Analizar.
-                if (abrir) setTab("mid");
+                // Pedir la propuesta ES pulsar aquí (o en la guía): una llamada al
+                // modelo con la clave del usuario, nunca sola. Las decisiones
+                // aparecen después sobre cada item de la composición.
+                setTab("mid");
+                document.getElementById("edGuia")?.scrollIntoView({ block: "nearest" });
+                runFit();
               }}
             >
               {t("editor.fitOpen")}
@@ -2610,208 +2697,23 @@ export function EditorVarianteScreen({ variantId = "editor" }: { variantId?: str
             </span>
           </div>
 
-          {/* ── Propuesta de ajuste. Cada fila se acepta o se rechaza SOLA. ── */}
-          {fitOpen && (
-            <section className="c-card fit" id="edFit" aria-label={t("editor.fitAria")}>
-              <div className="fith">
-                <span className="t-overline">{t("editor.fitTitle").replace("{p}", paginasTxt(objetivo))}</span>
-                <button type="button" className="c-btn c-btn--quiet fitx" onClick={() => setFitOpen(false)}>
-                  {t("editor.fitClose")}
-                </button>
-              </div>
-
-              {/* EL NÚMERO. Sale de contar las líneas del PDF real, y lo dice. */}
-              {fit && (
-                <div className="fitn">
-                  {fit.sobran > 0 ? (
-                    <>
-                      <b className="big">{t("editor.fitOver").replace("{n}", String(fit.sobran))}</b>
-                      <span className="sub">
-                        {t("editor.fitOverSub")
-                          .replace("{p}", String(fit.paginas))
-                          .replace("{o}", String(fit.paginasObjetivo))}
-                      </span>
-                    </>
-                  ) : (
-                    <>
-                      <b className="big ok">{t("editor.fitFits").replace("{o}", paginasTxt(fit.paginasObjetivo).toUpperCase())}</b>
-                      <span className="sub">{t("editor.fitFitsSub").replace("{n}", String(-fit.sobran))}</span>
-                    </>
-                  )}
-                </div>
-              )}
-
-              <div className="fitrun">
-                <button type="button" className="c-btn c-btn--patina" disabled={fitBusy} onClick={runFit}>
-                  {fitBusy ? t("editor.fitBusy") : fit ? t("editor.fitRerun") : t("editor.fitRun")}
-                </button>
-                {fit && <span className="fitmanual">{t("editor.fitManual")}</span>}
-              </div>
-
-              {fitErr && <p className="fiterr" role="status">{fitErr}</p>}
-
-              {fit && (
-                <>
-                  {/* 1 · QUÉ QUITAR */}
-                  <div className="fitsec">
-                    <div className="fitsech">
-                      <span className="t-overline">{t("editor.fitSecRemove")}</span>
-                      <span className="sub">
-                        {t("editor.fitSecRemoveSub").replace("{t}", targetTitle || t("editor.objPlaceholder"))}
-                      </span>
-                    </div>
-                    {fit.quitar.length === 0 && <p className="fitempty">{t("editor.fitEmpty")}</p>}
-                    {fit.quitar.map((p) => (
-                      <div className="fitrow" key={`q:${p.id}`}>
-                        <p className="txt">{p.texto}</p>
-                        {p.motivo && <p className="why">{p.motivo}</p>}
-                        {fitDone[`q:${p.id}`] === "ok" ? (
-                          <span className="fitok">{t("editor.fitAccepted")}</span>
-                        ) : fitDone[`q:${p.id}`] === "no" ? (
-                          <span className="fitno">{t("editor.fitRejected")}</span>
-                        ) : (
-                          <span className="fitacts">
-                            <button type="button" className="c-btn c-btn--quiet" onClick={() => mark(`q:${p.id}`, "no")}>
-                              {t("editor.fitReject")}
-                            </button>
-                            <button type="button" className="c-btn" onClick={() => fitAcceptDrop(p)}>
-                              {t("editor.fitAccept")}
-                            </button>
-                          </span>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-
-                  {/* 2 · QUÉ REORDENAR */}
-                  <div className="fitsec">
-                    <div className="fitsech">
-                      <span className="t-overline">{t("editor.fitSecReorder")}</span>
-                      <span className="sub">{t("editor.fitSecReorderSub")}</span>
-                    </div>
-                    {fit.reordenar.length === 0 && <p className="fitempty">{t("editor.fitEmpty")}</p>}
-                    {fit.reordenar.map((p) => (
-                      <div className="fitrow" key={`r:${p.id}`}>
-                        <p className="txt">{p.texto}</p>
-                        <p className="why">
-                          {t(p.hasta < p.desde ? "editor.fitMoveUp" : "editor.fitMoveDown")
-                            .replace("{a}", String(p.desde + 1))
-                            .replace("{b}", String(p.hasta + 1))}
-                        </p>
-                        {fitDone[`r:${p.id}`] === "ok" ? (
-                          <span className="fitok">{t("editor.fitAccepted")}</span>
-                        ) : fitDone[`r:${p.id}`] === "no" ? (
-                          <span className="fitno">{t("editor.fitRejected")}</span>
-                        ) : (
-                          <span className="fitacts">
-                            <button type="button" className="c-btn c-btn--quiet" onClick={() => mark(`r:${p.id}`, "no")}>
-                              {t("editor.fitReject")}
-                            </button>
-                            <button type="button" className="c-btn" onClick={() => fitAcceptMove(p)}>
-                              {t("editor.fitAccept")}
-                            </button>
-                          </span>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-
-                  {/* 3 · QUÉ ACORTAR — con el ORIGINAL al lado y REVERTIR.
-                      Todo lo que llega hasta aquí ya pasó el candado en el servidor:
-                      lo que no lo pasó no está en esta lista, está en el registro
-                      de descartados del final. */}
-                  <div className="fitsec">
-                    <div className="fitsech">
-                      <span className="t-overline">{t("editor.fitSecShorten")}</span>
-                      <span className="sub">{t("editor.fitSecShortenSub")}</span>
-                    </div>
-                    {fit.acortar.length === 0 && <p className="fitempty">{t("editor.fitEmpty")}</p>}
-                    {fit.acortar.map((p) => (
-                      <div className="fitrow fitcut" key={`a:${p.id}`}>
-                        <p className="lbl">{t("editor.fitOrigin")}</p>
-                        <p className="txt old">{p.original}</p>
-                        <p className="lbl">{t("editor.fitProposed")}</p>
-                        <p className="txt new">{p.propuesto}</p>
-                        <p className="why">
-                          {t("editor.fitSaved").replace("{n}", String(p.ahorro))}
-                          {p.motivo ? ` · ${p.motivo}` : ""}
-                        </p>
-                        {fitDone[`a:${p.id}`] === "ok" ? (
-                          <span className="fitacts">
-                            <span className="fitok">{t("editor.fitAccepted")}</span>
-                            <button type="button" className="c-btn c-btn--quiet" onClick={() => fitRevertShorten(p)}>
-                              {t("editor.fitRevert")}
-                            </button>
-                          </span>
-                        ) : fitDone[`a:${p.id}`] === "no" ? (
-                          <span className="fitno">{t("editor.fitRejected")}</span>
-                        ) : (
-                          <span className="fitacts">
-                            {fitDone[`a:${p.id}`] === "undo" && (
-                              <span className="fitno">{t("editor.fitReverted")}</span>
-                            )}
-                            <button type="button" className="c-btn c-btn--quiet" onClick={() => mark(`a:${p.id}`, "no")}>
-                              {t("editor.fitReject")}
-                            </button>
-                            <button type="button" className="c-btn" onClick={() => fitAcceptShorten(p)}>
-                              {t("editor.fitAccept")}
-                            </button>
-                          </span>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-
-                  {/* 4 · QUÉ FALTA — sin botones: esto no lo arregla la IA. */}
-                  <div className="fitsec">
-                    <div className="fitsech">
-                      <span className="t-overline">{t("editor.fitSecGaps")}</span>
-                      <span className="sub">{t("editor.fitSecGapsSub")}</span>
-                    </div>
-                    {fit.falta.length === 0 && <p className="fitempty">{t("editor.fitEmpty")}</p>}
-                    {fit.falta.map((p) => (
-                      <div className="fitrow fitgap" key={`g:${p.id}:${p.tipo}`}>
-                        <span className="gaptag">{t(FIT_GAP_KEY[p.tipo])}</span>
-                        <p className="txt">{p.texto}</p>
-                        <p className="why">{p.detalle}</p>
-                      </div>
-                    ))}
-                    {fit.falta.length > 0 && <p className="fitempty">{t("editor.fitGapHint")}</p>}
-                  </div>
-
-                  {/* El registro de lo que NO se ofrece. Un descarte silencioso y
-                      «no había nada que proponer» se ven igual desde fuera. */}
-                  {fit.descartados.filter((d) => d.tipo === "acortar").length > 0 && (
-                    <div className="fitsec fitdrop">
-                      <p className="txt">
-                        {t("editor.fitDropped").replace(
-                          "{n}",
-                          String(fit.descartados.filter((d) => d.tipo === "acortar").length),
-                        )}
-                      </p>
-                      <p className="why">{t("editor.fitDroppedHint")}</p>
-                      <ul>
-                        {fit.descartados
-                          .filter((d) => d.tipo === "acortar")
-                          .map((d, i) => (
-                            <li key={`${d.id}:${i}`}>{d.razon}</li>
-                          ))}
-                      </ul>
-                    </div>
-                  )}
-
-                  {fit.notas && (
-                    <div className="fitsec">
-                      <div className="fitsech">
-                        <span className="t-overline">{t("editor.fitNotes")}</span>
-                      </div>
-                      <p className="why">{fit.notas}</p>
-                    </div>
-                  )}
-                </>
-              )}
-            </section>
-          )}
+          {/* ── La GUÍA: cómo está el documento y qué queda por decidir. Las
+              decisiones no viven aquí: viven bajo cada item, más abajo. ── */}
+          <GuiaAjuste
+            estado={estadoDoc({ busy: pvBusy, error: pvError, paginas: pageCount, objetivo, autofit: autofitInfo })}
+            paginas={pageCount}
+            objetivo={objetivo}
+            autofit={autofitInfo}
+            paginasTxt={paginasTxt}
+            huecos={faltas.length}
+            pendientes={pendientes}
+            fit={fit}
+            busy={fitBusy}
+            err={fitErr}
+            notasIA={notasIA}
+            onProponer={runFit}
+            onSiguiente={irASiguiente}
+          />
           <div className="c-card var-obj">
             <label htmlFor="objInput">
               {t("editor.objLabel")}{" "}
@@ -2833,6 +2735,170 @@ export function EditorVarianteScreen({ variantId = "editor" }: { variantId?: str
             </p>
           </div>
 
+          {/* ── EL CONTENIDO, primero: es lo que se decide. La configuración del
+              documento (contacto · diseño · orden · presentación) va debajo. ── */}
+          {!isEmpty && (
+            <div id="mid">
+              {summaryItems.length > 0 && (
+                <div className="var-g">
+                  <div className="gh">
+                    <span className="t-overline">{t("editor.groupSummary")}</span>
+                  </div>
+                  <div className="var-exp">{summaryItems.map((s) => renderBullet(s))}</div>
+                </div>
+              )}
+
+              {workItems.length > 0 && (
+                <div className="var-g">
+                  <div className="gh">
+                    <span className="t-overline">{t("editor.groupExperience")}</span>
+                    <span className="n">{t("editor.datesFromMaster")}</span>
+                  </div>
+                  {workItems.map((w) => (
+                    <div className="var-exp" data-exp={w.item_id} key={w.id}>
+                      <div className="var-eh">
+                        <span className="tt">{S(w.data, "title")}</span>
+                        <span className="org">
+                          {[S(w.data, "company"), S(w.data, "dates")].filter(Boolean).join(" · ")}
+                        </span>
+                        <Huecos faltas={huecos.get(w.id)} />
+                        <span className="bacts" style={{ marginLeft: "auto", display: "flex", gap: "1px" }}>
+                          <button
+                            type="button"
+                            data-a="out"
+                            title={t("editor.removeRoleTitle")}
+                            onClick={() => removeItem(w.id)}
+                            style={{ font: "400 11px/1 var(--font-mono)", color: "var(--text-subtle)", padding: "4px 6px" }}
+                          >
+                            ×
+                          </button>
+                        </span>
+                      </div>
+                      {propsDe(w.id)}
+                      {bulletsForWork(w).map((b) => renderBullet(b, w))}
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {skillItems.length > 0 && (
+                <div className="var-g">
+                  <div className="gh">
+                    <span className="t-overline">{t("editor.groupSkillsFull")}</span>
+                  </div>
+                  <div className="var-chips">
+                    {skillItems.map((s) => (
+                      <span className="c-chip" key={s.id}>
+                        <b>{S(s.data, "group")}</b>{" "}
+                        {t("editor.skillItemsCount").replace(
+                          "{n}",
+                          String(S(s.data, "items").split(",").filter(Boolean).length),
+                        )}
+                        <button type="button" data-out={s.item_id} title={t("editor.removeTitle")} onClick={() => removeItem(s.id)}>
+                          ×
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                  <HuecosAptitud
+                    faltas={skillItems.flatMap((s) => huecos.get(s.id) ?? [])}
+                    grupo={(id) => S(items.find((i) => i.id === id)?.data, "group")}
+                  />
+                  {skillItems.map((s) => propsDe(s.id))}
+                </div>
+              )}
+
+              {projectItems.length > 0 && (
+                <div className="var-g">
+                  <div className="gh">
+                    <span className="t-overline">{t("editor.groupProjects")}</span>
+                  </div>
+                  <div className="var-exp">{projectItems.map((p) => renderBullet(p))}</div>
+                </div>
+              )}
+
+              {eduItems.length > 0 && (
+                <div className="var-g">
+                  <div className="gh">
+                    <span className="t-overline">{t("editor.groupEducation")}</span>
+                  </div>
+                  <div className="var-exp">
+                    {eduItems.map((d) => (
+                      <div className="var-b" data-b={d.id} key={d.id}>
+                        <span className="grip" aria-hidden="true">
+                          ⠿
+                        </span>
+                        <span className="tx">
+                          {[S(d.data, "degree"), S(d.data, "institution"), S(d.data, "dates")]
+                            .filter(Boolean)
+                            .join(" · ")}
+                        </span>
+                        <span className="bacts">
+                          <button
+                            type="button"
+                            data-a="out"
+                            title={t("editor.removeFromVariant")}
+                            onClick={() => removeItem(d.id)}
+                          >
+                            ×
+                          </button>
+                        </span>
+                      </div>
+                    )).flatMap((row, k) => [row, ...propsDe(eduItems[k]!.id)])}
+                  </div>
+                </div>
+              )}
+
+              {/* CERTIFICACIONES · IDIOMAS · PUBLICACIONES añadidas a la variante.
+                  Un solo helper para las tres: son filas idénticas (texto compuesto
+                  + quitar) y triplicar el JSX solo crea tres sitios donde arreglar
+                  el mismo bug. El texto es el MISMO que se imprimirá (libTextOf usa
+                  los helpers del documento). */}
+              {simpleGroup("editor.groupCertifications", certItems)}
+              {simpleGroup("editor.groupLanguages", langItems)}
+              {simpleGroup("editor.groupPublications", pubItems)}
+
+              {/* Referencias AÑADIDAS a esta variante. Estar aquí no basta para que
+                  se impriman: el interruptor de la tarjeta de presentación manda, y
+                  si está apagado se dice aquí mismo en vez de dejar al usuario
+                  creyendo que el PDF las lleva. */}
+              {refItems.length > 0 && (
+                <div className="var-g">
+                  <div className="gh">
+                    <span className="t-overline">{t("editor.groupReferences")}</span>
+                    <span className="n">{refsOn ? t("editor.refsWhenOn") : t("editor.refsWhyOff")}</span>
+                  </div>
+                  <div className="var-exp">
+                    {refItems.map((r) => (
+                      <div className="var-b" data-b={r.id} key={r.id}>
+                        <span className="grip" aria-hidden="true">
+                          ⠿
+                        </span>
+                        <span className="tx">{referenceLine(r.data as ReferenceFields)}</span>
+                        <span className="bacts">
+                          <button
+                            type="button"
+                            data-a="out"
+                            title={t("editor.removeFromVariant")}
+                            onClick={() => removeItem(r.id)}
+                          >
+                            ×
+                          </button>
+                        </span>
+                      </div>
+                    )).flatMap((row, k) => [row, ...propsDe(refItems[k]!.id)])}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          <div className="var-empty" id="midEmpty" hidden={!isEmpty}>
+            <span className="t-overline">{t("editor.emptyOverline")}</span>
+            {t("editor.emptyLine1")}
+            <br />
+            {t("editor.emptyLine2A")} <b>+</b> {t("editor.emptyLine2B")}
+          </div>
           {/* ── Contacto por variante — se imprime en el CUERPO; hereda del master ── */}
           <div className="c-card var-contact" data-screen-label="editor-contacto">
             <div className="presh">
@@ -3425,161 +3491,6 @@ export function EditorVarianteScreen({ variantId = "editor" }: { variantId?: str
             </div>
           )}
 
-          {!isEmpty && (
-            <div id="mid">
-              {summaryItems.length > 0 && (
-                <div className="var-g">
-                  <div className="gh">
-                    <span className="t-overline">{t("editor.groupSummary")}</span>
-                  </div>
-                  <div className="var-exp">{summaryItems.map((s) => renderBullet(s))}</div>
-                </div>
-              )}
-
-              {workItems.length > 0 && (
-                <div className="var-g">
-                  <div className="gh">
-                    <span className="t-overline">{t("editor.groupExperience")}</span>
-                    <span className="n">{t("editor.datesFromMaster")}</span>
-                  </div>
-                  {workItems.map((w) => (
-                    <div className="var-exp" data-exp={w.item_id} key={w.id}>
-                      <div className="var-eh">
-                        <span className="tt">{S(w.data, "title")}</span>
-                        <span className="org">
-                          {[S(w.data, "company"), S(w.data, "dates")].filter(Boolean).join(" · ")}
-                        </span>
-                        <span className="bacts" style={{ marginLeft: "auto", display: "flex", gap: "1px" }}>
-                          <button
-                            type="button"
-                            data-a="out"
-                            title={t("editor.removeRoleTitle")}
-                            onClick={() => removeItem(w.id)}
-                            style={{ font: "400 11px/1 var(--font-mono)", color: "var(--text-subtle)", padding: "4px 6px" }}
-                          >
-                            ×
-                          </button>
-                        </span>
-                      </div>
-                      {bulletsForWork(w).map((b) => renderBullet(b, w))}
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              {skillItems.length > 0 && (
-                <div className="var-g">
-                  <div className="gh">
-                    <span className="t-overline">{t("editor.groupSkillsFull")}</span>
-                  </div>
-                  <div className="var-chips">
-                    {skillItems.map((s) => (
-                      <span className="c-chip" key={s.id}>
-                        <b>{S(s.data, "group")}</b>{" "}
-                        {t("editor.skillItemsCount").replace(
-                          "{n}",
-                          String(S(s.data, "items").split(",").filter(Boolean).length),
-                        )}
-                        <button type="button" data-out={s.item_id} title={t("editor.removeTitle")} onClick={() => removeItem(s.id)}>
-                          ×
-                        </button>
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {projectItems.length > 0 && (
-                <div className="var-g">
-                  <div className="gh">
-                    <span className="t-overline">{t("editor.groupProjects")}</span>
-                  </div>
-                  <div className="var-exp">{projectItems.map((p) => renderBullet(p))}</div>
-                </div>
-              )}
-
-              {eduItems.length > 0 && (
-                <div className="var-g">
-                  <div className="gh">
-                    <span className="t-overline">{t("editor.groupEducation")}</span>
-                  </div>
-                  <div className="var-exp">
-                    {eduItems.map((d) => (
-                      <div className="var-b" data-b={d.id} key={d.id}>
-                        <span className="grip" aria-hidden="true">
-                          ⠿
-                        </span>
-                        <span className="tx">
-                          {[S(d.data, "degree"), S(d.data, "institution"), S(d.data, "dates")]
-                            .filter(Boolean)
-                            .join(" · ")}
-                        </span>
-                        <span className="bacts">
-                          <button
-                            type="button"
-                            data-a="out"
-                            title={t("editor.removeFromVariant")}
-                            onClick={() => removeItem(d.id)}
-                          >
-                            ×
-                          </button>
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* CERTIFICACIONES · IDIOMAS · PUBLICACIONES añadidas a la variante.
-                  Un solo helper para las tres: son filas idénticas (texto compuesto
-                  + quitar) y triplicar el JSX solo crea tres sitios donde arreglar
-                  el mismo bug. El texto es el MISMO que se imprimirá (libTextOf usa
-                  los helpers del documento). */}
-              {simpleGroup("editor.groupCertifications", certItems)}
-              {simpleGroup("editor.groupLanguages", langItems)}
-              {simpleGroup("editor.groupPublications", pubItems)}
-
-              {/* Referencias AÑADIDAS a esta variante. Estar aquí no basta para que
-                  se impriman: el interruptor de la tarjeta de presentación manda, y
-                  si está apagado se dice aquí mismo en vez de dejar al usuario
-                  creyendo que el PDF las lleva. */}
-              {refItems.length > 0 && (
-                <div className="var-g">
-                  <div className="gh">
-                    <span className="t-overline">{t("editor.groupReferences")}</span>
-                    <span className="n">{refsOn ? t("editor.refsWhenOn") : t("editor.refsWhyOff")}</span>
-                  </div>
-                  <div className="var-exp">
-                    {refItems.map((r) => (
-                      <div className="var-b" data-b={r.id} key={r.id}>
-                        <span className="grip" aria-hidden="true">
-                          ⠿
-                        </span>
-                        <span className="tx">{referenceLine(r.data as ReferenceFields)}</span>
-                        <span className="bacts">
-                          <button
-                            type="button"
-                            data-a="out"
-                            title={t("editor.removeFromVariant")}
-                            onClick={() => removeItem(r.id)}
-                          >
-                            ×
-                          </button>
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-
-          <div className="var-empty" id="midEmpty" hidden={!isEmpty}>
-            <span className="t-overline">{t("editor.emptyOverline")}</span>
-            {t("editor.emptyLine1")}
-            <br />
-            {t("editor.emptyLine2A")} <b>+</b> {t("editor.emptyLine2B")}
-          </div>
           <div style={{ height: "40px" }} />
         </section>
 

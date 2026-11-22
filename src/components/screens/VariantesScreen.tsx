@@ -418,6 +418,22 @@ export function VariantesScreen() {
   }
 
   // ── Creación ──────────────────────────────────────────────────────────────
+  /**
+   * FLUJO DEL CV: una variante recién armada (con IA o desde un aviso) se abre
+   * DIRECTAMENTE en el editor, que es donde se decide. Antes había una parada
+   * intermedia («creada — revísala → abrir») que solo llevaba a otra pantalla.
+   * Las notas honestas de la IA viajan con ella (sessionStorage) y el editor las
+   * enseña en el detalle de su guía.
+   */
+  function abrirRecienCreada(id: string, notes: string | null | undefined) {
+    try {
+      if (notes) window.sessionStorage.setItem(`corpus.notasIA.${id}`, notes);
+    } catch {
+      /* sin sessionStorage: se abre igual, sin las notas */
+    }
+    router.push(`/app/variantes/${id}`);
+  }
+
   async function createManual() {
     if (creating) return;
     setCreateErr("");
@@ -463,8 +479,8 @@ export function VariantesScreen() {
       });
       if (!res.ok) throw new Error();
       const { variant, notes } = (await res.json()) as { variant: { id: string; name: string }; notes?: string };
-      setAiResult({ id: variant.id, name: variant.name, notes: notes ?? null });
       setAnnounce(t("variantes.announceAiCreated").replace("{nm}", variant.name));
+      abrirRecienCreada(variant.id, notes);
     } catch {
       setCreateErr(t("variantes.errAi"));
     } finally {
@@ -545,11 +561,10 @@ export function VariantesScreen() {
       });
       if (!res.ok) throw new Error();
       const { variant, notes } = (await res.json()) as { variant: { id: string; name: string }; notes?: string | null };
-      // Se reutiliza la tarjeta de resultado de IA: «creada — revísala → abrir».
-      setAiResult({ id: variant.id, name: variant.name, notes: notes ?? null });
       setTailorProposal(null);
       setOfferDraft("");
       setAnnounce(t("variantes.announceAiCreated").replace("{nm}", variant.name));
+      abrirRecienCreada(variant.id, notes);
     } catch {
       setCreateErr(t("variantes.tailorErr"));
     } finally {
