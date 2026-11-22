@@ -28,3 +28,7 @@ next-env.d.ts
 /playwright-report
 /test-results
 npm-debug.log*
+
+# Material personal para construir el CV — NO se publica.
+# Contiene datos de contacto, el cuestionario completo y el perfil íntegro.
+material-perfil/
