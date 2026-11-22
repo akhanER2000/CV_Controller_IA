@@ -1,5 +1,4 @@
 # Desarrollo local (Supabase en Docker)
-
 Entrar a Corpus en `http://localhost:3000` sin el proyecto remoto de Supabase ni Google/GitHub.
 
 ## Requisitos
