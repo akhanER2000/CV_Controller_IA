@@ -177,11 +177,17 @@ test("ajustar páginas en cascada · la variante grande queda en 2 páginas real
       if (await b.count()) await b.click();
     }
     await page.waitForTimeout(3_000);
-  } else if (r === 2) {
-    const usar = panel.locator(".flu-cas-cands li button").first();
-    await Promise.all([page.waitForEvent("load", { timeout: 120_000 }), usar.click()]);
   } else {
-    await Promise.all([page.waitForEvent("load", { timeout: 120_000 }), panel.locator(".flu-cas-medida button").click()]);
+    // «Usar esta» guarda la plantilla con savePresentation, sin recargar (DA-AC4):
+    // se espera el PATCH de la variante y se recarga para leerla de la base.
+    const boton = r === 2 ? panel.locator(".flu-cas-cands li button").first() : panel.locator(".flu-cas-medida button");
+    const guardado = page.waitForResponse(
+      (res) => res.request().method() === "PATCH" && res.url().includes(`/api/variants/${variantId}`),
+      { timeout: 120_000 },
+    );
+    await boton.click();
+    expect((await guardado).ok(), "«Usar esta» guarda la plantilla en la variante").toBeTruthy();
+    await page.reload();
   }
   await expect(page.locator(".flu-ajustar")).toBeVisible({ timeout: 120_000 });
   await page.waitForTimeout(4_000);
