@@ -1,5 +1,5 @@
 {
-  "fecha": "2026-11-26T03:46:20.232Z",
+  "fecha": "2026-11-26T04:11:39.295Z",
   "comparacion": "A = decisiones por las llamadas de los manejadores (DELETE items · PATCH sort_order · POST ajustar acortar); B = mismas decisiones por el editor fluido (la primera con J + A; el resto con clic); gemelas con huella idéntica antes de tocarlas",
   "abrirNoCambia": {
     "items": true,

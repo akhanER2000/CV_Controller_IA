@@ -71,6 +71,13 @@
   scrollbar-width: none;
   align-self: flex-start;
 }
+/* C5: en móvil el paso 3 quedaba oculto tras el scroll horizontal; ahora salta de línea. */
+@media (max-width: 520px) {
+  .cu-pasos {
+    flex-wrap: wrap;
+    border-radius: var(--radius-xl);
+  }
+}
 .cu-paso {
   display: flex;
   align-items: center;
@@ -196,6 +203,7 @@ button.cu-paso:not([aria-current="step"]):focus-visible {
 }
 .cu-aviso {
   width: 100%;
+  overflow-wrap: anywhere; /* C5: el comando largo (node -e …) se partía fuera de la tarjeta en móvil */
   padding: var(--sp-3) var(--sp-4);
   border-radius: var(--radius-lg);
   background: var(--surface-sunken);

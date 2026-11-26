@@ -1,0 +1,219 @@
+{
+  "fecha": "2026-11-26T04:21:33.671Z",
+  "base": "http://localhost:3000",
+  "vistas": [
+    {
+      "vista": "01-panel-escritorio",
+      "cortados": [],
+      "superpuestos": [
+        [
+          "Viñetas",
+          "fuente: master"
+        ],
+        [
+          "Certificaciones",
+          "Variantes por mes"
+        ],
+        [
+          "Roles",
+          "Variantes por mes"
+        ],
+        [
+          "Roles",
+          "según el mes de su última edición"
+        ],
+        [
+          "5",
+          "según el mes de su última edición"
+        ],
+        [
+          "Idiomas",
+          "según el mes de su última edición"
+        ],
+        [
+          "2",
+          "según el mes de su última edición"
+        ]
+      ],
+      "anchoDoc": 1440,
+      "anchoVista": 1440
+    },
+    {
+      "vista": "02-master-escritorio",
+      "cortados": [],
+      "superpuestos": [],
+      "anchoDoc": 1440,
+      "anchoVista": 1440
+    },
+    {
+      "vista": "03-revision-escritorio",
+      "cortados": [],
+      "superpuestos": [],
+      "anchoDoc": 1440,
+      "anchoVista": 1440
+    },
+    {
+      "vista": "04-variantes-escritorio",
+      "cortados": [],
+      "superpuestos": [],
+      "anchoDoc": 1440,
+      "anchoVista": 1440
+    },
+    {
+      "vista": "05-editor-escritorio",
+      "tresPaginas": "false",
+      "pdf": "SIN descarga · estado: al día · guardado | Midiendo…",
+      "cortados": [],
+      "superpuestos": [],
+      "anchoDoc": 1440,
+      "anchoVista": 1440
+    },
+    {
+      "vista": "06-importar-escritorio",
+      "cortados": [],
+      "superpuestos": [],
+      "anchoDoc": 1440,
+      "anchoVista": 1440
+    },
+    {
+      "vista": "07-ajustes-escritorio",
+      "cortados": [],
+      "superpuestos": [],
+      "anchoDoc": 1440,
+      "anchoVista": 1440
+    },
+    {
+      "vista": "08-salud-escritorio",
+      "cortados": [],
+      "superpuestos": [],
+      "anchoDoc": 1440,
+      "anchoVista": 1440
+    },
+    {
+      "vista": "01-panel-movil",
+      "cortados": [],
+      "superpuestos": [
+        [
+          "Viñetas",
+          "fuente: master"
+        ],
+        [
+          "Certificaciones",
+          "Variantes recientes\n1"
+        ],
+        [
+          "Roles",
+          "Variantes recientes\n1"
+        ],
+        [
+          "Idiomas",
+          "Variantes recientes\n1"
+        ],
+        [
+          "Referencias",
+          "AI/ML Engineer"
+        ],
+        [
+          "2",
+          "AI/ML Engineer"
+        ],
+        [
+          "Contacto",
+          "AI/ML Engineer"
+        ],
+        [
+          "Contacto",
+          "objetivo: sin objetivo definido · tocada"
+        ],
+        [
+          "1",
+          "AI/ML Engineer"
+        ],
+        [
+          "1",
+          "objetivo: sin objetivo definido · tocada"
+        ],
+        [
+          "Educación",
+          "objetivo: sin objetivo definido · tocada"
+        ],
+        [
+          "Publicaciones",
+          "objetivo: sin objetivo definido · tocada"
+        ],
+        [
+          "1",
+          "objetivo: sin objetivo definido · tocada"
+        ],
+        [
+          "Resumen",
+          "objetivo: sin objetivo definido · tocada"
+        ]
+      ],
+      "anchoDoc": 390,
+      "anchoVista": 390
+    },
+    {
+      "vista": "02-master-movil",
+      "cortados": [],
+      "superpuestos": [],
+      "anchoDoc": 390,
+      "anchoVista": 390
+    },
+    {
+      "vista": "03-revision-movil",
+      "cortados": [],
+      "superpuestos": [],
+      "anchoDoc": 390,
+      "anchoVista": 390
+    },
+    {
+      "vista": "04-variantes-movil",
+      "cortados": [],
+      "superpuestos": [],
+      "anchoDoc": 390,
+      "anchoVista": 390
+    },
+    {
+      "vista": "05-editor-movil",
+      "tresPaginas": "true",
+      "pdf": "CV-Akhan-Lorenzo-Andr-s-Espinoza-Rojas.pdf",
+      "cortados": [],
+      "superpuestos": [],
+      "anchoDoc": 429,
+      "anchoVista": 429
+    },
+    {
+      "vista": "06-importar-movil",
+      "cortados": [],
+      "superpuestos": [],
+      "anchoDoc": 390,
+      "anchoVista": 390
+    },
+    {
+      "vista": "07-ajustes-movil",
+      "cortados": [],
+      "superpuestos": [],
+      "anchoDoc": 548,
+      "anchoVista": 548
+    },
+    {
+      "vista": "08-salud-movil",
+      "cortados": [],
+      "superpuestos": [],
+      "anchoDoc": 390,
+      "anchoVista": 390
+    }
+  ],
+  "errores": [
+    "escritorio http://localhost:3000/app/master: Invalid or unexpected token",
+    "escritorio /app/master: intento 1 con error de página",
+    "escritorio http://localhost:3000/app/staging: Invalid or unexpected token",
+    "escritorio /app/staging: intento 1 con error de página",
+    "escritorio editor: el clic en Descargar PDF no descargó",
+    "movil http://localhost:3000/app/variantes: Invalid or unexpected token",
+    "movil /app/variantes: intento 1 con error de página",
+    "movil http://localhost:3000/app/ajustes: Invalid or unexpected token",
+    "movil /app/ajustes: intento 1 con error de página"
+  ]
+}
