@@ -1,0 +1,104 @@
+{
+  "fecha": "2026-11-26T15:24:39.200Z",
+  "base": "http://localhost:3000",
+  "vistas": [
+    {
+      "vista": "01-panel-escritorio",
+      "cortados": [],
+      "superpuestos": [],
+      "anchoDoc": 1440,
+      "anchoVista": 1440
+    },
+    {
+      "vista": "02-master-escritorio",
+      "cortados": [],
+      "superpuestos": [],
+      "anchoDoc": 1440,
+      "anchoVista": 1440
+    },
+    {
+      "vista": "03-revision-escritorio",
+      "cortados": [],
+      "superpuestos": [],
+      "anchoDoc": 1440,
+      "anchoVista": 1440
+    },
+    {
+      "vista": "04-variantes-escritorio",
+      "pdf": "CV-AI-ML-Engineer.pdf",
+      "cortados": [],
+      "superpuestos": [],
+      "anchoDoc": 1440,
+      "anchoVista": 1440
+    },
+    {
+      "vista": "05-editor-escritorio",
+      "tresPaginas": "true",
+      "pdf": "CV-Akhan-Lorenzo-Andr-s-Espinoza-Rojas.pdf",
+      "cortados": [],
+      "superpuestos": [],
+      "anchoDoc": 1440,
+      "anchoVista": 1440
+    },
+    {
+      "vista": "06-importar-escritorio",
+      "cortados": [],
+      "superpuestos": [],
+      "anchoDoc": 1440,
+      "anchoVista": 1440
+    },
+    {
+      "vista": "07-ajustes-escritorio",
+      "cortados": [],
+      "superpuestos": [],
+      "anchoDoc": 1440,
+      "anchoVista": 1440
+    },
+    {
+      "vista": "08-salud-escritorio",
+      "cortados": [],
+      "superpuestos": [],
+      "anchoDoc": 1440,
+      "anchoVista": 1440
+    },
+    {
+      "vista": "09-fuentes-escritorio",
+      "cortados": [],
+      "superpuestos": [],
+      "anchoDoc": 1440,
+      "anchoVista": 1440
+    },
+    {
+      "vista": "10-ingesta-escritorio",
+      "cortados": [],
+      "superpuestos": [],
+      "anchoDoc": 1440,
+      "anchoVista": 1440
+    },
+    {
+      "vista": "11-adaptar-escritorio",
+      "cortados": [],
+      "superpuestos": [],
+      "anchoDoc": 1440,
+      "anchoVista": 1440
+    },
+    {
+      "vista": "12-onboarding-escritorio",
+      "cortados": [],
+      "superpuestos": [],
+      "anchoDoc": 1440,
+      "anchoVista": 1440
+    },
+    {
+      "vista": "13-cuenta-escritorio",
+      "cortados": [],
+      "superpuestos": [],
+      "anchoDoc": 1440,
+      "anchoVista": 1440
+    }
+  ],
+  "errores": [
+    "escritorio http://localhost:3000/app/variantes/fb438709-4503-4a94-97b0-a93561d47914: Invalid or unexpected token",
+    "escritorio /app/variantes/fb438709-4503-4a94-97b0-a93561d47914: intento 1 con error de página"
+  ]
+}

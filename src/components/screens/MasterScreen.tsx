@@ -628,6 +628,21 @@ function buildRealView(items: ApiItem[]): MasterView {
   };
 }
 
+/** Items que la vista PINTA. El total del Master (DA-V6) es este número más las
+ *  filas que no tienen sección propia aquí (idiomas, publicaciones, enlaces,
+ *  viñetas sin rol): «Ítems del master» = todas las filas de profile_items, igual
+ *  que en el Panel. */
+function itemsEnVista(v: MasterView): number {
+  const bullets = v.roles.reduce((a, e) => a + e.bullets.length, 0);
+  return (v.basics ? 1 : 0) + (v.summary ? 1 : 0) + v.roles.length + bullets + v.skills.length +
+    v.projects.length + v.education.length + v.certifications.length + v.references.length;
+}
+
+/** Filas del master que la vista no pinta (ver `itemsEnVista`). */
+function itemsFueraDeVista(items: ApiItem[], v: MasterView): number {
+  return Math.max(0, items.length - itemsEnVista(v));
+}
+
 const FILTERS: { key: FilterKey; label: string }[] = [
   { key: "all", label: "todo" },
   { key: "sin-cifra", label: "sin cifra" },
@@ -889,6 +904,8 @@ export function DateCell({
 export function MasterScreen() {
   const t = useT();
   const [view, setView] = useState<MasterView | null>(supabaseEnabled ? null : buildDemoView());
+  /* Filas de profile_items sin sección en esta pantalla; se suman al total (DA-V6). */
+  const [fueraDeVista, setFueraDeVista] = useState(0);
   const [loading, setLoading] = useState(supabaseEnabled);
 
   // Estado real de producto.
@@ -1734,7 +1751,10 @@ export function MasterScreen() {
         const res = await fetch("/api/master");
         const data = await res.json();
         if (!active) return;
-        setView(buildRealView((data.items ?? []) as ApiItem[]));
+        const items = (data.items ?? []) as ApiItem[];
+        const vista = buildRealView(items);
+        setFueraDeVista(itemsFueraDeVista(items, vista));
+        setView(vista);
       } catch {
         if (active) setView({ basics: null, summary: null, roles: [], skills: [], projects: [], education: [], certifications: [], references: [] });
       } finally {
@@ -1791,7 +1811,10 @@ export function MasterScreen() {
       try {
         const res = await fetch("/api/master");
         const data = await res.json();
-        setView(buildRealView((data.items ?? []) as ApiItem[]));
+        const items = (data.items ?? []) as ApiItem[];
+        const vista = buildRealView(items);
+        setFueraDeVista(itemsFueraDeVista(items, vista));
+        setView(vista);
       } catch {
         /* si falla la relectura, la vista de antes sigue siendo la última buena */
       }
@@ -2235,10 +2258,7 @@ export function MasterScreen() {
 
   const v = view;
   const totalBullets = v ? v.roles.reduce((a, e) => a + e.bullets.length, 0) : 0;
-  const total = v
-    ? (v.basics ? 1 : 0) + (v.summary ? 1 : 0) + v.roles.length + totalBullets + v.skills.length +
-      v.projects.length + v.education.length + v.certifications.length + v.references.length
-    : 0;
+  const total = v ? itemsEnVista(v) + fueraDeVista : 0;
 
   // «fuentes» = orígenes externos distintos (el manual no cuenta: es la ausencia
   // de fuente, "el más verificable de todos").

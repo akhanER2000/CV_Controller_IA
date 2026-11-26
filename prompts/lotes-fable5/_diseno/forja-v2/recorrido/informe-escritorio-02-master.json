@@ -1,0 +1,14 @@
+{
+  "fecha": "2026-11-26T15:24:15.616Z",
+  "base": "http://localhost:3000",
+  "vistas": [
+    {
+      "vista": "02-master-escritorio",
+      "cortados": [],
+      "superpuestos": [],
+      "anchoDoc": 1440,
+      "anchoVista": 1440
+    }
+  ],
+  "errores": []
+}

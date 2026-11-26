@@ -1,5 +1,5 @@
 {
-  "fecha": "2026-11-26T15:15:51.643Z",
+  "fecha": "2026-11-26T15:25:28.582Z",
   "base": "http://localhost:3000",
   "vistas": [
     {
@@ -13,16 +13,7 @@
     {
       "vista": "02-master-movil",
       "cortados": [],
-      "superpuestos": [
-        [
-          "AeroFit — Evaluación de aptitud médica a",
-          "escrito por ti"
-        ],
-        [
-          "Motor RAG médico-aeronáutico",
-          "escrito por ti"
-        ]
-      ],
+      "superpuestos": [],
       "anchoDoc": 390,
       "anchoVista": 390,
       "tapados": []
@@ -120,7 +111,15 @@
     }
   ],
   "errores": [
-    "movil http://localhost:3000/app/variantes: Invalid or unexpected token",
-    "movil /app/variantes: intento 1 con error de página"
+    "movil http://localhost:3000/app/master: Invalid or unexpected token",
+    "movil /app/master: intento 1 con error de página",
+    "movil http://localhost:3000/app/staging: Invalid or unexpected token",
+    "movil /app/staging: intento 1 con error de página",
+    "movil http://localhost:3000/app/importar: Invalid or unexpected token",
+    "movil /app/importar: intento 1 con error de página",
+    "movil http://localhost:3000/app/ingesta: Invalid or unexpected token",
+    "movil /app/ingesta: intento 1 con error de página",
+    "movil http://localhost:3000/app/cuenta: Invalid or unexpected token",
+    "movil /app/cuenta: intento 1 con error de página"
   ]
 }
