@@ -1,0 +1,347 @@
+{
+  "aplicado": [
+    {
+      "tipo": "texto",
+      "id": "741fa592-7dc6-455f-a0d4-02b86def4dd9",
+      "itemId": "3b81b6b6-7d97-4fee-90e5-65f405488d8d",
+      "kind": "project",
+      "campo": "description",
+      "original": "El motor técnico abierto detrás de AeroFit: arquitectura Dual-Engine (RAG air-gapped + ML) sobre datos y normativa públicos.",
+      "propuesto": "Motor técnico abierto de AeroFit: arquitectura Dual-Engine (RAG air-gapped + ML) sobre datos y normativa públicos.",
+      "motivo": "Pone la arquitectura de datos e IA al frente y recorta el relleno.",
+      "antes": null
+    },
+    {
+      "tipo": "texto",
+      "id": "9b6f35dd-d7e8-4925-90fa-60176c4ad496",
+      "itemId": "9a535406-36b6-46b0-a7d1-3b728c137180",
+      "kind": "project",
+      "campo": "description",
+      "original": "Gestión de turnos con IA, inventario con control de vencimientos y asistente RAG anclado a la reglamentación del MINSAL.",
+      "propuesto": "Plataforma con turnos generados por IA, inventario con control de vencimientos y asistente RAG anclado a la reglamentación del MINSAL.",
+      "motivo": "Describe el producto de forma más directa y destaca los componentes de IA y datos.",
+      "antes": null
+    },
+    {
+      "tipo": "texto",
+      "id": "67f5c450-9c56-4793-9397-eeaaf2198816",
+      "itemId": "2fc1bfea-4125-4e16-8231-f0431b54a122",
+      "kind": "project",
+      "campo": "description",
+      "original": "Convierte cualquier CSV en un reporte analítico visual, 100% en el navegador (CSV→PDF).",
+      "propuesto": "Genera reportes analíticos visuales desde cualquier CSV, 100% en el navegador (CSV→PDF).",
+      "motivo": "Arranca con verbo de acción y deja visible el resultado, que es analítica de datos.",
+      "antes": null
+    },
+    {
+      "tipo": "texto",
+      "id": "0d1b5ea3-76ab-46ad-9599-c29e95dbf1a6",
+      "itemId": "17b38bd9-8563-4e7f-b35b-453cef74a9cc",
+      "kind": "project",
+      "campo": "description",
+      "original": "Asistente RAG local para consultar los PDF del curso CINF104 con Ollama, LangChain y ChromaDB.",
+      "propuesto": "Consulta los PDF del curso CINF104 mediante un asistente RAG local sobre Ollama, LangChain y ChromaDB.",
+      "motivo": "Pone primero el resultado y deja la pila de IA a la vista.",
+      "antes": null
+    },
+    {
+      "tipo": "anadir",
+      "itemId": "adaa130a-93d2-4064-9aff-0a7fe4070779",
+      "kind": "bullet",
+      "aptitudes": [
+        "C#"
+      ],
+      "texto": "Fui responsable de la arquitectura y de la implementación en Unity/C# del entorno de entrenamiento (~80 scripts de simulación en C#).",
+      "id": "d690180c-a1d9-41e2-bb87-7169c6ae4996"
+    },
+    {
+      "tipo": "anadir",
+      "itemId": "0fd04b60-4f3a-44bf-83d0-5a7882756dea",
+      "kind": "project",
+      "aptitudes": [
+        "SQL",
+        "Spark SQL"
+      ],
+      "texto": "Análisis Big Data del Mundial — Análisis de datos de la Copa Mundial con PySpark: DataFrames, RDDs y Spark SQL en un pipeline único.",
+      "id": "d545a3de-8a65-49e5-8f09-d9a881c582ed"
+    },
+    {
+      "tipo": "ocultar-aptitud",
+      "id": "ece15cfe-5599-421c-8874-41acfc97298a",
+      "itemId": "a14e7357-d6cd-4519-bccd-39200dac5cac",
+      "aptitudes": [
+        "Python",
+        "TypeScript",
+        "JavaScript",
+        "C++",
+        "HTML/CSS",
+        "PHP"
+      ],
+      "original": "Python, TypeScript, JavaScript, C++, C#, SQL, HTML/CSS, PHP",
+      "propuesto": "C#, SQL",
+      "kind": "skill",
+      "antes": null
+    },
+    {
+      "tipo": "ocultar-aptitud",
+      "id": "35bed43d-1ea4-455c-94d4-27beb60dcdd6",
+      "itemId": "a13a0f61-b469-4f30-b13f-eb3333f2b36f",
+      "aptitudes": [
+        "Hugging Face",
+        "Claude",
+        "Gemini",
+        "GPT",
+        "LM Studio",
+        "Prompt Engineering",
+        "NVIDIA/CUDA",
+        "Mistral-7B",
+        "Llama 4 Scout",
+        "Groq API",
+        "Whisper / faster-whisper"
+      ],
+      "original": "RAG, LangChain, Ollama, ChromaDB, Hugging Face, Claude, Gemini, GPT, LM Studio, Prompt Engineering, NVIDIA/CUDA, Mistral-7B, Llama 4 Scout, Groq API, Whisper / faster-whisper",
+      "propuesto": "RAG, LangChain, Ollama, ChromaDB",
+      "kind": "skill",
+      "antes": null
+    },
+    {
+      "tipo": "ocultar-aptitud",
+      "id": "493f0cf9-a325-4995-aa64-740728b31530",
+      "itemId": "1f7eb631-714d-4d9f-8e3b-0ea3dda6cb49",
+      "aptitudes": [
+        "RAG con citación obligatoria",
+        "arquitectura Dual-Engine (RAG + ML)",
+        "agentes con trazabilidad de fuentes",
+        "evaluación de alucinación y calibración"
+      ],
+      "original": "RAG con citación obligatoria, RAG air-gapped, arquitectura Dual-Engine (RAG + ML), agentes con trazabilidad de fuentes, evaluación de alucinación y calibración",
+      "propuesto": "RAG air-gapped",
+      "kind": "skill",
+      "antes": null
+    },
+    {
+      "tipo": "anadir",
+      "itemId": "173573f6-3a34-4ea3-b862-43cf916523a4",
+      "kind": "project",
+      "aptitudes": [
+        "PySpark",
+        "ESP32",
+        "IoT"
+      ],
+      "texto": "Monitor ambiental IoT con ESP32 — Estación IoT maestro-esclavo con ESP32 y analítica ambiental en PySpark.",
+      "id": "f9d77678-5f61-4fad-8b19-4414f59cf4b5"
+    },
+    {
+      "tipo": "anadir",
+      "itemId": "e2edf005-8860-4523-b7e5-5e4d511590de",
+      "kind": "bullet",
+      "aptitudes": [
+        "señales de sensores"
+      ],
+      "texto": "Construí un sistema de decisión que ingiere exámenes de laboratorio, exámenes psicológicos y señales de sensores en tiempo real (presión, ritmo cardíaco, oxigenación) y devuelve un veredicto trazable con fuentes, justificación, riesgos y derivación a especialista.",
+      "id": "cce306a5-1d06-437a-97e0-27a3b0ce2d4c"
+    },
+    {
+      "tipo": "ocultar-aptitud",
+      "id": "fb4951b7-0831-40ab-a7c8-7bb97bf90c8c",
+      "itemId": "a9a3b170-01e4-4899-8d89-7fc63dba2c4c",
+      "aptitudes": [
+        "Pandas",
+        "NumPy",
+        "scikit-learn",
+        "TensorFlow",
+        "Keras",
+        "Jupyter",
+        "Machine Learning",
+        "Data Science",
+        "Data Modeling",
+        "CRISP-DM",
+        "análisis de series de tiempo"
+      ],
+      "original": "Pandas, NumPy, scikit-learn, TensorFlow, Keras, PySpark, Spark SQL, Jupyter, Machine Learning, Data Science, Data Modeling, CRISP-DM, análisis de series de tiempo, señales de sensores",
+      "propuesto": "PySpark, Spark SQL, señales de sensores",
+      "kind": "skill",
+      "antes": null
+    },
+    {
+      "tipo": "anadir",
+      "itemId": "e8cf66b5-cef2-4038-bf4d-4274bbf96fd4",
+      "kind": "project",
+      "aptitudes": [
+        "FastAPI"
+      ],
+      "texto": "API de firma multimodal — API FastAPI que inyecta firmas manuscritas, tipográficas o de imagen en documentos PDF y DOCX.",
+      "id": "371897e7-d3d7-4c2a-88c0-54bd7f76df0f"
+    },
+    {
+      "tipo": "ocultar-aptitud",
+      "id": "cde1459a-47cd-4e9d-bded-ea84c5b2e991",
+      "itemId": "79654fe2-f574-45b7-b6f1-4693018c6f32",
+      "aptitudes": [
+        "React",
+        "Node.js",
+        "Vite",
+        "Flask",
+        "Django",
+        "Streamlit",
+        "Recharts",
+        "WebSockets",
+        "Pydantic"
+      ],
+      "original": "Next.js, React, FastAPI, Node.js, Vite, Flask, Django, Streamlit, Recharts, WebSockets, Pydantic",
+      "propuesto": "Next.js, FastAPI",
+      "kind": "skill",
+      "antes": null
+    },
+    {
+      "tipo": "anadir",
+      "itemId": "5ac10a8a-b771-47d8-9086-b87f56c34b0f",
+      "kind": "bullet",
+      "aptitudes": [
+        "Docker"
+      ],
+      "texto": "Desarrollé software open-source para el servidor de un videojuego: levanté servicios, integré componentes con Docker, documenté y propuse mejoras.",
+      "id": "92707a0a-676d-4192-ac54-77246b494a07"
+    },
+    {
+      "tipo": "anadir",
+      "itemId": "c6385b38-048c-4204-ab8d-0943549b2a2e",
+      "kind": "bullet",
+      "aptitudes": [
+        "Git",
+        "sprints",
+        "Git en equipo",
+        "code review"
+      ],
+      "texto": "Lideré un equipo de 6 personas con Scrum —sprints, Git en equipo y code review—, reportando a un Product Owner y a un stakeholder real (profesor y director de los laboratorios de química).",
+      "id": "245ec9d8-7d4d-44c1-a829-e7705398da9f"
+    },
+    {
+      "tipo": "ocultar-aptitud",
+      "id": "b4e97a76-6764-41bc-80e5-0738ba21bc09",
+      "itemId": "19e28e37-717a-4307-8656-84b688cdd30d",
+      "aptitudes": [
+        "Linux",
+        "PostgreSQL",
+        "Vercel",
+        "contenedores",
+        "bases vectoriales",
+        "despliegue reproducible"
+      ],
+      "original": "Docker, Git, Linux, PostgreSQL, Supabase, Vercel, contenedores, bases vectoriales, despliegue reproducible",
+      "propuesto": "Docker, Git, Supabase",
+      "kind": "skill",
+      "antes": null
+    },
+    {
+      "tipo": "ocultar-aptitud",
+      "id": "c9f1274f-62ca-4164-bb6c-8b35c8da46f3",
+      "itemId": "d9d23c57-4c95-4921-a976-38acf631b5d3",
+      "aptitudes": [
+        "Meta Quest / XR Toolkit",
+        "Arduino",
+        "ESP-NOW"
+      ],
+      "original": "Unity 6, Meta Quest / XR Toolkit, ESP32, Arduino, ESP-NOW, IoT",
+      "propuesto": "Unity 6, ESP32, IoT",
+      "kind": "skill",
+      "antes": null
+    },
+    {
+      "tipo": "ocultar-grupo",
+      "id": "26fa71e2-bb5d-45bf-87f6-95344259423b",
+      "itemId": "f0926e2d-0268-4c71-9086-c7e1e0b02a8a",
+      "aptitudes": [
+        "Ethical Hacking",
+        "Penetration Testing",
+        "Vulnerability Assessment"
+      ],
+      "texto": "Ciberseguridad: Ethical Hacking, Penetration Testing, Vulnerability Assessment",
+      "kind": "skill"
+    },
+    {
+      "tipo": "ocultar-grupo",
+      "id": "30093e18-ec4b-44e4-9c08-8b83d6fa3ccf",
+      "itemId": "3e08b49f-7fe1-4044-a1e8-d7986e26c66a",
+      "aptitudes": [
+        "SDLC",
+        "Arquitectura de software",
+        "UML",
+        "OOP",
+        "Requirements Analysis",
+        "Test-Driven Development",
+        "Software Testing",
+        "Quality Assurance",
+        "Debugging"
+      ],
+      "texto": "Ingeniería de software: SDLC, Arquitectura de software, UML, OOP, Requirements Analysis, Test-Driven Development, Software Testing, Quality Assurance, Debugging",
+      "kind": "skill"
+    },
+    {
+      "tipo": "ocultar-aptitud",
+      "id": "d4ef5515-c6ae-4640-859e-15e9abe7e4c0",
+      "itemId": "c3d3a89b-c72a-44a2-9b96-7e86f9b7bcdb",
+      "aptitudes": [
+        "Scrum (Scrum Master)",
+        "metodologías ágiles",
+        "documentación técnica y diagramas estructurales"
+      ],
+      "original": "Scrum (Scrum Master), metodologías ágiles, sprints, Git en equipo, code review, documentación técnica y diagramas estructurales",
+      "propuesto": "sprints, Git en equipo, code review",
+      "kind": "skill",
+      "antes": null
+    },
+    {
+      "tipo": "ocultar-grupo",
+      "id": "db5a605e-6ac6-48ec-ba51-853c84cf5fc3",
+      "itemId": "e7d36734-b71e-45c0-86af-c6ef67bc87da",
+      "aptitudes": [
+        "VQE (Variational Quantum Eigensolver)",
+        "química cuántica",
+        "QML (Quantum Machine Learning)",
+        "hardware NISQ — en investigación"
+      ],
+      "texto": "Computación cuántica: VQE (Variational Quantum Eigensolver), química cuántica, QML (Quantum Machine Learning), hardware NISQ — en investigación",
+      "kind": "skill"
+    },
+    {
+      "tipo": "ocultar-grupo",
+      "id": "bdf438dc-0cf8-4572-8d6d-1cde447d74e7",
+      "itemId": "d5727ae1-5361-4090-98c6-4f48b6a120dc",
+      "aptitudes": [
+        "VS Code",
+        "Visual Studio",
+        "Antigravity",
+        "Jupyter"
+      ],
+      "texto": "Entorno e IDEs: VS Code, Visual Studio, Antigravity, Jupyter",
+      "kind": "skill"
+    }
+  ],
+  "descartado": [
+    {
+      "id": "56b24e62-8101-43fe-96c5-e921703f27c2",
+      "propuesto": "Ingeniero Civil en Computación en su último año (UNAB), especializado en IA aplicada a dominios regulados. Construyo sistemas RAG anclados a normativa real —salud y aviación— con respuestas verificables y trazables a su fuente. He liderado equipos con Scrum y entregado productos usados por clientes reales. Busco un rol de Ingeniero de Datos e IA donde el rigor de la fuente importe.",
+      "razon": "se pierden nombres del original (ai/ml)",
+      "nuevas": {
+        "cifras": [],
+        "entidades": []
+      },
+      "perdidas": {
+        "cifras": [],
+        "entidades": [
+          "ai/ml"
+        ]
+      }
+    }
+  ],
+  "notas": "Los ids provienen de la lista a afinar, no de la memoria, aunque los textos coinciden con el master. No toqué AeroFit, el laboratorio VR ni el panel de productividad: ya eran directos o aportan poco al rol de datos e IA.",
+  "uso": {
+    "tarea": "afinar",
+    "entrada": 17640,
+    "salida": 1759,
+    "cacheados": 16463,
+    "escritosCache": 0,
+    "en": "2026-11-26T17:37:04.721Z"
+  }
+}

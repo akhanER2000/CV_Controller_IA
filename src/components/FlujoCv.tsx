@@ -1,6 +1,6 @@
 // Sin "use client": solo lo importa el editor (que ya es cliente), y así sus
 // props pueden ser funciones sin el aviso de props serializables.
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { StatusChip, type EstadoChip } from "@/components/ui/StatusChip";
 import { useT } from "@/lib/i18n";
 import type { AutofitInfo, EstadoDoc, Fit, FitFalta, FitTipoFalta, PropEnLinea } from "@/components/flujo-cv";
@@ -49,6 +49,8 @@ export function GuiaAjuste(props: {
   avisos?: readonly string[];
   onProponer: () => void;
   onSiguiente: () => void;
+  /** lo que va en el hueco «acciones de IA» (Afinar con IA) */
+  ia?: ReactNode;
 }) {
   const t = useT();
   const [abierto, setAbierto] = useState(false);
@@ -197,7 +199,9 @@ export function GuiaAjuste(props: {
       </button>
       {/* HUECO RESERVADO para las acciones de IA (lo llena el lote siguiente).
           Sin lógica: vacío no ocupa sitio (:empty en FlujoCv.css). */}
-      <span className="flu-ia" id="edAccionesIA" data-ranura="acciones-ia" aria-label={t("editor.edAccionesIA")} />
+      <span className="flu-ia" id="edAccionesIA" data-ranura="acciones-ia" aria-label={t("editor.edAccionesIA")}>
+        {props.ia}
+      </span>
       {fit && (
         <span className="flu-pend">
           {pendientes > 0 ? (

@@ -1,6 +1,7 @@
 // Sin "use client": solo lo importa la pantalla del editor (ya cliente).
 import Link from "next/link";
 import { GuiaAjuste } from "@/components/FlujoCv";
+import { AfinarIA } from "./AfinarIA";
 import { Desplegable, Kbd } from "./Desplegable";
 import { ATAJOS, TECLA } from "./atajos";
 import { alternarOculto } from "./vista-previa";
@@ -129,6 +130,7 @@ export function BarraEditor({ ed }: { ed: Editor }) {
             ed.runFit();
           }}
           onSiguiente={ed.irASiguiente}
+          ia={<AfinarIA ed={ed} />}
         />
         <span className="ed-bar-sp" />
         <button

@@ -1735,6 +1735,8 @@ export function useEditorVariante(variantId: string) {
 
   return {
     variantId, t, paginasTxt, loading, meta, master, items, masterById, vItemByMaster, bulletsForWork,
+    // afinar con IA (useAfinar): pinta la variante que devuelve el servidor y avisa
+    setItems, flash,
     // barra
     onNameBlur, stMsg, stAccent, objetivo, elegirObjetivo, downloadPdf, doDeleteVariant,
     confirmDelete, setConfirmDelete, masAbierto, setMasAbierto, atajosAbierto, setAtajosAbierto,
