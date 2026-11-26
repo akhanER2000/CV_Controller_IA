@@ -1,5 +1,6 @@
 import { test, expect, type Page, type APIRequestContext } from "@playwright/test";
 import { createClient } from "@supabase/supabase-js";
+import { createHash } from "node:crypto";
 
 /**
  * AFINAR EN VIVO (remate-afinar) — contra el dev:local del 3000 y el Supabase LOCAL:
@@ -73,6 +74,15 @@ async function forma(req: APIRequestContext, id: string) {
   return { items, aviso: j.aviso ?? null, crudo: j.items };
 }
 
+/** Huella del documento (DA-C8): sha256 del texto RE-PARSEADO del PDF por /api/cv + páginas.
+ *  Los bytes del PDF no sirven: cambian en cada render. */
+async function huella(req: APIRequestContext, variantId: string) {
+  const r = await req.post("/api/cv", { data: { variantId, as: "text" } });
+  expect(r.ok(), await r.text()).toBeTruthy();
+  const j = (await r.json()) as { text: string; pages: number };
+  return `${createHash("sha256").update(j.text).digest("hex").slice(0, 16)}·${j.pages}p`;
+}
+
 test("afinar en vivo · aviso guardado, confirmación de sin respaldo, revertir y PDF", async ({ page }) => {
   test.setTimeout(240_000);
   const supabaseVisto = new Set<string>();
@@ -116,6 +126,7 @@ test("afinar en vivo · aviso guardado, confirmación de sin respaldo, revertir 
 
   const base = await forma(req, vid);
   expect(base.aviso, "el aviso queda guardado con la variante").toBe(AVISO);
+  const huellaBase = await huella(req, vid);
 
   await page.goto(`/app/variantes/${vid}`);
   await expect(page.locator("#edAfinar")).toBeVisible({ timeout: 60_000 });
@@ -158,6 +169,8 @@ test("afinar en vivo · aviso guardado, confirmación de sin respaldo, revertir 
   const revertido = await forma(req, vid);
   expect(revertido.items, "revertir deja la variante como estaba").toEqual(base.items);
   expect(revertido.crudo.filter((i) => i.override_origin === "ai_rephrased" && i.override_data && Object.keys(i.override_data).length).length).toBe(0);
+  const huellaRevertida = await huella(req, vid);
+  expect(huellaRevertida, "tras revertir, el texto del PDF es el de antes de afinar").toBe(huellaBase);
 
   // ── 4 · Descargar el PDF ──
   const descarga = page.waitForEvent("download", { timeout: 120_000 });
@@ -167,5 +180,6 @@ test("afinar en vivo · aviso guardado, confirmación de sin respaldo, revertir 
 
   // ── 5 · El navegador solo habló con el Supabase local ──
   expect([...supabaseVisto], "peticiones a Supabase").toEqual(["127.0.0.1:55321"]);
+  console.log(`[afinar-vivo] huella antes ${huellaBase} · tras revertir ${huellaRevertida}`);
   console.log(`[afinar-vivo] textos afinados por IA: ${nTexto} · supabase: ${[...supabaseVisto].join(", ")}`);
 });
