@@ -1,6 +1,9 @@
 import { Aurora } from "@/components/Aurora";
 import { UserMenu } from "@/components/UserMenu";
 import { IngestaEnCurso } from "@/components/IngestaEnCurso";
+import { BarraSuperior } from "@/components/ui/BarraSuperior";
+import { Transicion } from "@/components/ui/Transicion";
+import "@/components/ui/ui.css";
 
 /*
  * Layout del área /app.
@@ -38,6 +41,11 @@ import { IngestaEnCurso } from "@/components/IngestaEnCurso";
  *   avanza mientras el usuario navega por donde quiera.
  *   No pinta nada cuando no hay trabajo en marcha.
  *
+ * · <BarraSuperior> — Forja v2: ruta, «Ir a…» (Ctrl/⌘+K) y la cuenta. Va en
+ *   el flujo de .sh-main, encima de la pantalla, no fija (DA-SV2).
+ * · <Transicion> — la entrada de cada página (clave = ruta; sin movimiento con
+ *   prefers-reduced-motion).
+ *
  * La protección de sesión la hace el middleware de Supabase.
  */
 export default function AppLayout({ children }: { children: React.ReactNode }) {
@@ -47,7 +55,10 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       <UserMenu />
       <IngestaEnCurso />
       {/* .sh-main desplaza cada pantalla lo que ocupa el lateral (UserMenu.css). */}
-      <div className="sh-main">{children}</div>
+      <div className="sh-main">
+        <BarraSuperior />
+        <Transicion>{children}</Transicion>
+      </div>
     </>
   );
 }

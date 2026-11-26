@@ -118,6 +118,16 @@ const COMPARTIDOS = new Map<string, string>([
   ["--copper", "metal de atmósfera: solo vive en el shader, nunca en la UI"],
   ["--silver", "ídem"],
   ["--steel", "ídem"],
+  // Forja v2: los materiales de tarjeta rellenos son el MISMO objeto en los dos
+  // temas (una tarjeta naranja o un folio crema no cambian con la luz de la sala).
+  ["--brasa-fill-a", "Forja v2 · relleno de brasa, material compartido: encima siempre tinta"],
+  ["--brasa-fill-b", "ídem · el extremo oscuro del degradado"],
+  ["--ink-on-brasa-muted", "ídem · tinta secundaria sobre el relleno de brasa"],
+  ["--crema", "Forja v2 · el folio crema es material compartido entre temas"],
+  ["--crema-hondo", "ídem · pozos dentro del folio"],
+  ["--ink-on-crema", "ídem · tinta sobre folio"],
+  ["--ink-on-crema-muted", "ídem · tinta secundaria sobre folio"],
+  ["--accent-on-crema", "ídem · la brasa templada sobre folio"],
 ]);
 
 function sigueElTema(nombre: string, vistos = new Set<string>()): boolean {
@@ -457,5 +467,52 @@ describe("porcelana · regresiones concretas", () => {
     // y layout.tsx solo acepta "light"/"dark": si alguien lo hubiera montado, habría
     // pisado la preferencia real del usuario con un valor que el arranque descarta.
     expect(() => lee("../src/components/ThemeToggle.tsx")).toThrow();
+  });
+});
+
+/* ══════════════════════════════════════════════════════════════════════════
+   FORJA v2 · los materiales de tarjeta (lote sistema-visual-y-claude)
+   Cada par texto/fondo que usan los componentes de src/components/ui, medido
+   sobre los valores LEÍDOS de globals.css.
+   ══════════════════════════════════════════════════════════════════════════ */
+describe("forja v2 · materiales de tarjeta en AA", () => {
+  const hex = (n: string) => resolver(n, "dark");
+  const par = (fg: string, bg: string) => contrastRatio(hex(fg), hex(bg));
+
+  it("1 · tinta y tinta secundaria sobre los dos extremos del relleno de brasa", () => {
+    for (const bg of ["--brasa-fill-a", "--brasa-fill-b"]) {
+      for (const fg of ["--ink-on-brasa", "--ink-on-brasa-muted"]) {
+        const r = par(fg, bg);
+        expect(meetsAA(r), `${fg} sobre ${bg}: ${ratioText(r)}`).toBe(true);
+      }
+    }
+  });
+
+  it("2 · tinta de folio sobre crema y crema honda; el acento solo sobre crema", () => {
+    for (const bg of ["--crema", "--crema-hondo"]) {
+      for (const fg of ["--ink-on-crema", "--ink-on-crema-muted"]) {
+        const r = par(fg, bg);
+        expect(meetsAA(r), `${fg} sobre ${bg}: ${ratioText(r)}`).toBe(true);
+      }
+    }
+    expect(meetsAA(par("--accent-on-crema", "--crema"))).toBe(true);
+  });
+
+  it("3 · el texto del tema pasa AA sobre la tarjeta grafito, en los dos temas", () => {
+    for (const tema of ["dark", "light"] as const) {
+      for (const bg of ["--forja-card-a", "--forja-card-b"]) {
+        for (const fg of ["--text", "--text-muted", "--text-subtle", "--accent-text", "--oro-text"]) {
+          const r = ratio(fg, bg, tema);
+          expect(meetsAA(r), `${fg} sobre ${bg} (${tema}): ${ratioText(r)}`).toBe(true);
+        }
+      }
+    }
+  });
+
+  it("4 · los materiales compartidos NO tienen gemelo claro (son el mismo objeto)", () => {
+    for (const n of ["--brasa-fill-a", "--crema", "--ink-on-crema"]) {
+      expect(CLARO.has(n), n).toBe(false);
+      expect(BASE.has(n), n).toBe(true);
+    }
   });
 });

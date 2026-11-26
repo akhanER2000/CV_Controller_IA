@@ -1,0 +1,16 @@
+import { chromium } from "@playwright/test";
+const b = await chromium.launch(); const p = await b.newPage({ viewport: { width: 1440, height: 900 } });
+const errs=[]; p.on("pageerror", e=>errs.push(e.message)); p.on("console", m=>{ if(m.type()==="error") errs.push("console: "+m.text().slice(0,200)); });
+await p.goto("http://localhost:3107/app/master", { waitUntil: "networkidle" });
+await p.waitForTimeout(500);
+await p.keyboard.press("Control+k");
+console.log("activo tras Ctrl+K:", await p.evaluate(() => document.activeElement?.getAttribute("role")));
+await p.keyboard.type("vari");
+await p.waitForTimeout(300);
+console.log("opciones:", await p.locator('[role="option"]').allInnerTexts());
+await p.screenshot({ path: process.argv[2] });
+await p.keyboard.press("Enter"); await p.waitForURL("**/app/variantes", { timeout: 60000 });
+console.log("url:", p.url());
+console.log("headers visibles:", await p.evaluate(() => [...document.querySelectorAll(".c-header")].map(h => getComputedStyle(h).display)));
+console.log(errs.join("\n") || "sin errores");
+await b.close();

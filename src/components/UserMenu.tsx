@@ -1,7 +1,15 @@
 "use client";
 
 /* ============================================================================
-   UserMenu — EL LATERAL del shell (rediseño "Forja").
+   UserMenu — EL LATERAL del shell (Forja v2) + CuentaMenu (la cuenta, que
+   ahora vive en la barra superior: src/components/ui/BarraSuperior.tsx).
+
+   Forja v2 (lote sistema-visual-y-claude): cada destino lleva su icono en una
+   pastilla; la del activo va RELLENA de brasa. La tarjeta «Una oferta nueva»
+   es un bloque relleno de brasa con botón de tinta. La identidad sube a la
+   barra superior (CuentaMenu); el lateral queda para navegar.
+
+   Historia (rediseño "Forja"):
 
    Antes era una barra fija arriba a la derecha (idioma, tema, avatar). Ahora es
    el lateral flotante de toda el área /app: la navegación principal vive aquí
@@ -11,7 +19,7 @@
 
    De arriba abajo:
      · marca Corpus → /app
-     · identidad     avatar (anillo de oro) + nombre → menú Perfil · Ajustes · Salir
+     · identidad     → CuentaMenu, en la barra superior (Forja v2)
      · navegación    Trabajo: Panel · Master (└ Revisión) · Variantes ·
                      Fuentes (└ Volcar material) · Cuenta: Ajustes
      · tarjeta       «Una oferta nueva» → Variantes (el único botón de brasa)
@@ -33,6 +41,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { supabaseEnabled } from "@/lib/supabase/config";
 import { useLang, useT } from "@/lib/i18n";
+import { ICONOS } from "@/components/ui/Icono";
 import "./UserMenu.css";
 
 type Theme = "dark" | "light";
@@ -53,17 +62,7 @@ function initialsFrom(name: string | null, email: string | null): string {
 }
 
 /* ── Navegación ──────────────────────────────────────────────────────────────
-   Iconos propios: 18px, trazo 1.5, currentColor — afinados al peso de Geist 500
-   a 13px, no un set genérico. */
-const ICONOS = {
-  panel: "M2 2h6v6H2z M12 2h6v6h-6z M2 12h6v6H2z M12 12h6v6h-6z",
-  master: "M4 2h8l4 4v12H4z M7 9h6 M7 12h6 M7 15h4",
-  variantes: "M10 2l8 4-8 4-8-4z M2 10l8 4 8-4 M2 14l8 4 8-4",
-  fuentes: "M2 5h6l2 2h8v10H2z",
-  ajustes: "M2 5h16 M2 10h16 M2 15h16 M6 3v4 M13 8v4 M8 13v4",
-  mas: "M10 4v12 M4 10h12",
-} as const;
-
+   Iconos: el set propio de Corpus (src/components/ui/Icono.tsx). */
 function Icono({ d }: { d: string }) {
   return (
     <svg className="lt-ico" width="18" height="18" viewBox="0 0 20 20" aria-hidden="true" focusable="false">
@@ -137,13 +136,26 @@ const TXT = {
   },
 } as const;
 
-export function UserMenu() {
-  const router = useRouter();
-  const pathname = usePathname() || "/app";
-  const t = useT();
-  const { lang, setLang } = useLang();
+/** Aplica el tema al documento y lo recuerda en este navegador. */
+function aplicarTema(next: Theme) {
+  document.documentElement.dataset.theme = next;
+  try {
+    localStorage.setItem(THEME_KEY, next);
+  } catch {
+    /* noop */
+  }
+}
 
-  const [theme, setTheme] = useState<Theme>("dark");
+/* ══════════════════════════════════════════════════════════════════════════
+   CuentaMenu — identidad + menú Perfil · Ajustes · Cerrar sesión.
+   Vive en la barra superior. Es quien LEE user_settings (nombre, foto y tema
+   guardado) y reconcilia el tema con lo que el usuario eligió en otro equipo.
+   ══════════════════════════════════════════════════════════════════════════ */
+export function CuentaMenu() {
+  const router = useRouter();
+  const t = useT();
+  const { lang } = useLang();
+
   const [open, setOpen] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
 
@@ -156,47 +168,7 @@ export function UserMenu() {
   const buttonRef = useRef<HTMLButtonElement>(null);
   const itemRefs = useRef<Array<HTMLAnchorElement | HTMLButtonElement | null>>([]);
 
-  // ── Tema: aplica localStorage al instante, luego reconcilia con user_settings ──
-  const applyTheme = useCallback((next: Theme) => {
-    document.documentElement.dataset.theme = next;
-    setTheme(next);
-  }, []);
-
-  useEffect(() => {
-    try {
-      const cached = localStorage.getItem(THEME_KEY);
-      if (isTheme(cached)) applyTheme(cached);
-      else applyTheme((document.documentElement.dataset.theme as Theme) || "dark");
-    } catch {
-      /* noop */
-    }
-  }, [applyTheme]);
-
-  const toggleTheme = useCallback(() => {
-    const next: Theme = theme === "dark" ? "light" : "dark";
-    applyTheme(next);
-    try {
-      localStorage.setItem(THEME_KEY, next);
-    } catch {
-      /* noop */
-    }
-    if (supabaseEnabled) {
-      const sb = createClient();
-      sb.auth
-        .getUser()
-        .then(({ data: { user } }) => {
-          if (!user) return;
-          return sb
-            .from("user_settings")
-            .upsert({ user_id: user.id, theme: next }, { onConflict: "user_id" });
-        })
-        .catch(() => {
-          /* best-effort */
-        });
-    }
-  }, [theme, applyTheme]);
-
-  // ── Perfil: usuario + ajustes (avatar/nombre) al montar y cuando algo cambie ──
+  // ── Perfil: usuario + ajustes (avatar/nombre/tema) al montar y cuando algo cambie ──
   const loadProfile = useCallback(async () => {
     if (!supabaseEnabled) return;
     const sb = createClient();
@@ -217,14 +189,7 @@ export function UserMenu() {
       .maybeSingle();
 
     setDisplayName((data?.display_name as string | null) ?? null);
-    if (isTheme(data?.theme)) {
-      applyTheme(data.theme);
-      try {
-        localStorage.setItem(THEME_KEY, data.theme);
-      } catch {
-        /* noop */
-      }
-    }
+    if (isTheme(data?.theme)) aplicarTema(data.theme);
 
     const path = data?.avatar_url as string | null;
     if (path) {
@@ -233,7 +198,7 @@ export function UserMenu() {
     } else {
       setAvatarSrc(null);
     }
-  }, [applyTheme]);
+  }, []);
 
   useEffect(() => {
     void loadProfile();
@@ -332,6 +297,137 @@ export function UserMenu() {
   const settingsIdx = idx++;
   const signOutIdx = showSignOut ? idx++ : -1;
 
+  return (
+    <div className="um-menu lt-id" ref={rootRef}>
+      <button
+        type="button"
+        ref={buttonRef}
+        className="lt-idbtn"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        aria-label={open ? t("menu.close") : t("menu.open")}
+        onClick={() => setOpen((v) => !v)}
+        onKeyDown={onButtonKeyDown}
+      >
+        <span className="um-av" aria-hidden="true">
+          {avatarSrc ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={avatarSrc} alt="" />
+          ) : (
+            <span>{initials}</span>
+          )}
+        </span>
+        <span className="lt-idtxt">
+          <b>{displayName || (email ? email.split("@")[0] : "Corpus")}</b>
+          <span>{email || tx.invitado}</span>
+        </span>
+      </button>
+
+      {open ? (
+        <div className="um-pop" role="menu" aria-label={t("menu.open")} onKeyDown={onMenuKeyDown}>
+          {(displayName || email) && (
+            <div className="um-id" role="presentation">
+              {displayName ? <b>{displayName}</b> : null}
+              {email ? <span>{email}</span> : null}
+            </div>
+          )}
+
+          <Link
+            href="/app/cuenta"
+            role="menuitem"
+            className="um-item"
+            ref={(el) => {
+              itemRefs.current[profileIdx] = el;
+            }}
+            onClick={() => setOpen(false)}
+          >
+            {t("menu.profile")}
+          </Link>
+
+          <Link
+            href="/app/ajustes"
+            role="menuitem"
+            className="um-item"
+            ref={(el) => {
+              itemRefs.current[settingsIdx] = el;
+            }}
+            onClick={() => setOpen(false)}
+          >
+            {t("menu.settings")}
+          </Link>
+
+          {showSignOut ? (
+            <>
+              <hr className="um-sep" />
+              <button
+                type="button"
+                role="menuitem"
+                className="um-item um-item--danger"
+                ref={(el) => {
+                  itemRefs.current[signOutIdx] = el;
+                }}
+                disabled={signingOut}
+                onClick={signOut}
+              >
+                {signingOut ? t("menu.signingOut") : t("menu.signout")}
+              </button>
+            </>
+          ) : null}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   UserMenu — EL LATERAL: marca, navegación, tarjeta de la oferta, idioma y tema.
+   ══════════════════════════════════════════════════════════════════════════ */
+export function UserMenu() {
+  const pathname = usePathname() || "/app";
+  const t = useT();
+  const { lang, setLang } = useLang();
+  const [theme, setTheme] = useState<Theme>("dark");
+
+  // ── Tema: localStorage al instante; y escucha html[data-theme], porque quien
+  //    reconcilia con user_settings es CuentaMenu (y Ajustes también lo cambia).
+  useEffect(() => {
+    try {
+      const cached = localStorage.getItem(THEME_KEY);
+      if (isTheme(cached)) document.documentElement.dataset.theme = cached;
+    } catch {
+      /* noop */
+    }
+    const leer = () => {
+      const v = document.documentElement.dataset.theme;
+      setTheme(isTheme(v) ? v : "dark");
+    };
+    leer();
+    const obs = new MutationObserver(leer);
+    obs.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+    return () => obs.disconnect();
+  }, []);
+
+  const toggleTheme = useCallback(() => {
+    const next: Theme = theme === "dark" ? "light" : "dark";
+    aplicarTema(next);
+    if (supabaseEnabled) {
+      const sb = createClient();
+      sb.auth
+        .getUser()
+        .then(({ data: { user } }) => {
+          if (!user) return;
+          return sb
+            .from("user_settings")
+            .upsert({ user_id: user.id, theme: next }, { onConflict: "user_id" });
+        })
+        .catch(() => {
+          /* best-effort */
+        });
+    }
+  }, [theme]);
+
+  const tx = TXT[lang === "en" ? "en" : "es"];
+
   function enlace(item: Item) {
     const on = item.activo(pathname);
     const hijoOn = item.hijos?.some((h) => h.activo(pathname)) ?? false;
@@ -345,7 +441,9 @@ export function UserMenu() {
           aria-current={on ? "page" : undefined}
           title={t(item.key)}
         >
-          <Icono d={ICONOS[item.icon]} />
+          <span className="lt-pastilla" aria-hidden="true">
+            <Icono d={ICONOS[item.icon]} />
+          </span>
           <span className="lt-txt">{t(item.key)}</span>
         </Link>
         {item.hijos ? (
@@ -377,86 +475,6 @@ export function UserMenu() {
         Corpus
       </Link>
 
-      {/* Identidad + menú de cuenta */}
-      <div className="um-menu lt-id" ref={rootRef}>
-        <button
-          type="button"
-          ref={buttonRef}
-          className="lt-idbtn"
-          aria-haspopup="menu"
-          aria-expanded={open}
-          aria-label={open ? t("menu.close") : t("menu.open")}
-          onClick={() => setOpen((v) => !v)}
-          onKeyDown={onButtonKeyDown}
-        >
-          <span className="um-av" aria-hidden="true">
-            {avatarSrc ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={avatarSrc} alt="" />
-            ) : (
-              <span>{initials}</span>
-            )}
-          </span>
-          <span className="lt-idtxt">
-            <b>{displayName || (email ? email.split("@")[0] : "Corpus")}</b>
-            <span>{email || tx.invitado}</span>
-          </span>
-        </button>
-
-        {open ? (
-          <div className="um-pop" role="menu" aria-label={t("menu.open")} onKeyDown={onMenuKeyDown}>
-            {(displayName || email) && (
-              <div className="um-id" role="presentation">
-                {displayName ? <b>{displayName}</b> : null}
-                {email ? <span>{email}</span> : null}
-              </div>
-            )}
-
-            <Link
-              href="/app/cuenta"
-              role="menuitem"
-              className="um-item"
-              ref={(el) => {
-                itemRefs.current[profileIdx] = el;
-              }}
-              onClick={() => setOpen(false)}
-            >
-              {t("menu.profile")}
-            </Link>
-
-            <Link
-              href="/app/ajustes"
-              role="menuitem"
-              className="um-item"
-              ref={(el) => {
-                itemRefs.current[settingsIdx] = el;
-              }}
-              onClick={() => setOpen(false)}
-            >
-              {t("menu.settings")}
-            </Link>
-
-            {showSignOut ? (
-              <>
-                <hr className="um-sep" />
-                <button
-                  type="button"
-                  role="menuitem"
-                  className="um-item um-item--danger"
-                  ref={(el) => {
-                    itemRefs.current[signOutIdx] = el;
-                  }}
-                  disabled={signingOut}
-                  onClick={signOut}
-                >
-                  {signingOut ? t("menu.signingOut") : t("menu.signout")}
-                </button>
-              </>
-            ) : null}
-          </div>
-        ) : null}
-      </div>
-
       <nav className="lt-nav" aria-label={tx.aria}>
         <p className="lt-grupo">{tx.trabajo}</p>
         <ul className="lt-ul">{TRABAJO.map(enlace)}</ul>
@@ -464,11 +482,11 @@ export function UserMenu() {
         <ul className="lt-ul">{CUENTA.map(enlace)}</ul>
       </nav>
 
-      {/* La única llamada de brasa del lateral */}
+      {/* La tarjeta de la oferta: bloque RELLENO de brasa, botón de tinta. */}
       <div className="lt-cta">
         <p className="lt-cta-t">{tx.ofertaT}</p>
         <p className="lt-cta-b">{tx.ofertaB}</p>
-        <Link href="/app/variantes" className="c-btn c-btn--patina lt-cta-btn" title={tx.ofertaBtn}>
+        <Link href="/app/variantes" className="lt-cta-btn" title={tx.ofertaBtn}>
           <Icono d={ICONOS.mas} />
           <span className="lt-txt">{tx.ofertaBtn}</span>
         </Link>

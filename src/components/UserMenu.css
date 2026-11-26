@@ -1,19 +1,23 @@
 /* ============================================================================
-   UserMenu.css — se importa desde el layout de /app, así que sus reglas son
-   globales dentro del área de la app.
+   UserMenu.css — EL SHELL de /app (Forja v2): lateral flotante, barra superior
+   y menú de cuenta. Se importa desde UserMenu.tsx, que monta el layout de /app,
+   así que sus reglas son globales dentro del área de la app.
 
    1) Oculta los duplicados ESTÁTICOS que cada pantalla sigue pintando en su
       propio <header class="c-header">:
         · .hd-av   — el avatar "DG" de maqueta
-        · .hd-lang — el toggle ES/EN de maqueta (mi barra trae el real)
-        · .hd-right .hd-nav — el enlace "Ajustes" del extremo derecho (mi menú ya
-          lo ofrece). Se acota a .hd-right para NO tocar la nav principal de la
-          izquierda, que también usa .hd-nav pero cuelga fuera de .hd-right.
+        · .hd-lang — el toggle ES/EN de maqueta (el lateral trae el real)
+        · .hd-right .hd-nav — el enlace "Ajustes" del extremo derecho (el menú
+          de cuenta ya lo ofrece). Se acota a .hd-right para NO tocar la nav
+          principal de la izquierda, que también usa .hd-nav.
       Mayor especificidad que las definiciones sueltas de los *.css de pantalla
       (+ !important), así que gana sin depender del orden de carga.
-   2) Monta EL LATERAL (rediseño "Forja"): navegación, identidad, la tarjeta de
-      la oferta y los toggles de idioma y tema. Ya no hay barra fija arriba a la
-      derecha, así que el solape con el .hd-right de /app/ingesta desaparece.
+   2) EL LATERAL: vidrio flotante con pastillas de icono; el destino activo
+      lleva la pastilla RELLENA de brasa. La tarjeta de la oferta es un bloque
+      relleno de brasa con botón de tinta.
+   3) LA BARRA SUPERIOR (.tb-*): ruta, búsqueda «Ir a…» y cuenta. En el flujo,
+      no fija (DA-SV2).
+   Medidas: maqueta prompts/lotes-fable5/_diseno/forja-v2/01-panel.png.
    ============================================================================ */
 
 .c-header .hd-av,
@@ -22,12 +26,6 @@
   display: none !important;
 }
 
-/* ── EL LATERAL (rediseño "Forja") ─────────────────────────────────────────
-   Un panel flotante de vidrio ahumado sobre la aurora, separado del borde: la
-   atmósfera se ve ALREDEDOR y a través de él. El contenido de cada pantalla
-   vive en .sh-main (layout.tsx), desplazado lo que ocupa el lateral.
-   Medidas: 248px de ancho, 16px de aire al borde (las de la maqueta FigCraft
-   prompts/lotes-fable5/_diseno/rediseno-01-shell-panel.png). */
 :root {
   --lt-w: 248px;
   --lt-gap: 16px;
@@ -44,7 +42,27 @@
 .sh-main .c-header .c-logo {
   display: none !important;
 }
+/* TRANSITORIO (hasta que el lote siguiente rehaga las pantallas): un <header>
+   de pantalla que solo traía logo, nav y avatar/idioma —todo duplicado por el
+   shell— se queda como una franja vacía de 64px bajo la barra superior. Si no
+   le queda NADA propio, se quita, y su altura deja de contar para los
+   pegajosos de la pantalla (--header-h: 0). Un header con migas, título o
+   acciones no casa con el selector y sigue igual. */
+.sh-main
+  .c-header:not(:has(> .c-container > :not(.c-logo, .hd-nav, .hd-right))):not(
+    :has(.hd-right > :not(.hd-av, .hd-lang, .hd-nav))
+  ) {
+  display: none;
+}
+.sh-main:has(
+    .c-header:not(:has(> .c-container > :not(.c-logo, .hd-nav, .hd-right))):not(
+        :has(.hd-right > :not(.hd-av, .hd-lang, .hd-nav))
+      )
+  ) {
+  --header-h: 0px;
+}
 
+/* ── EL LATERAL ──────────────────────────────────────────────────────────── */
 .lt-side {
   position: fixed;
   z-index: var(--lt-z);
@@ -54,13 +72,13 @@
   width: var(--lt-w);
   display: flex;
   flex-direction: column;
-  padding: 18px 14px 14px;
-  background: color-mix(in srgb, var(--surface) 80%, transparent);
-  backdrop-filter: blur(24px) saturate(1.2);
-  -webkit-backdrop-filter: blur(24px) saturate(1.2);
-  border: 1px solid color-mix(in srgb, var(--text) 9%, transparent);
-  border-radius: 18px;
-  box-shadow: var(--shadow-2);
+  padding: 22px 12px 14px;
+  background: var(--glass-bg);
+  backdrop-filter: blur(var(--glass-blur)) saturate(1.2);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(1.2);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-2xl);
+  box-shadow: var(--elev-2);
   overflow-y: auto;
   overscroll-behavior: contain;
   scrollbar-width: thin;
@@ -68,23 +86,296 @@
 
 .lt-brand.c-logo {
   display: block;
-  padding: 0 10px 14px;
-  font-size: 21px;
+  padding: 0 10px 8px;
+  font-size: 23px;
 }
 
-/* Identidad: el avatar lleva el anillo de ORO (sello, no acción). */
+/* Navegación */
+.lt-nav {
+  flex: 1 0 auto;
+}
+.lt-grupo {
+  padding: 18px 10px 8px;
+  font: 500 var(--fs-micro) / 1 var(--font-mono);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-subtle);
+}
+.lt-ul,
+.lt-rama {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.lt-ul {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.lt-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  height: 44px;
+  padding: 0 8px;
+  border-radius: 14px;
+  border: 1px solid transparent;
+  color: var(--text-muted);
+  font: 500 var(--fs-ui) / 1 var(--font-sans);
+  transition: color var(--dur-fast) var(--ease-standard), background-color var(--dur-fast) var(--ease-standard),
+    border-color var(--dur-fast) var(--ease-standard);
+}
+.lt-pastilla {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  flex: none;
+  border-radius: 10px;
+  background: var(--surface-elevated);
+  transition: background-color var(--dur-base) var(--ease-signature), color var(--dur-fast) var(--ease-standard);
+}
+.lt-ico {
+  flex: none;
+}
+.lt-item:hover,
+.lt-item:focus-visible {
+  color: var(--text);
+  background: color-mix(in srgb, var(--text) 5%, transparent);
+  text-decoration: none;
+}
+.lt-item[data-rama] {
+  color: var(--text);
+}
+.lt-item[data-on] {
+  color: var(--text);
+  font-weight: 600;
+  background: var(--surface-elevated);
+  border-color: color-mix(in srgb, var(--accent) 28%, transparent);
+}
+.lt-item[data-on] .lt-pastilla {
+  background: linear-gradient(135deg, var(--brasa-fill-a), var(--brasa-fill-b));
+  color: var(--ink-on-brasa);
+}
+
+/* La rama: la guía vertical cuelga del centro de la pastilla del padre (8+15). */
+.lt-rama {
+  margin: 2px 0 4px 23px;
+  border-left: 1px solid var(--border-strong);
+}
+.lt-hijo {
+  display: block;
+  margin-left: -1px;
+  padding: 8px 10px 8px 26px;
+  border-left: 1px solid transparent;
+  border-radius: 0 10px 10px 0;
+  font: 400 12.5px / 1.2 var(--font-sans);
+  color: var(--text-muted);
+}
+.lt-hijo:hover,
+.lt-hijo:focus-visible {
+  color: var(--text);
+  background: color-mix(in srgb, var(--text) 4%, transparent);
+  text-decoration: none;
+}
+.lt-hijo[data-on] {
+  color: var(--text);
+  border-left-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+}
+
+/* La tarjeta de la oferta: bloque RELLENO de brasa, botón de tinta. */
+.lt-cta {
+  margin-top: 16px;
+  padding: 18px 16px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  border-radius: 18px;
+  background: linear-gradient(135deg, var(--brasa-fill-a), var(--brasa-fill-b));
+  color: var(--ink-on-brasa);
+  box-shadow: var(--glow-brasa);
+}
+.lt-cta-t {
+  font: 500 19px / 1.2 var(--font-display);
+}
+.lt-cta-b {
+  font: 400 var(--fs-data) / 1.5 var(--font-sans);
+  color: var(--ink-on-brasa-muted);
+}
+.lt-cta-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  height: 40px;
+  margin-top: 10px;
+  border-radius: 12px;
+  background: var(--ink-on-brasa);
+  color: var(--brasa-300);
+  font: 600 var(--fs-ui) / 1 var(--font-sans);
+  transition: color var(--dur-fast) var(--ease-standard);
+}
+.lt-cta-btn:hover,
+.lt-cta-btn:focus-visible {
+  color: var(--brasa-100);
+  text-decoration: none;
+}
+.lt-cta-btn:focus-visible {
+  outline-color: var(--ink-on-brasa);
+}
+
+.lt-foot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 6px 0;
+}
+
+/* ── LA BARRA SUPERIOR ───────────────────────────────────────────────────── */
+.tb-barra {
+  position: relative;
+  z-index: calc(var(--z-header) + 1);
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  min-height: var(--tb-h);
+  padding: var(--lt-gap) var(--lt-gap) 4px 8px;
+}
+.tb-ruta {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.tb-migas {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  font: 400 var(--fs-data) / 1.4 var(--font-sans);
+  color: var(--text-subtle);
+}
+.tb-migas a {
+  color: var(--text-subtle);
+}
+.tb-migas a:hover,
+.tb-migas a:focus-visible {
+  color: var(--text);
+}
+.tb-migas [aria-current="page"] {
+  color: var(--text-muted);
+}
+.tb-sep {
+  padding: 0 6px;
+}
+.tb-titulo {
+  font: 500 28px / 1.15 var(--font-display);
+  letter-spacing: -0.01em;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tb-buscar {
+  position: relative;
+  flex: 0 1 300px;
+  display: flex;
+  align-items: center;
+  height: 44px;
+  padding: 0 8px 0 14px;
+  gap: 10px;
+  border-radius: 14px;
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
+  color: var(--text-subtle);
+  transition: border-color var(--dur-fast) var(--ease-standard);
+}
+.tb-buscar:focus-within {
+  border-color: var(--border-brasa);
+}
+.tb-buscar input {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 100%;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  font: 400 var(--fs-ui) / 1 var(--font-sans);
+}
+.tb-buscar input::placeholder {
+  color: var(--text-subtle);
+}
+.tb-buscar input:focus-visible {
+  outline: none;
+}
+.tb-buscar input::-webkit-search-cancel-button {
+  display: none;
+}
+.tb-kbd {
+  flex: none;
+  padding: 4px 7px;
+  border-radius: 6px;
+  background: var(--surface-elevated);
+  font: 500 10.5px / 1 var(--font-mono);
+  color: var(--text-muted);
+}
+.tb-lista {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  right: 0;
+  margin: 0;
+  padding: 6px;
+  list-style: none;
+  border-radius: 14px;
+  background: var(--surface-elevated);
+  border: 1px solid var(--border-strong);
+  box-shadow: var(--elev-3);
+}
+.tb-op {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 9px 10px;
+  border-radius: 10px;
+  font: 500 var(--fs-ui) / 1 var(--font-sans);
+  color: var(--text-muted);
+  cursor: pointer;
+}
+.tb-op[aria-selected="true"] {
+  background: var(--surface);
+  color: var(--text);
+}
+.tb-op-ruta {
+  font: 400 var(--fs-micro) / 1 var(--font-mono);
+  color: var(--text-subtle);
+}
+.tb-nada {
+  padding: 10px;
+  font: 400 var(--fs-ui) / 1.3 var(--font-sans);
+  color: var(--text-muted);
+}
+
+/* Cuenta: identidad en la barra superior. El avatar lleva el anillo de ORO
+   (sello, no acción). */
 .lt-id {
   position: relative;
+  flex: none;
 }
 .lt-idbtn {
   display: flex;
   align-items: center;
   gap: 10px;
-  width: 100%;
-  padding: 10px;
-  border-radius: 12px;
-  border: 1px solid var(--border);
-  background: color-mix(in srgb, var(--text) 3%, transparent);
+  max-width: 230px;
+  height: 44px;
+  padding: 0 14px 0 6px;
+  border-radius: 14px;
+  border: 1px solid var(--glass-border);
+  background: var(--glass-bg);
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
   text-align: left;
   transition: border-color var(--dur-fast) var(--ease-standard);
 }
@@ -93,8 +384,8 @@
   border-color: var(--border-brasa);
 }
 .lt-idbtn .um-av {
-  width: 34px;
-  height: 34px;
+  width: 32px;
+  height: 32px;
   border-color: var(--border-oro);
   color: var(--oro-text);
 }
@@ -111,7 +402,7 @@
   white-space: nowrap;
 }
 .lt-idtxt b {
-  font: 500 var(--fs-ui) / 1.2 var(--font-sans);
+  font: 600 var(--fs-ui) / 1.2 var(--font-sans);
   color: var(--text);
 }
 .lt-idtxt span {
@@ -119,124 +410,8 @@
   color: var(--text-subtle);
 }
 .lt-id .um-pop {
-  left: 0;
   right: 0;
-  min-width: 0;
   z-index: 1;
-}
-
-/* Navegación */
-.lt-nav {
-  flex: 1 0 auto;
-}
-.lt-grupo {
-  padding: 18px 12px 8px;
-  font: 500 var(--fs-micro) / 1 var(--font-sans);
-  color: var(--text-subtle);
-}
-.lt-ul,
-.lt-rama {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-}
-.lt-ul {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-.lt-item {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  height: 38px;
-  padding: 0 12px;
-  border-radius: 10px;
-  border: 1px solid transparent;
-  color: var(--text-muted);
-  font: 500 var(--fs-ui) / 1 var(--font-sans);
-  transition: color var(--dur-fast) var(--ease-standard), background-color var(--dur-fast) var(--ease-standard);
-}
-.lt-ico {
-  flex: none;
-}
-.lt-item:hover {
-  color: var(--text);
-  background: color-mix(in srgb, var(--text) 5%, transparent);
-  text-decoration: none;
-}
-.lt-item[data-rama] {
-  color: var(--text);
-}
-.lt-item[data-on] {
-  color: var(--text);
-  background: var(--surface-elevated);
-  border-color: color-mix(in srgb, var(--accent) 24%, transparent);
-}
-.lt-item[data-on] .lt-ico {
-  color: var(--accent-text);
-}
-
-/* La rama: la guía vertical cuelga del centro del icono del padre (12 + 9 px). */
-.lt-rama {
-  margin: 2px 0 4px 21px;
-  border-left: 1px solid var(--border-strong);
-}
-.lt-hijo {
-  display: block;
-  margin-left: -1px;
-  padding: 8px 10px 8px 16px;
-  border-left: 1px solid transparent;
-  border-radius: 0 8px 8px 0;
-  font: 400 12.5px / 1.2 var(--font-sans);
-  color: var(--text-muted);
-}
-.lt-hijo:hover {
-  color: var(--text);
-  background: color-mix(in srgb, var(--text) 4%, transparent);
-  text-decoration: none;
-}
-.lt-hijo[data-on] {
-  color: var(--text);
-  border-left-color: var(--accent);
-  background: color-mix(in srgb, var(--accent) 10%, transparent);
-}
-
-/* La tarjeta de la oferta: hairline de oro, botón de brasa (el único). */
-.lt-cta {
-  margin-top: 16px;
-  padding: 16px;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  border-radius: 14px;
-  border: 1px solid var(--border-oro);
-  background: color-mix(in srgb, var(--surface-elevated) 80%, transparent);
-}
-.lt-cta-t {
-  font: 600 var(--fs-body) / 1.3 var(--font-sans);
-  color: var(--text);
-}
-.lt-cta-b {
-  font: 400 var(--fs-data) / 1.5 var(--font-sans);
-  color: var(--text-muted);
-}
-.lt-cta-btn {
-  width: 100%;
-  height: 38px;
-  margin-top: 4px;
-  border-radius: 10px;
-  box-shadow: var(--glow-brasa);
-}
-.lt-cta-btn:hover {
-  text-decoration: none;
-}
-
-.lt-foot {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 12px 4px 0;
 }
 
 /* ── Carril de iconos (768–1099px) ─────────────────────────────────────── */
@@ -250,7 +425,7 @@
     overflow: visible;
   }
   .lt-brand.c-logo {
-    padding: 0 0 14px;
+    padding: 0 0 8px;
     font-size: 0;
   }
   .lt-brand.c-logo::before {
@@ -258,7 +433,6 @@
     font-size: 22px;
   }
   .lt-txt,
-  .lt-idtxt,
   .lt-rama,
   .lt-cta-t,
   .lt-cta-b {
@@ -272,25 +446,29 @@
     color: transparent;
     background: var(--border);
   }
-  .lt-idbtn {
-    padding: 4px;
-    border-radius: 50%;
+  .lt-item {
+    justify-content: center;
+    width: 48px;
+    padding: 0;
+  }
+  .lt-item[data-on] {
     background: none;
     border-color: transparent;
   }
-  .lt-item {
-    justify-content: center;
-    width: 44px;
-    padding: 0;
-  }
   .lt-cta {
     padding: 0;
-    border: 0;
     background: none;
+    box-shadow: none;
   }
   .lt-cta-btn {
     width: 44px;
-    padding: 0;
+    margin: 0;
+    background: linear-gradient(135deg, var(--brasa-fill-a), var(--brasa-fill-b));
+    color: var(--ink-on-brasa);
+  }
+  .lt-cta-btn:hover,
+  .lt-cta-btn:focus-visible {
+    color: var(--ink-on-brasa);
   }
   .lt-foot {
     flex-direction: column;
@@ -298,11 +476,11 @@
   .lt-foot .um-lang {
     flex-direction: column;
   }
-  .lt-id .um-pop {
-    top: 0;
-    left: calc(100% + 12px);
-    right: auto;
-    min-width: 216px;
+  .lt-idtxt {
+    display: none;
+  }
+  .lt-idbtn {
+    padding: 0 6px;
   }
 }
 
@@ -318,11 +496,11 @@
     right: 8px;
     bottom: 8px;
     width: auto;
-    height: 60px;
+    height: 64px;
     flex-direction: row;
     justify-content: space-between;
     padding: 8px;
-    border-radius: 16px;
+    border-radius: 20px;
   }
   .lt-brand,
   .lt-grupo,
@@ -337,23 +515,53 @@
     flex: 1 1 auto;
     justify-content: space-around;
   }
-  .lt-id {
-    order: 2;
+  .lt-item {
+    width: 48px;
+    height: 48px;
   }
-  .lt-id .um-pop {
-    top: auto;
-    bottom: calc(100% + 12px);
-    left: auto;
-    right: 0;
+  .lt-pastilla {
+    width: 44px;
+    height: 44px;
+    border-radius: 14px;
+    background: none;
+  }
+  /* Barra superior en móvil: marca implícita, búsqueda como icono que se abre. */
+  .tb-barra {
+    padding: 12px 12px 4px;
+    flex-wrap: wrap;
+  }
+  .tb-migas {
+    display: none;
+  }
+  .tb-titulo {
+    font-size: 24px;
+  }
+  .tb-buscar {
+    order: 3;
+    flex: 1 1 100%;
+    height: 40px;
+  }
+  .tb-kbd {
+    display: none;
   }
 }
 
 @media print {
-  .lt-side {
+  .lt-side,
+  .tb-barra {
     display: none;
   }
   .sh-main {
     padding: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lt-item,
+  .lt-pastilla,
+  .lt-cta-btn,
+  .tb-buscar {
+    transition: none;
   }
 }
 
@@ -362,11 +570,11 @@
   display: flex;
   font: 500 var(--fs-micro) / 1 var(--font-mono);
   border: 1px solid var(--border-strong);
-  border-radius: 5px;
+  border-radius: 8px;
   overflow: hidden;
 }
 .um-lang button {
-  padding: 6px 8px;
+  padding: 7px 9px;
   color: var(--text-subtle);
   background: transparent;
   border: 0;
@@ -374,7 +582,8 @@
   font: inherit;
   letter-spacing: 0.02em;
 }
-.um-lang button:hover {
+.um-lang button:hover,
+.um-lang button:focus-visible {
   color: var(--text-muted);
 }
 .um-lang button[aria-pressed="true"] {
@@ -384,9 +593,9 @@
 
 /* ── Toggle de tema ────────────────────────────────────────────────────────── */
 .um-theme {
-  width: 28px;
-  height: 28px;
-  border-radius: 5px;
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
   display: grid;
   place-items: center;
   background: var(--surface-elevated);
@@ -397,7 +606,8 @@
   line-height: 1;
   flex: none;
 }
-.um-theme:hover {
+.um-theme:hover,
+.um-theme:focus-visible {
   color: var(--text);
   border-color: var(--border-patina);
 }
@@ -441,8 +651,8 @@
   padding: 6px;
   background: var(--surface-elevated);
   border: 1px solid var(--border-strong);
-  border-radius: var(--radius-md);
-  box-shadow: var(--shadow-2);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--elev-3);
   display: flex;
   flex-direction: column;
   gap: 2px;
@@ -470,7 +680,7 @@
   text-align: left;
   padding: 9px 10px;
   border: 0;
-  border-radius: var(--radius-sm);
+  border-radius: 10px;
   background: transparent;
   color: var(--text-muted);
   font: 500 var(--fs-ui) / 1 var(--font-sans);

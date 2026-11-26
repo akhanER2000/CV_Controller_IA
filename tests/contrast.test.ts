@@ -144,6 +144,14 @@ describe("contraste WCAG · la paleta de la app (Forja), medida", () => {
     ["oro-700 sobre porcelana", "#7D5C0E", PORCELANA, 5.71],
     ["peligro (grafito) sobre grafito", "#F2606E", GRAFITO, 6.2],
     ["blanco sobre peligro (porcelana)", "#FFFFFF", "#B3202E", 6.64],
+    // Forja v2 — materiales de tarjeta (globals.css §1b)
+    ["tinta sobre brasa rellena (claro)", TINTA, "#F58C4A", 8.09],
+    ["tinta sobre brasa rellena (oscuro)", TINTA, "#EA6D2C", 6.23],
+    ["tinta secundaria sobre brasa rellena", "#3A1A06", "#EA6D2C", 5.05],
+    ["tinta de folio sobre crema", "#1F1712", "#F2E8D8", 14.55],
+    ["tinta secundaria sobre crema honda", "#5B4A3C", "#E8DAC3", 6.12],
+    ["brasa templada sobre crema", "#A9470F", "#F2E8D8", 4.81],
+    ["text-subtle sobre tarjeta grafito", "#8F857C", "#1E1A17", 4.78],
   ];
 
   it("1 · cada par mide EXACTAMENTE lo que dice globals.css, y pasa AA", () => {

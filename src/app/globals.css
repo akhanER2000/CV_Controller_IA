@@ -394,6 +394,80 @@
   --glow-brasa: 0 12px 40px rgba(169, 71, 15, .18);
 }
 
+/* ============================================================================
+   §1b · FORJA v2 — capa ADITIVA (lote sistema-visual-y-claude)
+   ────────────────────────────────────────────────────────────────────────────
+   Todo lo anterior sigue valiendo: estos tokens AÑADEN los materiales que pide
+   la estructura tipo tablero (lateral flotante, fila de KPI, tarjetas grandes
+   con profundidad y gráficos). Ningún nombre existente cambia de valor.
+
+   LOS CUATRO MATERIALES DE TARJETA (src/components/ui/Card.tsx)
+     GRAFITO  la piedra de la fragua: superficie de trabajo. Sigue al tema.
+     BRASA    el metal al rojo, RELLENO: la tarjeta que manda en la vista (≤1).
+              Material COMPARTIDO entre temas: encima, siempre tinta.
+     CREMA    el folio: el papel donde acaba impreso el CV. Contraste de lectura
+              dentro del grafito. COMPARTIDO: encima, tinta de folio.
+     VIDRIO   el humo se intuye detrás. Solo para capas que flotan (lateral,
+              barra superior, cajones), nunca para listas densas.
+
+   Ratios medidos (fórmula WCAG; fijados en tests/tema-porcelana.test.ts):
+     tinta #160A03 sobre --brasa-fill-a #F58C4A → 8.09 · sobre -b #EA6D2C → 6.23 ✓
+     --ink-on-brasa-muted #3A1A06 sobre -a → 6.56 · sobre -b → 5.05 ✓
+     --ink-on-crema #1F1712 sobre --crema #F2E8D8 → 14.55 · sobre --crema-hondo → 12.82 ✓
+     --ink-on-crema-muted #5B4A3C sobre crema → 6.95 · sobre hondo → 6.12 ✓
+     --accent-on-crema #A9470F sobre crema → 4.81 ✓ (solo sobre --crema, no sobre hondo)
+     --text-subtle #8F857C sobre --forja-card-a #1E1A17 → 4.78 ✓
+   ============================================================================ */
+:root {
+  /* BRASA RELLENA (degradado de la tarjeta naranja: arriba-izq → abajo-der) */
+  --brasa-fill-a: #F58C4A;
+  --brasa-fill-b: #EA6D2C;
+  --ink-on-brasa-muted: #3A1A06;
+
+  /* CREMA — el folio */
+  --crema: #F2E8D8;
+  --crema-hondo: #E8DAC3;        /* pozos dentro de la tarjeta crema (pistas, chips) */
+  --ink-on-crema: #1F1712;
+  --ink-on-crema-muted: #5B4A3C;
+  --accent-on-crema: #A9470F;    /* = --brasa-700: la brasa templada sobre papel */
+
+  /* Geometría v2: la profundidad sube con el tamaño de la pieza */
+  --radius-xl: 16px;     /* KPI, botones grandes, cajas internas */
+  --radius-2xl: 22px;    /* tarjetas grandes, lateral, barra superior */
+  --radius-pill: 999px;  /* chips, pestañas */
+  --glass-blur: 20px;
+  --tb-h: 64px;          /* barra superior del shell */
+
+  --dur-page: 420ms;     /* transición entre páginas */
+}
+
+[data-theme="dark"], :root {
+  /* GRAFITO — la tarjeta de trabajo (degradado sutil: luz arriba) */
+  --forja-card-a: #1E1A17;
+  --forja-card-b: #151210;
+  --glass-bg:     color-mix(in srgb, var(--surface) 62%, transparent);
+  --glass-border: rgba(255, 255, 255, 0.10);
+  /* Elevación: sombra + filo de luz interior (la arista caliente de la pieza) */
+  --elev-1: 0 1px 0 rgba(255, 255, 255, 0.04) inset, 0 2px 8px rgba(0, 0, 0, 0.35);
+  --elev-2: 0 1px 0 rgba(255, 255, 255, 0.05) inset, 0 14px 36px rgba(0, 0, 0, 0.45);
+  --elev-3: 0 1px 0 rgba(255, 255, 255, 0.06) inset, 0 28px 64px rgba(0, 0, 0, 0.55);
+  /* Gráficos: pista del anillo y retícula */
+  --chart-track: rgba(255, 255, 255, 0.08);
+  --chart-grid:  rgba(255, 255, 255, 0.06);
+}
+
+[data-theme="light"] {
+  --forja-card-a: #FFFFFF;
+  --forja-card-b: #FAF7F2;
+  --glass-bg:     color-mix(in srgb, var(--surface) 72%, transparent);
+  --glass-border: rgba(26, 22, 19, 0.10);
+  --elev-1: 0 1px 2px rgba(26, 22, 19, 0.06);
+  --elev-2: 0 12px 32px rgba(26, 22, 19, 0.10);
+  --elev-3: 0 24px 56px rgba(26, 22, 19, 0.14);
+  --chart-track: rgba(26, 22, 19, 0.08);
+  --chart-grid:  rgba(26, 22, 19, 0.06);
+}
+
 
 /* ============================================================================
    §2 · base.css  ── COPIA ÍNTEGRA DE corpus-design/02-sistema/base.css
