@@ -14,6 +14,8 @@ import {
 // editor y «Ajustar a dos páginas». Se importan en vez de recopiarse: si divergen,
 // una reformulación escribiría en un campo que el editor no sabe enseñar ni revertir.
 import { campoDe, textoDeItem } from "./ajuste";
+// Las REGLAS de la variante (DA-R1): un término excluido se suma al candado.
+import { reglasParaPrompt, terminoExcluidoEn, type Reglas } from "./reglas";
 
 /**
  * «ADAPTAR EL CV A UNA OFERTA» — el motor de la PROPUESTA. Punto 3 del contrato.
@@ -115,7 +117,7 @@ export const OfertaPlanSchema = z.object({
 export type OfertaPlan = z.infer<typeof OfertaPlanSchema>;
 
 /** La función inyectable que llama al modelo (el LLM real se arma en la ruta). */
-export type OfertaLLM = (input: { offerText: string; items: ItemTailor[] }) => Promise<OfertaPlan>;
+export type OfertaLLM = (input: { offerText: string; items: ItemTailor[]; reglas?: string }) => Promise<OfertaPlan>;
 
 // ── El item, tal y como lo ve el motor ───────────────────────────────────────
 export interface ItemTailor {
@@ -337,10 +339,14 @@ function sanearMotivo(motivo: string, fuente: string, id: string, descartados: D
  * reales; el escepticismo es el diseño (igual que ajuste.ts y variant-ai.ts).
  */
 export async function construirTailor(
-  { offerText, items }: { offerText: string; items: ItemTailor[] },
+  { offerText, items, reglas }: { offerText: string; items: ItemTailor[]; reglas?: Reglas },
   { llm }: { llm: OfertaLLM },
 ): Promise<TailorResult> {
-  const plan = await llm({ offerText, items });
+  const textoReglas = reglas ? reglasParaPrompt(reglas) : "";
+  const plan = await llm(textoReglas ? { offerText, items, reglas: textoReglas } : { offerText, items });
+  /** El término excluido (obligatorio) que nombra un texto, o null. */
+  const excluido = (t: string) => (reglas ? terminoExcluidoEn(t, reglas) : null);
+  const obligatorio = (it: ItemTailor) => !!reglas && reglas.incluirSiempre.includes(it.itemId);
   const descartados: DescartadoTailor[] = [];
   const porId = new Map(items.map((i) => [i.id, i]));
 
@@ -390,9 +396,10 @@ export async function construirTailor(
     if (cubreV.length) {
       // Ya lo tienes en la variante: HAVE. No hace falta ofrecer añadir nada.
       for (const it of cubreV) anota(have, it, req.termino);
-    } else if (cubreM.length) {
+    } else if (cubreM.filter((i) => !excluido(i.texto)).length) {
       // Lo tienes en el master pero fuera de la variante: ADD (un clic para meterlo).
-      for (const it of cubreM) anota(add, it, req.termino);
+      // Un item que nombra un término que las reglas excluyen no se ofrece.
+      for (const it of cubreM) if (!excluido(it.texto)) anota(add, it, req.termino);
     } else {
       // No lo cubre nada tuyo: GAP. Se enseña, NUNCA se ofrece añadir.
       faltan.push({ termino: req.termino, evidencia: req.evidencia });
@@ -418,8 +425,21 @@ export async function construirTailor(
       continue;
     }
     if (seen.has(id)) continue;
+    const it = porId.get(id)!;
+    const t = excluido(it.texto);
+    if (t && !obligatorio(it)) {
+      descartados.push({ tipo: "seleccion", id, propuesto: "", razon: `nombra «${t}», que las reglas de la variante excluyen` });
+      continue;
+    }
     seen.add(id);
     seleccion.push(id);
+  }
+  // Los items OBLIGATORIOS de las reglas entran siempre, los eligiera o no el modelo.
+  for (const it of items) {
+    if (obligatorio(it) && !seen.has(it.id)) {
+      seen.add(it.id);
+      seleccion.push(it.id);
+    }
   }
 
   // ── 4 · REFORMULACIONES — ★ EL CANDADO ───────────────────────────────────────
@@ -466,6 +486,11 @@ export async function construirTailor(
       });
       continue;
     }
+    const tx = excluido(propuesto);
+    if (tx) {
+      descartados.push({ tipo: "reformular", id: it.id, propuesto, razon: `nombra «${tx}», que las reglas de la variante excluyen` });
+      continue;
+    }
     yaRef.add(it.id);
     reformulaciones.push({
       id: it.id,
@@ -483,7 +508,10 @@ export async function construirTailor(
   let resumen: string | null = null;
   if (proposedSummary) {
     const check = preservesFacts(masterBody, proposedSummary);
-    if (check.ok) resumen = proposedSummary;
+    const tx = excluido(proposedSummary);
+    if (check.ok && tx)
+      descartados.push({ tipo: "resumen", id: "", propuesto: proposedSummary, razon: `nombra «${tx}», que las reglas de la variante excluyen` });
+    else if (check.ok) resumen = proposedSummary;
     else
       descartados.push({
         tipo: "resumen",
@@ -515,9 +543,12 @@ export async function construirTailor(
 export function verificarReformulacion(
   original: string,
   propuesto: string,
+  reglas?: Reglas,
 ): { ok: true } | { ok: false; razon: string } {
   const p = (propuesto ?? "").trim();
   if (!p) return { ok: false, razon: "la propuesta está vacía" };
+  const tx = reglas ? terminoExcluidoEn(p, reglas) : null;
+  if (tx) return { ok: false, razon: `nombra «${tx}», que las reglas de la variante excluyen` };
   if (normalize(p) === normalize(original)) return { ok: false, razon: "la propuesta es igual al original" };
   const v = preservesFacts(original, p);
   return v.ok ? { ok: true } : { ok: false, razon: razonInvento(v) };

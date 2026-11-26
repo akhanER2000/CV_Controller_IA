@@ -3,7 +3,8 @@ import { generateObject } from "ai";
 import { hayClaveIA, modeloPara } from "@/lib/ai/modelos";
 import { createClient } from "@/lib/supabase/server";
 import { listVariants, countMasterItems, getMasterItems, type MasterItem } from "@/lib/db/queries";
-import { createVariant, updateVariant, addItem, setAiOverride } from "@/lib/db/variants";
+import { createVariant, updateVariant, addItem, setAiOverride, guardarReglas, guardarPaginasObjetivo } from "@/lib/db/variants";
+import { esObligatorio, reglasParaPrompt, terminoExcluidoEn, validarReglas, REGLAS_VACIAS, type Reglas } from "@/lib/cv/reglas";
 import { guardarAvisoDeVariante } from "@/lib/db/aviso";
 import { preservesFacts } from "@/lib/verify";
 import { geminiApiKey } from "@/lib/extract/llm";
@@ -53,7 +54,7 @@ function masterItemText(m: MasterItem): string {
 
 /** El LLM real (Gemini) como función inyectable de buildAiVariant. La clave es la
  *  BYOK del usuario (ya descifrada) o, si no, la del servidor. */
-function geminiVariantLLM(apiKey?: string, apiKey3?: string, mem?: ContextoMemoria): VariantLLM {
+function geminiVariantLLM(apiKey?: string, apiKey3?: string, mem?: ContextoMemoria, reglas: Reglas = REGLAS_VACIAS): VariantLLM {
   const key = apiKey || geminiApiKey();
   if (!key) throw new Error("Falta GEMINI_API_KEY");
   // Armar la variante es redacción/selección que no puede inventar: pasa por el
@@ -80,7 +81,7 @@ function geminiVariantLLM(apiKey?: string, apiKey3?: string, mem?: ContextoMemor
         memoria: mem?.memoria,
         modelo: model,
         sistema: SYS,
-        usuario: `ROL/DESCRIPCIÓN OBJETIVO:\n${prompt}\n\nITEMS DEL MASTER:\n${list}`,
+        usuario: `ROL/DESCRIPCIÓN OBJETIVO:\n${prompt}\n\nITEMS DEL MASTER:\n${list}` + (reglasParaPrompt(reglas) ? `\n\n${reglasParaPrompt(reglas)}` : ""),
       }),
       temperature: 0.2,
     });
@@ -115,6 +116,8 @@ export async function POST(req: Request) {
     summary?: string;
     notes?: string;
     aviso?: string;
+    /** las REGLAS de la variante (DA-R1), de cualquiera de las tres puertas. */
+    reglas?: unknown;
   };
   try {
     body = await req.json();
@@ -125,9 +128,37 @@ export async function POST(req: Request) {
   const mode = body.mode ?? "manual";
 
   try {
+    // ── REGLAS (DA-R1): se validan contra el master REAL antes de crear nada. ──
+    const conReglas = body.reglas != null;
+    const masterParaReglas = conReglas ? await getMasterItems(sb, user.id) : [];
+    const vr = validarReglas(body.reglas, { masterIds: new Set(masterParaReglas.map((m) => m.id)) });
+    if (!vr.ok) return NextResponse.json({ error: vr.errores.join(" ") }, { status: 400 });
+    const reglas = vr.reglas;
+    /** Guarda las reglas en la variante recién creada (persistido:false si falta la 0012). */
+    const fijarReglas = async (variantId: string) => {
+      if (!conReglas) return true;
+      // «Máximo N páginas» fija también el objetivo de páginas con el que nace.
+      if (reglas.paginasMax) await guardarPaginasObjetivo(sb, user.id, variantId, reglas.paginasMax);
+      return (await guardarReglas(sb, user.id, variantId, reglas)).persistido;
+    };
+    /** ¿Este item del master puede entrar? Un término excluido lo deja fuera, salvo que sea obligatorio. */
+    const admitido = (m: MasterItem) => esObligatorio(reglas, m.id) || !terminoExcluidoEn(masterItemText(m), reglas);
+    /** Los ids, filtrados por las reglas y con los obligatorios que falten al final. */
+    const segunReglas = (ids: string[], master: MasterItem[]) => {
+      const porId = new Map(master.map((m) => [m.id, m]));
+      const out = ids.filter((id) => porId.has(id) && admitido(porId.get(id)!));
+      for (const id of reglas.incluirSiempre) if (porId.has(id) && !out.includes(id)) out.push(id);
+      return out;
+    };
+    /** Un summary de IA que nombra un término excluido no se aplica. */
+    const summaryAdmitido = (s: string) => !terminoExcluidoEn(s, reglas);
+
     if (mode === "manual") {
       const variant = await createVariant(sb, user.id, body.name);
-      return NextResponse.json({ variant });
+      const reglasPersistidas = await fijarReglas(variant.id);
+      // «Incluir siempre» en una variante vacía: los obligatorios entran desde el principio.
+      for (const id of segunReglas([], masterParaReglas)) await addItem(sb, user.id, variant.id, id);
+      return NextResponse.json({ variant, reglasPersistidas });
     }
 
     // mode === "tailor": crear una variante desde una SELECCIÓN ya revisada por el
@@ -145,20 +176,22 @@ export async function POST(req: Request) {
         return NextResponse.json({ error: "Tu master está vacío: importa o agrega items antes de crear una variante." }, { status: 422 });
       }
       const valido = new Set(master.map((m) => m.id));
-      const ordenados: string[] = [];
       const vistos = new Set<string>();
+      const unicosPedidos: string[] = [];
       for (const id of pedidos) {
         if (valido.has(id) && !vistos.has(id)) {
           vistos.add(id);
-          ordenados.push(id);
+          unicosPedidos.push(id);
         }
       }
+      const ordenados = segunReglas(unicosPedidos, master);
       if (ordenados.length === 0) {
         return NextResponse.json({ error: "Ninguno de los items seleccionados existe en tu master." }, { status: 422 });
       }
 
       const targetTitle = (body.targetTitle ?? "").trim();
       const variant = await createVariant(sb, user.id, (body.name ?? "").trim() || targetTitle);
+      const reglasPersistidas = await fijarReglas(variant.id);
 
       const variantItemByMaster = new Map<string, string>();
       for (const id of ordenados) {
@@ -176,7 +209,7 @@ export async function POST(req: Request) {
       const summary = (body.summary ?? "").trim();
       if (summary) {
         const masterBody = master.map(masterItemText).join(" \n ");
-        if (preservesFacts(masterBody, summary).ok) {
+        if (preservesFacts(masterBody, summary).ok && summaryAdmitido(summary)) {
           const summaryMaster = master.find((m) => m.kind === "summary");
           const summaryVariantItem = summaryMaster ? variantItemByMaster.get(summaryMaster.id) : undefined;
           if (summaryMaster && summaryVariantItem) {
@@ -192,6 +225,7 @@ export async function POST(req: Request) {
       return NextResponse.json({
         variant: { ...variant, target_title: targetTitle || variant.target_title },
         notes: (body.notes ?? "").trim() || null,
+        reglasPersistidas,
       });
     }
 
@@ -213,13 +247,15 @@ export async function POST(req: Request) {
     }
 
     const aiItems: AiMasterItem[] = master.map((m) => ({ id: m.id, kind: m.kind, text: masterItemText(m) }));
-    const plan = await buildAiVariant({ master: aiItems, prompt }, { llm: geminiVariantLLM(byok, byok3, await contextoMemoria(sb, user.id, "variantes")) });
+    const plan = await buildAiVariant({ master: aiItems, prompt }, { llm: geminiVariantLLM(byok, byok3, await contextoMemoria(sb, user.id, "variantes"), reglas) });
 
     const variant = await createVariant(sb, user.id, body.name ?? plan.targetTitle);
+    const reglasPersistidas = await fijarReglas(variant.id);
 
     // Añade los items validados EN ORDEN; recuerda el variant_item de cada master item.
     const variantItemByMaster = new Map<string, string>();
-    for (const id of plan.includeIds) {
+    // La salida de la IA se revisa contra las reglas antes de aplicarse.
+    for (const id of segunReglas(plan.includeIds, master)) {
       const row = await addItem(sb, user.id, variant.id, id);
       variantItemByMaster.set(row.item_id as string, row.id as string);
     }
@@ -229,7 +265,7 @@ export async function POST(req: Request) {
     }
 
     // Si el summary de la IA validó, va como override del variant_item del summary.
-    if (plan.summary) {
+    if (plan.summary && summaryAdmitido(plan.summary)) {
       const summaryMaster = master.find((m) => m.kind === "summary");
       const summaryVariantItem = summaryMaster ? variantItemByMaster.get(summaryMaster.id) : undefined;
       if (summaryMaster && summaryVariantItem) {
@@ -243,6 +279,7 @@ export async function POST(req: Request) {
     return NextResponse.json({
       variant: { ...variant, target_title: plan.targetTitle || variant.target_title },
       notes: plan.notes,
+      reglasPersistidas,
     });
   } catch (e) {
     return NextResponse.json({ error: e instanceof Error ? e.message : "Error" }, { status: 500 });

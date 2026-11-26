@@ -23,6 +23,9 @@ import {
 } from "./variantes-fechas";
 import "@/components/panel/panel.css";
 import "./variantes.css";
+import { ReglasPanel, type ItemParaReglas } from "@/components/ReglasPanel";
+import { REGLAS_VACIAS, hayReglas, type Reglas } from "@/lib/cv/reglas";
+import { textoDeItem } from "@/lib/cv/ajuste";
 
 /* ============================================================================
    Variantes — porte de corpus-design/04-pantallas/variantes.html
@@ -217,6 +220,31 @@ export function VariantesScreen() {
   // el paso lo marca cada función cuando de verdad lo alcanza. Flotante: no
   // desplaza ningún botón. Al navegar al editor la pantalla se desmonta con él.
   const [prog, setProg] = useState<{ pasos: string[]; paso: number } | null>(null);
+  // REGLAS de la variante que va a nacer (DA-R1): valen para las tres puertas.
+  const [reglas, setReglas] = useState<Reglas>(REGLAS_VACIAS);
+  const [masterReglas, setMasterReglas] = useState<ItemParaReglas[]>([]);
+  const masterReglasPedido = useRef(false);
+  /** El master para «Incluir siempre…»: se pide al abrir el bloque, una vez. */
+  const cargarMasterReglas = () => {
+    if (masterReglasPedido.current || !supabaseEnabled) return;
+    masterReglasPedido.current = true;
+    void (async () => {
+      try {
+        const res = await fetch("/api/master");
+        if (!res.ok) throw new Error();
+        const j = (await res.json()) as { items?: { id: string; kind: string; data: Record<string, unknown> }[] };
+        setMasterReglas(
+          (j.items ?? [])
+            .map((m) => ({ id: m.id, kind: m.kind, texto: textoDeItem(m.kind, m.data ?? {}) }))
+            .filter((m) => m.texto.trim() !== ""),
+        );
+      } catch {
+        masterReglasPedido.current = false;
+      }
+    })();
+  };
+  /** Las reglas solo viajan si hay alguna: sin reglas, el cuerpo de siempre. */
+  const conReglas = () => (hayReglas(reglas) ? { reglas } : {});
 
   // Tercera puerta: el aviso pegado (o su enlace) y la PROPUESTA a revisar antes de crear.
   const [offerDraft, setOfferDraft] = useState("");
@@ -493,7 +521,7 @@ export function VariantesScreen() {
       const res = await fetch("/api/variants", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ mode: "manual", name: newName.trim() || undefined }),
+        body: JSON.stringify({ mode: "manual", name: newName.trim() || undefined, ...conReglas() }),
       });
       if (!res.ok) throw new Error();
       const { variant } = (await res.json()) as { variant: { id: string } };
@@ -526,7 +554,7 @@ export function VariantesScreen() {
       const res = await fetch("/api/variants", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ mode: "ai", prompt }),
+        body: JSON.stringify({ mode: "ai", prompt, ...conReglas() }),
       });
       if (!res.ok) throw new Error();
       const { variant, notes } = (await res.json()) as { variant: { id: string; name: string }; notes?: string };
@@ -569,7 +597,7 @@ export function VariantesScreen() {
       const res = await fetch("/api/tailor/analizar", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(looksUrl ? { url: offer } : { offerText: offer }),
+        body: JSON.stringify({ ...(looksUrl ? { url: offer } : { offerText: offer }), ...conReglas() }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -617,6 +645,7 @@ export function VariantesScreen() {
           notes: tailorProposal.notes ?? undefined,
           // El aviso viaja con la variante: «Afinar con IA» lo usa luego (DA-AV3).
           aviso: offerDraft.trim() || undefined,
+          ...conReglas(),
         }),
       });
       if (!res.ok) throw new Error();
@@ -796,6 +825,17 @@ export function VariantesScreen() {
             </span>
           </div>
         </div>
+
+        {/* REGLAS (DA-R1): plegable, valen para la puerta que uses. */}
+        <ReglasPanel
+          plegable
+          reglas={reglas}
+          onCambio={setReglas}
+          master={masterReglas}
+          t={t}
+          deshabilitado={creating !== null}
+          alAbrir={cargarMasterReglas}
+        />
 
         {createErr ? (
           <p className="vr-create-err" style={{ font: "400 var(--fs-micro)/1.6 var(--font-mono)", color: "var(--danger)", margin: 0 }} role="alert">

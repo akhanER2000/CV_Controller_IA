@@ -6,6 +6,7 @@ import { hayClaveIA, modeloPara } from "@/lib/ai/modelos";
 import { getUserLlmKey, getUserLlmKey3 } from "@/lib/account/byok";
 import { contextoMemoria, mensajesConMemoria, type ContextoMemoria } from "@/lib/ai/memoria";
 import { fetchViaJina } from "@/lib/extract/web";
+import { normalizarReglas } from "@/lib/cv/reglas";
 import { extractFile, extractDepsFor, type FileKind } from "@/lib/extract/files";
 import {
   construirTailor,
@@ -56,7 +57,7 @@ function geminiOfertaLLM(apiKey?: string, apiKey3?: string, mem?: ContextoMemori
     "(4) REFORMULACIONES: reescrituras más alineadas con el aviso, SIN meter ninguna cifra, sigla ni " +
     "tecnología que no esté YA en el texto del item. El aviso NO autoriza a añadir hechos al CV.\n" +
     "NUNCA inventes ids, cifras ni tecnologías. NUNCA des un porcentaje ni un score de encaje.";
-  return async ({ offerText, items }) => {
+  return async ({ offerText, items, reglas }) => {
     const model = modeloPara("redaccion-preserva-hechos", apiKey, undefined, undefined, apiKey3);
     // Sin variante, los items SON el master con sus ids: con memoria (DA-M2) ya
     // viajan en ella, cacheados, y no se repiten. Sin memoria, la lista de siempre.
@@ -70,7 +71,7 @@ function geminiOfertaLLM(apiKey?: string, apiKey3?: string, mem?: ContextoMemori
         memoria: mem?.memoria,
         modelo: model,
         sistema: SYS,
-        usuario: `AVISO:\n${offerText.slice(0, 16000)}\n\nITEMS DEL MASTER:\n${lista}`,
+        usuario: `AVISO:\n${offerText.slice(0, 16000)}\n\nITEMS DEL MASTER:\n${lista}` + (reglas ? `\n\n${reglas}` : ""),
       }),
       temperature: 0.2,
     });
@@ -171,7 +172,8 @@ export async function POST(req: Request) {
   const { data: { user } } = await sb.auth.getUser();
   if (!user) return fallo("Sesión requerida.", 401);
 
-  let body: { offerText?: string; text?: string; url?: string; files?: FileRef[] };
+  // `reglas`: las que el usuario está fijando para la variante que va a nacer (DA-R1).
+  let body: { offerText?: string; text?: string; url?: string; files?: FileRef[]; reglas?: unknown };
   try {
     body = await req.json();
   } catch {
@@ -199,7 +201,7 @@ export async function POST(req: Request) {
       itemTailorDe({ id: m.id, item_id: m.id, kind: m.kind, data: masterData(m), enVariante: false }),
     );
 
-    const analisis = await construirTailor({ offerText: oferta.text, items }, { llm: geminiOfertaLLM(byok, byok3, await contextoMemoria(sb, user.id, "adaptar-aviso")) });
+    const analisis = await construirTailor({ offerText: oferta.text, items, reglas: normalizarReglas(body.reglas) }, { llm: geminiOfertaLLM(byok, byok3, await contextoMemoria(sb, user.id, "adaptar-aviso")) });
 
     // Los descartes de reformulación se registran en el servidor: si el modelo empieza
     // a inventar en masa, tiene que verse en los logs, no solo en la pantalla de quien lo sufre.

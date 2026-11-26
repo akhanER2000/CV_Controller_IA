@@ -19,6 +19,7 @@ import {
   type PublicationFields,
 } from "@/lib/cv/resume";
 import { ensureMaster, getMasterItems, createMasterItem, type MasterItem } from "@/lib/db/queries";
+import { aplicarReglasAlDocumento, obtenerReglas, type Reglas } from "@/lib/cv/reglas";
 import {
   ORIGEN_TRADUCCION,
   SIN_TRADUCCIONES,
@@ -97,6 +98,8 @@ export interface VariantDetail {
     master_updated_at: string | null;
     /** páginas objetivo (1 a 3). 2 si la columna aún no existe (0009 sin aplicar). */
     paginas_objetivo: PaginasObjetivo;
+    /** reglas de la variante (DA-R1). Sin reglas si la 0012 no está aplicada. */
+    reglas: Reglas;
   };
   items: VariantItemView[];
   master: MasterItemView[];
@@ -227,6 +230,47 @@ export async function guardarPaginasObjetivo(
     .eq("user_id", userId);
   if (error) {
     if (faltaColumnaPaginas(error)) return { persistido: false };
+    throw new Error(error.message);
+  }
+  return { persistido: true };
+}
+
+/* ── REGLAS (0012, DA-R1) ─────────────────────────────────────────────────────
+   cv_variants.reglas, con el mismo criterio que paginas_objetivo: consulta APARTE
+   y, si la columna aún no existe, se leen «sin reglas» y guardar responde
+   persistido:false. Nunca tumba la cabecera de la variante. */
+function faltaColumnaReglas(err: { code?: string; message?: string }): boolean {
+  if (err.code === "PGRST204" || err.code === "42703") return true;
+  return /reglas/i.test(err.message ?? "") && /column|columna|schema cache/i.test(err.message ?? "");
+}
+
+export async function leerReglas(sb: SB, userId: string, variantId: string): Promise<Reglas> {
+  const { data, error } = await sb
+    .from("cv_variants")
+    .select("reglas")
+    .eq("id", variantId)
+    .eq("user_id", userId)
+    .maybeSingle();
+  if (error) {
+    if (faltaColumnaReglas(error)) return obtenerReglas(null);
+    throw new Error(error.message);
+  }
+  return obtenerReglas(data as { reglas?: unknown } | null);
+}
+
+export async function guardarReglas(
+  sb: SB,
+  userId: string,
+  variantId: string,
+  reglas: Reglas,
+): Promise<{ persistido: boolean }> {
+  const { error } = await sb
+    .from("cv_variants")
+    .update({ reglas })
+    .eq("id", variantId)
+    .eq("user_id", userId);
+  if (error) {
+    if (faltaColumnaReglas(error)) return { persistido: false };
     throw new Error(error.message);
   }
   return { persistido: true };
@@ -500,10 +544,11 @@ export async function getVariant(
   if (vErr) throw new Error(vErr.message);
   if (!v) return null;
 
-  const [master, mUpdated, paginas, vitemsRes] = await Promise.all([
+  const [master, mUpdated, paginas, reglas, vitemsRes] = await Promise.all([
     getMasterItems(sb, userId),
     masterUpdatedAt(sb, userId),
     leerPaginasObjetivo(sb, userId, variantId),
+    leerReglas(sb, userId, variantId),
     sb
       .from("variant_items")
       .select("id,item_id,visible,sort_order,override_data,override_origin,override_verified")
@@ -550,6 +595,7 @@ export async function getVariant(
       updated_at: v.updated_at as string,
       master_updated_at: mUpdated,
       paginas_objetivo: paginas,
+      reglas,
     },
     items,
     master: masterView,
@@ -759,7 +805,7 @@ export async function buildVariantResumeData(
   const owned = await ownedVariant(sb, userId, variantId);
   if (!owned) throw new Error("Variante no encontrada.");
 
-  const [master, vitemsRes, espejosRes] = await Promise.all([
+  const [master, vitemsRes, espejosRes, reglas] = await Promise.all([
     getMasterItems(sb, userId),
     sb
       .from("variant_items")
@@ -776,6 +822,7 @@ export async function buildVariantResumeData(
       .select("id,data,lang,origin,translated_from")
       .eq("user_id", userId)
       .eq("origin", ORIGEN_TRADUCCION),
+    leerReglas(sb, userId, variantId),
   ]);
   if (vitemsRes.error) throw new Error(vitemsRes.error.message);
   // Un fallo bajando las traducciones NO puede tumbar el PDF: se degrada al
@@ -876,7 +923,9 @@ export async function buildVariantResumeData(
       })).filter((r) => r.es.trim() !== "")
     : [];
 
-  return {
+  // Las REGLAS de la variante mandan sobre lo que se pinta (DA-R1): secciones
+  // ocultas, sin foto y ningún término excluido. Misma función que el editor.
+  return aplicarReglasAlDocumento({
     meta: { variant: owned.name },
     basics: {
       name: str(basicsItem, "name"),
@@ -938,5 +987,5 @@ export async function buildVariantResumeData(
       en: publicationLine(p.bi.en as PublicationFields),
     })).filter((p) => p.es.trim() !== ""),
     headings: DOCUMENT_HEADINGS,
-  };
+  }, reglas);
 }

@@ -858,7 +858,7 @@ export function ResumePDF({
             <View style={s.side}>
               {photoBlock}
               {contactBlock}
-              {skillsBlock}
+              {!data.ocultas?.includes("skills") && skillsBlock}
               {educationBlock}
               {/* Certificaciones e idiomas van a la LATERAL, junto a la formación:
                   son bloques cortos y es donde caen en una maqueta de dos columnas.
@@ -870,7 +870,7 @@ export function ResumePDF({
             </View>
             <View style={s.main}>
               {nameBlock}
-              {summaryBlock}
+              {!data.ocultas?.includes("summary") && summaryBlock}
               {workBlock}
               {projectsBlock}
               {/* Las publicaciones, en la columna PRINCIPAL: son líneas largas y en

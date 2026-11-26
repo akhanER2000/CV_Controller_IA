@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { generateObject } from "ai";
 import { createClient } from "@/lib/supabase/server";
-import { getVariant, getVariantItem, setAiOverride } from "@/lib/db/variants";
+import { getVariant, getVariantItem, setAiOverride, leerReglas } from "@/lib/db/variants";
 import { guardarAvisoDeVariante } from "@/lib/db/aviso";
 import { hayClaveIA, modeloPara } from "@/lib/ai/modelos";
 import { getUserLlmKey, getUserLlmKey3 } from "@/lib/account/byok";
@@ -58,7 +58,7 @@ function geminiOfertaLLM(apiKey?: string, apiKey3?: string, mem?: ContextoMemori
     "(4) REFORMULACIONES: reescrituras alineadas al aviso de items QUE YA ESTÉN EN LA VARIANTE, SIN meter " +
     "ninguna cifra, sigla ni tecnología que no esté YA en el texto del item. El aviso NO autoriza hechos nuevos.\n" +
     "NUNCA inventes ids, cifras ni tecnologías. NUNCA des un porcentaje ni un score de encaje.";
-  return async ({ offerText, items }) => {
+  return async ({ offerText, items, reglas }) => {
     const model = modeloPara("redaccion-preserva-hechos", apiKey, undefined, undefined, apiKey3);
     // La memoria (DA-M2) va primero y cacheada. La lista se queda: lleva los ids de
     // la VARIANTE y la marca «en la variante / en el master», que la memoria no sabe.
@@ -69,7 +69,7 @@ function geminiOfertaLLM(apiKey?: string, apiKey3?: string, mem?: ContextoMemori
         memoria: mem?.memoria,
         modelo: model,
         sistema: SYS,
-        usuario: `AVISO:\n${offerText.slice(0, 16000)}\n\nITEMS:\n${lineasDelPrompt(items)}`,
+        usuario: `AVISO:\n${offerText.slice(0, 16000)}\n\nITEMS:\n${lineasDelPrompt(items)}` + (reglas ? `\n\n${reglas}` : ""),
       }),
       temperature: 0.2,
     });
@@ -181,7 +181,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       const original = String(it.data[campo] ?? "");
       if (!original.trim()) return fallo("El item no tiene texto que reformular.", 422);
 
-      const veredicto = verificarReformulacion(original, propuesto);
+      // Las reglas de la variante (DA-R1) se suman al candado: un término excluido no se escribe.
+      const veredicto = verificarReformulacion(original, propuesto, await leerReglas(sb, user.id, variantId));
       if (!veredicto.ok) {
         // 422 y el motivo REAL: un rechazo mudo aquí sería indistinguible de un fallo
         // de red, y esto no es un fallo: es el producto negándose a escribir una mentira.
@@ -238,7 +239,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       .map((m) => itemTailorDe({ id: m.id, item_id: m.id, kind: m.kind, data: m.data, enVariante: false }));
 
     const items = [...enVariante, ...soloMaster];
-    const analisis = await construirTailor({ offerText: oferta.text, items }, { llm: geminiOfertaLLM(byok, byok3, await contextoMemoria(sb, user.id, "adaptar-variante")) });
+    const analisis = await construirTailor({ offerText: oferta.text, items, reglas: detalle.variant.reglas }, { llm: geminiOfertaLLM(byok, byok3, await contextoMemoria(sb, user.id, "adaptar-variante")) });
 
     for (const d of analisis.descartados) {
       if (d.tipo === "reformular" || d.tipo === "resumen") {

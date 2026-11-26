@@ -5,6 +5,8 @@ import { z } from "zod";
 // I/O (modelo, base de datos) vive en la ruta /api/variants/[id]/afinar.
 import { normalize, preservesFacts } from "../verify";
 import { calcularFaltas, campoDe, textoDeItem, type AjusteItem } from "./ajuste";
+// Las REGLAS de la variante (DA-R1): se suman al candado, verify.ts no se toca.
+import { esObligatorio, reglasParaPrompt, terminoExcluidoEn, type Reglas } from "./reglas";
 
 /**
  * «AFINAR CON IA» — el motor. La variante puede quedarse con el texto del master
@@ -121,7 +123,32 @@ export const AfinarPlanSchema = z.object({
 export type AfinarPlan = z.infer<typeof AfinarPlanSchema>;
 
 /** La función inyectable que llama al modelo (el LLM real se arma en la ruta). */
-export type AfinarLLM = (input: { items: AfinarItem[]; targetTitle: string; aviso: string }) => Promise<AfinarPlan>;
+export type AfinarLLM = (input: {
+  items: AfinarItem[];
+  targetTitle: string;
+  aviso: string;
+  /** las reglas de la variante como texto de prompt (vacío si no hay). */
+  reglas?: string;
+}) => Promise<AfinarPlan>;
+
+/** Razón de descarte si el texto nombra un término que las reglas excluyen; null si no. */
+export function razonPorReglas(texto: string, reglas: Reglas | undefined): string | null {
+  const t = reglas ? terminoExcluidoEn(texto, reglas) : null;
+  return t ? `nombra «${t}», que las reglas de la variante excluyen` : null;
+}
+
+/**
+ * Las acciones «sin respaldo» que las reglas permiten: un item OBLIGATORIO nunca se
+ * oculta, y no se muestra ni añade un item que nombra un término excluido.
+ */
+export function respaldoSegunReglas(acciones: AccionRespaldo[], reglas: Reglas | undefined): AccionRespaldo[] {
+  if (!reglas) return acciones;
+  return acciones.filter((a) => {
+    if (a.tipo === "ocultar-grupo") return !esObligatorio(reglas, a.itemId);
+    if (a.tipo === "mostrar" || a.tipo === "anadir") return !terminoExcluidoEn(a.texto, reglas);
+    return true;
+  });
+}
 
 // ── La salida ────────────────────────────────────────────────────────────────
 export interface PropuestaAfinar {
@@ -238,7 +265,7 @@ export function lineasDelPromptAfinar(items: AfinarItem[]): string {
  * invención y la paramos» no pueden verse igual desde fuera.
  */
 export async function construirAfinado(
-  input: { items: AfinarItem[]; alcance: AlcanceAfinar; targetTitle: string; aviso?: string },
+  input: { items: AfinarItem[]; alcance: AlcanceAfinar; targetTitle: string; aviso?: string; reglas?: Reglas },
   { llm }: { llm: AfinarLLM },
 ): Promise<AfinadoResult> {
   const descartados: DescartadoAfinar[] = [];
@@ -251,7 +278,13 @@ export async function construirAfinado(
   }
   if (!candidatos.length) return { propuestas: [], descartados, notas: "" };
 
-  const plan = await llm({ items: candidatos, targetTitle: input.targetTitle, aviso: (input.aviso ?? "").trim() });
+  const textoReglas = input.reglas ? reglasParaPrompt(input.reglas) : "";
+  const plan = await llm({
+    items: candidatos,
+    targetTitle: input.targetTitle,
+    aviso: (input.aviso ?? "").trim(),
+    ...(textoReglas ? { reglas: textoReglas } : {}),
+  });
   const porId = new Map(candidatos.map((i) => [i.id, i]));
   const propuestas: PropuestaAfinar[] = [];
   const ya = new Set<string>();
@@ -268,6 +301,11 @@ export async function construirAfinado(
     const v = verificarAfinado(it.maestro, it.evidencia, propuesto);
     if (!v.ok) {
       descartados.push({ id: it.id, propuesto, razon: v.razon, nuevas: v.nuevas, perdidas: v.perdidas });
+      continue;
+    }
+    const rr = razonPorReglas(propuesto, input.reglas);
+    if (rr) {
+      descartados.push({ id: it.id, propuesto, razon: rr });
       continue;
     }
     ya.add(it.id);

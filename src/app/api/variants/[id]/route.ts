@@ -9,7 +9,12 @@ import {
   variantCounts,
   guardarPaginasObjetivo,
   paginasValidas,
+  guardarReglas,
+  addItem,
+  updateItem,
 } from "@/lib/db/variants";
+import { getMasterItems } from "@/lib/db/queries";
+import { validarReglas } from "@/lib/cv/reglas";
 import type { PresentationPatch } from "@/lib/cv/resume";
 import { encuadreValido, leerEncuadre } from "@/components/editor/encuadre";
 
@@ -26,6 +31,9 @@ export const runtime = "nodejs";
  *     { paginas_objetivo: 1|2|3 }            → páginas objetivo (0009)
  *                                              → { ok:true, paginas_objetivo, persistido }
  *        persistido:false ⇒ la columna aún no existe; el editor sigue con su valor.
+ *     { reglas: Reglas }                     → reglas de la variante (0012, DA-R1)
+ *                                              → { ok:true, reglas, persistido, items }
+ *        Los items de «Incluir siempre» que falten entran (o se vuelven visibles).
  *   DELETE /api/variants/[id]          → borrado SUAVE (archived=true) → { ok:true }
  */
 export async function GET(req: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -61,6 +69,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     /** + photoEncuadre: el ORIGINAL de la foto y sus parámetros, para volver a encuadrar. */
     presentation?: PresentationPatch & { photoEncuadre?: unknown };
     paginas_objetivo?: unknown;
+    reglas?: unknown;
   };
   try {
     body = await req.json();
@@ -104,6 +113,29 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       }
       const { persistido } = await guardarPaginasObjetivo(sb, user.id, id, body.paginas_objetivo);
       return NextResponse.json({ ok: true, paginas_objetivo: body.paginas_objetivo, persistido });
+    }
+    if (body.reglas !== undefined) {
+      const master = await getMasterItems(sb, user.id);
+      const vr = validarReglas(body.reglas, { masterIds: new Set(master.map((m) => m.id)) });
+      if (!vr.ok) return NextResponse.json({ error: vr.errores.join(" ") }, { status: 400 });
+      const detalle = await getVariant(sb, user.id, id);
+      if (!detalle) return NextResponse.json({ error: "Variante no encontrada." }, { status: 404 });
+      const { persistido } = await guardarReglas(sb, user.id, id, vr.reglas);
+      // Un objetivo de páginas por encima del nuevo máximo baja al máximo.
+      const max = vr.reglas.paginasMax;
+      if (max && detalle.variant.paginas_objetivo > max) await guardarPaginasObjetivo(sb, user.id, id, max);
+      // Los OBLIGATORIOS se cumplen al guardarlos: el que falte entra, el oculto se ve.
+      const porMaster = new Map(detalle.items.map((v) => [v.item_id, v]));
+      let cambio = false;
+      for (const mid of vr.reglas.incluirSiempre) {
+        const v = porMaster.get(mid);
+        if (!v) await addItem(sb, user.id, id, mid);
+        else if (!v.visible) await updateItem(sb, user.id, v.id, { visible: true });
+        else continue;
+        cambio = true;
+      }
+      const items = cambio ? (await getVariant(sb, user.id, id))?.items ?? detalle.items : detalle.items;
+      return NextResponse.json({ ok: true, reglas: vr.reglas, persistido, items });
     }
     await updateVariant(sb, user.id, id, { name: body.name, target_title: body.target_title });
     return NextResponse.json({ ok: true });

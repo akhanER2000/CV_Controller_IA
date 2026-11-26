@@ -42,6 +42,8 @@ import {
 import type { SeccionNav } from "./NavSecciones";
 import { accionDeTecla } from "./atajos";
 import { archivoAOriginal, leerEncuadre, type Encuadre } from "./encuadre";
+import { aplicarReglasAlDocumento, estadoDeReglas, obtenerReglas, type Reglas } from "@/lib/cv/reglas";
+import { textoDeItem } from "@/lib/cv/ajuste";
 import { PV_ANCHO_DEF, alternarCompleto, alternarOculto, limitarAncho, useVistaPrevia } from "./vista-previa";
 import {
   TEMPLATES,
@@ -685,9 +687,43 @@ export function useEditorVariante(variantId: string) {
   }, [variantId, router, flash, t, fail]);
 
   // ── EL DOCUMENTO: un solo modelo (ResumeData) para el preview y la descarga ──
-  const resumeData = useMemo(
+  // Las REGLAS de la variante (DA-R1) mandan sobre lo que se pinta: misma función
+  // que el servidor (buildVariantResumeData), así preview y descarga son el mismo PDF.
+  const [reglas, setReglasEstado] = useState<Reglas>(() => obtenerReglas(meta));
+  const reglasGuardadas = meta?.reglas;
+  useEffect(() => {
+    setReglasEstado(obtenerReglas({ reglas: reglasGuardadas }));
+  }, [meta?.id, reglasGuardadas]);
+  const resumeSinReglas = useMemo(
     () => buildEditorResumeData({ items, basicsData, masterById, targetTitle, variantName: meta?.name }),
     [items, basicsData, masterById, targetTitle, meta?.name],
+  );
+  const resumeData = useMemo(() => aplicarReglasAlDocumento(resumeSinReglas, reglas), [resumeSinReglas, reglas]);
+  /** Guarda las reglas (PATCH). Los obligatorios que falten vuelven con `items`. */
+  const reglasTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const guardarReglas = useCallback(
+    (r: Reglas) => {
+      setReglasEstado(r);
+      if (!supabaseEnabled) return;
+      // Debounce: la nota libre cambia por tecla; se guarda al parar.
+      if (reglasTimer.current) clearTimeout(reglasTimer.current);
+      reglasTimer.current = setTimeout(() => void (async () => {
+        try {
+          const res = await fetch(`/api/variants/${variantId}`, {
+            method: "PATCH",
+            headers: JSON_HEADERS,
+            body: JSON.stringify({ reglas: r }),
+          });
+          if (!res.ok) throw new Error(await readApiError(res));
+          const j = (await res.json()) as { persistido?: boolean; items?: unknown[] };
+          if (Array.isArray(j.items)) setItems(j.items.map(normalizeIncoming));
+          flash(t(j.persistido === false ? "reglas.sinColumna" : "reglas.guardadas"));
+        } catch (e) {
+          fail("PATCH de la variante · reglas", e, "editor.stSaveErr");
+        }
+      })(), 500);
+    },
+    [variantId, flash, t, fail],
   );
   /* QUÉ SECCIONES SE IMPRIMEN DE VERDAD. Se calcula con la MISMA función que usa el
      PDF (documentSections) y la MISMA métrica (metricsOf): el reordenador dice «no
@@ -721,6 +757,18 @@ export function useEditorVariante(variantId: string) {
   const objetivoRef = useRef(objetivo);
   objetivoRef.current = objetivo;
   const [autofitInfo, setAutofitInfo] = useState<AutofitInfo | null>(null);
+  const estadoReglas = useMemo(() => {
+    const visibles = new Set(items.filter((i) => i.visible).map((i) => i.item_id));
+    const nombreDe = (id: string) => {
+      const m = masterById.get(id);
+      return m ? textoDeItem(m.kind, m.data ?? {}).slice(0, 60) || m.kind : id;
+    };
+    return estadoDeReglas(resumeSinReglas, resumeData, reglas, {
+      paginas: pageCount || undefined,
+      idsVisibles: visibles,
+      nombreDe,
+    });
+  }, [items, masterById, resumeSinReglas, resumeData, reglas, pageCount]);
   // El objetivo vive en la base (cv_variants.paginas_objetivo, 0009): llega con la
   // cabecera de la variante y sobrevive a otro navegador. Sin la columna, 2.
   const paginasGuardadas = meta?.paginas_objetivo;
@@ -1822,7 +1870,7 @@ export function useEditorVariante(variantId: string) {
     onGripKey, toggleHide, revert, removeItem,
     // documento
     basicsData, basicsOverride, revertContact, onContactBlur, linkRows, updateLinkRow, commitLinks, addLinkRow,
-    removeLinkRow, resumeData, docSig, thumbDocHash, designTemplateId, designPaletteId, designTypographyId,
+    removeLinkRow, resumeData, docSig, reglas, guardarReglas, estadoReglas, thumbDocHash, designTemplateId, designPaletteId, designTypographyId,
     activeTemplate, savePresentation, galleryOpen, setGalleryOpen, recommendations, effectiveOrder, orderIsCustom,
     printedSections, moveSection, applyOrderPreset, resetOrder, hasBasics, photoOn, photoUrl, photoInputRef,
     busyPhoto, onPhotoFile, togglePhoto, qrChecked, toggleQr, qrMode, changeQrMode, linkOptions, qrCustomMode,

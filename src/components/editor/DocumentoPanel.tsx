@@ -1,10 +1,12 @@
 // Sin "use client": solo lo importa la pantalla del editor (ya cliente).
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { referenceLine, type ReferenceFields } from "@/lib/cv/resume";
 import { PINNED_LAST_SECTION, SECTION_ORDER_PRESETS } from "@/lib/cv/templates";
 import { TemplateGallery, TemplateThumb } from "@/components/TemplateGallery";
 import { Tabs } from "@/components/ui/Tabs";
 import { EncuadreFoto } from "./EncuadreFoto";
+import { ReglasPanel } from "@/components/ReglasPanel";
+import { textoDeItem } from "@/lib/cv/ajuste";
 import { LIB_TITLE_KEY, PALETTES, S, TEMPLATES, TYPOGRAPHIES, isPhotoDataUrl } from "./modelo";
 import type { Editor } from "./useEditorVariante";
 
@@ -15,7 +17,21 @@ import type { Editor } from "./useEditorVariante";
    selector de plantilla abre la galería (TemplateGallery) tal cual.
    ============================================================================ */
 
-type DocTab = "contacto" | "diseno" | "orden" | "presentacion";
+type DocTab = "contacto" | "diseno" | "orden" | "presentacion" | "reglas";
+
+/** La pestaña «Reglas»: el mismo bloque que en Variantes, con el estado de cada una. */
+function ReglasTab({ ed }: { ed: Editor }) {
+  const master = useMemo(
+    () =>
+      ed.master
+        .map((m) => ({ id: m.id, kind: m.kind, texto: textoDeItem(m.kind, m.data ?? {}) }))
+        .filter((m) => m.texto.trim() !== ""),
+    [ed.master],
+  );
+  return (
+    <ReglasPanel reglas={ed.reglas} onCambio={ed.guardarReglas} master={master} t={ed.t} estado={ed.estadoReglas} />
+  );
+}
 
 export function DocumentoPanel({ ed }: { ed: Editor }) {
   const { t } = ed;
@@ -25,6 +41,8 @@ export function DocumentoPanel({ ed }: { ed: Editor }) {
     { id: "diseno", etiqueta: t("editor.docTabDiseno") },
     { id: "orden", etiqueta: t("editor.docTabOrden") },
     ...(ed.hasBasics ? [{ id: "presentacion" as const, etiqueta: t("editor.docTabPres") }] : []),
+    // Las reglas de la variante (DA-R1): verlas, editarlas y su estado.
+    { id: "reglas", etiqueta: t("reglas.docTab") },
   ];
   const activa = items.some((i) => i.id === tab) ? tab : "contacto";
   return (
@@ -45,6 +63,7 @@ export function DocumentoPanel({ ed }: { ed: Editor }) {
           {activa === "diseno" && <Diseno ed={ed} />}
           {activa === "orden" && <Orden ed={ed} />}
           {activa === "presentacion" && <Presentacion ed={ed} />}
+          {activa === "reglas" && <ReglasTab ed={ed} />}
         </Tabs>
       </div>
 

@@ -17,7 +17,9 @@ import {
   itemDeAfinar,
   lineasDelPromptAfinar,
   planRevertir,
+  razonPorReglas,
   resolverSinRespaldo,
+  respaldoSegunReglas,
   verificarAfinado,
   type AfinarItem,
   type AfinarLLM,
@@ -80,7 +82,7 @@ function afinarLLM(
   const key = apiKey || geminiApiKey();
   if (!key) throw new Error("Falta GEMINI_API_KEY");
   const model = modeloPara("redaccion-preserva-hechos", key, undefined, undefined, apiKey3);
-  return async ({ items, targetTitle, aviso }) => {
+  return async ({ items, targetTitle, aviso, reglas }) => {
     // Memoria primero y cacheada (DA-M2); lo variable (rol, aviso, items) después.
     const r = await generateObject({
       model,
@@ -92,6 +94,7 @@ function afinarLLM(
         usuario:
           `ROL OBJETIVO: ${targetTitle || "(sin especificar)"}\n` +
           (aviso ? `AVISO (solo orienta, no autoriza hechos):\n${aviso}\n\n` : "\n") +
+          (reglas ? `${reglas}\n\n` : "") +
           `ITEMS A AFINAR:\n${lineasDelPromptAfinar(items)}`,
       }),
       temperature: 0.3,
@@ -146,6 +149,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     const items: AfinarItem[] = detalle.items.map((v) => itemDeAfinar(itemDeAjuste(v), masterById.get(v.item_id)));
     const itemsPorId = new Map(items.map((i) => [i.id, i]));
     const frescos = async () => (await getVariant(sb, user.id, variantId))?.items ?? [];
+    // Las REGLAS de la variante (DA-R1): viajan en el prompt y se suman al candado.
+    const reglas = detalle.variant.reglas;
+    const sinRespaldo = () => respaldoSegunReglas(resolverSinRespaldo(items, master), reglas);
 
     /** Escribe UN afinado de texto, con el candado corriendo aquí, donde se escribe. */
     const escribirTexto = async (
@@ -169,6 +175,11 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       if (!ver.ok) {
         console.warn("[api/afinar] afinado RECHAZADO por el candado", { variantId, item: id, razon: ver.razon });
         descartados.push({ id, propuesto, razon: ver.razon, nuevas: ver.nuevas, perdidas: ver.perdidas });
+        return;
+      }
+      const rr = razonPorReglas(propuesto, reglas);
+      if (rr) {
+        descartados.push({ id, propuesto, razon: rr });
         return;
       }
       const antes = v.override_data ?? null;
@@ -196,6 +207,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       let revertidos = 0;
       for (const op of ops) {
         if (!porId.has(op.id)) continue; // solo items de ESTA variante
+        // Un item OBLIGATORIO de las reglas no se quita ni al revertir.
+        if (op.op === "quitar" && reglas.incluirSiempre.includes(porId.get(op.id)!.item_id)) continue;
         if (op.op === "override") await updateItem(sb, user.id, op.id, { override_data: op.override_data });
         else if (op.op === "visible") await updateItem(sb, user.id, op.id, { visible: op.visible });
         else await removeItem(sb, user.id, op.id);
@@ -206,7 +219,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
 
     // ── RESPALDO (confirmado): sin IA. Nunca escribe una viñeta: muestra, añade o quita.
     if (body.accion === "respaldo") {
-      const acciones = resolverSinRespaldo(items, master);
+      const acciones = sinRespaldo();
       if (!mismoResumen(resumenRespaldo(acciones), body.esperado)) {
         return fallo("La variante cambió desde el resumen: vuelve a afinar para ver lo que se aplicaría.", 409);
       }
@@ -268,7 +281,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       }
       const mem = await contextoMemoria(sb, user.id, "afinar");
       const r = await construirAfinado(
-        { items, alcance, targetTitle, aviso },
+        { items, alcance, targetTitle, aviso, reglas },
         { llm: afinarLLM(byok, byok3, mem, (u) => (uso.v = u)) },
       );
       notas = r.notas;
@@ -280,7 +293,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
 
     // 2 · «Sin respaldo»: solo se CUENTA. Se aplica con accion:'respaldo' tras la
     //     confirmación del editor (DA-M5).
-    const respaldo = incluyeAptitudes(alcance) ? resumenRespaldo(resolverSinRespaldo(items, master)) : null;
+    const respaldo = incluyeAptitudes(alcance) ? resumenRespaldo(sinRespaldo()) : null;
 
     return NextResponse.json({
       aplicado: aplicados,

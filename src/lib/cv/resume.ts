@@ -268,6 +268,12 @@ export interface ResumeData {
    */
   sectionOrder?: readonly SectionId[];
   /**
+   * SECCIONES OCULTAS por las reglas de la variante (DA-R1, src/lib/cv/reglas.ts).
+   * Opcional: `undefined` ⇒ nada oculto (golden intacto). Hace falta además de
+   * vaciar la sección porque el resumen y las habilidades se rotulan siempre.
+   */
+  ocultas?: readonly SectionId[];
+  /**
    * Foto — OPT-IN explícito (versión "visual"). El CV estándar (y el golden) va
    * SIN foto. NUNCA es el avatar de la UI: es una imagen (data-URL) que el usuario
    * sube aparte para el CV. Solo se renderiza si está puesta.
@@ -660,7 +666,7 @@ export function documentSections(data: ResumeData, onePage: boolean, m: Resolved
     // rotula, no gasta una línea, no queda un «disponibles a solicitud» flotando.
     references: references.length > 0,
   };
-  return m.sectionOrder.filter((id) => hay[id]);
+  return m.sectionOrder.filter((id) => hay[id] && !data.ocultas?.includes(id));
 }
 
 /**

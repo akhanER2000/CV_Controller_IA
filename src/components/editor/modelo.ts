@@ -77,6 +77,8 @@ export interface VMeta {
   master_updated_at?: string;
   /** páginas objetivo guardadas en la base (0009); sin la columna llega 2. */
   paginas_objetivo?: number;
+  /** reglas de la variante (0012, DA-R1); se normalizan con obtenerReglas. */
+  reglas?: unknown;
 }
 
 /* El contrato de /ajustar, el del autofit y el reparto de la propuesta sobre los
