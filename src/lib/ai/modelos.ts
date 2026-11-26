@@ -539,6 +539,45 @@ export async function pingProveedorAnthropic(
   );
 }
 
+/* ── EL PING DE LOS MODELOS QUE TRABAJAN ─────────────────────────────────────
+   El ping de salud prueba Haiku (la llamada más barata), pero la extracción y la
+   redacción van en Sonnet. Que Haiku responda no dice nada de Sonnet: una clave
+   puede tener uno sin el otro, o Sonnet puede estar caído o sin cupo. Así que
+   Salud prueba TAMBIÉN el modelo de esas dos tareas y dice cuál responde. */
+
+/** Tareas pesadas cuyo modelo de Claude prueba Salud además del ping. */
+export const TAREAS_DE_TRABAJO: readonly Tarea[] = ["extraccion-estructurada", "redaccion-preserva-hechos"] as const;
+
+export interface PingDeTrabajo extends ResultadoPing {
+  /** las tareas que ese modelo atiende (si comparten modelo, UN ping para las dos) */
+  tareas: Tarea[];
+}
+
+/** Los modelos de Claude de extracción y redacción, agrupados (Sonnet atiende las dos → uno). */
+export function modelosDeTrabajo(elegido?: string | null): { modelo: string; tareas: Tarea[] }[] {
+  const grupos = new Map<string, Tarea[]>();
+  for (const tarea of TAREAS_DE_TRABAJO) {
+    const e = eleccionDe(tarea, elegido);
+    const modelo = e && proveedorDeModelo(e) === "anthropic" ? e : REGISTRO[tarea].modelo;
+    grupos.set(modelo, [...(grupos.get(modelo) ?? []), tarea]);
+  }
+  return [...grupos].map(([modelo, tareas]) => ({ modelo, tareas }));
+}
+
+/** Ping REAL a cada modelo de trabajo de Anthropic (misma ventana compartida que el ping). */
+export async function pingModelosDeTrabajo(
+  apiKey?: string,
+  forzar = false,
+  elegido?: string | null,
+): Promise<PingDeTrabajo[]> {
+  return Promise.all(
+    modelosDeTrabajo(elegido).map(async ({ modelo, tareas }) => ({
+      ...(await pingProveedorAnthropic(apiKey, forzar, modelo)),
+      tareas,
+    })),
+  );
+}
+
 /** Solo para los tests: deja la ventana limpia entre casos. */
 export function _resetPing(): void {
   cachePing.clear();

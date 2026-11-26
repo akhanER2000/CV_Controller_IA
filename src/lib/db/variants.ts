@@ -95,6 +95,8 @@ export interface VariantDetail {
     lang: string;
     updated_at: string;
     master_updated_at: string | null;
+    /** páginas objetivo (1 a 3). 2 si la columna aún no existe (0009 sin aplicar). */
+    paginas_objetivo: PaginasObjetivo;
   };
   items: VariantItemView[];
   master: MasterItemView[];
@@ -175,6 +177,59 @@ export async function updateVariant(
     .eq("id", variantId)
     .eq("user_id", userId);
   if (error) throw new Error(error.message);
+}
+
+/* ── PÁGINAS OBJETIVO (0009) ─────────────────────────────────────────────────
+   Vivía en localStorage (corpus.paginas.<id>) y no sobrevivía a otro navegador.
+   Ahora es cv_variants.paginas_objetivo. Si la 0009 no está aplicada, se cae a 2
+   SIN romper nada (mismo criterio que byok con su columna ausente): se lee y se
+   escribe en una consulta APARTE para que la cabecera de la variante no dependa
+   de una columna que puede faltar. */
+export type PaginasObjetivo = 1 | 2 | 3;
+export const PAGINAS_POR_DEFECTO: PaginasObjetivo = 2;
+
+export function paginasValidas(v: unknown): v is PaginasObjetivo {
+  return v === 1 || v === 2 || v === 3;
+}
+
+/** ¿El error es «esa columna no existe» (y no RLS u otra cosa)? */
+function faltaColumnaPaginas(err: { code?: string; message?: string }): boolean {
+  if (err.code === "PGRST204" || err.code === "42703") return true;
+  return /paginas_objetivo/i.test(err.message ?? "") && /column|columna|schema cache/i.test(err.message ?? "");
+}
+
+export async function leerPaginasObjetivo(sb: SB, userId: string, variantId: string): Promise<PaginasObjetivo> {
+  const { data, error } = await sb
+    .from("cv_variants")
+    .select("paginas_objetivo")
+    .eq("id", variantId)
+    .eq("user_id", userId)
+    .maybeSingle();
+  if (error) {
+    if (faltaColumnaPaginas(error)) return PAGINAS_POR_DEFECTO;
+    throw new Error(error.message);
+  }
+  const v = (data as { paginas_objetivo?: unknown } | null)?.paginas_objetivo;
+  return paginasValidas(v) ? v : PAGINAS_POR_DEFECTO;
+}
+
+/** Guarda el objetivo. `persistido:false` ⇒ la columna no existe todavía (0009). */
+export async function guardarPaginasObjetivo(
+  sb: SB,
+  userId: string,
+  variantId: string,
+  paginas: PaginasObjetivo,
+): Promise<{ persistido: boolean }> {
+  const { error } = await sb
+    .from("cv_variants")
+    .update({ paginas_objetivo: paginas })
+    .eq("id", variantId)
+    .eq("user_id", userId);
+  if (error) {
+    if (faltaColumnaPaginas(error)) return { persistido: false };
+    throw new Error(error.message);
+  }
+  return { persistido: true };
 }
 
 /** Estado efectivo + verdad de la persistencia que la UI usa para reconciliar. */
@@ -444,9 +499,10 @@ export async function getVariant(
   if (vErr) throw new Error(vErr.message);
   if (!v) return null;
 
-  const [master, mUpdated, vitemsRes] = await Promise.all([
+  const [master, mUpdated, paginas, vitemsRes] = await Promise.all([
     getMasterItems(sb, userId),
     masterUpdatedAt(sb, userId),
+    leerPaginasObjetivo(sb, userId, variantId),
     sb
       .from("variant_items")
       .select("id,item_id,visible,sort_order,override_data,override_origin,override_verified")
@@ -492,6 +548,7 @@ export async function getVariant(
       lang: (v.lang as string) ?? "es",
       updated_at: v.updated_at as string,
       master_updated_at: mUpdated,
+      paginas_objetivo: paginas,
     },
     items,
     master: masterView,

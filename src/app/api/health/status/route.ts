@@ -9,6 +9,7 @@ import {
   pingProveedor,
   pingProveedorBarato,
   pingProveedorAnthropic,
+  pingModelosDeTrabajo,
   rutaDe,
   TAREAS,
 } from "@/lib/ai/modelos";
@@ -229,7 +230,9 @@ async function checkAnthropic(sb: SupabaseClient, uid: string): Promise<Service>
     return { id: "anthropic", ok: true, status: "warn", detail, meta: metaBase };
   }
 
-  const ping = await pingProveedorAnthropic(clave!);
+  // El ping es Haiku; extracción y redacción van en Sonnet. Se prueban los dos y
+  // se dice cuál responde: que Haiku conteste no prueba que Sonnet atienda.
+  const [ping, trabajo] = await Promise.all([pingProveedorAnthropic(clave!), pingModelosDeTrabajo(clave!)]);
   const meta = {
     ...metaBase,
     model: ping.modelo,
@@ -237,11 +240,31 @@ async function checkAnthropic(sb: SupabaseClient, uid: string): Promise<Service>
     sample: ping.muestra,
     cached: ping.reutilizado,
     checkedAgoMs: ping.edadMs,
+    workModels: trabajo.map((w) => ({
+      model: w.modelo, tasks: w.tareas, ok: w.ok, latencyMs: w.latenciaMs, reason: w.error,
+      cached: w.reutilizado, checkedAgoMs: w.edadMs,
+    })),
   };
-  if (!ping.ok) {
+  const caidos = trabajo.filter((w) => !w.ok);
+  const quienes = (ws: typeof trabajo) => ws.map((w) => `${w.modelo} (${w.tareas.join(" y ")})`).join(", ");
+  if (!ping.ok && caidos.length === trabajo.length) {
     return {
       id: "anthropic", ok: false, status: "fail",
-      detail: `${ping.error ?? "Anthropic no respondió."} Mientras tanto, las tareas caen a Gemini.`,
+      detail: `${ping.error ?? "Anthropic no respondió."} Tampoco responde ${quienes(trabajo)}. Mientras tanto, las tareas caen a Gemini.`,
+      meta,
+    };
+  }
+  if (caidos.length) {
+    return {
+      id: "anthropic", ok: true, status: "warn",
+      detail: `${ping.ok ? `Responde ${ping.modelo} (ping)` : `No responde ${ping.modelo} (ping)`}, pero NO responde ${quienes(caidos)}: ${caidos[0]!.error ?? "error"}. Esas tareas caen a Gemini.`,
+      meta,
+    };
+  }
+  if (!ping.ok) {
+    return {
+      id: "anthropic", ok: true, status: "warn",
+      detail: `Responde ${quienes(trabajo)}, pero no ${ping.modelo} (ping/clasificación): ${ping.error ?? "error"}.`,
       meta,
     };
   }
@@ -256,9 +279,9 @@ async function checkAnthropic(sb: SupabaseClient, uid: string): Promise<Service>
     id: "anthropic",
     ok: true,
     status: "ok",
-    detail: est3.clave
-      ? "Responde. Es el proveedor principal de todas las tareas. Usa tu propia clave (BYOK)."
-      : "Responde. Es el proveedor principal de todas las tareas. Usa la clave del servidor.",
+    detail: `Responden ${ping.modelo} (ping) y ${quienes(trabajo)}. Es el proveedor principal de todas las tareas. ${
+      est3.clave ? "Usa tu propia clave (BYOK)." : "Usa la clave del servidor."
+    }`,
     meta,
   };
 }

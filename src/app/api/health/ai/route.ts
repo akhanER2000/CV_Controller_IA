@@ -4,7 +4,9 @@ import {
   nombreVarClave,
   pingProveedor,
   pingProveedorAnthropic,
+  pingModelosDeTrabajo,
   rutaDe,
+  type PingDeTrabajo,
   type ResultadoPing,
 } from "@/lib/ai/modelos";
 
@@ -52,9 +54,11 @@ export async function GET() {
     );
   }
 
-  const [pa, pg] = await Promise.all([
+  const [pa, pg, trabajo] = await Promise.all([
     keyA ? pingProveedorAnthropic(keyA) : Promise.resolve(null),
     keyG ? pingProveedor(keyG) : Promise.resolve(null),
+    // El ping es Haiku; extracción y redacción van en Sonnet: se prueba también.
+    keyA ? pingModelosDeTrabajo(keyA) : Promise.resolve([] as PingDeTrabajo[]),
   ]);
   const principalOk = !!pa?.ok;
   const ok = principalOk || !!pg?.ok;
@@ -76,6 +80,8 @@ export async function GET() {
       envVar: nombreVarClave(), // el NOMBRE real de la variable de Gemini
       anthropicKeyLoaded: !!keyA,
       principal: { proveedor: "anthropic", envVar: keyA ? "ANTHROPIC_API_KEY" : null, ...resumen(pa) },
+      // Los modelos de extracción y redacción, cada uno con si responde o no.
+      modelosDeTrabajo: trabajo.map((w) => ({ tasks: w.tareas, ...resumen(w) })),
       secundario: { proveedor: "google", envVar: nombreVarClave(), ...resumen(pg) },
       // Quién redacta con las claves del servidor (sin BYOK: no hay sesión).
       tailoringModel: rutaDe("redaccion-preserva-hechos", { anthropicDisponible: principalOk }).modelo,

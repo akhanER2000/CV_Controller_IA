@@ -403,9 +403,25 @@ export function analizarCorpusMd(parseoCrudo: unknown, opts: OpcionesAnalisis = 
     }
 
     // ── enlace viñeta → su rol ────────────────────────────────────────────────
+    // DA-PD9: el parser real (corpus-md/parser.ts) enlaza por `parentIndex`, no
+    // por `parentKey`. Leer solo la clave dejaba TODAS las viñetas del .md sin
+    // rol en staging, y de ahí al master con parent_id nulo.
     const padreAjeno = texto(it.parentKey).trim();
+    const padreIdx = entero(it.parentIndex);
     let parentKey: string | undefined;
-    if (padreAjeno) {
+    if (!padreAjeno && padreIdx !== null) {
+      const padre = parseo.items[padreIdx];
+      parentKey = padre && KINDS.has(texto(padre.kind).trim()) ? `md${padreIdx}` : undefined;
+      if (!parentKey) {
+        avisos.push(
+          conLinea(
+            linea,
+            `«${etiquetaItem(kind, dataItem)}»: apunta a un bloque padre que no está en el fichero. Entra suelta para que no se pierda; podrás recolocarla al aceptarla.`,
+            `"${etiquetaItem(kind, dataItem)}": it points to a parent block that is not in the file. It enters on its own so nothing is lost; you can re-attach it when you accept it.`,
+          ),
+        );
+      }
+    } else if (padreAjeno) {
       parentKey = claveDe.get(padreAjeno);
       if (!parentKey) {
         avisos.push(

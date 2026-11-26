@@ -160,6 +160,8 @@ interface VMeta {
   lang: string;
   updated_at?: string;
   master_updated_at?: string;
+  /** páginas objetivo guardadas en la base (0009); sin la columna llega 2. */
+  paginas_objetivo?: number;
 }
 
 /* El contrato de /ajustar, el del autofit y el reparto de la propuesta sobre los
@@ -1418,27 +1420,31 @@ export function EditorVarianteScreen({ variantId = "editor" }: { variantId?: str
   const objetivoRef = useRef(objetivo);
   objetivoRef.current = objetivo;
   const [autofitInfo, setAutofitInfo] = useState<AutofitInfo | null>(null);
-  const claveObjetivo = `corpus.paginas.${variantId}`;
-  // Se hidrata ya montado (como el plegado): leer localStorage en el inicializador
-  // haría discrepar servidor y cliente. Puede lanzar (modo privado): se degrada a 2.
+  // El objetivo vive en la base (cv_variants.paginas_objetivo, 0009): llega con la
+  // cabecera de la variante y sobrevive a otro navegador. Sin la columna, 2.
+  const paginasGuardadas = meta?.paginas_objetivo;
   useEffect(() => {
-    try {
-      const v = Number(window.localStorage.getItem(claveObjetivo));
-      if (v === 1 || v === 3) setObjetivo(v);
-    } catch {
-      /* sin almacenamiento: 2 páginas */
-    }
-  }, [claveObjetivo]);
+    if (paginasGuardadas === 1 || paginasGuardadas === 2 || paginasGuardadas === 3) setObjetivo(paginasGuardadas);
+  }, [meta?.id, paginasGuardadas]);
   const elegirObjetivo = useCallback(
     (n: Objetivo) => {
       setObjetivo(n);
-      try {
-        window.localStorage.setItem(claveObjetivo, String(n));
-      } catch {
-        /* la preferencia no sobrevive a la sesión, y no pasa nada */
-      }
+      if (!supabaseEnabled) return;
+      void (async () => {
+        try {
+          const res = await fetch(`/api/variants/${variantId}`, {
+            method: "PATCH",
+            headers: JSON_HEADERS,
+            body: JSON.stringify({ paginas_objetivo: n }),
+          });
+          if (!res.ok) throw new Error(await readApiError(res));
+          flash(t("editor.stSaved"));
+        } catch (e) {
+          fail("PATCH de la variante · paginas_objetivo", e, "editor.stSaveErr");
+        }
+      })();
     },
-    [claveObjetivo],
+    [variantId, flash, t, fail],
   );
 
   // Un object URL vivo por PDF: se revoca el anterior al llegar el nuevo y el
