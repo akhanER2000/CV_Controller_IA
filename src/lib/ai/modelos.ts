@@ -1,6 +1,6 @@
 import "server-only";
 import { createHash } from "node:crypto";
-import { generateText } from "ai";
+import { APICallError, LoadAPIKeyError, generateText, wrapLanguageModel } from "ai";
 import { createGoogleGenerativeAI } from "@ai-sdk/google";
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import { createAnthropic } from "@ai-sdk/anthropic";
@@ -9,47 +9,44 @@ import { createAnthropic } from "@ai-sdk/anthropic";
  * ════════════════════════════════════════════════════════════════════════════
  * REGISTRO ÚNICO DE MODELOS — una tarea, un modelo, un sitio.
  *
- * EL PROBLEMA: el literal "gemini-flash-latest" estaba COPIADO en cinco ficheros
- * (llm.ts, variants/route.ts, ajustar/route.ts, health/ai/route.ts,
- * health/status/route.ts) más ingest.ts. Cambiar de modelo —o cambiar de modelo
- * SOLO para una tarea, que es lo que se quiere cuando algo sale caro— obligaba a
- * encontrar los seis. Y el panel de salud podía acabar reportando un modelo
- * distinto del que la extracción usa de verdad: un chequeo que miente.
+ * EL PROBLEMA: el literal "gemini-flash-latest" estaba COPIADO en cinco ficheros.
+ * Cambiar de modelo obligaba a encontrarlos todos, y el panel de salud podía acabar
+ * reportando un modelo distinto del que la extracción usa de verdad.
  *
- * LA FORMA: un mapa TAREA → modelo. Las tareas son las que el código ya hace hoy,
- * identificadas una a una; no hay tareas inventadas «por si acaso».
+ * LA FORMA: un mapa TAREA → modelo. Las tareas son las que el código ya hace hoy.
  *
- * ★ BLOQUE H · SEGUNDO PROVEEDOR (router de dos niveles POR COSTE).
- *   Ya no es solo estructura preparada: entra un segundo proveedor compatible con
- *   OpenAI (Groq por defecto) que atiende SOLO las tareas baratas —clasificar y
- *   desempatar duplicados—. `modeloPara` es el ÚNICO punto de ramificación.
+ * ★ ANTHROPIC (Claude) ES EL PROVEEDOR PRINCIPAL DE TODAS LAS TAREAS; GEMINI EL
+ *   SECUNDARIO. Orden de clave, igual en todas:
+ *     1. la clave BYOK de Anthropic del usuario (user_settings.llm_api_key_3),
+ *     2. ANTHROPIC_API_KEY del servidor,
+ *     3. Gemini (BYOK del usuario o GEMINI_API_KEY del servidor).
+ *   Groq (2ª clave BYOK) queda OPCIONAL y solo para `clasificacion-barata`: atiende
+ *   cuando no hay ninguna clave de Anthropic, antes de caer a Gemini.
  *
- *   ⚠ Esto NO apila modelos para «más fiabilidad»: apilar solo añade modos de
- *     fallo. Es un router POR COSTE, para abaratar lo barato. La fiabilidad sigue
+ * ★ FALLBACK REAL, NUNCA EN SILENCIO. Si Claude falla en tiempo de ejecución (401,
+ *   403, 404 de modelo, 429, 5xx o la red), la MISMA llamada —mismos parámetros— se
+ *   repite con Gemini (`conFallback`). Se avisa por consola y la caída queda anotada:
+ *   `rutaDe` marca la tarea `degradado` durante `TTL_CAIDA_MS`, así el panel de salud
+ *   enseña quién atiende de verdad. Sin clave de Anthropic, la tarea va directa a
+ *   Gemini y también sale `degradado`.
+ *
+ *   ⚠ Esto NO apila modelos para «más fiabilidad» del contenido: la fiabilidad sigue
  *     viniendo de la verificación DETERMINISTA (evidencia literal, preservesFacts,
- *     round-trip ATS), no de tener dos modelos. Por eso un modelo barato solo entra
- *     al router si soporta SALIDA ESTRUCTURADA (llama-3.3-70b-versatile la soporta):
- *     si no la soportara, no podría atender una tarea con schema y quedaría fuera.
- *
- *   ⚠ DEGRADAR CON HONESTIDAD: sin 2ª clave configurada, la tarea barata CAE al
- *     proveedor por defecto (Gemini) — no rompe, no calla. `rutaDe` lo dice con el
- *     flag `degradado` para que el panel de salud no mienta sobre quién atiende qué.
- *
- * ★ TERCER PROVEEDOR · ANTHROPIC (Claude), SOLO para `redaccion-preserva-hechos`.
- *   Extracción y visión siguen en Gemini (el A/B de abajo es de Gemini y la visión
- *   no se ha probado en otro). La 3ª clave BYOK (user_settings.llm_api_key_3,
- *   migración 0007) activa la redacción en Claude; sin ella la redacción CAE a
- *   Gemini con su `modeloFallback` y `rutaDe` la marca `degradado`, igual que Groq.
+ *     round-trip ATS). El fallback solo evita que un proveedor caído tumbe la app.
  * ════════════════════════════════════════════════════════════════════════════
  */
 
-/** Los proveedores del router. "google" = Gemini (por defecto); barato = Groq; redacción = Anthropic. */
+/** Los proveedores del router. anthropic = principal · google = secundario · groq = barato opcional. */
 export type Proveedor = "google" | "groq" | "anthropic";
 
-/** El proveedor BARATO del router de dos niveles. Un solo sitio lo nombra. */
+/** El proveedor PRINCIPAL de todas las tareas. */
+export const PROVEEDOR_PRINCIPAL: Proveedor = "anthropic";
+/** El proveedor SECUNDARIO: atiende sin clave de Anthropic o cuando Claude falla. */
+export const PROVEEDOR_SECUNDARIO: Proveedor = "google";
+/** El proveedor BARATO opcional (solo clasificación, solo con 2ª clave). */
 export const PROVEEDOR_BARATO: Proveedor = "groq";
 
-/** Base URL OpenAI-compatible de Groq. El SDK de @ai-sdk/openai-compatible la usa. */
+/** Base URL OpenAI-compatible de Groq. */
 const GROQ_BASE_URL = "https://api.groq.com/openai/v1";
 
 /** Las tareas REALES del repo, cada una con el sitio que la ejecuta. */
@@ -75,161 +72,264 @@ export const TAREAS: readonly Tarea[] = [
 ] as const;
 
 export interface Definicion {
-  /** El proveedor PREFERENTE de la tarea. "groq" solo en las baratas; "anthropic" solo en la redacción. */
+  /** El proveedor PREFERENTE de la tarea: Anthropic en todas. */
   proveedor: Proveedor;
-  /** El modelo del proveedor preferente. */
+  /** El modelo del proveedor preferente (Claude, ID versionado). */
   modelo: string;
-  /**
-   * SOLO en tareas cuyo `proveedor` NO es "google": el modelo de Gemini al que la
-   * tarea CAE cuando no hay clave de su proveedor (2ª Groq · 3ª Anthropic). Sin este
-   * campo, degradar dejaría a `modeloPara` sin un modelo de google válido que instanciar.
-   */
-  modeloFallback?: string;
+  /** El modelo de Gemini al que la tarea CAE (sin clave de Anthropic o si Claude falla). */
+  modeloFallback: string;
+  /** SOLO en clasificación: el modelo de Groq, si hay 2ª clave y ninguna de Anthropic. */
+  modeloBarato?: string;
   /** Por qué ESTE modelo para ESTA tarea. Sin esto el registro es una tabla muda. */
   motivo: string;
 }
 
+/** Claude Sonnet: visión, extracción y redacción. ID versionado, comprobado con llamada real. */
+export const MODELO_SONNET = "claude-sonnet-5-5";
+/** Claude Haiku: clasificación y ping. ID versionado, comprobado con llamada real. */
+export const MODELO_HAIKU = "claude-haiku-5-5";
+/** El Gemini secundario: el que ganó el A/B de extracción de Gemini (abajo). */
+export const MODELO_GEMINI = "gemini-3.6-flash";
+/** El Groq opcional de clasificación (soporta salida estructurada). */
+export const MODELO_GROQ = "llama-3.3-70b-versatile";
+
 /**
  * El único sitio del repo donde se nombra un modelo.
  *
- * ★ NUNCA UN ALIAS FLOTANTE (`-latest`) EN PRODUCCIÓN. `gemini-flash-latest`
- *   resuelve a «lo que Google promocione como Flash más reciente», y esa promoción
- *   la decide GOOGLE, no nosotros: el consumo real de la cuenta se fue a Gemini 3.5
- *   Flash —el escalón más caro— sin que nadie lo eligiera, solo porque el alias fue
- *   detrás de la promoción. Un alias flotante es dejar que tu proveedor te elija la
- *   factura, y la próxima promoción te la vuelve a cambiar sin que toques una línea.
- *   Un ID versionado, en cambio, solo cambia cuando lo cambiamos aquí. `tests/
- *   modelos-registro.test.ts` falla si reaparece un `-latest`.
+ * ★ NUNCA UN ALIAS FLOTANTE (`-latest`) EN PRODUCCIÓN. Un alias flotante es dejar
+ *   que tu proveedor te elija la factura: `gemini-flash-latest` se fue al escalón más
+ *   caro sin que nadie lo eligiera. Un ID versionado solo cambia cuando lo cambiamos
+ *   aquí. `tests/modelos-registro.test.ts` falla si reaparece un `-latest`.
  *
- * ⚠⚠ EL LISTADO DE MODELOS MIENTE. ESTE ES EL HECHO QUE MANDA AQUÍ.
- *   `GET /v1beta/models` devolvió 20 modelos con `generateContent` para la clave del
- *   usuario. Al hacerles un ping REAL, solo 11 respondieron: `gemini-2.5-flash`,
- *   `2.5-pro`, `2.5-flash-lite`, `2.0-flash`, `2.0-flash-lite` y `3-pro-preview` dan
- *   404 «no longer available to new users». Listado ≠ utilizable.
- *   Por eso el selector de modelos NO puede poblarse solo con el listado: hay que
- *   PROBAR cada uno. Es el mismo principio que el resto del producto — el chequeo
- *   llama de verdad, nunca un ✓ optimista.
+ * ⚠⚠ EL LISTADO DE MODELOS MIENTE. `GET /v1beta/models` devolvió 20 modelos de
+ *   Gemini con `generateContent`; al hacerles un ping REAL solo 11 respondieron.
+ *   Listado ≠ utilizable: los IDs de Claude de aquí salen de `GET /v1/models` Y de
+ *   una llamada real a cada uno (tests/manual/ab-modelos.ts).
  *
- * ⚠ Y ANTES DE ESO YO ME EQUIVOQUÉ, que conviene dejarlo escrito: fijé
- *   `gemini-2.5-flash` afirmando que el comentario original («la clave NO habilita
- *   2.5/2.0-flash») estaba obsoleto. No lo estaba. Leí una leyenda de familias de
- *   modelos como si fuera la lista de lo que la clave puede llamar, y contradije un
- *   comentario que tenía razón. Resultado: la app entera con un modelo inexistente y
- *   el panel de salud en rojo. La regla que lo evita ya estaba escrita —«comprueba
- *   cuáles acepta de verdad la clave, no adivines el string»— y no la seguí.
- *
- * ★ ELECCIÓN ACTUAL: `gemini-3.6-flash` en todo lo de Gemini, y no por intuición.
- *   A/B MEDIDO sobre el dossier real (mismos prompts de producción, solo cambia el
- *   modelo), con el CANARIO: la extracción pide copiar el `evidence_snippet` LITERAL
- *   y el servidor comprueba `normalize(raw).includes(normalize(evidence))`.
+ * ★ GEMINI (secundario): `gemini-3.6-flash`, por el A/B MEDIDO sobre el dossier real
+ *   con el CANARIO de evidencia literal (`normalize(raw).includes(normalize(ev))`):
  *
  *     gemini-3.6-flash        46 items · 87 % verificado ·  6 parciales   ← elegido
  *     gemini-3.5-flash        35 items · 86 % verificado ·  5 parciales
  *     gemini-3.5-flash-lite   40 items · 30 % verificado · 28 parciales   ✗
  *     gemini-3.1-flash-lite   35 items · 35 % verificado · 22 parciales   ✗
  *
- *   ★ LOS LITE NO SIRVEN PARA ESTO, y el porqué importa más que el número: un modelo
- *   débil NO falla inventando, falla PARAFRASEANDO. Resume la cita con sus palabras,
- *   el includes() da false, y la evidencia se cae del 87 % al 30 %. Mírense los
- *   parciales: 28 y 22 contra 5 y 6. La hipótesis de que «extraer contra un schema es
- *   reconocimiento de patrones y aguanta un Lite» era MÍA y el canario la desmintió.
- *   Bajar la extracción a Lite habría ahorrado tokens destruyendo lo único que hace
- *   confiable este producto.
+ *   ★ CLAUDE (principal), MISMO A/B, 25-nov-2026 (9 llamadas, prompts de producción):
  *
- *   Reproducir: `tests/manual/ab-modelos.ts` (fuera de CI; gasta tokens reales).
+ *     claude-sonnet-5-5       45 items · 98 % verificado ·  1 parcial    ← principal
+ *     gemini-3.6-flash        47 items · 52 % verificado · 23 parciales  (misma tanda)
+ *
+ *   Sonnet gasta ~1,9× tokens de entrada (97 k vs 52 k: otro tokenizador) y ~0,6× de
+ *   salida. El 52 % de Gemini es una sola tanda; la del jul. dio 87 %: varía.
+ *
+ *   ★ LOS LITE NO SIRVEN PARA ESTO: un modelo débil no falla inventando, falla
+ *   PARAFRASEANDO, y el includes() da false. Por eso la extracción va en Sonnet y no
+ *   en Haiku: Haiku solo atiende decisiones de una palabra y el ping.
+ *
+ *   Reproducir (Claude y Gemini): `tests/manual/ab-modelos.ts` (fuera de CI; gasta tokens).
  */
 export const REGISTRO: Readonly<Record<Tarea, Definicion>> = {
   "transcripcion-vision": {
-    proveedor: "google",
-    modelo: "gemini-3.6-flash",
+    proveedor: "anthropic",
+    modelo: MODELO_SONNET,
+    modeloFallback: MODELO_GEMINI,
     motivo:
-      "de su fidelidad LITERAL depende el detector de alucinación; se queda en un flash pleno " +
-      "(no lite) hasta medir la transcripción aparte. Bajarla ciega se lleva el candado de evidencia.",
+      "de su fidelidad LITERAL depende el detector de alucinación: un modelo pleno (Sonnet), " +
+      "nunca un pequeño. Cae a Gemini flash si Claude no está o falla.",
   },
   "extraccion-estructurada": {
-    proveedor: "google",
-    modelo: "gemini-3.6-flash",
+    proveedor: "anthropic",
+    modelo: MODELO_SONNET,
+    modeloFallback: MODELO_GEMINI,
     motivo:
-      "structured outputs con los cinco schemas troceados (límite de 24 opcionales). Es el 80% de " +
-      "los tokens, así que era LA candidata a bajar a un Lite — y el A/B lo desmintió: 87% de " +
-      "evidencia verificada aquí contra 30% en 3.5-flash-lite, que parafrasea en vez de citar.",
+      "structured outputs con los cinco schemas. Es el 80% de los tokens, y aun así no se baja " +
+      "a un modelo pequeño: el canario de evidencia mide que los débiles parafrasean en vez de citar.",
   },
   "redaccion-preserva-hechos": {
     proveedor: "anthropic",
-    modelo: "claude-sonnet-5-5",
-    modeloFallback: "gemini-3.6-flash",
+    modelo: MODELO_SONNET,
+    modeloFallback: MODELO_GEMINI,
     motivo:
-      "aquí se juega la promesa del producto: NO se baja a lite. preservesFacts corre después e " +
-      "impide la invención igual, pero un modelo débil redacta peor. Es el sitio donde pagar bien vale: " +
-      "Claude Sonnet, ID versionado. Sin 3ª clave (Anthropic) cae a Gemini y se marca degradado.",
+      "aquí se juega la promesa del producto: preservesFacts impide la invención igual, pero un " +
+      "modelo débil redacta peor. Es el sitio donde pagar bien vale.",
   },
   "clasificacion-barata": {
-    proveedor: "groq",
-    modelo: "llama-3.3-70b-versatile",
-    modeloFallback: "gemini-3.6-flash",
+    proveedor: "anthropic",
+    modelo: MODELO_HAIKU,
+    modeloFallback: MODELO_GEMINI,
+    modeloBarato: MODELO_GROQ,
     motivo:
-      "decisiones de una palabra y desempate de duplicados: barato y con salida estructurada. " +
-      "Sin 2ª clave cae a Gemini 2.5-flash (degrada, no rompe).",
+      "decisiones de una palabra y desempate de duplicados: Haiku basta y es el más barato de " +
+      "Claude. Sin Anthropic, Groq (2ª clave) si la hay; si no, Gemini.",
   },
   "ping-salud": {
-    proveedor: "google",
-    modelo: "gemini-3.6-flash",
-    motivo: "espeja a extraccion-estructurada: si el chequeo usa OTRO modelo, no prueba nada útil.",
+    proveedor: "anthropic",
+    modelo: MODELO_HAIKU,
+    modeloFallback: MODELO_GEMINI,
+    motivo: "¿responde el proveedor principal? Una palabra: Haiku, la llamada más barata de Claude.",
   },
 };
 
 /** El nombre del modelo PREFERENTE de una tarea. Para reportarlo sin llamar a nada. */
 export const modeloDe = (tarea: Tarea): string => REGISTRO[tarea].modelo;
 
+/** ¿De qué proveedor es un id de modelo? Claude → anthropic; el resto (gemini-…) → google. */
+export function proveedorDeModelo(id: string): Proveedor {
+  return /^claude-/i.test(id) ? "anthropic" : "google";
+}
+
 /**
  * ════════════════════════════════════════════════════════════════════════════
  * ★ LA ELECCIÓN DEL USUARIO (selector de modelos probados) — y su ESPEJO.
  *
- * El usuario puede elegir, entre los modelos que su clave admite DE VERDAD (los
- * que respondieron a una llamada real; ver lib/ai/catalogo.ts), cuál atiende la
- * extracción. Su elección NO reemplaza al registro: lo SOMBREA en estas tareas y
- * solo en estas.
- *
- * POR QUÉ SOLO ESTAS DOS:
- *   · `extraccion-estructurada` — es lo que el selector dice que elige, y es el
- *     80 % de los tokens.
- *   · `ping-salud` — porque ESPEJA a la extracción. Si el usuario mueve la
- *     extracción a otro modelo y el chequeo de salud se queda probando el del
- *     registro, el panel diría «en línea» mientras la extracción se cae con 404:
- *     un chequeo que prueba OTRA cosa no prueba nada. El espejo no es una
- *     coincidencia de dos entradas iguales en la tabla, es esta función.
- *   · visión y redacción NO se mueven: la sonda del catálogo prueba texto contra
- *     un schema, no visión ni calidad de redacción. Ofrecer para visión un modelo
- *     que nadie probó en visión sería el mismo ✓ optimista que este bloque combate.
+ * El usuario puede elegir, entre los modelos que su clave admite DE VERDAD (los que
+ * respondieron a una llamada real; ver catalogo.ts), cuál atiende la extracción. Su
+ * elección SOMBREA el registro en estas dos tareas y solo en estas:
+ *   · `extraccion-estructurada` — es lo que el selector dice que elige.
+ *   · `ping-salud` — ESPEJA a la extracción cuando hay elección: si el usuario mueve
+ *     la extracción y el chequeo sigue probando otro modelo, el panel mentiría.
+ * Puede ser un Claude (va a Anthropic, con Gemini de fallback) o un Gemini (el usuario
+ * eligió Gemini a propósito: va directo a Gemini).
  * ════════════════════════════════════════════════════════════════════════════
  */
 export const TAREAS_ELEGIBLES: readonly Tarea[] = ["extraccion-estructurada", "ping-salud"] as const;
 
+/** La elección válida para esta tarea, o null (vacía o tarea no elegible). */
+function eleccionDe(tarea: Tarea, elegido?: string | null): string | null {
+  const e = typeof elegido === "string" ? elegido.trim() : "";
+  return e && TAREAS_ELEGIBLES.includes(tarea) ? e : null;
+}
+
 /**
- * El modelo que atiende DE VERDAD una tarea con la elección del usuario aplicada.
- * `elegido` vacío/nulo ⇒ el del registro (que sigue siendo el valor por defecto y
- * el que se recomienda: es el que ganó el A/B).
+ * El modelo PREFERENTE de una tarea con la elección del usuario aplicada.
+ * `elegido` vacío/nulo ⇒ el del registro.
  */
 export function modeloEfectivo(tarea: Tarea, elegido?: string | null): string {
-  const e = typeof elegido === "string" ? elegido.trim() : "";
-  if (e && TAREAS_ELEGIBLES.includes(tarea)) return e;
-  return REGISTRO[tarea].modelo;
+  return eleccionDe(tarea, elegido) ?? REGISTRO[tarea].modelo;
 }
 
-/**
- * La clave EFECTIVA de Gemini: la BYOK del usuario (ya descifrada) o la del servidor.
- * Se acepta cualquiera de las dos variables de entorno; el provider de Google solo
- * mira GOOGLE_GENERATIVE_AI_API_KEY por su cuenta, así que se pasa explícita.
- */
+/** La clave de Gemini del SERVIDOR. Se acepta cualquiera de las dos variables de entorno. */
 export function claveGemini(): string | undefined {
-  return process.env.GEMINI_API_KEY || process.env.GOOGLE_GENERATIVE_AI_API_KEY;
+  return process.env.GEMINI_API_KEY || process.env.GOOGLE_GENERATIVE_AI_API_KEY || undefined;
 }
 
-/** El NOMBRE de la variable que se está usando de verdad (para el panel de salud). */
+/** La clave de Anthropic del SERVIDOR (ANTHROPIC_API_KEY). */
+export function claveAnthropic(): string | undefined {
+  return process.env.ANTHROPIC_API_KEY || undefined;
+}
+
+/** El NOMBRE de la variable de Gemini que se está usando de verdad (para el panel de salud). */
 export function nombreVarClave(): string | null {
   if (process.env.GEMINI_API_KEY) return "GEMINI_API_KEY";
   if (process.env.GOOGLE_GENERATIVE_AI_API_KEY) return "GOOGLE_GENERATIVE_AI_API_KEY";
   return null;
+}
+
+/**
+ * ¿Hay AL MENOS una clave con la que atender una tarea de IA? Las claves BYOK que el
+ * llamador ya tenga (Gemini, Anthropic) más las del servidor. Es la condición del 503
+ * de las rutas de IA: sin NINGUNA clave no hay a quién llamar; con una basta.
+ */
+export function hayClaveIA(...byok: (string | null | undefined)[]): boolean {
+  return byok.some((k) => !!k) || !!claveAnthropic() || !!claveGemini();
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   CAÍDAS EN TIEMPO DE EJECUCIÓN — lo que `rutaDe` necesita para no mentir.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/** Cuánto tiempo una caída de Claude marca la tarea como degradada en el panel. */
+export const TTL_CAIDA_MS = 5 * 60_000;
+
+export interface Caida {
+  /** el modelo de Claude que falló */
+  modelo: string;
+  /** el motivo real (HTTP 429: …, HTTP 404: …) */
+  motivo: string;
+  /** epoch ms */
+  en: number;
+}
+
+/** La clave NUNCA se guarda: se indexa por su huella, que no permite recuperarla. */
+const huella = (k: string) => createHash("sha256").update(k).digest("hex").slice(0, 16);
+
+const caidas = new Map<string, Caida>();
+const idCaida = (tarea: Tarea, claveA: string) => `${tarea}:${huella(claveA)}`;
+
+/** La última caída de Claude en esta tarea con esta clave (la del servidor si no se pasa), si es reciente. */
+export function caidaReciente(tarea: Tarea, claveA?: string): Caida | null {
+  const k = claveA || claveAnthropic();
+  if (!k) return null;
+  const c = caidas.get(idCaida(tarea, k));
+  return c && Date.now() - c.en < TTL_CAIDA_MS ? c : null;
+}
+
+/** Solo para los tests: olvida las caídas anotadas. */
+export function _resetCaidas(): void {
+  caidas.clear();
+}
+
+/**
+ * ¿Este fallo de Claude justifica repetir la llamada con Gemini? Sin clave, 401, 403,
+ * 404 (modelo), 408, 409, 429, 5xx y errores de red. NO: una cancelación del usuario
+ * (AbortError), que tiene que cortar, no rebotar a otro proveedor.
+ */
+export function debeCaer(e: unknown): boolean {
+  if (e && typeof e === "object" && (e as { name?: string }).name === "AbortError") return false;
+  if (LoadAPIKeyError.isInstance(e)) return true;
+  if (APICallError.isInstance(e)) {
+    const s = e.statusCode;
+    if (s === undefined) return true; // sin respuesta HTTP: red
+    return s === 401 || s === 403 || s === 404 || s === 408 || s === 409 || s === 429 || s >= 500;
+  }
+  // fetch caído (TypeError: fetch failed, ECONNRESET…): el proveedor no respondió.
+  return e instanceof TypeError || /ECONN|ETIMEDOUT|ENOTFOUND|fetch failed|socket/i.test(String(e));
+}
+
+function motivoCorto(e: unknown): string {
+  if (APICallError.isInstance(e)) return `HTTP ${e.statusCode ?? "—"}: ${e.message}`.replace(/\s+/g, " ").slice(0, 200);
+  return (e instanceof Error ? e.message : String(e)).replace(/\s+/g, " ").slice(0, 200);
+}
+
+type Modelo = ReturnType<ReturnType<typeof createGoogleGenerativeAI>>;
+type ModeloLM = Modelo | ReturnType<ReturnType<typeof createAnthropic>>;
+
+/**
+ * ★ EL FALLBACK REAL. Envuelve el modelo de Claude: si su llamada falla con un error
+ * de `debeCaer`, se anota la caída, se avisa por consola y se repite la MISMA llamada
+ * (mismos `params`) con Gemini. Lo que no es caída (400 de petición mala, cancelación)
+ * se relanza tal cual: no se tapa un error con otro proveedor.
+ */
+function conFallback(tarea: Tarea, claveA: string, primario: ModeloLM, secundario: Modelo) {
+  const caer = (e: unknown) => {
+    if (!debeCaer(e)) return false;
+    const motivo = motivoCorto(e);
+    caidas.set(idCaida(tarea, claveA), { modelo: primario.modelId, motivo, en: Date.now() });
+    console.warn(`[ia] ${tarea}: ${primario.modelId} falló (${motivo}); se repite con ${secundario.modelId}.`);
+    return true;
+  };
+  return wrapLanguageModel({
+    model: primario,
+    middleware: {
+      specificationVersion: "v4",
+      wrapGenerate: async ({ doGenerate, params }) => {
+        try {
+          return await doGenerate();
+        } catch (e) {
+          if (!caer(e)) throw e;
+          return secundario.doGenerate(params);
+        }
+      },
+      wrapStream: async ({ doStream, params }) => {
+        try {
+          return await doStream();
+        } catch (e) {
+          if (!caer(e)) throw e;
+          return secundario.doStream(params);
+        }
+      },
+    },
+  });
 }
 
 /** La ruta EFECTIVA de una tarea: qué proveedor y modelo la atienden de verdad. */
@@ -239,63 +339,54 @@ export interface RutaTarea {
   proveedor: Proveedor;
   /** modelo que la atiende de verdad (el fallback de google si degradó) */
   modelo: string;
-  /** true si la tarea PREFERÍA otro proveedor (Groq/Anthropic) pero cayó a Gemini por falta de su clave */
+  /** true si la tarea no la atiende el proveedor principal (Anthropic): sin su clave o por una caída reciente */
   degradado: boolean;
+  /** solo si degradó por una caída en ejecución: el motivo real */
+  motivo?: string;
 }
 
 /**
- * Resuelve QUIÉN atiende una tarea según haya o no clave de su proveedor: 2ª (Groq)
- * o 3ª (Anthropic). Es la verdad que el panel de salud enseña: sin la clave, la tarea
- * CAE a Gemini y se marca `degradado` para no fingir que atiende quien no atiende.
- * `anthropicDisponible` es opcional y por defecto false: quien no lo pase ve la
- * redacción degradada (la verdad sin clave), nunca un Claude fingido.
+ * Resuelve QUIÉN atiende una tarea. Es la verdad que el panel de salud enseña.
+ *   · `anthropicDisponible` — hay clave de Anthropic (BYOK o servidor). Si se omite,
+ *     se mira ANTHROPIC_API_KEY del servidor.
+ *   · `groqDisponible` — hay 2ª clave (solo cuenta en clasificación y sin Anthropic).
+ *   · `claveAnthropic` — la clave concreta, para mirar SUS caídas (por defecto, la del servidor).
+ * Con Anthropic disponible pero una caída reciente (`TTL_CAIDA_MS`), la tarea se
+ * marca degradada a Gemini con el motivo: es lo que ha pasado de verdad.
  */
 export function rutaDe(
   tarea: Tarea,
-  opts: { groqDisponible: boolean; anthropicDisponible?: boolean },
+  opts: { groqDisponible?: boolean; anthropicDisponible?: boolean; claveAnthropic?: string } = {},
 ): RutaTarea {
   const def = REGISTRO[tarea];
-  const disponible =
-    def.proveedor === "groq" ? opts.groqDisponible
-    : def.proveedor === "anthropic" ? opts.anthropicDisponible === true
-    : true;
-  if (!disponible) {
-    // Degrada al modelo de Gemini declarado como fallback (o al preferente si, por
-    // un error de registro, faltara: nunca se deja a `modeloPara` sin modelo).
-    return { tarea, proveedor: "google", modelo: def.modeloFallback ?? def.modelo, degradado: true };
+  const anthropic = opts.anthropicDisponible ?? !!claveAnthropic();
+  if (anthropic) {
+    const caida = caidaReciente(tarea, opts.claveAnthropic);
+    if (caida) return { tarea, proveedor: "google", modelo: def.modeloFallback, degradado: true, motivo: caida.motivo };
+    return { tarea, proveedor: "anthropic", modelo: def.modelo, degradado: false };
   }
-  return { tarea, proveedor: def.proveedor, modelo: def.modelo, degradado: false };
+  if (def.modeloBarato && opts.groqDisponible) {
+    return { tarea, proveedor: "groq", modelo: def.modeloBarato, degradado: true };
+  }
+  return { tarea, proveedor: "google", modelo: def.modeloFallback, degradado: true };
 }
 
-/** Instancia el modelo de REDACCIÓN (Anthropic) con la 3ª clave del usuario. */
-function modeloRedaccion(modelo: string, apiKey3: string) {
-  return createAnthropic({ apiKey: apiKey3 })(modelo);
-}
-
-/** Instancia el modelo BARATO (Groq) con la 2ª clave del usuario. */
-function modeloBarato(modelo: string, apiKey2: string) {
-  const groq = createOpenAICompatible({ name: "groq", baseURL: GROQ_BASE_URL, apiKey: apiKey2 });
-  return groq(modelo);
-}
+const gemini = (modelo: string, apiKey: string) => createGoogleGenerativeAI({ apiKey })(modelo);
+const claude = (modelo: string, apiKey: string) => createAnthropic({ apiKey })(modelo);
+const groq = (modelo: string, apiKey: string) =>
+  createOpenAICompatible({ name: "groq", baseURL: GROQ_BASE_URL, apiKey })(modelo);
 
 /**
  * El modelo instanciado para una tarea. ÚNICO punto de ramificación por proveedor.
  *
- *   · `apiKey`  — la clave de Gemini (BYOK del usuario o del servidor).
- *   · `apiKey2` — la 2ª clave BYOK (Groq). Si la tarea es del proveedor barato Y
- *     hay 2ª clave → se instancia Groq. Si no, CAE a Gemini con su modelo fallback.
+ *   · `apiKey`  — la clave de Gemini (BYOK del usuario; si falta, la del servidor).
+ *   · `apiKey2` — la 2ª clave BYOK (Groq): solo clasificación, solo sin Anthropic.
+ *   · `elegido` — el modelo que el usuario eligió en Ajustes (ya probado de verdad).
+ *     Solo sombrea a las TAREAS_ELEGIBLES. Un Gemini elegido va directo a Gemini.
+ *   · `apiKey3` — la 3ª clave BYOK (Anthropic). Si falta, ANTHROPIC_API_KEY del servidor.
  *
- * Los llamadores existentes (extracción, visión, redacción, ping) pasan solo
- * `apiKey`: son tareas de Gemini y siguen yendo a Gemini sin cambio alguno.
- *
- *   · `elegido`  — el modelo que el usuario eligió en Ajustes (ya validado contra
- *     una llamada REAL; ver catalogo.ts). Solo sombrea a las TAREAS_ELEGIBLES, y
- *     el parámetro es opcional: quien no lo pasa se comporta EXACTAMENTE igual que
- *     antes. Es un parámetro y no un estado global a propósito — un override
- *     guardado en el módulo se filtraría entre peticiones de usuarios distintos.
- *   · `apiKey3` — la 3ª clave BYOK (Anthropic). Si la tarea es de Anthropic
- *     (redaccion-preserva-hechos) Y hay 3ª clave → se instancia Claude. Si no, CAE
- *     a Gemini con su modelo fallback. Va la última para no mover a nadie.
+ * Con Claude y con Gemini disponibles, devuelve Claude ENVUELTO en `conFallback`:
+ * si Claude cae, la misma llamada se repite con Gemini. Sin ninguna clave, lanza.
  */
 export function modeloPara(
   tarea: Tarea,
@@ -305,45 +396,36 @@ export function modeloPara(
   apiKey3?: string,
 ) {
   const def = REGISTRO[tarea];
+  const kG = apiKey || claveGemini();
+  const kA = apiKey3 || claveAnthropic();
+  const e = eleccionDe(tarea, elegido);
 
-  // Tarea de redacción + 3ª clave presente ⇒ Anthropic. Con clave de Anthropic NO
-  // hace falta clave de Gemini: son proveedores independientes.
-  if (def.proveedor === "anthropic" && apiKey3) {
-    return modeloRedaccion(def.modelo, apiKey3);
+  // El usuario eligió un Gemini a propósito: se respeta, sin pasar por Claude.
+  if (e && proveedorDeModelo(e) === "google") {
+    if (!kG) throw new Error("Falta clave de IA: el modelo elegido es de Gemini y no hay GEMINI_API_KEY");
+    return gemini(e, kG);
   }
 
-  // Tarea barata + 2ª clave presente ⇒ proveedor barato (Groq). La elección del
-  // usuario es un modelo de Gemini: no toca esta rama (TAREAS_ELEGIBLES es google).
-  if (def.proveedor === PROVEEDOR_BARATO && apiKey2) {
-    return modeloBarato(def.modelo, apiKey2);
-  }
+  const secundario = kG ? gemini(def.modeloFallback, kG) : null;
 
-  // Todo lo demás va a Gemini: las tareas de google, y las baratas SIN 2ª clave
-  // (degradan al modelo fallback declarado en el registro). Degrada, no rompe.
-  const key = apiKey || claveGemini();
-  if (!key) throw new Error("Falta GEMINI_API_KEY");
-  const modelo =
-    def.proveedor === "google" ? modeloEfectivo(tarea, elegido) : (def.modeloFallback ?? def.modelo);
-  return createGoogleGenerativeAI({ apiKey: key })(modelo);
+  if (kA) {
+    const primario = claude(e ?? def.modelo, kA);
+    return secundario ? conFallback(tarea, kA, primario, secundario) : primario;
+  }
+  // Sin Anthropic: la clasificación puede ir a Groq (2ª clave), opcional.
+  if (def.modeloBarato && apiKey2) return groq(def.modeloBarato, apiKey2);
+  if (secundario) return secundario;
+  throw new Error("Falta clave de IA: ni ANTHROPIC_API_KEY ni GEMINI_API_KEY (ni BYOK)");
 }
 
 /* ══════════════════════════════════════════════════════════════════════════
-   PING DE SALUD COMPARTIDO — el panel dejaba de pagar dos veces.
+   PING DE SALUD COMPARTIDO — el panel no paga dos veces.
 
-   /api/health/ai y /api/health/status hacían CADA UNO su propia llamada real
-   con el mismo prompt trivial. Abrir el panel de salud una vez costaba DOS
-   llamadas facturadas, y el número crece con cada refresco.
-
-   La solución NO es un check optimista (un ✓ que no llama a nada es peor que no
-   tener check: miente justo cuando importa). Es una caché muy corta: la primera
+   /api/health/ai y /api/health/status comparten una caché muy corta: la primera
    ruta paga una llamada REAL, la segunda reutiliza ese resultado durante
-   `TTL_PING_MS`. Dentro de esa ventana el estado del proveedor no ha cambiado, y
-   el resultado que se muestra sigue siendo el de una llamada que ocurrió de
-   verdad — se dice cuántos ms hace (`edadMs`), así que el usuario ve si es
-   fresco o reciclado. Nada se finge.
-
-   ★ Bloque H: la MISMA maquinaria sirve para el 2º proveedor (Groq). La caché se
-     indexa por proveedor+huella de clave, así un proveedor no pisa al otro.
+   `TTL_PING_MS` y dice cuántos ms hace (`edadMs`). Nada se finge. La caché se
+   indexa por proveedor + huella de clave + modelo. Cada ping llama a SU proveedor
+   directamente, SIN fallback: un ping que cae a otro proveedor no prueba nada.
    ══════════════════════════════════════════════════════════════════════════ */
 
 /** Ventana de reutilización. Corta a propósito: es un chequeo, no un dato. */
@@ -365,16 +447,10 @@ export interface ResultadoPing {
   reutilizado: boolean;
 }
 
-/** La clave NUNCA se guarda: se indexa por su huella, que no permite recuperarla. */
-const huella = (k: string) => createHash("sha256").update(k).digest("hex").slice(0, 16);
-
 const cachePing = new Map<string, ResultadoPing>();
+const PROMPT_PING = "Responde exactamente con la palabra: OK";
 
-/**
- * El núcleo compartido de los dos pings (Gemini y Groq): mira la ventana, y si
- * toca llamar, ejecuta `llamada` UNA vez y cachea el resultado (éxito O fallo: un
- * proveedor caído no debe hacer que las dos rutas insistan en pagar el timeout).
- */
+/** El núcleo compartido de los pings: mira la ventana y, si toca, llama UNA vez y cachea (éxito o fallo). */
 async function ejecutarPing(
   cacheId: string,
   modelo: string,
@@ -406,19 +482,15 @@ async function ejecutarPing(
   }
 }
 
+/** El modelo de Gemini que el ping de Gemini prueba: el elegido si es Gemini, si no el secundario de la extracción. */
+export function modeloGeminiDePing(elegido?: string | null): string {
+  const e = eleccionDe("ping-salud", elegido);
+  return e && proveedorDeModelo(e) === "google" ? e : REGISTRO["extraccion-estructurada"].modeloFallback;
+}
+
 /**
- * Comprueba de verdad que GEMINI responde. Compartido por las dos rutas de salud.
- * `forzar: true` salta la ventana y llama sí o sí.
- *
- * ★ `elegido` — el modelo que el usuario haya elegido en Ajustes. EL ESPEJO VIVE
- *   AQUÍ: si la extracción se mueve a otro modelo y el chequeo se queda en el del
- *   registro, el panel diría «en línea» mientras la extracción devuelve 404. Se
- *   pasa el mismo valor que se le pasa a la extracción y `modeloEfectivo` hace el
- *   resto. Omitirlo deja el comportamiento EXACTAMENTE como estaba.
- *
- * ⚠ La ventana compartida se indexa por clave Y MODELO. Sin el modelo en la clave,
- *   el «sí responde» de un modelo se reutilizaría para otro distinto: una caché que
- *   miente es peor que no tener caché.
+ * Comprueba de verdad que GEMINI (secundario) responde. `elegido`: si el usuario
+ * eligió un Gemini para la extracción, se prueba ESE (el espejo).
  */
 export async function pingProveedor(
   apiKey?: string,
@@ -427,61 +499,42 @@ export async function pingProveedor(
 ): Promise<ResultadoPing> {
   const key = apiKey || claveGemini();
   if (!key) throw new Error("Falta GEMINI_API_KEY");
-  const modelo = modeloEfectivo("ping-salud", elegido);
+  const modelo = modeloGeminiDePing(elegido);
   return ejecutarPing(
     `google:${huella(key)}:${modelo}`,
     modelo,
-    async () => {
-      const { text } = await generateText({
-        model: modeloPara("ping-salud", key, undefined, elegido),
-        prompt: "Responde exactamente con la palabra: OK",
-      });
-      return text;
-    },
+    async () => (await generateText({ model: gemini(modelo, key), prompt: PROMPT_PING, maxRetries: 0 })).text,
     forzar,
   );
 }
 
-/**
- * Comprueba de verdad que el 2º PROVEEDOR (Groq) responde. Reutiliza la misma
- * ventana compartida. Solo tiene sentido con 2ª clave: el llamador ya la exige, y
- * si no la hay el panel dice «no configurado» SIN llegar aquí.
- */
+/** Comprueba de verdad que GROQ (2ª clave) responde. Sin 2ª clave el panel no llega aquí. */
 export async function pingProveedorBarato(apiKey2: string, forzar = false): Promise<ResultadoPing> {
-  const modelo = REGISTRO["clasificacion-barata"].modelo; // el modelo Groq del registro
+  const modelo = MODELO_GROQ;
   return ejecutarPing(
     `groq:${huella(apiKey2)}`,
     modelo,
-    async () => {
-      const { text } = await generateText({
-        // La tarea barata + 2ª clave ⇒ modeloPara devuelve el modelo de Groq.
-        model: modeloPara("clasificacion-barata", undefined, apiKey2),
-        prompt: "Responde exactamente con la palabra: OK",
-      });
-      return text;
-    },
+    async () => (await generateText({ model: groq(modelo, apiKey2), prompt: PROMPT_PING, maxRetries: 0 })).text,
     forzar,
   );
 }
 
 /**
- * Comprueba de verdad que ANTHROPIC responde (3ª clave). Misma ventana compartida,
- * indexada por proveedor + huella de clave. Solo con 3ª clave: sin ella el panel dice
- * «no configurado» SIN llegar aquí (no se llama a nadie sin clave).
+ * Comprueba de verdad que ANTHROPIC (principal) responde. `apiKey`: la BYOK del
+ * usuario o, si falta, ANTHROPIC_API_KEY del servidor. `modelo`: por defecto el del
+ * ping (Haiku); con elección del usuario de un Claude, ese (el espejo).
  */
-export async function pingProveedorAnthropic(apiKey3: string, forzar = false): Promise<ResultadoPing> {
-  const modelo = REGISTRO["redaccion-preserva-hechos"].modelo; // el modelo Claude del registro
+export async function pingProveedorAnthropic(
+  apiKey?: string,
+  forzar = false,
+  modelo: string = REGISTRO["ping-salud"].modelo,
+): Promise<ResultadoPing> {
+  const key = apiKey || claveAnthropic();
+  if (!key) throw new Error("Falta ANTHROPIC_API_KEY");
   return ejecutarPing(
-    `anthropic:${huella(apiKey3)}:${modelo}`,
+    `anthropic:${huella(key)}:${modelo}`,
     modelo,
-    async () => {
-      const { text } = await generateText({
-        // Redacción + 3ª clave ⇒ modeloPara devuelve el modelo de Anthropic.
-        model: modeloPara("redaccion-preserva-hechos", undefined, undefined, undefined, apiKey3),
-        prompt: "Responde exactamente con la palabra: OK",
-      });
-      return text;
-    },
+    async () => (await generateText({ model: claude(modelo, key), prompt: PROMPT_PING, maxRetries: 0 })).text,
     forzar,
   );
 }

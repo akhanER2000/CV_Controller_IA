@@ -1,7 +1,8 @@
 import "server-only";
 import mammoth from "mammoth";
 import { extractText, getDocumentProxy } from "unpdf";
-import { transcribeImage, transcribePdf, geminiApiKey } from "./llm";
+import { transcribeImage, transcribePdf } from "./llm";
+import { hayClaveIA } from "../ai/modelos";
 
 /**
  * Extracción de texto por tipo de archivo (prompt 02 §3.1, §4.2). Convierte los
@@ -68,11 +69,12 @@ export interface ExtractDeps {
  * Deps reales con la clave EFECTIVA: la BYOK del usuario (ya descifrada) o, si no,
  * la del servidor. `realDeps()` es el atajo con la del servidor.
  */
-export function extractDepsFor(apiKey?: string): ExtractDeps {
+export function extractDepsFor(apiKey?: string, apiKey3?: string): ExtractDeps {
   return {
-    transcribeImage: (u) => transcribeImage(u, apiKey),
-    transcribePdf: (b) => transcribePdf(b, apiKey),
-    hasAiKey: () => !!(apiKey || geminiApiKey()),
+    transcribeImage: (u) => transcribeImage(u, apiKey, apiKey3),
+    transcribePdf: (b) => transcribePdf(b, apiKey, apiKey3),
+    // Basta UNA clave (Anthropic o Gemini, BYOK o servidor) para transcribir.
+    hasAiKey: () => hayClaveIA(apiKey, apiKey3),
   };
 }
 const realDeps = (): ExtractDeps => extractDepsFor();

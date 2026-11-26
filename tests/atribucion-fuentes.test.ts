@@ -638,7 +638,7 @@ const h = vi.hoisted(() => ({
 }));
 
 vi.mock("@/lib/supabase/server", () => ({ createClient: async () => h.db }));
-vi.mock("@/lib/account/byok", () => ({ getUserLlmKey: async () => "clave-del-usuario" }));
+vi.mock("@/lib/account/byok", () => ({ getUserLlmKey: async () => "clave-del-usuario", getUserLlmKey3: async () => null }));
 vi.mock("@/lib/extract/llm", () => ({
   geminiApiKey: () => "clave-del-servidor",
   makeGeminiExtractor: () => extractorFalso,

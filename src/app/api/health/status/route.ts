@@ -2,9 +2,10 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
 import { getUserLlmKey, estadoLlmKey2, estadoLlmKey3 } from "@/lib/account/byok";
 import {
+  claveAnthropic,
   claveGemini,
   nombreVarClave,
-  modeloDe,
+  modeloGeminiDePing,
   pingProveedor,
   pingProveedorBarato,
   pingProveedorAnthropic,
@@ -57,12 +58,12 @@ async function run(id: string, ms: number, fn: () => Promise<Service>): Promise<
   }
 }
 
-/** Gemini: llamada real. Reporta el modelo, la envVar efectiva y si la clave que
- *  se USARÍA es la BYOK del usuario o la del servidor. NUNCA devuelve la clave. */
+/** Gemini (proveedor SECUNDARIO): llamada real. Reporta el modelo, la envVar efectiva
+ *  y si la clave que se USARÍA es la BYOK del usuario o la del servidor. NUNCA la clave. */
 async function checkGemini(sb: SupabaseClient, uid: string): Promise<Service> {
   const serverKey = claveGemini();
   const envVar = nombreVarClave();
-  const modelo = modeloDe("ping-salud");
+  const modelo = modeloGeminiDePing();
 
   // ¿Hay una BYOK guardada (cifrada) para este usuario? Se detecta la PRESENCIA
   // del blob "v1:…" sin devolverlo. getUserLlmKey la descifra (null si no puede).
@@ -80,7 +81,7 @@ async function checkGemini(sb: SupabaseClient, uid: string): Promise<Service> {
       id: "gemini",
       ok: false,
       status: "fail",
-      detail: "Sin clave efectiva: define GEMINI_API_KEY en el servidor o guarda tu propia clave (BYOK).",
+      detail: "Secundario sin clave: define GEMINI_API_KEY en el servidor o guarda tu propia clave (BYOK). Sin él, si Claude cae no hay recambio.",
       meta: { model: modelo, envVar, keySource, parked },
     };
   }
@@ -123,7 +124,9 @@ async function checkGemini(sb: SupabaseClient, uid: string): Promise<Service> {
     id: "gemini",
     ok: true,
     status: "ok",
-    detail: byok ? "Responde. Usa tu propia clave (BYOK)." : "Responde. Usa la clave incluida del servidor.",
+    detail: byok
+      ? "Responde (secundario: atiende si Claude falla o no hay su clave). Usa tu propia clave (BYOK)."
+      : "Responde (secundario: atiende si Claude falla o no hay su clave). Usa la clave incluida del servidor.",
     meta,
   };
 }
@@ -141,12 +144,14 @@ async function checkGemini(sb: SupabaseClient, uid: string): Promise<Service> {
 async function checkRouterBarato(sb: SupabaseClient, uid: string): Promise<Service> {
   const est2 = await estadoLlmKey2(sb, uid);
   const groqDisponible = !!est2.clave;
-  const anthropicDisponible = !!(await estadoLlmKey3(sb, uid)).clave;
+  const claveA = (await estadoLlmKey3(sb, uid)).clave ?? claveAnthropic();
+  const anthropicDisponible = !!claveA;
 
-  // El mapa tarea → proveedor → modelo, con las claves REALES de este usuario.
+  // El mapa tarea → proveedor → modelo, con las claves REALES de este usuario (y las
+  // caídas recientes de Claude con SU clave: si cayó, la tarea sale degradada).
   const routing = TAREAS.map((tarea) => {
-    const r = rutaDe(tarea, { groqDisponible, anthropicDisponible });
-    return { tarea, proveedor: r.proveedor, modelo: r.modelo, degradado: r.degradado };
+    const r = rutaDe(tarea, { groqDisponible, anthropicDisponible, claveAnthropic: claveA });
+    return { tarea, proveedor: r.proveedor, modelo: r.modelo, degradado: r.degradado, motivo: r.motivo };
   });
   const metaBase = {
     configured: groqDisponible,
@@ -156,12 +161,12 @@ async function checkRouterBarato(sb: SupabaseClient, uid: string): Promise<Servi
   };
 
   if (!groqDisponible) {
-    // Tres motivos honestos, todos degradan a Gemini sin romper nada.
+    // Groq es OPCIONAL: sin él la clasificación la atiende Claude (o Gemini sin Claude).
     const detail = est2.columnaAusente
-      ? "Segundo proveedor no disponible: falta aplicar la migración 0006 (llm_api_key_2). Todo va a Gemini."
+      ? "Groq no disponible: falta aplicar la migración 0006 (llm_api_key_2). La clasificación va a Claude o, sin él, a Gemini."
       : est2.aparcada
-        ? "Tu 2ª clave está APARCADA: falta CORPUS_ENCRYPTION_KEY para descifrarla. Mientras tanto, todo va a Gemini."
-        : "No configurado · sin 2ª clave el router de dos niveles no actúa: TODO va a Gemini (degrada, no rompe).";
+        ? "Tu 2ª clave está APARCADA: falta CORPUS_ENCRYPTION_KEY para descifrarla. La clasificación va a Claude o, sin él, a Gemini."
+        : "No configurado (opcional) · Groq solo atiende la clasificación cuando no hay clave de Anthropic.";
     return { id: "groq", ok: true, status: "warn", detail, meta: metaBase };
   }
 
@@ -182,56 +187,78 @@ async function checkRouterBarato(sb: SupabaseClient, uid: string): Promise<Servi
     id: "groq",
     ok: true,
     status: "ok",
-    detail: "Responde. Atiende las tareas baratas (clasificar · desempatar duplicados); el resto sigue en Gemini.",
+    detail: anthropicDisponible
+      ? "Responde, pero no atiende: con clave de Anthropic la clasificación va a Claude (Groq queda de reserva opcional)."
+      : "Responde. Atiende la clasificación (no hay clave de Anthropic); el resto va a Gemini.",
     meta,
   };
 }
 
 /**
- * ★ ANTHROPIC (3ª clave) — atiende SOLO `redaccion-preserva-hechos`. Sin clave:
- * «no configurado» SIN llamar a nadie, y la redacción va a Gemini (degrada, no rompe).
- * Con clave: llamada REAL con la ventana compartida (indexada por proveedor + huella).
- * La variable de entorno ANTHROPIC_API_KEY del servidor NO se usa: solo la BYOK cifrada.
+ * ★ ANTHROPIC — el proveedor PRINCIPAL de todas las tareas. Clave: la BYOK del
+ * usuario (3ª, cifrada) o, si no hay, ANTHROPIC_API_KEY del servidor. Sin ninguna:
+ * «no configurado» SIN llamar a nadie, y todo va a Gemini (degrada, no rompe). Con
+ * clave: llamada REAL con la ventana compartida (indexada por proveedor + huella).
  */
 async function checkAnthropic(sb: SupabaseClient, uid: string): Promise<Service> {
   const est3 = await estadoLlmKey3(sb, uid);
-  const disponible = !!est3.clave;
-  const r = rutaDe("redaccion-preserva-hechos", { groqDisponible: false, anthropicDisponible: disponible });
+  const servidor = claveAnthropic();
+  const clave = est3.clave ?? servidor;
+  const disponible = !!clave;
+  const keySource: "byok" | "servidor" | "ninguna" = est3.clave ? "byok" : servidor ? "servidor" : "ninguna";
+  const r = rutaDe("redaccion-preserva-hechos", { anthropicDisponible: disponible, claveAnthropic: clave });
   const metaBase = {
     configured: disponible,
+    keySource,
+    principal: true,
     parked: est3.aparcada,
     columnAusente: est3.columnaAusente,
     task: r.tarea,
     provider: r.proveedor,
     model: r.modelo,
     degraded: r.degradado,
+    degradedReason: r.motivo,
   };
 
   if (!disponible) {
     const detail = est3.columnaAusente
-      ? "Falta aplicar la migración 0007 (llm_api_key_3). La redacción va a Gemini."
+      ? "Principal sin clave: falta ANTHROPIC_API_KEY en el servidor y la migración 0007 (llm_api_key_3). Todo va a Gemini."
       : est3.aparcada
-        ? "Tu clave de Anthropic está APARCADA: falta CORPUS_ENCRYPTION_KEY para descifrarla. La redacción va a Gemini."
-        : "No configurado · sin clave de Anthropic la redacción va a Gemini (degrada, no rompe).";
+        ? "Tu clave de Anthropic está APARCADA (falta CORPUS_ENCRYPTION_KEY) y el servidor no tiene ANTHROPIC_API_KEY. Todo va a Gemini."
+        : "Principal no configurado · sin clave de Anthropic (BYOK o ANTHROPIC_API_KEY) todo va a Gemini (degrada, no rompe).";
     return { id: "anthropic", ok: true, status: "warn", detail, meta: metaBase };
   }
 
-  const ping = await pingProveedorAnthropic(est3.clave!);
+  const ping = await pingProveedorAnthropic(clave!);
   const meta = {
     ...metaBase,
+    model: ping.modelo,
     latencyMs: ping.latenciaMs,
     sample: ping.muestra,
     cached: ping.reutilizado,
     checkedAgoMs: ping.edadMs,
   };
   if (!ping.ok) {
-    return { id: "anthropic", ok: false, status: "fail", detail: ping.error ?? "Anthropic no respondió.", meta };
+    return {
+      id: "anthropic", ok: false, status: "fail",
+      detail: `${ping.error ?? "Anthropic no respondió."} Mientras tanto, las tareas caen a Gemini.`,
+      meta,
+    };
+  }
+  if (r.degradado) {
+    return {
+      id: "anthropic", ok: true, status: "warn",
+      detail: `Responde ahora, pero cayó hace poco (${r.motivo ?? "error"}) y esa llamada se repitió con Gemini.`,
+      meta,
+    };
   }
   return {
     id: "anthropic",
     ok: true,
     status: "ok",
-    detail: "Responde. Atiende la redacción que no puede inventar hechos; extracción y visión siguen en Gemini.",
+    detail: est3.clave
+      ? "Responde. Es el proveedor principal de todas las tareas. Usa tu propia clave (BYOK)."
+      : "Responde. Es el proveedor principal de todas las tareas. Usa la clave del servidor.",
     meta,
   };
 }
@@ -307,9 +334,9 @@ export async function GET() {
   const uid = user.id;
 
   const services = await Promise.all([
+    run("anthropic", 15000, () => checkAnthropic(sb, uid)),
     run("gemini", 15000, () => checkGemini(sb, uid)),
     run("groq", 15000, () => checkRouterBarato(sb, uid)),
-    run("anthropic", 15000, () => checkAnthropic(sb, uid)),
     run("github", 8000, () => checkGithub()),
     run("supabase", 8000, () => checkSupabase(sb, uid)),
     run("storage", 8000, () => checkStorage(sb, uid)),

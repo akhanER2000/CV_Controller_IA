@@ -1,7 +1,7 @@
 import { NextResponse, after } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { getUserLlmKey } from "@/lib/account/byok";
-import { geminiApiKey } from "@/lib/extract/llm";
+import { getUserLlmKey, getUserLlmKey3 } from "@/lib/account/byok";
+import { hayClaveIA } from "@/lib/ai/modelos";
 import { crearClienteDeTrabajo } from "../../../_motor/cliente";
 import { avanzarTrabajo, depsReales, leerEventos, leerFuentes } from "../../../_motor/motor";
 import { derivarProgreso } from "@/lib/ingesta/progreso";
@@ -53,9 +53,10 @@ export async function POST(_req: Request, ctx: { params: Promise<{ id: string }>
   if (!lote) return NextResponse.json({ error: "Ese trabajo no existe." }, { status: 404 });
 
   const byok = (await getUserLlmKey(sb, user.id)) ?? undefined;
-  if (!byok && !geminiApiKey()) {
+  const byok3 = (await getUserLlmKey3(sb, user.id)) ?? undefined;
+  if (!hayClaveIA(byok, byok3)) {
     return NextResponse.json(
-      { error: "Falta configurar la clave de IA (BYOK o GEMINI_API_KEY del servidor)." },
+      { error: "Falta configurar una clave de IA (BYOK, ANTHROPIC_API_KEY o GEMINI_API_KEY del servidor)." },
       { status: 503 },
     );
   }
@@ -85,7 +86,7 @@ export async function POST(_req: Request, ctx: { params: Promise<{ id: string }>
   after(async () => {
     try {
       const bg = crearClienteDeTrabajo(accessToken);
-      await avanzarTrabajo(bg, user.id, jobId, depsReales(bg, byok));
+      await avanzarTrabajo(bg, user.id, jobId, depsReales(bg, byok, byok3));
     } catch {
       // Cada fuente escribe su propio fallo. Lo que muera aquí lo retoma la
       // siguiente llamada: el trabajo queda en pausa, jamás en un estado falso.

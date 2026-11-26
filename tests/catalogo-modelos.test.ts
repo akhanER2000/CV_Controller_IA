@@ -320,8 +320,8 @@ describe("validarModeloEfectivo · si el guardado se cayó, el motivo REAL y un 
     expect(v.sugerencia).toBe("gemini-3.6-flash"); // no el lite: parafrasea (medido)
   });
 
-  it("modelo caído SIN catálogo → prueba el del registro y solo lo propone si RESPONDE", async () => {
-    const registro = modeloDe("extraccion-estructurada");
+  it("modelo caído SIN catálogo → prueba el del registro (aquí, con solo clave de Gemini, su secundario) y solo lo propone si RESPONDE", async () => {
+    const registro = REGISTRO["extraccion-estructurada"].modeloFallback;
     const { sonda, llamados } = sondaFalsa([registro]);
     const v = await validarModeloEfectivo(CLAVE, "gemini-2.0-flash", { sonda });
     expect(v.sugerencia).toBe(registro);
@@ -348,8 +348,13 @@ describe("validarModeloEfectivo · si el guardado se cayó, el motivo REAL y un 
 /* ── 4 · EL ESPEJO: ping-salud DEBE probar lo mismo que la extracción ───────── */
 
 describe("★ el espejo · un chequeo que prueba OTRO modelo no prueba nada", () => {
-  it("ping-salud y extracción resuelven SIEMPRE al mismo modelo, elija el usuario lo que elija", () => {
-    for (const elegido of [null, undefined, "", "  ", "gemini-3.5-flash", "gemini-flash-latest"]) {
+  it("con elección, ping-salud y extracción resuelven SIEMPRE al mismo modelo; sin ella, cada uno el suyo del registro", () => {
+    // Sin elección: extracción en Sonnet, ping en Haiku (la llamada más barata de Claude).
+    for (const vacio of [null, undefined, "", "  "]) {
+      expect(modeloEfectivo("ping-salud", vacio)).toBe(REGISTRO["ping-salud"].modelo);
+      expect(modeloEfectivo("extraccion-estructurada", vacio)).toBe(REGISTRO["extraccion-estructurada"].modelo);
+    }
+    for (const elegido of ["gemini-3.5-flash", "gemini-flash-latest", "claude-haiku-5-5"]) {
       expect(
         modeloEfectivo("ping-salud", elegido),
         `el espejo se rompió con elegido=${JSON.stringify(elegido)}`,
@@ -395,11 +400,12 @@ describe("★ el espejo · un chequeo que prueba OTRO modelo no prueba nada", ()
     const elegido = "gemini-3.5-flash";
     expect(modeloPara("extraccion-estructurada", "k", undefined, elegido).modelId).toBe(elegido);
     expect(modeloPara("ping-salud", "k", undefined, elegido).modelId).toBe(elegido);
+    // Solo hay clave de Gemini: la visión no se mueve al elegido, va a SU secundario.
     expect(modeloPara("transcripcion-vision", "k", undefined, elegido).modelId).toBe(
-      REGISTRO["transcripcion-vision"].modelo,
+      REGISTRO["transcripcion-vision"].modeloFallback,
     );
-    // Sin elección, todo sigue exactamente igual que antes de este bloque.
-    expect(modeloPara("extraccion-estructurada", "k").modelId).toBe(REGISTRO["extraccion-estructurada"].modelo);
+    // Sin elección y sin Anthropic, la extracción va a su secundario de Gemini.
+    expect(modeloPara("extraccion-estructurada", "k").modelId).toBe(REGISTRO["extraccion-estructurada"].modeloFallback);
   });
 });
 

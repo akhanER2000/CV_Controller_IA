@@ -2,11 +2,12 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { listSources } from "@/lib/db/queries";
 import { runImport } from "@/lib/extract/pipeline";
-import { makeGeminiExtractor, geminiApiKey } from "@/lib/extract/llm";
+import { makeGeminiExtractor } from "@/lib/extract/llm";
+import { hayClaveIA } from "@/lib/ai/modelos";
 import { fetchGithubUser } from "@/lib/extract/github";
 import { fetchViaJina } from "@/lib/extract/web";
 import { extractFile, extractDepsFor, type FileKind } from "@/lib/extract/files";
-import { getUserLlmKey } from "@/lib/account/byok";
+import { getUserLlmKey, getUserLlmKey3 } from "@/lib/account/byok";
 import { registrarIngesta, consumoCero, sumarConsumo, type ConsumoIA } from "@/lib/db/telemetria";
 import type { ResumenLectura } from "@/lib/extract/llm";
 import {
@@ -111,16 +112,17 @@ export async function POST(req: Request) {
 
   // BYOK: clave del usuario (descifrada, solo servidor) o la del servidor.
   const byok = (await getUserLlmKey(sb, user.id)) ?? undefined;
-  const hasLlm = !!(byok || geminiApiKey());
+  const byok3 = (await getUserLlmKey3(sb, user.id)) ?? undefined;
+  const hasLlm = hayClaveIA(byok, byok3);
   const noKey = () =>
     NextResponse.json(
-      { error: "Falta configurar la clave de IA (BYOK o GEMINI_API_KEY del servidor)." },
+      { error: "Falta configurar una clave de IA (BYOK, ANTHROPIC_API_KEY o GEMINI_API_KEY del servidor)." },
       { status: 503 },
     );
   // `completo` desactiva el reparto por secciones para esta ingesta concreta.
   const completo = body.completo === true;
   const deps = {
-    extract: makeGeminiExtractor(byok, { forzarCompleto: completo }),
+    extract: makeGeminiExtractor(byok, { forzarCompleto: completo, claveAnthropic: byok3 }),
     fetchGithubUser,
     fetchWeb: fetchViaJina,
   };
@@ -194,7 +196,7 @@ export async function POST(req: Request) {
           const { data: blob, error: dlErr } = await sb.storage.from("sources").download(path);
           if (dlErr || !blob) throw new Error(dlErr?.message ?? "no se pudo descargar de Storage");
           const bytes = new Uint8Array(await blob.arrayBuffer());
-          const ex = await extractFile({ kind: fk, bytes, mime: blob.type || undefined, name }, extractDepsFor(byok));
+          const ex = await extractFile({ kind: fk, bytes, mime: blob.type || undefined, name }, extractDepsFor(byok, byok3));
           if (ex.warning) warnings.push(`«${name}»: ${ex.warning}`);
 
           if (!ex.text.trim()) {

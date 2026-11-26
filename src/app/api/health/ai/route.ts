@@ -1,55 +1,85 @@
-import { claveGemini, nombreVarClave, pingProveedor, rutaDe } from "@/lib/ai/modelos";
+import {
+  claveAnthropic,
+  claveGemini,
+  nombreVarClave,
+  pingProveedor,
+  pingProveedorAnthropic,
+  rutaDe,
+  type ResultadoPing,
+} from "@/lib/ai/modelos";
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
 
 /**
- * ¿La IA está activa? Confirma (1) que la clave está cargada y con qué NOMBRE de
- * variable, y (2) que una llamada REAL a Gemini devuelve. GET /api/health/ai.
- * No requiere sesión: es un chequeo de infraestructura.
+ * ¿La IA está activa? GET /api/health/ai. No requiere sesión: es un chequeo de
+ * infraestructura con las claves DEL SERVIDOR.
  *
- * ★ El chequeo real vive en `lib/ai/modelos.ts` y lo COMPARTE con
- *   /api/health/status. Antes cada ruta hacía su propia llamada con el mismo
- *   prompt trivial, así que abrir el panel de salud costaba DOS llamadas
- *   facturadas por visita. Ahora la primera paga y la segunda reutiliza durante
- *   60 s — sin dejar de ser una llamada que ocurrió de verdad: la respuesta
- *   incluye `edadMs` y `reutilizado` para que se vea si es fresca o reciclada.
- *   Un ✓ optimista habría sido peor que no tener chequeo.
+ * ★ Anthropic es el proveedor PRINCIPAL: se hace un ping REAL con ANTHROPIC_API_KEY.
+ *   Gemini es el SECUNDARIO: también se le hace ping real con su clave. `ok` es true
+ *   si responde AL MENOS uno (la app atiende con cualquiera); `degradado` dice que
+ *   el principal no está. 503 solo sin NINGUNA clave; 502 si ninguno responde.
+ *
+ * El ping vive en `lib/ai/modelos.ts` y lo COMPARTE con /api/health/status (60 s de
+ * ventana, con `edadMs`/`reutilizado` para que se vea si es fresco o reciclado).
  */
-export async function GET() {
-  const key = claveGemini();
-  const envVar = nombreVarClave();
+function resumen(p: ResultadoPing | null) {
+  if (!p) return { keyLoaded: false as const };
+  return {
+    keyLoaded: true as const,
+    ok: p.ok,
+    model: p.modelo,
+    latencyMs: p.latenciaMs,
+    sample: p.muestra,
+    reason: p.error,
+    cached: p.reutilizado,
+    checkedAgoMs: p.edadMs,
+  };
+}
 
-  if (!key) {
+export async function GET() {
+  const keyA = claveAnthropic();
+  const keyG = claveGemini();
+
+  if (!keyA && !keyG) {
     return Response.json(
-      { ok: false, keyLoaded: false, reason: "No hay clave: define GEMINI_API_KEY en el entorno." },
+      {
+        ok: false,
+        keyLoaded: false,
+        reason: "No hay clave: define ANTHROPIC_API_KEY (principal) o GEMINI_API_KEY (secundario) en el entorno.",
+      },
       { status: 503 },
     );
   }
 
-  const ping = await pingProveedor(key);
-  if (!ping.ok) {
-    return Response.json(
-      { ok: false, keyLoaded: true, envVar, reason: ping.error ?? "error", model: ping.modelo },
-      { status: 502 },
-    );
-  }
+  const [pa, pg] = await Promise.all([
+    keyA ? pingProveedorAnthropic(keyA) : Promise.resolve(null),
+    keyG ? pingProveedor(keyG) : Promise.resolve(null),
+  ]);
+  const principalOk = !!pa?.ok;
+  const ok = principalOk || !!pg?.ok;
+  const quien = principalOk ? pa! : pg?.ok ? pg : (pa ?? pg)!;
 
-  return Response.json({
-    ok: true,
-    keyLoaded: true,
-    envVar, // el NOMBRE real que se está usando
-    provider: "google (@ai-sdk/google)",
-    model: ping.modelo,
-    latencyMs: ping.latenciaMs,
-    sample: ping.muestra,
-    // Honestidad sobre el dato que se enseña: si `cached` es true, la llamada
-    // ocurrió hace `checkedAgoMs` milisegundos, no ahora mismo.
-    cached: ping.reutilizado,
-    checkedAgoMs: ping.edadMs,
-    anthropicKeyLoaded: !!process.env.ANTHROPIC_API_KEY, // informativo: el código usa la BYOK cifrada, no esta variable
-    // Sin sesión no hay BYOK: se dice quién redacta SIN 3ª clave (el fallback). Con la
-    // clave de Anthropic del usuario, /api/health/status lo muestra como atendido por Claude.
-    tailoringModel: rutaDe("redaccion-preserva-hechos", { groqDisponible: false, anthropicDisponible: false }).modelo,
-  });
+  return Response.json(
+    {
+      ok,
+      keyLoaded: true,
+      // El proveedor que atiende AHORA (el principal si responde).
+      provider: principalOk ? "anthropic (@ai-sdk/anthropic)" : "google (@ai-sdk/google)",
+      degradado: !principalOk,
+      model: quien.modelo,
+      latencyMs: quien.latenciaMs,
+      sample: quien.muestra,
+      reason: ok ? undefined : quien.error ?? "error",
+      cached: quien.reutilizado,
+      checkedAgoMs: quien.edadMs,
+      envVar: nombreVarClave(), // el NOMBRE real de la variable de Gemini
+      anthropicKeyLoaded: !!keyA,
+      principal: { proveedor: "anthropic", envVar: keyA ? "ANTHROPIC_API_KEY" : null, ...resumen(pa) },
+      secundario: { proveedor: "google", envVar: nombreVarClave(), ...resumen(pg) },
+      // Quién redacta con las claves del servidor (sin BYOK: no hay sesión).
+      tailoringModel: rutaDe("redaccion-preserva-hechos", { anthropicDisponible: principalOk }).modelo,
+    },
+    { status: ok ? 200 : 502 },
+  );
 }

@@ -2,6 +2,8 @@ import { describe, it } from "vitest";
 import { readFileSync } from "node:fs";
 import { generateObject } from "ai";
 import { createGoogleGenerativeAI } from "@ai-sdk/google";
+import { createAnthropic } from "@ai-sdk/anthropic";
+import { generateText } from "ai";
 import { planificarExtraccion } from "@/lib/extract/llm";
 import { BasicsSchema, WorkSchema, EducationSchema, SkillsSchema, ProjectsSchema } from "@/lib/extract/schema";
 import { verifyEvidence } from "@/lib/verify";
@@ -12,7 +14,8 @@ import { verifyEvidence } from "@/lib/verify";
    una clave con crédito.
 
    Para correrla:  npx vitest run tests/manual/ab-modelos.ts --reporter=verbose
-   Requiere GEMINI_API_KEY con crédito en .env.local.
+   Requiere GEMINI_API_KEY y ANTHROPIC_API_KEY con crédito en .env.local (nunca se imprimen).
+   Compara Claude (principal) con Gemini (secundario); AB_MODELOS="a,b" cambia la lista.
 
    Mide el CANARIO: la tasa de evidencia verificada. Un modelo débil no falla
    inventando, falla PARAFRASEANDO —resume «con sus palabras» y el includes() del
@@ -36,10 +39,45 @@ const env = Object.fromEntries(
     .map((l) => [l.slice(0, l.indexOf("=")).trim(), l.slice(l.indexOf("=") + 1).trim()]),
 );
 const KEY = (env.GEMINI_API_KEY || env.GOOGLE_GENERATIVE_AI_API_KEY)!;
+// La clave de Anthropic del servidor. NUNCA se imprime: solo se pasa al SDK / cabecera.
+const KEY_A = env.ANTHROPIC_API_KEY;
 const DOSSIER = readFileSync("J:/Code/CV_Controller_IA/material-perfil/dossier/DOSSIER-MAESTRO-AKHAN.md", "utf8");
 
 const SCHEMA = { basics: BasicsSchema, work: WorkSchema, education: EducationSchema, skills: SkillsSchema, projects: ProjectsSchema } as const;
-const MODELOS = ["gemini-3.5-flash", "gemini-3.6-flash", "gemini-3.5-flash-lite", "gemini-3.1-flash-lite"];
+// Claude (principal) contra el Gemini secundario. AB_MODELOS="a,b" para cambiar la lista.
+const MODELOS = (process.env.AB_MODELOS ?? "claude-sonnet-5-5,gemini-3.6-flash").split(",").map((m) => m.trim()).filter(Boolean);
+const modeloDe = (id: string) =>
+  /^claude-/.test(id) ? createAnthropic({ apiKey: KEY_A! })(id) : createGoogleGenerativeAI({ apiKey: KEY })(id);
+
+describe("Anthropic · qué modelos lista la clave y cuáles RESPONDEN", () => {
+  it.skipIf(!KEY_A)("lista /v1/models y hace ping real a Sonnet y Haiku", async () => {
+    const r = await fetch("https://api.anthropic.com/v1/models?limit=100", {
+      headers: { "x-api-key": KEY_A!, "anthropic-version": "2023-06-01" },
+    });
+    console.log(`\nGET /v1/models → HTTP ${r.status}`);
+    const j = (await r.json()) as { data?: { id: string; created_at?: string }[] };
+    const ids = (j.data ?? []).map((m) => m.id);
+    console.log(ids.map((id) => `  · ${id}`).join("\n"));
+    const candidatos = ids.filter((id) => /sonnet|haiku/.test(id) && !/latest/.test(id));
+    for (const id of candidatos) {
+      const t0 = Date.now();
+      try {
+        const { text } = await generateText({ model: createAnthropic({ apiKey: KEY_A! })(id), prompt: "Responde exactamente con la palabra: OK", maxRetries: 0 });
+        console.log(`  ✔ ${id.padEnd(32)} ${Date.now() - t0} ms · ${text.trim().slice(0, 12)}`);
+      } catch (e) {
+        console.log(`  ✘ ${id.padEnd(32)} ${(e as Error).message.slice(0, 100)}`);
+      }
+    }
+  }, 120000);
+
+  it.skipIf(!KEY_A || !KEY)("ping de salud REAL a los dos proveedores (las funciones de producción)", async () => {
+    const { pingProveedor, pingProveedorAnthropic } = await import("@/lib/ai/modelos");
+    const a = await pingProveedorAnthropic(KEY_A!, true);
+    const g = await pingProveedor(KEY, true);
+    console.log(`\nping anthropic · ${a.modelo} · ok=${a.ok} · ${a.latenciaMs} ms · ${a.muestra || a.error}`);
+    console.log(`ping gemini    · ${g.modelo} · ok=${g.ok} · ${g.latenciaMs} ms · ${g.muestra || g.error}`);
+  }, 60000);
+});
 
 // Recoge (evidence) de cada item de una respuesta, según extractor.
 function evidencias(extractor: string, obj: any): string[] {
@@ -58,8 +96,8 @@ describe("A/B de modelos sobre el dossier real", () => {
 
     const filas: string[] = [];
     for (const modelo of MODELOS) {
-      const google = createGoogleGenerativeAI({ apiKey: KEY });
-      const model = google(modelo);
+      if (/^claude-/.test(modelo) && !KEY_A) { filas.push(`${modelo}: sin ANTHROPIC_API_KEY`); continue; }
+      const model = modeloDe(modelo);
       let items = 0, ver = 0, par = 0, none = 0, inTok = 0, outTok = 0, fallos = 0;
       for (const ll of plan.llamadas) {
         try {

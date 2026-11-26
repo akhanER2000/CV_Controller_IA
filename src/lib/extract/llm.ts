@@ -75,10 +75,10 @@ export function geminiApiKey(): string | undefined {
   return claveGemini();
 }
 
-/** El modelo de extracción con la clave EFECTIVA: la BYOK del usuario (ya
- *  descifrada, se pasa explícita) o, si no hay, la del servidor. */
-function googleModel(apiKey?: string) {
-  return modeloPara("extraccion-estructurada", apiKey);
+/** El modelo de extracción con las claves EFECTIVAS: Claude (BYOK de Anthropic o
+ *  ANTHROPIC_API_KEY) como principal y Gemini (BYOK o servidor) como fallback. */
+function googleModel(apiKey?: string, apiKey3?: string) {
+  return modeloPara("extraccion-estructurada", apiKey, undefined, undefined, apiKey3);
 }
 
 const BASE =
@@ -488,6 +488,8 @@ export interface OpcionesExtractor {
   ignorarCache?: boolean;
   /** Los tramos de cada documento dentro del rawText combinado (D6). */
   fuentes?: readonly Fuente[];
+  /** La clave BYOK de Anthropic del usuario (ya descifrada). Sin ella, ANTHROPIC_API_KEY del servidor. */
+  claveAnthropic?: string;
 }
 
 /* ── EL PLAN, SEPARADO DE LA EJECUCIÓN ────────────────────────────────────────
@@ -609,7 +611,7 @@ export function makeGeminiExtractor(apiKey?: string, opts: OpcionesExtractor = {
     }
 
     const plan = planificarExtraccion(rawText, opciones);
-    const model = googleModel(apiKey);
+    const model = googleModel(apiKey, opts.claveAnthropic);
     const consumo = consumoCero();
     consumo.caracteresDocumento = rawText.length;
     const partes: Extraction[] = [];
@@ -647,9 +649,9 @@ export const geminiExtractor: Extractor = makeGeminiExtractor();
  * esa transcripción. Sin este raw_text, la verificación de evidencia (§4.4)
  * quedaría desactivada justo en las fuentes con mayor riesgo de alucinación.
  */
-export async function transcribeImage(dataUrl: string, apiKey?: string): Promise<string> {
+export async function transcribeImage(dataUrl: string, apiKey?: string, apiKey3?: string): Promise<string> {
   const { text } = await generateText({
-    model: modeloPara("transcripcion-vision", apiKey),
+    model: modeloPara("transcripcion-vision", apiKey, undefined, undefined, apiKey3),
     messages: [
       {
         role: "user",
@@ -680,9 +682,9 @@ export async function transcribeImage(dataUrl: string, apiKey?: string): Promise
  * literal, página por página. Igual disciplina que transcribeImage: es la fuente
  * sobre la que corre la verificación de evidencia (§4.4), así que NADA se inventa.
  */
-export async function transcribePdf(bytes: Uint8Array, apiKey?: string): Promise<string> {
+export async function transcribePdf(bytes: Uint8Array, apiKey?: string, apiKey3?: string): Promise<string> {
   const { text } = await generateText({
-    model: modeloPara("transcripcion-vision", apiKey),
+    model: modeloPara("transcripcion-vision", apiKey, undefined, undefined, apiKey3),
     messages: [
       {
         role: "user",

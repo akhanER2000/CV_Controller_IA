@@ -442,8 +442,8 @@ function kindDeArchivo(f: FuenteTrabajo): FileKind {
   return fileKindFromName(f.original_name ?? "", undefined) ?? "text";
 }
 
-export function depsReales(sb: SupabaseClient, byok?: string): MotorDeps {
-  const extractDeps = extractDepsFor(byok);
+export function depsReales(sb: SupabaseClient, byok?: string, byok3?: string): MotorDeps {
+  const extractDeps = extractDepsFor(byok, byok3);
   return {
     async leerArchivo(f) {
       const path = f.storage_path!;
@@ -459,7 +459,7 @@ export function depsReales(sb: SupabaseClient, byok?: string): MotorDeps {
     extraer: (texto) =>
       runImport(
         { pastedText: texto, files: [] },
-        { extract: makeGeminiExtractor(byok), fetchGithubUser, fetchWeb: fetchViaJina },
+        { extract: makeGeminiExtractor(byok, { claveAnthropic: byok3 }), fetchGithubUser, fetchWeb: fetchViaJina },
       ),
     ahora: () => Date.now(),
     presupuestoMs: PRESUPUESTO_MS,

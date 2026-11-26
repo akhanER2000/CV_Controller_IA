@@ -2,8 +2,7 @@ import { NextResponse } from "next/server";
 import { generateObject } from "ai";
 import { createClient } from "@/lib/supabase/server";
 import { getVariant, getVariantItem, setAiOverride } from "@/lib/db/variants";
-import { geminiApiKey } from "@/lib/extract/llm";
-import { modeloPara } from "@/lib/ai/modelos";
+import { hayClaveIA, modeloPara } from "@/lib/ai/modelos";
 import { getUserLlmKey, getUserLlmKey3 } from "@/lib/account/byok";
 import { fetchViaJina } from "@/lib/extract/web";
 import { extractFile, extractDepsFor, type FileKind } from "@/lib/extract/files";
@@ -194,8 +193,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
 
   // ── ANALIZAR ───────────────────────────────────────────────────────────────
   const byok = (await getUserLlmKey(sb, user.id)) ?? undefined;
-  if (!byok && !geminiApiKey()) {
-    return fallo("Falta configurar la clave de IA (BYOK o GEMINI_API_KEY del servidor).", 503);
+  const byok3 = (await getUserLlmKey3(sb, user.id)) ?? undefined;
+  if (!hayClaveIA(byok, byok3)) {
+    return fallo("Falta configurar una clave de IA (BYOK, ANTHROPIC_API_KEY o GEMINI_API_KEY del servidor).", 503);
   }
 
   try {
@@ -225,7 +225,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       .map((m) => itemTailorDe({ id: m.id, item_id: m.id, kind: m.kind, data: m.data, enVariante: false }));
 
     const items = [...enVariante, ...soloMaster];
-    const analisis = await construirTailor({ offerText: oferta.text, items }, { llm: geminiOfertaLLM(byok, (await getUserLlmKey3(sb, user.id)) ?? undefined) });
+    const analisis = await construirTailor({ offerText: oferta.text, items }, { llm: geminiOfertaLLM(byok, byok3) });
 
     for (const d of analisis.descartados) {
       if (d.tipo === "reformular" || d.tipo === "resumen") {

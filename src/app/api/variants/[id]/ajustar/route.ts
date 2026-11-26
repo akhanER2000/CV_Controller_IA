@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { generateObject } from "ai";
-import { modeloPara } from "@/lib/ai/modelos";
+import { hayClaveIA, modeloPara } from "@/lib/ai/modelos";
 import { createClient } from "@/lib/supabase/server";
 import { getVariant, getVariantItem, setAiOverride, buildVariantResumeData } from "@/lib/db/variants";
 import { geminiApiKey } from "@/lib/extract/llm";
@@ -142,8 +142,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const paginasObjetivo = objetivoDe(body.paginas);
 
   const byok = (await getUserLlmKey(sb, user.id)) ?? undefined;
-  if (!byok && !geminiApiKey()) {
-    return fallo("Falta configurar la clave de IA (BYOK o GEMINI_API_KEY del servidor).", 503);
+  const byok3 = (await getUserLlmKey3(sb, user.id)) ?? undefined;
+  if (!hayClaveIA(byok, byok3)) {
+    return fallo("Falta configurar una clave de IA (BYOK, ANTHROPIC_API_KEY o GEMINI_API_KEY del servidor).", 503);
   }
 
   try {
@@ -166,7 +167,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
 
     const propuesta = await construirAjuste(
       { targetTitle, items, paginas: medida.porPagina.length, paginasObjetivo, sobran },
-      { llm: geminiAjusteLLM(byok, (await getUserLlmKey3(sb, user.id)) ?? undefined) },
+      { llm: geminiAjusteLLM(byok, byok3) },
     );
 
     // Los descartes se registran EN EL SERVIDOR además de viajar al cliente: si un

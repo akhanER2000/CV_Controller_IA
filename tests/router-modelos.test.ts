@@ -1,229 +1,288 @@
 /* ============================================================================
-   §H · ROUTER POR TAREA + SEGUNDO PROVEEDOR (registro de modelos).
+   ROUTER DE MODELOS · Anthropic PRINCIPAL, Gemini SECUNDARIO, Groq opcional.
 
    Lo que este test PROTEGE, con mutantes que deben morir:
 
-     (1) El router es POR COSTE, no redundancia. Solo la tarea BARATA prefiere el 2º
-         proveedor (Groq); visión, extracción, redacción y ping siguen en Gemini.
-     (2) DEGRADAR CON HONESTIDAD: sin 2ª clave, la tarea barata CAE a Gemini y `rutaDe`
-         lo marca `degradado:true`. Si alguien borra esa rama, el panel de salud
-         mentiría diciendo «groq» donde de verdad atiende Gemini — y este test lo caza.
-     (3) `modeloPara` instancia el proveedor CORRECTO. Se comprueba SIN red, mirando el
-         `provider`/`modelId` del objeto modelo (no se llama a ninguna API).
-     (4) La ruta barata con 2ª clave NO necesita clave de Gemini (son proveedores
-         independientes); las tareas de Gemini SÍ la exigen y, sin ella, lanzan.
+     (1) Orden de clave en TODAS las tareas: BYOK de Anthropic → ANTHROPIC_API_KEY
+         del servidor → Gemini. Groq solo en clasificación y solo sin Anthropic.
+     (2) FALLBACK REAL: si Claude responde 5xx/404/429/401, la MISMA llamada se repite
+         con Gemini y `rutaDe` marca la tarea `degradado` con el motivo. Un 400 (petición
+         mala) NO rebota: se relanza.
+     (3) DA-C1a: con UNA sola clave (cualquiera) no hay 503.
+     (4) Ningún modelo del registro es un alias `-latest`.
 
-   No hay clave real en el entorno: NADA aquí hace una llamada. Construir un modelo del
-   SDK es perezoso; el objeto solo declara qué proveedor/modelo usaría.
+   No hay clave real: `fetch` se sustituye por un doble que imita a cada proveedor.
    ============================================================================ */
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import { readFileSync, readdirSync, statSync } from "node:fs";
+import { join } from "node:path";
+import { generateText } from "ai";
 import {
   REGISTRO,
   TAREAS,
-  PROVEEDOR_BARATO,
+  PROVEEDOR_PRINCIPAL,
+  PROVEEDOR_SECUNDARIO,
+  MODELO_GEMINI,
+  MODELO_GROQ,
+  MODELO_HAIKU,
+  MODELO_SONNET,
+  _resetCaidas,
+  caidaReciente,
+  debeCaer,
+  hayClaveIA,
   modeloDe,
   modeloPara,
   rutaDe,
   type Tarea,
 } from "../src/lib/ai/modelos";
 
-const MODELO_GROQ = "llama-3.3-70b-versatile";
-// El modelo de redacción (3ª clave · Anthropic). Versionado, nunca un alias.
-const MODELO_CLAUDE = "claude-sonnet-5-5";
-// El modelo de Gemini fijado en el registro (versionado, NUNCA un alias -latest).
-// Si el A/B lo cambia, se actualiza aquí; que no compile con -latest lo garantiza
-// tests/modelos-registro.test.ts, no este.
-// El modelo de Gemini fijado en el registro. Versionado y —lo que importa más—
-// COMPROBADO con un ping real contra la clave: `gemini-2.5-flash` figuraba en el
-// listado de la API y devolvía 404 «no longer available» al llamarlo.
-const MODELO_GEMINI = "gemini-3.6-flash";
+const ENV = ["GEMINI_API_KEY", "GOOGLE_GENERATIVE_AI_API_KEY", "ANTHROPIC_API_KEY"] as const;
+let guardado: Record<string, string | undefined> = {};
+beforeEach(() => {
+  guardado = Object.fromEntries(ENV.map((k) => [k, process.env[k]]));
+  for (const k of ENV) delete process.env[k];
+  _resetCaidas();
+});
+afterEach(() => {
+  for (const k of ENV) {
+    if (guardado[k] === undefined) delete process.env[k];
+    else process.env[k] = guardado[k];
+  }
+  vi.unstubAllGlobals();
+  vi.restoreAllMocks();
+});
 
-/* ── El registro es la única fuente de verdad tarea→proveedor→modelo ─────────── */
-describe("registro · una tarea, un proveedor, un modelo", () => {
-  it("TAREAS coincide EXACTAMENTE con las claves del registro (ni una de más ni de menos)", () => {
+/* ── El registro ─────────────────────────────────────────────────────────────── */
+describe("registro · Anthropic principal en todas las tareas", () => {
+  it("TAREAS coincide EXACTAMENTE con las claves del registro", () => {
     expect([...TAREAS].sort()).toEqual(Object.keys(REGISTRO).sort());
   });
 
-  it("SOLO la tarea barata es de Groq y SOLO la redacción de Anthropic; el resto siguen en Gemini", () => {
-    expect(PROVEEDOR_BARATO).toBe("groq");
-    expect(REGISTRO["clasificacion-barata"].proveedor).toBe("groq");
-    expect(REGISTRO["redaccion-preserva-hechos"].proveedor).toBe("anthropic");
-    for (const t of ["transcripcion-vision", "extraccion-estructurada", "ping-salud"] as Tarea[]) {
-      expect(REGISTRO[t].proveedor).toBe("google");
+  it("★ todas las tareas son de Anthropic con un fallback de Gemini", () => {
+    expect(PROVEEDOR_PRINCIPAL).toBe("anthropic");
+    expect(PROVEEDOR_SECUNDARIO).toBe("google");
+    for (const t of TAREAS) {
+      expect(REGISTRO[t].proveedor, t).toBe("anthropic");
+      expect(REGISTRO[t].modelo, t).toMatch(/^claude-/);
+      expect(REGISTRO[t].modeloFallback, t).toBe(MODELO_GEMINI);
     }
   });
 
-  it("la redacción declara Claude Sonnet versionado y su fallback de Gemini (nunca -latest)", () => {
-    const def = REGISTRO["redaccion-preserva-hechos"];
-    expect(def.modelo).toBe(MODELO_CLAUDE);
-    expect(def.modeloFallback).toBe(MODELO_GEMINI);
-    expect(def.modelo).not.toMatch(/latest/);
-    expect(def.modeloFallback).not.toMatch(/latest/);
+  it("Sonnet para visión, extracción y redacción; Haiku para clasificación y ping", () => {
+    for (const t of ["transcripcion-vision", "extraccion-estructurada", "redaccion-preserva-hechos"] as Tarea[]) {
+      expect(modeloDe(t)).toBe(MODELO_SONNET);
+    }
+    expect(modeloDe("clasificacion-barata")).toBe(MODELO_HAIKU);
+    expect(modeloDe("ping-salud")).toBe(MODELO_HAIKU);
+    expect(MODELO_SONNET).toMatch(/sonnet/);
+    expect(MODELO_HAIKU).toMatch(/haiku/);
   });
 
-  it("la tarea barata declara su modelo Groq CON salida estructurada y su fallback de Gemini", () => {
-    const def = REGISTRO["clasificacion-barata"];
-    expect(def.modelo).toBe(MODELO_GROQ); // llama-3.3-70b-versatile soporta structured output
-    expect(def.modeloFallback).toBe(MODELO_GEMINI); // sin 2ª clave, cae a Gemini
+  it("★ ningún modelo (preferente, fallback ni barato) es un alias -latest", () => {
+    for (const t of TAREAS) {
+      const d = REGISTRO[t];
+      for (const m of [d.modelo, d.modeloFallback, d.modeloBarato].filter(Boolean)) {
+        expect(m, `${t}: ${m}`).not.toMatch(/latest/i);
+      }
+    }
   });
 
-  it("modeloDe reporta el modelo PREFERENTE de cada tarea sin llamar a nada", () => {
-    expect(modeloDe("extraccion-estructurada")).toBe(MODELO_GEMINI);
-    expect(modeloDe("clasificacion-barata")).toBe(MODELO_GROQ);
+  it("Groq solo existe en la clasificación", () => {
+    expect(REGISTRO["clasificacion-barata"].modeloBarato).toBe(MODELO_GROQ);
+    for (const t of TAREAS.filter((x) => x !== "clasificacion-barata")) expect(REGISTRO[t].modeloBarato).toBeUndefined();
   });
 });
 
-/* ── rutaDe · la VERDAD que el panel de salud enseña ─────────────────────────── */
-describe("rutaDe · quién atiende de verdad cada tarea", () => {
-  it("★ barata + 2ª clave (Groq disponible) → Groq, sin degradar", () => {
-    expect(rutaDe("clasificacion-barata", { groqDisponible: true })).toEqual({
-      tarea: "clasificacion-barata",
+/* ── Orden de clave · modeloPara (sin red) ───────────────────────────────────── */
+describe("★ orden Anthropic → Gemini · modeloPara", () => {
+  it("BYOK de Anthropic → instancia Claude (envuelto con fallback si hay Gemini)", () => {
+    for (const t of TAREAS) {
+      const m = modeloPara(t, "gkey", undefined, undefined, "akey");
+      expect(String(m.provider), t).toMatch(/^anthropic/);
+      expect(m.modelId, t).toBe(REGISTRO[t].modelo);
+    }
+  });
+
+  it("sin BYOK de Anthropic → ANTHROPIC_API_KEY del servidor", () => {
+    process.env.ANTHROPIC_API_KEY = "akey-servidor";
+    const m = modeloPara("extraccion-estructurada", "gkey");
+    expect(String(m.provider)).toMatch(/^anthropic/);
+    expect(m.modelId).toBe(MODELO_SONNET);
+  });
+
+  it("sin ninguna clave de Anthropic → Gemini con el fallback", () => {
+    for (const t of TAREAS) {
+      const m = modeloPara(t, "gkey");
+      expect(String(m.provider), t).toMatch(/^google/);
+      expect(m.modelId, t).toBe(MODELO_GEMINI);
+    }
+  });
+
+  it("solo clave de Anthropic (ni Gemini) → Claude sin envoltorio, no lanza", () => {
+    const m = modeloPara("transcripcion-vision", undefined, undefined, undefined, "akey");
+    expect(String(m.provider)).toMatch(/^anthropic/);
+  });
+
+  it("Groq: solo clasificación, solo con 2ª clave y SIN Anthropic", () => {
+    expect(String(modeloPara("clasificacion-barata", "gkey", "qkey").provider)).toMatch(/^groq/);
+    expect(modeloPara("clasificacion-barata", undefined, "qkey").modelId).toBe(MODELO_GROQ);
+    // Con Anthropic, Claude manda.
+    expect(String(modeloPara("clasificacion-barata", "gkey", "qkey", undefined, "akey").provider)).toMatch(/^anthropic/);
+    // El resto de tareas ignoran la 2ª clave.
+    expect(String(modeloPara("extraccion-estructurada", "gkey", "qkey").provider)).toMatch(/^google/);
+  });
+
+  it("un modelo elegido de Gemini va directo a Gemini; uno de Claude, a Claude", () => {
+    const g = modeloPara("extraccion-estructurada", "gkey", undefined, "gemini-3.5-flash", "akey");
+    expect(String(g.provider)).toMatch(/^google/);
+    expect(g.modelId).toBe("gemini-3.5-flash");
+    const c = modeloPara("extraccion-estructurada", "gkey", undefined, "claude-haiku-5-5", "akey");
+    expect(String(c.provider)).toMatch(/^anthropic/);
+    expect(c.modelId).toBe("claude-haiku-5-5");
+  });
+
+  it("sin NINGUNA clave → lanza nombrando las dos variables", () => {
+    expect(() => modeloPara("extraccion-estructurada")).toThrow(/ANTHROPIC_API_KEY.*GEMINI_API_KEY/);
+  });
+});
+
+/* ── rutaDe · la verdad del panel ────────────────────────────────────────────── */
+describe("rutaDe · quién atiende de verdad", () => {
+  it("★ con Anthropic disponible → anthropic, sin degradar", () => {
+    expect(rutaDe("extraccion-estructurada", { anthropicDisponible: true })).toEqual({
+      tarea: "extraccion-estructurada",
+      proveedor: "anthropic",
+      modelo: MODELO_SONNET,
+      degradado: false,
+    });
+  });
+
+  it("el flag omitido mira ANTHROPIC_API_KEY del servidor", () => {
+    expect(rutaDe("redaccion-preserva-hechos").proveedor).toBe("google");
+    process.env.ANTHROPIC_API_KEY = "akey-servidor";
+    expect(rutaDe("redaccion-preserva-hechos").proveedor).toBe("anthropic");
+  });
+
+  it("★★ sin Anthropic → Gemini, degradado", () => {
+    expect(rutaDe("redaccion-preserva-hechos", { anthropicDisponible: false })).toEqual({
+      tarea: "redaccion-preserva-hechos",
+      proveedor: "google",
+      modelo: MODELO_GEMINI,
+      degradado: true,
+    });
+  });
+
+  it("clasificación sin Anthropic y con Groq → groq (degradado: no es el principal)", () => {
+    expect(rutaDe("clasificacion-barata", { groqDisponible: true, anthropicDisponible: false })).toMatchObject({
       proveedor: "groq",
       modelo: MODELO_GROQ,
-      degradado: false,
-    });
-  });
-
-  it("★★ barata SIN 2ª clave → CAE a Gemini y se marca degradado (mutante: si se borra la rama, muere aquí)", () => {
-    expect(rutaDe("clasificacion-barata", { groqDisponible: false })).toEqual({
-      tarea: "clasificacion-barata",
-      proveedor: "google",
-      modelo: MODELO_GEMINI, // el fallback declarado, no el modelo de Groq
       degradado: true,
     });
+    // Groq no mueve otras tareas.
+    expect(rutaDe("extraccion-estructurada", { groqDisponible: true, anthropicDisponible: false }).proveedor).toBe("google");
   });
+});
 
-  it("una tarea de Gemini NO se mueve a Groq aunque haya 2ª clave (el router es por coste, no por redundancia)", () => {
-    expect(rutaDe("extraccion-estructurada", { groqDisponible: true })).toEqual({
-      tarea: "extraccion-estructurada",
-      proveedor: "google",
-      modelo: MODELO_GEMINI,
-      degradado: false,
+/* ── FALLBACK REAL ante 5xx / 404 / 429 simulados ────────────────────────────── */
+
+const RESPUESTA_GEMINI = {
+  candidates: [{ content: { role: "model", parts: [{ text: "desde gemini" }] }, finishReason: "STOP", index: 0 }],
+  usageMetadata: { promptTokenCount: 3, candidatesTokenCount: 2, totalTokenCount: 5 },
+};
+
+/** Doble de `fetch`: Anthropic responde `status`; Gemini responde bien. Registra a quién se llamó. */
+function stubProveedores(statusAnthropic: number) {
+  const llamados: string[] = [];
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input instanceof Request ? input.url : input);
+      if (url.includes("api.anthropic.com")) {
+        llamados.push("anthropic");
+        return new Response(
+          JSON.stringify({ type: "error", error: { type: "api_error", message: `simulado ${statusAnthropic}` } }),
+          { status: statusAnthropic, headers: { "content-type": "application/json" } },
+        );
+      }
+      if (url.includes("generativelanguage.googleapis.com")) {
+        llamados.push("google");
+        return new Response(JSON.stringify(RESPUESTA_GEMINI), { status: 200, headers: { "content-type": "application/json" } });
+      }
+      throw new Error(`url inesperada en el test: ${url}`);
+    }),
+  );
+  return llamados;
+}
+
+describe("★ fallback real · si Claude cae, la MISMA llamada se repite con Gemini", () => {
+  for (const status of [500, 503, 529, 404, 429, 401]) {
+    it(`Anthropic ${status} → responde Gemini y la tarea queda degradada con el motivo`, async () => {
+      const llamados = stubProveedores(status);
+      const aviso = vi.spyOn(console, "warn").mockImplementation(() => {});
+      const model = modeloPara("redaccion-preserva-hechos", "gkey", undefined, undefined, "akey");
+      const { text } = await generateText({ model, prompt: "hola", maxRetries: 0 });
+
+      expect(text).toBe("desde gemini");
+      expect(llamados).toEqual(["anthropic", "google"]); // primero Claude, después Gemini
+      // Nunca en silencio: consola + caída anotada que el panel enseña.
+      expect(aviso).toHaveBeenCalledTimes(1);
+      expect(caidaReciente("redaccion-preserva-hechos", "akey")?.motivo).toMatch(new RegExp(String(status)));
+      const r = rutaDe("redaccion-preserva-hechos", { anthropicDisponible: true, claveAnthropic: "akey" });
+      expect(r).toMatchObject({ proveedor: "google", modelo: MODELO_GEMINI, degradado: true });
+      expect(r.motivo).toMatch(new RegExp(String(status)));
+      // La caída es de ESA clave y ESA tarea: otra clave no sale degradada.
+      expect(rutaDe("redaccion-preserva-hechos", { anthropicDisponible: true, claveAnthropic: "otra" }).degradado).toBe(false);
+      expect(rutaDe("extraccion-estructurada", { anthropicDisponible: true, claveAnthropic: "akey" }).degradado).toBe(false);
     });
-    expect(rutaDe("ping-salud", { groqDisponible: false }).degradado).toBe(false);
+  }
+
+  it("un 400 (petición mala) NO rebota a Gemini: se relanza", async () => {
+    const llamados = stubProveedores(400);
+    const model = modeloPara("redaccion-preserva-hechos", "gkey", undefined, undefined, "akey");
+    await expect(generateText({ model, prompt: "hola", maxRetries: 0 })).rejects.toThrow();
+    expect(llamados).toEqual(["anthropic"]);
+    expect(caidaReciente("redaccion-preserva-hechos", "akey")).toBeNull();
   });
 
-  it("★ redacción + 3ª clave (Anthropic disponible) → Claude, sin degradar", () => {
-    expect(rutaDe("redaccion-preserva-hechos", { groqDisponible: false, anthropicDisponible: true })).toEqual({
-      tarea: "redaccion-preserva-hechos",
-      proveedor: "anthropic",
-      modelo: MODELO_CLAUDE,
-      degradado: false,
-    });
+  it("sin clave de Gemini no hay recambio: el error de Claude sale tal cual", async () => {
+    const llamados = stubProveedores(503);
+    const model = modeloPara("redaccion-preserva-hechos", undefined, undefined, undefined, "akey");
+    await expect(generateText({ model, prompt: "hola", maxRetries: 0 })).rejects.toThrow();
+    expect(llamados).toEqual(["anthropic"]);
   });
 
-  it("★★ redacción SIN 3ª clave → CAE a Gemini y se marca degradado (omitir el flag también)", () => {
-    const esperado = {
-      tarea: "redaccion-preserva-hechos",
-      proveedor: "google",
-      modelo: MODELO_GEMINI,
-      degradado: true,
-    };
-    expect(rutaDe("redaccion-preserva-hechos", { groqDisponible: true, anthropicDisponible: false })).toEqual(esperado);
-    expect(rutaDe("redaccion-preserva-hechos", { groqDisponible: true })).toEqual(esperado);
+  it("debeCaer: cancelación del usuario NO cae; red caída SÍ", () => {
+    expect(debeCaer(Object.assign(new Error("aborted"), { name: "AbortError" }))).toBe(false);
+    expect(debeCaer(new TypeError("fetch failed"))).toBe(true);
+  });
+});
+
+/* ── DA-C1a · sin 503 con una sola clave ─────────────────────────────────────── */
+describe("★ DA-C1a · con UNA clave basta (no hay 503)", () => {
+  it("hayClaveIA: cualquier clave sola habilita la IA; ninguna, no", () => {
+    expect(hayClaveIA()).toBe(false);
+    expect(hayClaveIA(undefined, null)).toBe(false);
+    expect(hayClaveIA("byok-gemini")).toBe(true);
+    expect(hayClaveIA(undefined, "byok-anthropic")).toBe(true);
+    process.env.ANTHROPIC_API_KEY = "solo-anthropic";
+    expect(hayClaveIA()).toBe(true);
+    delete process.env.ANTHROPIC_API_KEY;
+    process.env.GEMINI_API_KEY = "solo-gemini";
+    expect(hayClaveIA()).toBe(true);
   });
 
-  it("la 3ª clave NO mueve a Claude ni la extracción ni la visión (siguen en Gemini)", () => {
-    for (const t of ["extraccion-estructurada", "transcripcion-vision"] as Tarea[]) {
-      const r = rutaDe(t, { groqDisponible: true, anthropicDisponible: true });
-      expect(r.proveedor).toBe("google");
-      expect(r.degradado).toBe(false);
+  it("ninguna ruta de IA decide el 503 mirando solo la clave de Gemini", () => {
+    const rutas = (dir: string): string[] =>
+      readdirSync(dir).flatMap((n) => {
+        const p = join(dir, n);
+        return statSync(p).isDirectory() ? rutas(p) : n === "route.ts" ? [p] : [];
+      });
+    const api = join(__dirname, "..", "src", "app", "api");
+    const conIA = rutas(api).filter((p) => /modeloPara\(|makeGeminiExtractor\(|extractDepsFor\(|depsReales\(/.test(readFileSync(p, "utf8")));
+    expect(conIA.length).toBeGreaterThan(5);
+    for (const p of conIA) {
+      const src = readFileSync(p, "utf8");
+      expect(src, p).not.toMatch(/!\s*geminiApiKey\(\)|byok \|\| geminiApiKey\(\)/);
     }
-  });
-});
-
-/* ── modeloPara · la redacción en Anthropic con la 3ª clave (sin red) ────────── */
-describe("modeloPara · 3ª clave (Anthropic) solo para la redacción", () => {
-  it("★ redacción + 3ª clave → instancia el modelo de ANTHROPIC", () => {
-    const m = modeloPara("redaccion-preserva-hechos", "gkey", undefined, undefined, "akey");
-    expect(String(m.provider)).toMatch(/^anthropic/);
-    expect(m.modelId).toBe(MODELO_CLAUDE);
-  });
-
-  it("★ la extracción con 3ª clave sigue en GEMINI (Claude no la atiende)", () => {
-    const m = modeloPara("extraccion-estructurada", "gkey", undefined, undefined, "akey");
-    expect(String(m.provider)).toMatch(/^google/);
-    expect(m.modelId).toBe(MODELO_GEMINI);
-    const v = modeloPara("transcripcion-vision", "gkey", undefined, undefined, "akey");
-    expect(String(v.provider)).toMatch(/^google/);
-  });
-
-  it("★★ redacción SIN 3ª clave → CAE a Gemini con su fallback, no a Claude", () => {
-    const m = modeloPara("redaccion-preserva-hechos", "gkey");
-    expect(String(m.provider)).toMatch(/^google/);
-    expect(m.modelId).toBe(MODELO_GEMINI);
-  });
-
-  it("la 2ª clave (Groq) no activa Claude: la redacción sigue degradada a Gemini", () => {
-    const m = modeloPara("redaccion-preserva-hechos", "gkey", "qkey");
-    expect(String(m.provider)).toMatch(/^google/);
-  });
-
-  it("la tarea barata con 3ª clave sigue su propia regla (Groq con 2ª clave)", () => {
-    const m = modeloPara("clasificacion-barata", "gkey", "qkey", undefined, "akey");
-    expect(String(m.provider)).toMatch(/^groq/);
-  });
-});
-
-/* ── modeloPara · instancia el proveedor correcto (sin red) ──────────────────── */
-describe("modeloPara · ramifica al proveedor correcto", () => {
-  it("★ barata + 2ª clave → instancia el modelo de GROQ", () => {
-    const m = modeloPara("clasificacion-barata", "gkey", "qkey");
-    expect(String(m.provider)).toMatch(/^groq/);
-    expect(m.modelId).toBe(MODELO_GROQ);
-  });
-
-  it("★★ barata SIN 2ª clave → instancia GEMINI (el fallback), no Groq", () => {
-    const m = modeloPara("clasificacion-barata", "gkey");
-    expect(String(m.provider)).toMatch(/^google/);
-    expect(m.modelId).toBe(MODELO_GEMINI);
-  });
-
-  it("★ barata + 2ª clave NO necesita clave de Gemini (proveedores independientes)", () => {
-    // Sin apiKey de Google, pero con 2ª clave: la ruta barata va a Groq y no lanza.
-    const m = modeloPara("clasificacion-barata", undefined, "qkey");
-    expect(String(m.provider)).toMatch(/^groq/);
-    expect(m.modelId).toBe(MODELO_GROQ);
-  });
-
-  it("una tarea de Gemini IGNORA la 2ª clave y sigue en Gemini", () => {
-    const m = modeloPara("extraccion-estructurada", "gkey", "qkey");
-    expect(String(m.provider)).toMatch(/^google/);
-    expect(m.modelId).toBe(MODELO_GEMINI);
-  });
-
-  it("ping-salud siempre en Gemini", () => {
-    const m = modeloPara("ping-salud", "gkey");
-    expect(m.modelId).toBe(MODELO_GEMINI);
-  });
-});
-
-/* ── modeloPara · sin clave de Gemini, las tareas de Gemini LANZAN ───────────── */
-describe("modeloPara · sin clave de Gemini y sin 2ª clave, la ruta a Gemini lanza", () => {
-  let g: string | undefined;
-  let gg: string | undefined;
-  beforeEach(() => {
-    g = process.env.GEMINI_API_KEY;
-    gg = process.env.GOOGLE_GENERATIVE_AI_API_KEY;
-    delete process.env.GEMINI_API_KEY;
-    delete process.env.GOOGLE_GENERATIVE_AI_API_KEY;
-  });
-  afterEach(() => {
-    if (g === undefined) delete process.env.GEMINI_API_KEY; else process.env.GEMINI_API_KEY = g;
-    if (gg === undefined) delete process.env.GOOGLE_GENERATIVE_AI_API_KEY; else process.env.GOOGLE_GENERATIVE_AI_API_KEY = gg;
-  });
-
-  it("extracción sin clave alguna → Falta GEMINI_API_KEY", () => {
-    expect(() => modeloPara("extraccion-estructurada")).toThrow(/GEMINI_API_KEY/);
-  });
-
-  it("★ barata SIN 2ª clave y SIN Gemini → también lanza (degrada a una ruta que exige Gemini)", () => {
-    expect(() => modeloPara("clasificacion-barata")).toThrow(/GEMINI_API_KEY/);
-  });
-
-  it("★ redacción SIN 3ª clave y SIN Gemini → lanza; CON 3ª clave no necesita Gemini", () => {
-    expect(() => modeloPara("redaccion-preserva-hechos")).toThrow(/GEMINI_API_KEY/);
-    const m = modeloPara("redaccion-preserva-hechos", undefined, undefined, undefined, "akey");
-    expect(String(m.provider)).toMatch(/^anthropic/);
   });
 });

@@ -33,12 +33,26 @@ beforeEach(() => {
 });
 
 describe("pingProveedorAnthropic", () => {
-  it("★ llama DE VERDAD a Anthropic con el modelo de redacción del registro", async () => {
+  it("★ llama DE VERDAD a Anthropic con el modelo del ping del registro (Haiku)", async () => {
     const r = await pingProveedorAnthropic("akey-1", true);
     expect(h.llamadas).toHaveLength(1);
     expect(h.llamadas[0]!.provider).toMatch(/^anthropic/);
-    expect(h.llamadas[0]!.modelId).toBe("claude-sonnet-5-5");
-    expect(r).toMatchObject({ ok: true, modelo: "claude-sonnet-5-5", reutilizado: false });
+    expect(h.llamadas[0]!.modelId).toBe("claude-haiku-5-5");
+    expect(r).toMatchObject({ ok: true, modelo: "claude-haiku-5-5", reutilizado: false });
+  });
+
+  it("★ sin clave explícita usa ANTHROPIC_API_KEY del servidor; sin ninguna, lanza", async () => {
+    const prev = process.env.ANTHROPIC_API_KEY;
+    try {
+      process.env.ANTHROPIC_API_KEY = "akey-servidor";
+      const r = await pingProveedorAnthropic(undefined, true);
+      expect(r.ok).toBe(true);
+      expect(h.llamadas[0]!.provider).toMatch(/^anthropic/);
+      delete process.env.ANTHROPIC_API_KEY;
+      await expect(pingProveedorAnthropic(undefined, true)).rejects.toThrow(/ANTHROPIC_API_KEY/);
+    } finally {
+      if (prev === undefined) delete process.env.ANTHROPIC_API_KEY; else process.env.ANTHROPIC_API_KEY = prev;
+    }
   });
 
   it("la ventana compartida reutiliza la llamada para la MISMA clave (no paga dos veces)", async () => {

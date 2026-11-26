@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { generateObject } from "ai";
-import { modeloPara } from "@/lib/ai/modelos";
+import { hayClaveIA, modeloPara } from "@/lib/ai/modelos";
 import { createClient } from "@/lib/supabase/server";
 import { listVariants, countMasterItems, getMasterItems, type MasterItem } from "@/lib/db/queries";
 import { createVariant, updateVariant, addItem, setAiOverride } from "@/lib/db/variants";
@@ -187,8 +187,9 @@ export async function POST(req: Request) {
     }
     // BYOK: la clave del usuario (descifrada, solo servidor) o la del servidor.
     const byok = (await getUserLlmKey(sb, user.id)) ?? undefined;
-    if (!byok && !geminiApiKey()) {
-      return NextResponse.json({ error: "Falta configurar la clave de IA (BYOK o GEMINI_API_KEY del servidor)." }, { status: 503 });
+    const byok3 = (await getUserLlmKey3(sb, user.id)) ?? undefined;
+    if (!hayClaveIA(byok, byok3)) {
+      return NextResponse.json({ error: "Falta configurar una clave de IA (BYOK, ANTHROPIC_API_KEY o GEMINI_API_KEY del servidor)." }, { status: 503 });
     }
 
     const master = await getMasterItems(sb, user.id);
@@ -197,7 +198,7 @@ export async function POST(req: Request) {
     }
 
     const aiItems: AiMasterItem[] = master.map((m) => ({ id: m.id, kind: m.kind, text: masterItemText(m) }));
-    const plan = await buildAiVariant({ master: aiItems, prompt }, { llm: geminiVariantLLM(byok, (await getUserLlmKey3(sb, user.id)) ?? undefined) });
+    const plan = await buildAiVariant({ master: aiItems, prompt }, { llm: geminiVariantLLM(byok, byok3) });
 
     const variant = await createVariant(sb, user.id, body.name ?? plan.targetTitle);
 

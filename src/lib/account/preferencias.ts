@@ -1,6 +1,6 @@
 import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { idModeloValido, probarModelo, type OpcionesCatalogo } from "@/lib/ai/catalogo";
+import { claveParaModelo, idModeloValido, probarModelo, type Claves, type OpcionesCatalogo } from "@/lib/ai/catalogo";
 import { modeloEfectivo } from "@/lib/ai/modelos";
 
 /**
@@ -148,7 +148,7 @@ export async function elegirModelo(
   sb: SupabaseClient,
   userId: string,
   crudo: unknown,
-  apiKey: string | null,
+  claves: Claves | null,
   opts: OpcionesCatalogo = {},
 ): Promise<ResultadoEleccion> {
   const conModelo = (modelo: string | null, extra: Partial<ResultadoEleccion>): ResultadoEleccion => ({
@@ -170,6 +170,8 @@ export async function elegirModelo(
   }
 
   if (candidato) {
+    // La clave de SU proveedor: un Claude se prueba con la de Anthropic, un Gemini con la de Gemini.
+    const apiKey = claves ? claveParaModelo(claves, candidato) : undefined;
     if (!apiKey) return conModelo(null, { motivo: "sin-clave" });
     const prueba = await probarModelo(apiKey, candidato, opts);
     if (!prueba.responde) {

@@ -2,8 +2,9 @@ import "server-only";
 import { createHash } from "node:crypto";
 import { generateObject } from "ai";
 import { createGoogleGenerativeAI } from "@ai-sdk/google";
+import { createAnthropic } from "@ai-sdk/anthropic";
 import { z } from "zod";
-import { modeloDe, pingProveedor } from "./modelos";
+import { REGISTRO, modeloDe, pingProveedor, pingProveedorAnthropic, proveedorDeModelo } from "./modelos";
 
 /**
  * ════════════════════════════════════════════════════════════════════════════
@@ -46,6 +47,26 @@ import { modeloDe, pingProveedor } from "./modelos";
 
 /** El listado oficial. Mismo host que usa el proveedor de Google del SDK. */
 const URL_LISTADO = "https://generativelanguage.googleapis.com/v1beta/models";
+/** El listado oficial de Anthropic (Claude). */
+const URL_LISTADO_ANTHROPIC = "https://api.anthropic.com/v1/models";
+
+/**
+ * ★ Las claves con las que se barre y se prueba. Un `string` suelto es la clave de
+ * Gemini (la forma de siempre); con `anthropic` se listan y prueban TAMBIÉN los
+ * modelos de Claude, cada uno con la clave de SU proveedor.
+ */
+export type Claves = string | { gemini?: string | null; anthropic?: string | null };
+
+function normalizar(c: Claves): { gemini?: string; anthropic?: string } {
+  if (typeof c === "string") return { gemini: c };
+  return { gemini: c.gemini || undefined, anthropic: c.anthropic || undefined };
+}
+
+/** La clave del proveedor de un id (claude-… → Anthropic; el resto → Gemini). */
+export function claveParaModelo(c: Claves, id: string): string | undefined {
+  const n = normalizar(c);
+  return proveedorDeModelo(id) === "anthropic" ? n.anthropic : n.gemini;
+}
 
 /**
  * Ventana de reutilización del barrido y de cada sonda. Larga comparada con el
@@ -174,7 +195,7 @@ const ESQUEMA_SONDA = z.object({ ok: z.string() });
 
 const sondaReal: Sonda = async (id, apiKey) => {
   const r = await generateObject({
-    model: createGoogleGenerativeAI({ apiKey })(id),
+    model: proveedorDeModelo(id) === "anthropic" ? createAnthropic({ apiKey })(id) : createGoogleGenerativeAI({ apiKey })(id),
     schema: ESQUEMA_SONDA,
     prompt: 'Devuelve exactamente {"ok":"OK"}.',
     temperature: 0,
@@ -190,6 +211,12 @@ const sondaReal: Sonda = async (id, apiKey) => {
 
 /** La clave NUNCA se guarda: se indexa por huella, de la que no se recupera. */
 const huella = (k: string) => createHash("sha256").update(k).digest("hex").slice(0, 16);
+
+/** Huella del PAR de claves (el catálogo depende de las dos). */
+const huellaClaves = (c: Claves) => {
+  const n = normalizar(c);
+  return huella(`${n.gemini ?? ""}|${n.anthropic ?? ""}`);
+};
 
 /** Barrido completo por huella de clave. */
 const cacheCatalogo = new Map<string, CatalogoModelos>();
@@ -332,6 +359,26 @@ async function leerListado(apiKey: string): Promise<{ ids: string[]; etiquetas: 
   return { ids, etiquetas };
 }
 
+/** Lee el listado de Anthropic. Devuelve los ids de Claude tal cual se pasan al SDK. */
+async function leerListadoAnthropic(apiKey: string): Promise<{ ids: string[]; etiquetas: Map<string, string> }> {
+  const res = await fetch(`${URL_LISTADO_ANTHROPIC}?limit=100`, {
+    headers: { "x-api-key": apiKey, "anthropic-version": "2023-06-01" },
+    cache: "no-store",
+  });
+  if (!res.ok) {
+    throw new Error(`HTTP ${res.status}: ${(await res.text()).replace(/\s+/g, " ").slice(0, 160)}`);
+  }
+  const j = (await res.json()) as { data?: { id?: string; display_name?: string }[] };
+  const ids: string[] = [];
+  const etiquetas = new Map<string, string>();
+  for (const m of j.data ?? []) {
+    if (!m.id) continue;
+    ids.push(m.id);
+    if (m.display_name) etiquetas.set(m.id, m.display_name);
+  }
+  return { ids, etiquetas };
+}
+
 /**
  * ★ EL BARRIDO. Lista + PRUEBA. Devuelve la tabla entera (respondan o no) y, por
  * separado, los `elegibles` — que salen SOLO de `responde:true`, jamás del listado.
@@ -340,8 +387,9 @@ async function leerListado(apiKey: string): Promise<{ ids: string[]; etiquetas: 
  * y una tabla vacía. Un catálogo vacío con su porqué es honesto; una excepción a
  * mitad de una pantalla de ajustes, no.
  */
-export async function listarModelos(apiKey: string, opts: OpcionesCatalogo = {}): Promise<CatalogoModelos> {
-  const hk = huella(apiKey);
+export async function listarModelos(claves: Claves, opts: OpcionesCatalogo = {}): Promise<CatalogoModelos> {
+  const hk = huellaClaves(claves);
+  const { gemini: apiKey, anthropic: claveA } = normalizar(claves);
   const previo = cacheCatalogo.get(hk);
   if (!opts.forzar && previo) {
     const edadMs = Date.now() - previo.medidoEn;
@@ -351,20 +399,41 @@ export async function listarModelos(apiKey: string, opts: OpcionesCatalogo = {})
   let ids: string[] = [];
   let etiquetas = new Map<string, string>();
   let errorListado: string | undefined;
-  try {
-    const l = await leerListado(apiKey);
-    ids = l.ids;
-    etiquetas = l.etiquetas;
-  } catch (e) {
-    errorListado = motivoDe(e);
+  const errores: string[] = [];
+  // Claude primero: es el proveedor principal.
+  if (claveA) {
+    try {
+      const l = await leerListadoAnthropic(claveA);
+      ids.push(...l.ids);
+      for (const [k, v] of l.etiquetas) etiquetas.set(k, v);
+    } catch (e) {
+      errores.push(`Anthropic · ${motivoDe(e)}`);
+    }
   }
+  if (apiKey) {
+    try {
+      const l = await leerListado(apiKey);
+      ids.push(...l.ids);
+      for (const [k, v] of l.etiquetas) etiquetas.set(k, v);
+    } catch (e) {
+      errores.push(claveA ? `Gemini · ${motivoDe(e)}` : motivoDe(e));
+    }
+  }
+  if (errores.length) errorListado = errores.join(" · ");
 
   // Los prioritarios van DELANTE: así el tope nunca puede dejar sin probar el
   // modelo que la app está usando. `Set` conserva el orden de inserción y quita
   // duplicados, que es exactamente lo que hace falta aquí.
-  const ordenados = [...new Set([...(opts.prioritarios ?? []).filter(idModeloValido), ...ids])];
-  const { candidatos, descartados } = candidatosDe(ordenados, opts.tope ?? MAX_CANDIDATOS);
-  const probados = await enParalelo(candidatos, CONCURRENCIA, (id) => probarModelo(apiKey, id, opts));
+  // Un prioritario sin clave de su proveedor no se puede probar: se descarta con su motivo.
+  const sinClave: DescartadoSinProbar[] = [];
+  const ordenados = [...new Set([...(opts.prioritarios ?? []).filter(idModeloValido), ...ids])].filter((id) => {
+    if (claveParaModelo(claves, id)) return true;
+    sinClave.push({ id, motivo: "sin clave de su proveedor" });
+    return false;
+  });
+  const { candidatos, descartados: porTope } = candidatosDe(ordenados, opts.tope ?? MAX_CANDIDATOS);
+  const descartados = [...sinClave, ...porTope];
+  const probados = await enParalelo(candidatos, CONCURRENCIA, (id) => probarModelo(claveParaModelo(claves, id)!, id, opts));
 
   const enListado = new Set(ids);
   const modelos = probados
@@ -398,8 +467,8 @@ export async function listarModelos(apiKey: string, opts: OpcionesCatalogo = {})
 }
 
 /** El catálogo YA cacheado, o null. Para pintar la pantalla sin gastar una llamada. */
-export function catalogoCacheado(apiKey: string): CatalogoModelos | null {
-  const previo = cacheCatalogo.get(huella(apiKey));
+export function catalogoCacheado(claves: Claves): CatalogoModelos | null {
+  const previo = cacheCatalogo.get(huellaClaves(claves));
   if (!previo) return null;
   const edadMs = Date.now() - previo.medidoEn;
   if (edadMs >= TTL_CATALOGO_MS) return null;
@@ -433,15 +502,22 @@ export interface ValidacionModelo {
  * panel de salud—, así que abrir Ajustes no paga una llamada extra por esto.
  */
 export async function validarModeloEfectivo(
-  apiKey: string,
+  claves: Claves,
   modelo: string,
   opts: OpcionesCatalogo = {},
 ): Promise<ValidacionModelo> {
   let base: { responde: boolean; error?: string; latenciaMs?: number; edadMs: number; reutilizado: boolean };
+  const apiKey = claveParaModelo(claves, modelo);
+  const geminiPing = REGISTRO["extraccion-estructurada"].modeloFallback;
 
-  if (modelo === modeloDe("ping-salud") && !opts.sonda) {
+  if (!apiKey) {
+    // Sin clave de SU proveedor no se puede llamar: se dice, no se finge.
+    base = { responde: false, error: "sin clave de su proveedor", edadMs: 0, reutilizado: false };
+  } else if (!opts.sonda && (modelo === modeloDe("ping-salud") || modelo === geminiPing)) {
     // El camino barato: es exactamente el chequeo que el panel de salud ya hace.
-    const p = await pingProveedor(apiKey, opts.forzar);
+    const p = modelo === geminiPing
+      ? await pingProveedor(apiKey, opts.forzar)
+      : await pingProveedorAnthropic(apiKey, opts.forzar, modelo);
     base = { responde: p.ok, error: p.error, latenciaMs: p.latenciaMs, edadMs: p.edadMs, reutilizado: p.reutilizado };
   } else {
     const antes = Date.now();
@@ -455,15 +531,17 @@ export async function validarModeloEfectivo(
 
   // No responde: hay que proponer algo, pero SOLO con evidencia.
   // 1) del catálogo ya probado, si lo hay (cero llamadas nuevas).
-  const cat = catalogoCacheado(apiKey);
+  const cat = catalogoCacheado(claves);
   const delCatalogo = cat?.elegibles.find((id) => id !== modelo && !avisoDe(id)) ?? cat?.elegibles.find((id) => id !== modelo);
   if (delCatalogo) return { ...out, sugerencia: delCatalogo };
 
-  // 2) el del registro: se PRUEBA antes de proponerlo (una llamada, cacheada).
-  const registro = modeloDe("extraccion-estructurada");
-  if (registro !== modelo) {
-    const m = await probarModelo(apiKey, registro, opts);
-    if (m.responde) return { ...out, sugerencia: registro };
+  // 2) el del registro (Claude) y su secundario (Gemini), con la clave que haya: se
+  //    PRUEBAN antes de proponerlos (una llamada cada uno, cacheada).
+  for (const recambio of [modeloDe("extraccion-estructurada"), geminiPing]) {
+    const k = claveParaModelo(claves, recambio);
+    if (recambio === modelo || !k) continue;
+    const m = await probarModelo(k, recambio, opts);
+    if (m.responde) return { ...out, sugerencia: recambio };
   }
   // 3) sin evidencia, sin sugerencia. La pantalla invita a «comprobar modelos».
   return out;

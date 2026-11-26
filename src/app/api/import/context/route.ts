@@ -1,14 +1,15 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { runImport } from "@/lib/extract/pipeline";
-import { makeGeminiExtractor, geminiApiKey } from "@/lib/extract/llm";
+import { makeGeminiExtractor } from "@/lib/extract/llm";
+import { hayClaveIA } from "@/lib/ai/modelos";
 import { fetchGithubUser } from "@/lib/extract/github";
 import { fetchViaJina } from "@/lib/extract/web";
 import { ensureMaster, persistImport } from "@/lib/db/queries";
 import { registrarIngesta } from "@/lib/db/telemetria";
 import { extractFile, extractDepsFor, type FileKind } from "@/lib/extract/files";
 import { sourceKindFor, causaSinItems, nuevoId } from "@/lib/db/sources";
-import { getUserLlmKey } from "@/lib/account/byok";
+import { getUserLlmKey, getUserLlmKey3 } from "@/lib/account/byok";
 
 // Esperar el I/O del LLM no cuenta como Active CPU en Fluid Compute → timeout
 // generoso barato. Hobby permite 300 s (02 §1).
@@ -81,8 +82,9 @@ export async function POST(req: Request) {
 
   // BYOK: la clave del usuario (descifrada, solo servidor) o la del servidor.
   const byok = (await getUserLlmKey(sb, user.id)) ?? undefined;
-  if (!byok && !geminiApiKey()) {
-    return NextResponse.json({ error: "Falta configurar la clave de IA (BYOK o GEMINI_API_KEY del servidor)." }, { status: 503 });
+  const byok3 = (await getUserLlmKey3(sb, user.id)) ?? undefined;
+  if (!hayClaveIA(byok, byok3)) {
+    return NextResponse.json({ error: "Falta configurar una clave de IA (BYOK, ANTHROPIC_API_KEY o GEMINI_API_KEY del servidor)." }, { status: 503 });
   }
 
   // ── 1 · Descargar de Storage + extraer texto por archivo ────────────────────
@@ -149,7 +151,7 @@ export async function POST(req: Request) {
       const bytes = new Uint8Array(await blob.arrayBuffer());
       const mime = blob.type || undefined;
 
-      const ex = await extractFile({ kind, bytes, mime, name }, extractDepsFor(byok));
+      const ex = await extractFile({ kind, bytes, mime, name }, extractDepsFor(byok, byok3));
       if (ex.text.trim()) forPipeline.push({ label: etiqueta, text: ex.text });
       if (ex.warning) warnings.push(`«${name}»: ${ex.warning}`);
 
@@ -196,7 +198,7 @@ export async function POST(req: Request) {
   try {
     const result = await runImport(
       { pastedText: text, files: forPipeline },
-      { extract: makeGeminiExtractor(byok), fetchGithubUser, fetchWeb: fetchViaJina },
+      { extract: makeGeminiExtractor(byok, { claveAnthropic: byok3 }), fetchGithubUser, fetchWeb: fetchViaJina },
     );
     // Avisos de la LECTURA (p. ej. documento tan largo que no cupo entero): van a
     // la UI junto a los de cada archivo. Nada se descarta en silencio.

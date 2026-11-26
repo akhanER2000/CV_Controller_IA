@@ -1,11 +1,12 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { runImport } from "@/lib/extract/pipeline";
-import { makeGeminiExtractor, geminiApiKey } from "@/lib/extract/llm";
+import { makeGeminiExtractor } from "@/lib/extract/llm";
+import { hayClaveIA } from "@/lib/ai/modelos";
 import { fetchGithubUser } from "@/lib/extract/github";
 import { fetchViaJina } from "@/lib/extract/web";
 import { extractFile, extractDepsFor } from "@/lib/extract/files";
-import { getUserLlmKey } from "@/lib/account/byok";
+import { getUserLlmKey, getUserLlmKey3 } from "@/lib/account/byok";
 import { getSource, restageSource, parseGithubHandle, fileKindFromName, type FileKind } from "@/lib/db/sources";
 import { registrarIngesta } from "@/lib/db/telemetria";
 import type { ResumenLectura } from "@/lib/extract/llm";
@@ -59,10 +60,11 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   if (!source) return NextResponse.json({ error: "Fuente no encontrada." }, { status: 404 });
 
   const byok = (await getUserLlmKey(sb, user.id)) ?? undefined;
-  const hasLlm = !!(byok || geminiApiKey());
+  const byok3 = (await getUserLlmKey3(sb, user.id)) ?? undefined;
+  const hasLlm = hayClaveIA(byok, byok3);
   const noKey = () =>
     NextResponse.json(
-      { error: "Falta configurar la clave de IA (BYOK o GEMINI_API_KEY del servidor)." },
+      { error: "Falta configurar una clave de IA (BYOK, ANTHROPIC_API_KEY o GEMINI_API_KEY del servidor)." },
       { status: 503 },
     );
   // ★ `ignorarCache: true` SIEMPRE en releer. Pedir releer es exactamente pedir
@@ -71,7 +73,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   //   saberlo. La caché ahorra en los dobles clics, no en las peticiones
   //   explícitas.
   const deps = {
-    extract: makeGeminiExtractor(byok, { forzarCompleto: completo, ignorarCache: true }),
+    extract: makeGeminiExtractor(byok, { forzarCompleto: completo, ignorarCache: true, claveAnthropic: byok3 }),
     fetchGithubUser,
     fetchWeb: fetchViaJina,
   };
@@ -105,7 +107,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         // El kind de la BD no distingue texto: se re-deduce del nombre real, que es
         // justo lo que conserva original_name para no haber necesitado migración.
         const kind = (fileKindFromName(name) ?? (source.kind as FileKind)) as FileKind;
-        const ex = await extractFile({ kind, bytes, mime: blob.type || undefined, name }, extractDepsFor(byok));
+        const ex = await extractFile({ kind, bytes, mime: blob.type || undefined, name }, extractDepsFor(byok, byok3));
         if (!ex.text.trim()) {
           await restageSource(sb, user.id, id, [], { status: "failed", error: ex.warning ?? "sin texto legible", raw_text: null });
           return NextResponse.json({ sourceId: id, staged: 0, counts: { verified: 0, partial: 0, none: 0, api: 0, total: 0 }, warnings: [ex.warning ?? "No se pudo leer texto del archivo."] }, { status: 200 });

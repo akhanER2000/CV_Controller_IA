@@ -1,9 +1,9 @@
 import { NextResponse, after } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { geminiApiKey } from "@/lib/extract/llm";
+import { hayClaveIA } from "@/lib/ai/modelos";
 import { ensureMaster } from "@/lib/db/queries";
 import { sourceKindFor, fileKindFromName, isOwnedPath } from "@/lib/db/sources";
-import { getUserLlmKey } from "@/lib/account/byok";
+import { getUserLlmKey, getUserLlmKey3 } from "@/lib/account/byok";
 import { crearClienteDeTrabajo } from "../_motor/cliente";
 import { avanzarTrabajo, depsReales } from "../_motor/motor";
 
@@ -70,9 +70,10 @@ export async function POST(req: Request) {
 
   // BYOK: la clave del usuario (descifrada, solo servidor) o la del servidor.
   const byok = (await getUserLlmKey(sb, user.id)) ?? undefined;
-  if (!byok && !geminiApiKey()) {
+  const byok3 = (await getUserLlmKey3(sb, user.id)) ?? undefined;
+  if (!hayClaveIA(byok, byok3)) {
     return NextResponse.json(
-      { error: "Falta configurar la clave de IA (BYOK o GEMINI_API_KEY del servidor)." },
+      { error: "Falta configurar una clave de IA (BYOK, ANTHROPIC_API_KEY o GEMINI_API_KEY del servidor)." },
       { status: 503 },
     );
   }
@@ -167,7 +168,7 @@ export async function POST(req: Request) {
     after(async () => {
       try {
         const bg = crearClienteDeTrabajo(accessToken);
-        await avanzarTrabajo(bg, user.id, jobId, depsReales(bg, byok));
+        await avanzarTrabajo(bg, user.id, jobId, depsReales(bg, byok, byok3));
       } catch {
         // El motor ya escribe el fallo de cada fuente en su fila y en sus
         // eventos. Lo que se pierda aquí lo recoge el siguiente `avanzar`: el

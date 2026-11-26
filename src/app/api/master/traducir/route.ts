@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { generateObject } from "ai";
 import { createClient } from "@/lib/supabase/server";
-import { modeloPara } from "@/lib/ai/modelos";
+import { hayClaveIA, modeloPara } from "@/lib/ai/modelos";
 import { geminiApiKey } from "@/lib/extract/llm";
 import { getUserLlmKey, getUserLlmKey3 } from "@/lib/account/byok";
 import { ensureMaster } from "@/lib/db/queries";
@@ -388,11 +388,11 @@ export async function POST(req: Request) {
 
     // ── ANALIZAR (por defecto) ───────────────────────────────────────────────
     const byok = (await getUserLlmKey(sb, user.id)) ?? undefined;
-    if (!byok && !geminiApiKey()) {
-      return fallo("Falta configurar la clave de IA (BYOK o GEMINI_API_KEY del servidor).", 503);
+    const key3 = (await getUserLlmKey3(sb, user.id)) ?? undefined;
+    if (!hayClaveIA(byok, key3)) {
+      return fallo("Falta configurar una clave de IA (BYOK, ANTHROPIC_API_KEY o GEMINI_API_KEY del servidor).", 503);
     }
 
-    const key3 = (await getUserLlmKey3(sb, user.id)) ?? undefined;
     const resultado = await construirTraduccion(
       { items, hacia, desde },
       { llm: geminiTraduccionLLM(byok, key3) },

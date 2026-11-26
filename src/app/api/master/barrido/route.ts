@@ -4,8 +4,8 @@ import { generateObject } from "ai";
 import { createClient } from "@/lib/supabase/server";
 import { barrerMaster, aplicarBarrido, type Correccion, type JuezDuplicados } from "@/lib/master/barrido";
 import type { DestinoVinetas } from "@/lib/db/duplicados";
-import { getUserLlmKey, getUserLlmKey2 } from "@/lib/account/byok";
-import { claveGemini, modeloPara } from "@/lib/ai/modelos";
+import { getUserLlmKey, getUserLlmKey2, getUserLlmKey3 } from "@/lib/account/byok";
+import { claveGemini, hayClaveIA, modeloPara } from "@/lib/ai/modelos";
 
 export const runtime = "nodejs";
 // El I/O del juez (una llamada por par candidato) no cuenta como Active CPU (02 §1).
@@ -40,11 +40,12 @@ async function construirJuez(sb: Awaited<ReturnType<typeof createClient>>, userI
   const byok = await getUserLlmKey(sb, userId);
   const key2 = (await getUserLlmKey2(sb, userId)) ?? undefined;
   const googleKey = byok ?? claveGemini();
-  if (!key2 && !googleKey) return undefined; // ni 2ª clave ni Gemini → sin juez
+  const key3 = (await getUserLlmKey3(sb, userId)) ?? undefined;
+  if (!hayClaveIA(googleKey, key2, key3)) return undefined; // sin ninguna clave → sin juez
 
   return async ({ aTexto, bTexto }) => {
     // La tarea barata: con key2 va a Groq; sin key2 cae a Gemini (googleKey).
-    const model = modeloPara("clasificacion-barata", googleKey, key2);
+    const model = modeloPara("clasificacion-barata", googleKey ?? undefined, key2, undefined, key3);
     const { object } = await generateObject({
       model,
       schema: JuezSchema,

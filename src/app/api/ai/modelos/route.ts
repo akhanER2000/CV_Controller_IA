@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { getUserLlmKey } from "@/lib/account/byok";
+import { getUserLlmKey, getUserLlmKey3 } from "@/lib/account/byok";
 import { SQL_COLUMNA_MODELO, elegirModelo, leerModeloElegido } from "@/lib/account/preferencias";
 import { catalogoCacheado, listarModelos, validarModeloEfectivo } from "@/lib/ai/catalogo";
-import { claveGemini, modeloDe, modeloEfectivo, nombreVarClave } from "@/lib/ai/modelos";
+import { claveAnthropic, claveGemini, modeloDe, modeloEfectivo, nombreVarClave } from "@/lib/ai/modelos";
 
 export const runtime = "nodejs";
 // El barrido son N llamadas reales en oleadas de CONCURRENCIA: necesita margen.
@@ -46,10 +46,15 @@ export async function GET(req: Request) {
 
   // La clave EFECTIVA: la del usuario (BYOK, descifrada en servidor) o la del
   // servidor. NUNCA vuelve al cliente; solo se dice de dónde salió.
+  // Dos proveedores: Anthropic (principal) y Gemini (secundario), cada uno con su
+  // BYOK o la del servidor. El selector ofrece los modelos de los dos.
   const byok = await getUserLlmKey(sb, user.id);
+  const byok3 = await getUserLlmKey3(sb, user.id);
   const servidor = claveGemini();
-  const key = byok ?? servidor;
-  const claveFuente = byok ? "byok" : servidor ? "servidor" : "ninguna";
+  const servidorA = claveAnthropic();
+  const claves = { gemini: byok ?? servidor ?? null, anthropic: byok3 ?? servidorA ?? null };
+  const key = claves.gemini || claves.anthropic;
+  const claveFuente = byok || byok3 ? "byok" : servidor || servidorA ? "servidor" : "ninguna";
 
   const pref = await leerModeloElegido(sb, user.id);
   const registro = modeloDe("extraccion-estructurada");
@@ -65,7 +70,9 @@ export async function GET(req: Request) {
     // El espejo, comprobado y devuelto: si algún día dejaran de coincidir, el
     // chequeo de salud estaría probando otro modelo y esto lo delata.
     espejoPingSalud: espejoPing,
-    espejoOk: espejoPing === efectivo,
+    // Sin elección, el ping prueba Haiku (registro) y la extracción Sonnet: el espejo
+    // solo se exige cuando el usuario eligió un modelo.
+    espejoOk: !pref.modelo || espejoPing === efectivo,
     claveFuente,
     envVar: nombreVarClave(),
     columnaAusente: pref.columnaAusente,
@@ -78,12 +85,12 @@ export async function GET(req: Request) {
     return NextResponse.json({ ...base, validacion: null, catalogo: null, motivo: "sin-clave" });
   }
 
-  const validacion = await validarModeloEfectivo(key, efectivo, { forzar });
+  const validacion = await validarModeloEfectivo(claves, efectivo, { forzar });
   // ★ El modelo EN USO y el del registro se prueban siempre, aunque el tope de
   //   coste corte el resto: un catálogo sin el modelo que usas no sirve de nada.
   const catalogo = probar
-    ? await listarModelos(key, { forzar, prioritarios: [efectivo, registro] })
-    : catalogoCacheado(key);
+    ? await listarModelos(claves, { forzar, prioritarios: [efectivo, registro] })
+    : catalogoCacheado(claves);
 
   return NextResponse.json({ ...base, validacion, catalogo });
 }
@@ -103,7 +110,11 @@ export async function POST(req: Request) {
   // La DECISIÓN (validar · PROBAR · guardar) vive en src/lib, no aquí: una ruta es
   // una frontera HTTP, no un módulo compartido. Aquí solo queda el mapeo a HTTP.
   const byok = await getUserLlmKey(sb, user.id);
-  const res = await elegirModelo(sb, user.id, body.modelo, byok ?? claveGemini() ?? null);
+  const byok3 = await getUserLlmKey3(sb, user.id);
+  const res = await elegirModelo(sb, user.id, body.modelo, {
+    gemini: byok ?? claveGemini() ?? null,
+    anthropic: byok3 ?? claveAnthropic() ?? null,
+  });
 
   // 400 solo cuando la petición se RECHAZA (id malo, sin clave, no responde). Un
   // guardado que no se pudo escribir por falta de columna NO es culpa del cliente:

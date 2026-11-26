@@ -158,7 +158,7 @@ function connMeta(s: ConnService): string | null {
     return parts.filter(Boolean).join(" · ");
   }
   if (s.id === "anthropic") {
-    const parts = [String(m.model ?? "")];
+    const parts = [String(m.model ?? ""), "principal", `clave: ${String(m.keySource ?? "?")}`];
     if (m.degraded) parts.push("degradado → Gemini");
     if (m.parked) parts.push("clave aparcada");
     if (typeof m.latencyMs === "number") parts.push(`${m.latencyMs} ms`);
