@@ -86,6 +86,13 @@ export const tailor = {
     "tailor.reformErr": "No se aplicó: ",
     "tailor.notesPrefix": "Nota de la IA: ",
     "tailor.reAnalyze": "Analizar otro aviso",
+
+    // ── Pasos 1 · 2 · 3 y zona de carga (Forja v2) ─────────────────────────────
+    "tailor.pasos.aria": "Pasos para adaptar la variante",
+    "tailor.paso.aviso": "Pega el aviso",
+    "tailor.paso.analisis": "Lee el análisis",
+    "tailor.paso.aplicar": "Aplica uno a uno",
+    "tailor.fileDrop": "o arrástralo aquí",
   } as Record<string, string>,
   en: {
     // Top bar.
@@ -161,5 +168,12 @@ export const tailor = {
     "tailor.reformErr": "Not applied: ",
     "tailor.notesPrefix": "AI note: ",
     "tailor.reAnalyze": "Analyze another posting",
+
+    // ── Steps 1 · 2 · 3 and upload zone (Forja v2) ─────────────────────────────
+    "tailor.pasos.aria": "Steps to tailor the variant",
+    "tailor.paso.aviso": "Paste the posting",
+    "tailor.paso.analisis": "Read the analysis",
+    "tailor.paso.aplicar": "Apply one by one",
+    "tailor.fileDrop": "or drag it here",
   } as Record<string, string>,
 } as const;

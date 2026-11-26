@@ -2,11 +2,16 @@
    Este archivo lo llena el barrido i18n de la pantalla "importar". */
 export const importar = {
   es: {
-    // ── Cabecera (paso dinámico) ──────────────────────────────────────────
-    "importar.step.idle": "VOLCADO · PASO 1 DE 2",
-    "importar.step.ingest": "INGESTA · LEYENDO FUENTES",
-    "importar.step.done": "INGESTA · COMPLETA",
-    "importar.langAria": "Idioma",
+    // ── Pasos 1 · 2 · 3 (Forja v2: sustituyen al rótulo de paso del header) ──
+    "importar.pasos.aria": "Pasos para volcar material",
+    "importar.paso.volcar": "Vuelca tu material",
+    "importar.paso.leer": "Leemos tus fuentes",
+    "importar.paso.revisar": "Revisas y confirmas",
+    "importar.box.title": "Pega o sube tu material",
+    "importar.box.sub": "El texto y los archivos de esta tarjeta se leen juntos al pulsar «Extraer con evidencia».",
+    // Fracción de fuentes TERMINADAS (Progreso.listas / Progreso.total): un
+    // recuento real, no un tiempo estimado ni un porcentaje.
+    "importar.job.barra": "{listas} de {n} fuentes leídas",
 
     // ── Volcado ───────────────────────────────────────────────────────────
     "importar.overline": "Nada entra al master sin tu confirmación",
@@ -177,7 +182,7 @@ Reglas, sin excepciones:
     // ── Ingesta (la espera) ───────────────────────────────────────────────
     "importar.ing.overline": "Leyendo tus fuentes",
     "importar.ing.caption": "items encontrados hasta ahora",
-    "importar.ing.hint1": "Esto toma entre 5 y 40 segundos según las fuentes.",
+    "importar.ing.hint1": "Puede tardar de unos segundos a varios minutos: depende de cuántas fuentes haya y de qué tipo sean.",
     "importar.ing.hint2": "Sin porcentajes inventados: te decimos qué estamos haciendo.",
 
     // ── Log de la ingesta (filas dinámicas) ───────────────────────────────
@@ -288,11 +293,14 @@ Reglas, sin excepciones:
     "ingesta.shell.ver": "Ver",
   } as Record<string, string>,
   en: {
-    // ── Header (dynamic step) ─────────────────────────────────────────────
-    "importar.step.idle": "DUMP · STEP 1 OF 2",
-    "importar.step.ingest": "INTAKE · READING SOURCES",
-    "importar.step.done": "INTAKE · COMPLETE",
-    "importar.langAria": "Language",
+    // ── Steps 1 · 2 · 3 ───────────────────────────────────────────────────
+    "importar.pasos.aria": "Steps to dump your material",
+    "importar.paso.volcar": "Dump your material",
+    "importar.paso.leer": "We read your sources",
+    "importar.paso.revisar": "You review and confirm",
+    "importar.box.title": "Paste or upload your material",
+    "importar.box.sub": "The text and files in this card are read together when you press «Extract with evidence».",
+    "importar.job.barra": "{listas} of {n} sources read",
 
     // ── Dump ──────────────────────────────────────────────────────────────
     "importar.overline": "Nothing enters your master without your sign-off",
@@ -454,7 +462,7 @@ Rules, no exceptions:
     // ── Intake (the wait) ─────────────────────────────────────────────────
     "importar.ing.overline": "Reading your sources",
     "importar.ing.caption": "items found so far",
-    "importar.ing.hint1": "This takes between 5 and 40 seconds depending on your sources.",
+    "importar.ing.hint1": "It can take anywhere from a few seconds to several minutes, depending on how many sources there are and what kind.",
     "importar.ing.hint2": "No made-up percentages: we tell you what we're doing.",
 
     // ── Intake log (dynamic rows) ─────────────────────────────────────────

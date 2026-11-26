@@ -1,7 +1,6 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useT } from "@/lib/i18n";
 import { useBoot } from "@/lib/corpus/runtime";
@@ -10,6 +9,10 @@ import { createClient } from "@/lib/supabase/client";
 import { fileKindFromName, FILE_ACCEPT, type FileKind } from "@/lib/db/sources";
 import { AuroraTune, AURORA_TRABAJO } from "@/components/Aurora";
 import { Breadcrumb } from "@/components/Breadcrumb";
+import { DropZone } from "@/components/DropZone";
+import { Button, Card, Chip, PanelHeader } from "@/components/ui";
+import { CabezaPantalla } from "@/components/cuenta/CabezaPantalla";
+import { Pasos } from "@/components/cuenta/Pasos";
 import "./tailor.css";
 
 /* ============================================================================
@@ -260,176 +263,163 @@ export function TailorScreen() {
     analisis.faltan.length === 0 &&
     analisis.reformulaciones.length === 0;
 
+  /* Los pasos 1 · 2 · 3 salen del MISMO estado que decide qué se pinta: sin
+     análisis, pegar el aviso; con análisis, leerlo; y en cuanto se añade o se
+     aplica algo, el tercero. No hay paso que no corresponda a un dato. */
+  const pasos = [
+    { id: "aviso", titulo: t("tailor.paso.aviso") },
+    { id: "analisis", titulo: t("tailor.paso.analisis") },
+    { id: "aplicar", titulo: t("tailor.paso.aplicar") },
+  ];
+  const pasoActual = !analisis ? 0 : addedIds.size + appliedIds.size > 0 ? 2 : 1;
+
   return (
     <div className="c-page" ref={bootRef}>
       {/* Leer un aviso y contrastarlo es trabajo denso: el humo baja. */}
       <AuroraTune strength={AURORA_TRABAJO} />
-      <header className="c-header">
-        <div className="c-container">
-          <Link className="c-logo" href="/app">
-            Corpus
-          </Link>
-          <nav className="hd-nav">
-            <Link href="/app">{t("nav.panel")}</Link>
-            <Link href="/app/master">{t("nav.master")}</Link>
-            <Link href="/app/variantes" aria-current="page">
-              {t("nav.variantes")}
-            </Link>
-            <Link href="/app/fuentes">{t("nav.fuentes")}</Link>
-          </nav>
-          <div className="hd-right">
-            <nav className="hd-nav" style={{ display: "flex" }}>
-              <Link href="/app/ajustes">{t("nav.ajustes")}</Link>
-            </nav>
-            <div className="hd-lang">
-              <span data-on>ES</span>
-              <span>EN</span>
-            </div>
-          </div>
-        </div>
-      </header>
 
-      <div className="tl-bar" data-screen-label="tailor-toolbar">
-        <div className="c-container">
+      {/* Forja v2: el <header class="c-header"> de antes solo traía logo, nav e
+          idioma de maqueta (todo lo da el shell) y se quitó. La barra .tl-bar
+          traía la salida y el rótulo: la salida sigue aquí arriba. */}
+      <main className="cu-pagina tl-main" data-screen-label="tailor">
+        <div className="tl-top">
           {/* La salida: a la variante que estás adaptando (o al ?from que te trajo). */}
           <Breadcrumb fallback={volverA} />
-          <span
-            style={{ width: "1px", height: "16px", background: "var(--border-strong)" }}
-            aria-hidden="true"
-          />
-          <span
-            style={{
-              font: "500 var(--fs-micro)/1 var(--font-mono)",
-              letterSpacing: ".14em",
-              color: "var(--text-muted)",
-            }}
-          >
-            {t("common.tailor").toUpperCase()}
-          </span>
-          <span
-            style={{
-              marginLeft: "auto",
-              font: "400 var(--fs-micro)/1 var(--font-mono)",
-              color: "var(--text-subtle)",
-            }}
-          >
-            {t("tailor.toolbarNote")}
-          </span>
+          <Pasos pasos={pasos} actual={pasoActual} etiqueta={t("tailor.pasos.aria")} />
         </div>
-      </div>
 
-      <main className="tl-main c-wall" data-screen-label="tailor">
-        <div className="c-container tl-wrap">
-          {!analisis ? (
-            <>
-              {/* Intro / estado previo: antes de pegar un aviso no hay análisis. */}
-              <span className="t-overline">{t("tailor.voidOverline")}</span>
-              <h2 style={{ marginTop: "14px" }}>{t("tailor.voidTitle")}</h2>
-              <p className="tl-void-body">{t("tailor.voidBody")}</p>
-              <p className="tl-void-ethic">{t("tailor.voidEthic")}</p>
+        <CabezaPantalla
+          rotulo={t("tailor.voidOverline")}
+          titulo={analisis ? t("tailor.resultOverline") : t("tailor.voidTitle")}
+          sub={analisis ? undefined : t("tailor.voidBody")}
+          acciones={<Chip>{t("tailor.toolbarNote")}</Chip>}
+        />
 
-              {puedeAnalizar ? (
-                <div className="c-card tl-entry">
-                  <span className="t-overline">{t("tailor.entryOverline")}</span>
-                  <h3 style={{ marginTop: "10px" }}>{t("tailor.entryTitle")}</h3>
-                  <p className="tl-entry-body">{t("tailor.entryBody")}</p>
+        {!analisis ? (
+          <>
+            {/* La regla, no una disculpa. */}
+            <p className="cu-aviso tl-ethic">{t("tailor.voidEthic")}</p>
 
-                  <div className="tl-tabs" role="tablist" aria-label={t("tailor.entryOverline")}>
-                    {(["paste", "url", "file"] as Tab[]).map((k) => (
-                      <button
-                        key={k}
-                        type="button"
-                        role="tab"
-                        aria-selected={tab === k}
-                        className={`tl-tab${tab === k ? " on" : ""}`}
-                        onClick={() => setTab(k)}
-                      >
-                        {t(k === "paste" ? "tailor.tabPaste" : k === "url" ? "tailor.tabUrl" : "tailor.tabFile")}
-                      </button>
-                    ))}
-                  </div>
+            {puedeAnalizar ? (
+              <Card as="section" grande className="tl-entry" aria-labelledby="tlEntryT">
+                <PanelHeader
+                  nivel={2}
+                  id="tlEntryT"
+                  titulo={
+                    <>
+                      <span className="cu-num" aria-hidden="true">
+                        1
+                      </span>
+                      {t("tailor.entryTitle")}
+                    </>
+                  }
+                  sub={t("tailor.entryBody")}
+                />
 
-                  {tab === "paste" && (
-                    <textarea
-                      className="c-input tl-paste"
-                      rows={6}
-                      placeholder={t("tailor.pastePlaceholder")}
-                      value={offerText}
-                      onChange={(e) => setOfferText(e.target.value)}
-                    />
-                  )}
-
-                  {tab === "url" && (
-                    <div className="tl-urlrow">
-                      <input
-                        className="c-input"
-                        type="url"
-                        placeholder={t("tailor.urlPlaceholder")}
-                        value={url}
-                        onChange={(e) => setUrl(e.target.value)}
-                      />
-                      <span className="tl-hint">{t("tailor.urlHint")}</span>
-                    </div>
-                  )}
-
-                  {tab === "file" && (
-                    <div className="tl-filerow">
-                      <label className="c-btn c-btn--quiet tl-filepick">
-                        {uploading ? t("tailor.fileUploading") : fileRef ? fileRef.name : t("tailor.filePick")}
-                        <input
-                          type="file"
-                          accept={FILE_ACCEPT}
-                          style={{ display: "none" }}
-                          onChange={(e) => {
-                            const f = e.target.files?.[0];
-                            if (f) void subirArchivo(f);
-                          }}
-                        />
-                      </label>
-                      <span className="tl-hint">{t("tailor.fileHint")}</span>
-                      {fileErr ? (
-                        <p className="tl-err" role="alert">
-                          {fileErr}
-                        </p>
-                      ) : null}
-                    </div>
-                  )}
-
-                  <div className="tl-actions">
+                <div className="tl-tabs" role="tablist" aria-label={t("tailor.entryOverline")}>
+                  {(["paste", "url", "file"] as Tab[]).map((k) => (
                     <button
+                      key={k}
                       type="button"
-                      className="c-btn c-btn--patina"
-                      disabled={analizando || uploading || !hayEntrada}
-                      onClick={() => void analizar()}
+                      role="tab"
+                      aria-selected={tab === k}
+                      className={`tl-tab${tab === k ? " on" : ""}`}
+                      onClick={() => setTab(k)}
                     >
-                      {analizando ? t("tailor.analyzing") : t("tailor.analyze")}
+                      {t(k === "paste" ? "tailor.tabPaste" : k === "url" ? "tailor.tabUrl" : "tailor.tabFile")}
                     </button>
-                    <span className="tl-score">{t("tailor.scoreNever")}</span>
-                  </div>
-                  {analizarErr ? (
-                    <p className="tl-err" role="alert">
-                      {analizarErr}
-                    </p>
-                  ) : null}
+                  ))}
                 </div>
-              ) : null}
-            </>
-          ) : (
-            <>
-              {/* ── El análisis: tres grupos, sin score ── */}
+
+                {tab === "paste" && (
+                  <textarea
+                    className="c-input tl-paste"
+                    rows={6}
+                    placeholder={t("tailor.pastePlaceholder")}
+                    value={offerText}
+                    onChange={(e) => setOfferText(e.target.value)}
+                  />
+                )}
+
+                {tab === "url" && (
+                  <div className="tl-urlrow">
+                    <input
+                      className="c-input"
+                      type="url"
+                      placeholder={t("tailor.urlPlaceholder")}
+                      value={url}
+                      onChange={(e) => setUrl(e.target.value)}
+                    />
+                    <span className="cu-nota">{t("tailor.urlHint")}</span>
+                  </div>
+                )}
+
+                {tab === "file" && (
+                  <div className="tl-filerow">
+                    {/* La zona de carga destacada (la misma del volcado). Un solo
+                        archivo: el aviso es UNO. Mismo manejador que el selector
+                        de antes; arrastrar es un atajo, no el único camino. */}
+                    <DropZone
+                      className="tl-drop"
+                      accept={FILE_ACCEPT}
+                      disabled={uploading}
+                      onFiles={(fs) => {
+                        const f = fs[0];
+                        if (f) void subirArchivo(f);
+                      }}
+                      label={
+                        <>
+                          <b>{uploading ? t("tailor.fileUploading") : fileRef ? fileRef.name : t("tailor.filePick")}</b>{" "}
+                          {t("tailor.fileDrop")}
+                        </>
+                      }
+                    />
+                    <span className="cu-nota">{t("tailor.fileHint")}</span>
+                    {fileErr ? (
+                      <p className="tl-err" role="alert">
+                        {fileErr}
+                      </p>
+                    ) : null}
+                  </div>
+                )}
+
+                <div className="tl-actions">
+                  <Button
+                    variante="brasa"
+                    tamano="lg"
+                    disabled={analizando || uploading || !hayEntrada}
+                    onClick={() => void analizar()}
+                  >
+                    {analizando ? t("tailor.analyzing") : t("tailor.analyze")}
+                  </Button>
+                  <span className="cu-nota tl-score">{t("tailor.scoreNever")}</span>
+                </div>
+                {analizarErr ? (
+                  <p className="tl-err" role="alert">
+                    {analizarErr}
+                  </p>
+                ) : null}
+              </Card>
+            ) : null}
+          </>
+        ) : (
+          <>
+            {/* ── El análisis: tres grupos, sin score ── */}
+            <Card as="section" className="tl-resumen">
               <div className="tl-rhead">
-                <span className="t-overline">{t("tailor.resultOverline")}</span>
-                <button type="button" className="c-btn c-btn--quiet" onClick={reiniciar}>
+                <div className="tl-target">
+                  {analisis.tituloObjetivo ? (
+                    <>
+                      <span className="tl-k">{t("tailor.targetPrefix")}</span>
+                      <b>{analisis.tituloObjetivo}</b>
+                    </>
+                  ) : null}
+                  <span className="cu-nota">{t("tailor.scoreNever")}</span>
+                </div>
+                <Button variante="grafito" onClick={reiniciar}>
                   {t("tailor.reAnalyze")}
-                </button>
+                </Button>
               </div>
-              {analisis.tituloObjetivo ? (
-                <p className="tl-target">
-                  <span className="t-overline">{t("tailor.targetPrefix")}</span>
-                  <b>{analisis.tituloObjetivo}</b>
-                </p>
-              ) : null}
-              <p className="tl-score tl-score--result">{t("tailor.scoreNever")}</p>
 
               {avisos.length ? (
                 <ul className="tl-warns">
@@ -438,20 +428,19 @@ export function TailorScreen() {
                   ))}
                 </ul>
               ) : null}
+            </Card>
 
-              {gruposVacios ? (
-                <p className="tl-void-body">{t("tailor.emptyGroups")}</p>
-              ) : (
-                <>
-                  {/* GRUPO 1 — ya en la variante (sin botón) */}
-                  {analisis.yaEnVariante.length > 0 && (
-                    <section className="tl-group">
-                      <div className="tl-ghead">
-                        <h3>{t("tailor.groupHaveTitle")}</h3>
-                        <span className="tl-gnote">{t("tailor.groupHaveNote")}</span>
-                      </div>
+            {gruposVacios ? (
+              <p className="cu-aviso">{t("tailor.emptyGroups")}</p>
+            ) : (
+              <>
+                {/* GRUPO 1 — ya en la variante (sin botón) */}
+                {analisis.yaEnVariante.length > 0 && (
+                  <Card as="section" className="tl-group">
+                    <PanelHeader nivel={2} titulo={t("tailor.groupHaveTitle")} sub={t("tailor.groupHaveNote")} />
+                    <div className="tl-items">
                       {analisis.yaEnVariante.map((it) => (
-                        <div className="c-card tl-item" key={it.id}>
+                        <div className="tl-item" key={it.id}>
                           <span className="tl-itext">{it.texto}</span>
                           <span className="tl-cubre">
                             {t("tailor.coversPrefix")}
@@ -459,18 +448,17 @@ export function TailorScreen() {
                           </span>
                         </div>
                       ))}
-                    </section>
-                  )}
+                    </div>
+                  </Card>
+                )}
 
-                  {/* GRUPO 2 — en el master, no en la variante (un clic para añadir) */}
-                  {analisis.enMasterNoEnVariante.length > 0 && (
-                    <section className="tl-group">
-                      <div className="tl-ghead">
-                        <h3>{t("tailor.groupAddTitle")}</h3>
-                        <span className="tl-gnote">{t("tailor.groupAddNote")}</span>
-                      </div>
+                {/* GRUPO 2 — en el master, no en la variante (un clic para añadir) */}
+                {analisis.enMasterNoEnVariante.length > 0 && (
+                  <Card as="section" className="tl-group">
+                    <PanelHeader nivel={2} titulo={t("tailor.groupAddTitle")} sub={t("tailor.groupAddNote")} />
+                    <div className="tl-items">
                       {analisis.enMasterNoEnVariante.map((it) => (
-                        <div className="c-card tl-item tl-item--add" key={it.id}>
+                        <div className="tl-item tl-item--add" key={it.id}>
                           <span className="tl-itext">{it.texto}</span>
                           <span className="tl-cubre">
                             {t("tailor.coversPrefix")}
@@ -479,14 +467,14 @@ export function TailorScreen() {
                           {addedIds.has(it.id) ? (
                             <span className="tl-done">{t("tailor.added")}</span>
                           ) : (
-                            <button
-                              type="button"
-                              className="c-btn"
+                            <Button
+                              variante="grafito"
+                              icono="mas"
                               disabled={addingId !== null}
                               onClick={() => void anadir(it)}
                             >
                               {addingId === it.id ? t("tailor.adding") : t("tailor.addBtn")}
-                            </button>
+                            </Button>
                           )}
                           {reformErr[it.id] ? (
                             <span className="tl-err" role="alert">
@@ -495,45 +483,41 @@ export function TailorScreen() {
                           ) : null}
                         </div>
                       ))}
-                    </section>
-                  )}
+                    </div>
+                  </Card>
+                )}
 
-                  {/* GRUPO 3 — el aviso lo pide y no lo tienes (SIN botón: no se inventa) */}
-                  {analisis.faltan.length > 0 && (
-                    <section className="tl-group">
-                      <div className="tl-ghead">
-                        <h3>{t("tailor.groupGapTitle")}</h3>
-                        <span className="tl-gnote">{t("tailor.groupGapNote")}</span>
-                      </div>
-                      <div className="tl-gaps">
-                        {analisis.faltan.map((f, i) => (
-                          <div className="tl-gap" key={i}>
-                            <b>{f.termino}</b>
-                            <span className="tl-cite">
-                              {t("tailor.offerCitePrefix")}«{f.evidencia}»
-                            </span>
-                          </div>
-                        ))}
-                      </div>
-                    </section>
-                  )}
+                {/* GRUPO 3 — el aviso lo pide y no lo tienes (SIN botón: no se inventa) */}
+                {analisis.faltan.length > 0 && (
+                  <Card as="section" className="tl-group">
+                    <PanelHeader nivel={2} titulo={t("tailor.groupGapTitle")} sub={t("tailor.groupGapNote")} />
+                    <div className="tl-gaps">
+                      {analisis.faltan.map((f, i) => (
+                        <div className="tl-gap" key={i}>
+                          <b>{f.termino}</b>
+                          <span className="tl-cite">
+                            {t("tailor.offerCitePrefix")}«{f.evidencia}»
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </Card>
+                )}
 
-                  {/* Reformulaciones — original contra propuesto, una a una */}
-                  {analisis.reformulaciones.length > 0 && (
-                    <section className="tl-group">
-                      <div className="tl-ghead">
-                        <h3>{t("tailor.reformOverline")}</h3>
-                        <span className="tl-gnote">{t("tailor.reformNote")}</span>
-                      </div>
+                {/* Reformulaciones — original contra propuesto, una a una */}
+                {analisis.reformulaciones.length > 0 && (
+                  <Card as="section" className="tl-group">
+                    <PanelHeader nivel={2} titulo={t("tailor.reformOverline")} sub={t("tailor.reformNote")} />
+                    <div className="tl-items">
                       {analisis.reformulaciones.map((r) => (
-                        <div className="c-card tl-reform" key={r.id}>
+                        <div className="tl-reform" key={r.id}>
                           <div className="tl-rcols">
                             <div className="tl-rcol">
-                              <span className="t-overline">{t("tailor.reformOriginal")}</span>
+                              <span className="tl-k">{t("tailor.reformOriginal")}</span>
                               <p className="tl-rtext tl-rtext--orig">{r.original}</p>
                             </div>
-                            <div className="tl-rcol">
-                              <span className="t-overline">{t("tailor.reformProposed")}</span>
+                            <div className="tl-rcol tl-rcol--prop">
+                              <span className="tl-k">{t("tailor.reformProposed")}</span>
                               <p className="tl-rtext">{r.propuesto}</p>
                             </div>
                           </div>
@@ -542,14 +526,14 @@ export function TailorScreen() {
                             {appliedIds.has(r.id) ? (
                               <span className="tl-done">{t("tailor.reformApplied")}</span>
                             ) : (
-                              <button
-                                type="button"
-                                className="c-btn c-btn--patina"
+                              <Button
+                                variante="grafito"
+                                icono="revision"
                                 disabled={applyingId !== null}
                                 onClick={() => void aplicarReform(r)}
                               >
                                 {applyingId === r.id ? t("tailor.reformApplying") : t("tailor.reformApply")}
-                              </button>
+                              </Button>
                             )}
                             {reformErr[r.id] ? (
                               <span className="tl-err" role="alert">
@@ -559,42 +543,43 @@ export function TailorScreen() {
                           </div>
                         </div>
                       ))}
-                    </section>
-                  )}
-                </>
-              )}
+                    </div>
+                  </Card>
+                )}
+              </>
+            )}
 
-              {analisis.notas ? (
-                <p className="tl-notes">
-                  {t("tailor.notesPrefix")}
-                  {analisis.notas}
-                </p>
-              ) : null}
-            </>
-          )}
+            {analisis.notas ? (
+              <p className="cu-nota tl-notes">
+                {t("tailor.notesPrefix")}
+                {analisis.notas}
+              </p>
+            ) : null}
+          </>
+        )}
 
-          {/* ── Salidas secundarias: lo que también funciona ── */}
-          <hr className="c-divider" style={{ marginTop: "34px" }} />
-          <span className="t-overline" style={{ display: "block", marginTop: "24px" }}>
+        {/* ── Salidas secundarias: lo que también funciona ── */}
+        <section className="tl-outs-sec" aria-labelledby="tlOutsT">
+          <h2 className="cu-rotulo tl-outs-h" id="tlOutsT">
             {t("tailor.voidNextOverline")}
-          </span>
-          <div className="tl-outs">
-            <div className="c-card tl-out">
+          </h2>
+          <div className="cu-rejilla cu-rejilla--2 tl-outs">
+            <Card className="tl-out">
               {/* Rótulo con la MISMA clave que el botón real del editor: si alguien lo
                   renombra, esta indicación se renombra con él. */}
-              <Link className="c-btn c-btn--patina" href={volverA}>
+              <Button variante="grafito" href={volverA}>
                 {t("editor.fitOpen")} →
-              </Link>
+              </Button>
               <span className="note">{t("tailor.voidFitNote")}</span>
-            </div>
-            <div className="c-card tl-out">
-              <Link className="c-btn" href="/app/master">
+            </Card>
+            <Card className="tl-out">
+              <Button variante="grafito" icono="master" href="/app/master">
                 {t("tailor.voidMasterCta")}
-              </Link>
+              </Button>
               <span className="note">{t("tailor.voidMasterNote")}</span>
-            </div>
+            </Card>
           </div>
-        </div>
+        </section>
       </main>
     </div>
   );

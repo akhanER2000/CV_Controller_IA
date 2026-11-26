@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState, type ReactNode } from "react";
+import { Icono } from "@/components/ui";
 import "./DropZone.css";
 
 /* ============================================================================
@@ -16,6 +17,10 @@ import "./DropZone.css";
 
    Sin @keyframes ni transform: solo transiciones de color/borde, las mismas que
    ya tenía .imp-drop. Nada que revisar bajo prefers-reduced-motion.
+
+   Forja v2: es LA ZONA DE CARGA DESTACADA — grande, borde brasa discontinuo
+   (lleva también la clase compartida `cu-carga` de components/cuenta) y un
+   icono que dice «aquí se sueltan archivos» antes de leer nada.
    ============================================================================ */
 
 export interface DropZoneProps {
@@ -62,7 +67,7 @@ export function DropZone({
       <button
         type="button"
         id={id}
-        className={`dz${drag ? " is-drag" : ""}${className ? ` ${className}` : ""}`}
+        className={`dz cu-carga${drag ? " is-drag" : ""}${className ? ` ${className}` : ""}`}
         disabled={disabled}
         onClick={() => inputRef.current?.click()}
         onDragEnter={(e) => {
@@ -88,7 +93,10 @@ export function DropZone({
           take(e.dataTransfer?.files ?? null);
         }}
       >
-        {label}
+        <span className="dz-ico" aria-hidden="true">
+          <Icono nombre="fuentes" tamano={20} />
+        </span>
+        <span className="dz-txt">{label}</span>
       </button>
       <input
         ref={inputRef}

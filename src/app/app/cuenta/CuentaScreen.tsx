@@ -9,16 +9,17 @@
      · Cambio de contraseña (solo si la cuenta es email/contraseña; si entró por
        Google/GitHub, se oculta y se explica por qué)
 
-   Reutiliza el sistema de diseño (.c-header, .c-input, .c-btn, .t-overline…) y
+   Forja v2: tarjetas de ui/ y filas de components/cuenta (c-input sigue) y
    los textos bilingües del motor i18n (useT). Al guardar dispara el evento
    'corpus:profile-updated' para que el UserMenu del layout se refresque.
    ============================================================================ */
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { supabaseEnabled } from "@/lib/supabase/config";
 import { useT } from "@/lib/i18n";
+import { Button, Card, EmptyState, PanelHeader } from "@/components/ui";
+import { CabezaPantalla } from "@/components/cuenta/CabezaPantalla";
 import "./cuenta.css";
 
 const AVATAR_MAX_BYTES = 2 * 1024 * 1024;
@@ -238,215 +239,159 @@ export function CuentaScreen() {
 
   return (
     <div className="c-page">
-      <header className="c-header">
-        <div className="c-container">
-          <Link className="c-logo" href="/app">
-            Corpus
-          </Link>
-          <nav className="hd-nav">
-            <Link href="/app">Panel</Link>
-            <Link href="/app/master">Master</Link>
-            <Link href="/app/variantes">Variantes</Link>
-            <Link href="/app/fuentes">Fuentes</Link>
-          </nav>
-          <div className="hd-right" />
-        </div>
-      </header>
+      <main className="cu-pagina cu-pagina--estrecha" data-screen-label="cuenta">
+        <CabezaPantalla titulo={t("cuenta.title")} sub={t("cuenta.subtitle")} />
 
-      <main className="cu-main c-wall" data-screen-label="cuenta">
-        <div className="c-container cu-col">
-          <h2 className="cu-title">{t("cuenta.title")}</h2>
-          <p className="cu-sub">{t("cuenta.subtitle")}</p>
-
-          {!supabaseEnabled || (ready && !authed) ? (
-            <p className="cu-need">{t("cuenta.needAuth")}</p>
-          ) : (
-            <>
-              {/* ── Foto de perfil ── */}
-              <section className="cu-g" data-screen-label="cuenta-foto">
-                <div className="cu-gh">
-                  <span className="t-overline">{t("cuenta.photo.overline")}</span>
+        {!supabaseEnabled || (ready && !authed) ? (
+          <EmptyState icono="ajustes" titulo={t("cuenta.title")} texto={t("cuenta.needAuth")} />
+        ) : (
+          <>
+            {/* ── Foto de perfil ── */}
+            <Card as="section" grande data-screen-label="cuenta-foto" aria-labelledby="ct-h-foto">
+              <PanelHeader id="ct-h-foto" titulo={t("cuenta.photo.overline")} sub={t("cuenta.photo.hint")} />
+              <div className="ct-foto">
+                <div className="ct-av" aria-hidden="true">
+                  {avatarSrc ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={avatarSrc} alt="" />
+                  ) : (
+                    <span>{initials}</span>
+                  )}
                 </div>
-                <div className="cu-rows">
-                  <div className="cu-row cu-photo">
-                    <div className="cu-av" aria-hidden="true">
-                      {avatarSrc ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img src={avatarSrc} alt="" />
-                      ) : (
-                        <span>{initials}</span>
-                      )}
-                    </div>
-                    <div className="cu-photo-controls">
-                      <div className="cu-photo-btns">
-                        <button
-                          type="button"
-                          className="c-btn"
-                          onClick={pickPhoto}
-                          disabled={photoBusy}
-                        >
-                          {photoBusy ? t("cuenta.photo.uploading") : t("cuenta.photo.change")}
-                        </button>
-                        {avatarPath ? (
-                          <button
-                            type="button"
-                            className="c-btn c-btn--quiet"
-                            onClick={removePhoto}
-                            disabled={photoBusy}
-                          >
-                            {t("cuenta.photo.remove")}
-                          </button>
-                        ) : null}
-                      </div>
-                      <span className="cu-hint">{t("cuenta.photo.hint")}</span>
-                      {photoErr ? (
-                        <span className="cu-msg cu-msg--err" role="alert">
-                          {photoErr}
-                        </span>
-                      ) : null}
-                    </div>
-                    <input
-                      ref={fileRef}
-                      type="file"
-                      accept="image/*"
-                      hidden
-                      onChange={onFile}
-                    />
-                  </div>
-                </div>
-              </section>
-
-              {/* ── Identidad ── */}
-              <section className="cu-g" data-screen-label="cuenta-identidad">
-                <div className="cu-gh">
-                  <span className="t-overline">{t("cuenta.identity.overline")}</span>
-                </div>
-                <div className="cu-rows">
-                  <div className="cu-row">
-                    <span className="k">
-                      <b>{t("cuenta.name.label")}</b>
-                      <span>{t("cuenta.name.hint")}</span>
+                <div className="cu-fila-v">
+                  <span className="cu-linea">
+                    <Button variante="grafito" icono="mas" onClick={pickPhoto} disabled={photoBusy}>
+                      {photoBusy ? t("cuenta.photo.uploading") : t("cuenta.photo.change")}
+                    </Button>
+                    {avatarPath ? (
+                      <Button variante="fantasma" onClick={removePhoto} disabled={photoBusy}>
+                        {t("cuenta.photo.remove")}
+                      </Button>
+                    ) : null}
+                  </span>
+                  {photoErr ? (
+                    <span className="ct-msg ct-msg--err" role="alert">
+                      {photoErr}
                     </span>
-                    <span className="v">
+                  ) : null}
+                </div>
+                <input ref={fileRef} type="file" accept="image/*" hidden onChange={onFile} />
+              </div>
+            </Card>
+
+            {/* ── Identidad ── */}
+            <Card as="section" grande data-screen-label="cuenta-identidad" aria-labelledby="ct-h-id">
+              <PanelHeader id="ct-h-id" titulo={t("cuenta.identity.overline")} />
+              <div className="cu-filas">
+                <div className="cu-fila">
+                  <span className="cu-fila-k">
+                    <b>{t("cuenta.name.label")}</b>
+                    <span>{t("cuenta.name.hint")}</span>
+                  </span>
+                  <span className="cu-fila-v">
+                    <span className="cu-linea">
                       <input
                         className="c-input"
-                        style={{ maxWidth: "320px" }}
                         aria-label={t("cuenta.name.label")}
                         placeholder={t("cuenta.name.placeholder")}
                         value={name}
                         onChange={(e) => setName(e.target.value)}
                       />
                     </span>
-                  </div>
-                  <div className="cu-row">
-                    <span className="k">
-                      <b>{t("cuenta.email.label")}</b>
-                      <span>{t("cuenta.email.hint")}</span>
-                    </span>
-                    <span className="v">
+                  </span>
+                </div>
+                <div className="cu-fila">
+                  <span className="cu-fila-k">
+                    <b>{t("cuenta.email.label")}</b>
+                    <span>{t("cuenta.email.hint")}</span>
+                  </span>
+                  <span className="cu-fila-v">
+                    <span className="cu-linea">
                       <input
                         className="c-input"
                         type="email"
                         autoComplete="email"
-                        style={{ maxWidth: "320px" }}
                         aria-label={t("cuenta.email.label")}
                         value={email}
                         onChange={(e) => setEmail(e.target.value)}
                       />
                     </span>
-                  </div>
+                  </span>
                 </div>
-                <div className="cu-actions">
-                  <button
-                    type="button"
-                    className="c-btn c-btn--patina"
-                    onClick={saveIdentity}
-                    disabled={savingId || !idDirty}
-                  >
-                    {savingId ? t("cuenta.saving") : t("cuenta.save")}
-                  </button>
-                  {idMsg ? (
-                    <span
-                      className={`cu-msg ${idMsg.kind === "err" ? "cu-msg--err" : "cu-msg--ok"}`}
-                      role="status"
-                    >
-                      {idMsg.text}
-                    </span>
-                  ) : null}
-                </div>
-              </section>
+              </div>
+              <div className="ct-acciones">
+                <Button variante="brasa" onClick={saveIdentity} disabled={savingId || !idDirty}>
+                  {savingId ? t("cuenta.saving") : t("cuenta.save")}
+                </Button>
+                {idMsg ? (
+                  <span className={`ct-msg ${idMsg.kind === "err" ? "ct-msg--err" : "ct-msg--ok"}`} role="status">
+                    {idMsg.text}
+                  </span>
+                ) : null}
+              </div>
+            </Card>
 
-              {/* ── Contraseña (solo cuentas email/contraseña) ── */}
-              <section className="cu-g" data-screen-label="cuenta-password">
-                <div className="cu-gh">
-                  <span className="t-overline">{t("cuenta.password.overline")}</span>
-                  <span className="cu-gh-note">{t("cuenta.password.hint")}</span>
-                </div>
-
-                {isEmailProvider ? (
-                  <>
-                    <div className="cu-rows">
-                      <div className="cu-row">
-                        <span className="k">
-                          <b>{t("cuenta.password.new")}</b>
-                        </span>
-                        <span className="v">
+            {/* ── Contraseña (solo cuentas email/contraseña) ── */}
+            <Card as="section" grande data-screen-label="cuenta-password" aria-labelledby="ct-h-pw">
+              <PanelHeader id="ct-h-pw" titulo={t("cuenta.password.overline")} sub={t("cuenta.password.hint")} />
+              {isEmailProvider ? (
+                <>
+                  <div className="cu-filas">
+                    <div className="cu-fila">
+                      <span className="cu-fila-k">
+                        <b>{t("cuenta.password.new")}</b>
+                      </span>
+                      <span className="cu-fila-v">
+                        <span className="cu-linea">
                           <input
                             className="c-input"
                             type="password"
                             autoComplete="new-password"
                             placeholder={t("cuenta.password.placeholder")}
-                            style={{ maxWidth: "320px" }}
                             aria-label={t("cuenta.password.new")}
                             value={pw}
                             onChange={(e) => setPw(e.target.value)}
                           />
                         </span>
-                      </div>
-                      <div className="cu-row">
-                        <span className="k">
-                          <b>{t("cuenta.password.repeat")}</b>
-                        </span>
-                        <span className="v">
+                      </span>
+                    </div>
+                    <div className="cu-fila">
+                      <span className="cu-fila-k">
+                        <b>{t("cuenta.password.repeat")}</b>
+                      </span>
+                      <span className="cu-fila-v">
+                        <span className="cu-linea">
                           <input
                             className="c-input"
                             type="password"
                             autoComplete="new-password"
                             placeholder={t("cuenta.password.placeholder")}
-                            style={{ maxWidth: "320px" }}
                             aria-label={t("cuenta.password.repeat")}
                             value={pw2}
                             onChange={(e) => setPw2(e.target.value)}
                           />
                         </span>
-                      </div>
+                      </span>
                     </div>
-                    <div className="cu-actions">
-                      <button
-                        type="button"
-                        className="c-btn"
-                        onClick={changePassword}
-                        disabled={pwBusy || pw.length === 0}
-                      >
-                        {pwBusy ? t("cuenta.password.changing") : t("cuenta.password.change")}
-                      </button>
-                      {pwMsg ? (
-                        <span
-                          className={`cu-msg ${pwMsg.kind === "err" ? "cu-msg--err" : "cu-msg--ok"}`}
-                          role="status"
-                        >
-                          {pwMsg.text}
-                        </span>
-                      ) : null}
-                    </div>
-                  </>
-                ) : (
-                  <p className="cu-oauth">{t("cuenta.password.oauthOnly")}</p>
-                )}
-              </section>
-            </>
-          )}
-        </div>
+                  </div>
+                  <div className="ct-acciones">
+                    <Button variante="grafito" onClick={changePassword} disabled={pwBusy || pw.length === 0}>
+                      {pwBusy ? t("cuenta.password.changing") : t("cuenta.password.change")}
+                    </Button>
+                    {pwMsg ? (
+                      <span className={`ct-msg ${pwMsg.kind === "err" ? "ct-msg--err" : "ct-msg--ok"}`} role="status">
+                        {pwMsg.text}
+                      </span>
+                    ) : null}
+                  </div>
+                </>
+              ) : (
+                <p className="cu-aviso">{t("cuenta.password.oauthOnly")}</p>
+              )}
+            </Card>
+
+          </>
+        )}
       </main>
     </div>
   );

@@ -3,6 +3,16 @@
 export const ajustes = {
   es: {
     "ajustes.title": "Ajustes",
+    "ajustes.sub": "Tu perfil, tus claves de IA y tus datos. Lo que cambias aquí se guarda al momento o con su botón.",
+    "ajustes.profile.title": "Perfil",
+    "ajustes.profile.sub": "Cómo te ves dentro de Corpus.",
+    "ajustes.keys.title": "Claves de IA",
+    "ajustes.keys.sub": "Claude es el proveedor principal; Gemini entra solo como respaldo.",
+    "ajustes.keys.principal": "principal",
+    "ajustes.keys.respaldo": "respaldo",
+    "ajustes.keys.opcional": "opcional",
+    "ajustes.ai.onShort": "IA encendida",
+    "ajustes.ai.offShort": "IA apagada",
 
     // Flash (avisos efímeros de estado)
     "ajustes.flash.nameSaved": "Nombre guardado ✓",
@@ -57,13 +67,15 @@ export const ajustes = {
     "ajustes.ai.off": "apagada — modo manual completo",
 
     // BYOK (tu propia clave)
-    "ajustes.byok.label": "Tu propia clave",
-    "ajustes.byok.hint": "BYOK — opcional",
+    "ajustes.byok.label": "Gemini",
+    "ajustes.byok.hint": "Entra solo si Claude falla o no hay clave de Claude.",
     "ajustes.byok.hintSaved": " · hay una guardada",
     "ajustes.byok.included": "Incluida",
-    "ajustes.byok.placeholder": "sk-… (se cifra, solo se usa en tus extracciones)",
+    "ajustes.byok.placeholder": "AIza… (Gemini · se cifra, no se muestra)",
     "ajustes.byok.placeholderSaved": "•••••••••• (guardada — escribe para cambiarla)",
-    "ajustes.byok.aria": "Tu propia clave (BYOK)",
+    "ajustes.byok.aria": "Clave de Gemini (BYOK)",
+    "ajustes.byok.mine": "Mi clave",
+    "ajustes.byok.note": "«Incluida» usa la clave del servidor; con la tuya, el respaldo corre por tu cuenta.",
     "ajustes.byok.useIncluded": "Usar la incluida",
     "ajustes.byok.saveKey": "Guardar clave",
 
@@ -80,8 +92,8 @@ export const ajustes = {
       "Hay una clave guardada que HOY no se puede descifrar (falta o cambió CORPUS_ENCRYPTION_KEY): está aparcada, no se usa. Vuelve a pegarla cuando el servidor pueda cifrar.",
 
     // BYOK · segunda clave (§H) — el proveedor BARATO del router por coste (Groq)
-    "ajustes.byok2.label": "Segunda clave · proveedor barato",
-    "ajustes.byok2.hint": "BYOK — opcional · router por coste",
+    "ajustes.byok2.label": "Groq",
+    "ajustes.byok2.hint": "Clasificación barata, solo cuando no hay clave de Claude.",
     "ajustes.byok2.hintSaved": " · hay una guardada",
     "ajustes.byok2.placeholder": "gsk-… (Groq · se cifra, solo tareas baratas)",
     "ajustes.byok2.placeholderSaved": "•••••••••• (guardada — escribe para cambiarla)",
@@ -95,16 +107,16 @@ export const ajustes = {
     "ajustes.flash.key3Parked":
       "Falta configurar CORPUS_ENCRYPTION_KEY en el servidor. Hasta entonces no se guarda ninguna clave — a propósito, para no dejar secretos en claro.",
     "ajustes.flash.key3Unavailable": "Falta aplicar la migración 0007 (llm_api_key_3): la clave de Anthropic no se pudo guardar.",
-    "ajustes.flash.key3Cleared": "Clave de Anthropic quitada ✓ — la redacción vuelve a Gemini",
-    "ajustes.byok3.label": "Tercera clave · Anthropic (Claude)",
-    "ajustes.byok3.hint": "BYOK — opcional · redacción",
+    "ajustes.flash.key3Cleared": "Clave de Anthropic quitada ✓ — la IA vuelve a Gemini",
+    "ajustes.byok3.label": "Anthropic (Claude)",
+    "ajustes.byok3.hint": "Hace todas las tareas de IA.",
     "ajustes.byok3.hintSaved": " · hay una guardada",
-    "ajustes.byok3.placeholder": "sk-ant-… (Anthropic · se cifra, solo la redacción)",
+    "ajustes.byok3.placeholder": "sk-ant-… (Anthropic · se cifra, no se muestra)",
     "ajustes.byok3.placeholderSaved": "•••••••••• (guardada — escribe para cambiarla)",
     "ajustes.byok3.aria": "Clave de Anthropic (BYOK)",
     "ajustes.byok3.save": "Guardar clave de Anthropic",
     "ajustes.byok3.clear": "Quitar",
-    "ajustes.byok3.note": "Solo redacta variantes, «Ajustar», avisos y traducciones. Extracción y visión siguen en Gemini. Sin ella, la redacción va a Gemini (no se rompe nada).",
+    "ajustes.byok3.note": "Extrae, lee imágenes, redacta variantes, «Ajustar», avisos y traducciones. Si Claude falla o no hay clave, la misma llamada va a Gemini: no se rompe nada.",
     "ajustes.byok3.unavailable": "Falta aplicar la migración 0007 (llm_api_key_3): hasta entonces la clave de Anthropic no se puede guardar.",
 
     // ★ Selector de modelos PROBADOS. El listado de la API miente (20 listados, 11
@@ -147,23 +159,26 @@ export const ajustes = {
 
     // Estado de conexiones (E2) — cada check llama de verdad
     "ajustes.conn.overline": "Estado de conexiones",
-    "ajustes.conn.hint": "cada check llama de verdad · el motivo real, no un ✓ optimista",
+    "ajustes.conn.hint": "Cada comprobación llama de verdad y dice el motivo real.",
     "ajustes.conn.recheck": "Volver a comprobar",
     "ajustes.conn.checking": "Comprobando…",
     "ajustes.conn.error": "No se pudo comprobar el estado",
     "ajustes.conn.ok": "en línea",
     "ajustes.conn.warn": "a medias",
     "ajustes.conn.fail": "caído",
-    "ajustes.conn.svc.gemini": "Gemini · extracción",
-    "ajustes.conn.svc.groq": "Groq · router barato",
-    "ajustes.conn.svc.anthropic": "Anthropic · redacción",
+    "ajustes.conn.svc.gemini": "Gemini · respaldo",
+    "ajustes.conn.svc.groq": "Groq · clasificación",
+    "ajustes.conn.svc.anthropic": "Anthropic · principal",
     "ajustes.conn.svc.github": "GitHub",
     "ajustes.conn.svc.supabase": "Supabase · RLS",
     "ajustes.conn.svc.storage": "Storage · archivos",
 
     // Tus datos
     "ajustes.data.overline": "Tus datos",
-    "ajustes.data.hint": "sin permiso, sin retención hostil",
+    "ajustes.data.hint": "Son tuyos: descárgalos cuando quieras.",
+    "ajustes.export.hint": "Un archivo JSON con tu master, tus variantes y tus fuentes. Sin pedir permiso.",
+    "ajustes.danger.title": "Zona de peligro",
+    "ajustes.danger.sub": "Estas acciones no se deshacen. Cada una pide confirmación aquí mismo.",
 
     // Borrar todos mis datos (E1 · bloque 1) — conserva la cuenta
     "ajustes.wipe.label": "Borrar todos mis datos y empezar de cero",
@@ -197,6 +212,16 @@ export const ajustes = {
   } as Record<string, string>,
   en: {
     "ajustes.title": "Settings",
+    "ajustes.sub": "Your profile, your AI keys and your data. Changes here save instantly or with their button.",
+    "ajustes.profile.title": "Profile",
+    "ajustes.profile.sub": "How you appear inside Corpus.",
+    "ajustes.keys.title": "AI keys",
+    "ajustes.keys.sub": "Claude is the primary provider; Gemini only steps in as backup.",
+    "ajustes.keys.principal": "primary",
+    "ajustes.keys.respaldo": "backup",
+    "ajustes.keys.opcional": "optional",
+    "ajustes.ai.onShort": "AI on",
+    "ajustes.ai.offShort": "AI off",
 
     // Flash (ephemeral status notes)
     "ajustes.flash.nameSaved": "Name saved ✓",
@@ -248,13 +273,15 @@ export const ajustes = {
     "ajustes.ai.off": "off — full manual mode",
 
     // BYOK (your own key)
-    "ajustes.byok.label": "Your own key",
-    "ajustes.byok.hint": "BYOK — optional",
+    "ajustes.byok.label": "Gemini",
+    "ajustes.byok.hint": "Steps in only if Claude fails or there is no Claude key.",
     "ajustes.byok.hintSaved": " · one is saved",
     "ajustes.byok.included": "Included",
-    "ajustes.byok.placeholder": "sk-… (encrypted, used only for your extractions)",
+    "ajustes.byok.placeholder": "AIza… (Gemini · encrypted, never shown)",
     "ajustes.byok.placeholderSaved": "•••••••••• (saved — type to change it)",
-    "ajustes.byok.aria": "Your own key (BYOK)",
+    "ajustes.byok.aria": "Gemini key (BYOK)",
+    "ajustes.byok.mine": "My key",
+    "ajustes.byok.note": "“Included” uses the server key; with yours, the backup runs on your account.",
     "ajustes.byok.useIncluded": "Use the included one",
     "ajustes.byok.saveKey": "Save key",
 
@@ -270,8 +297,8 @@ export const ajustes = {
       "There's a saved key that can NOT be decrypted today (CORPUS_ENCRYPTION_KEY is missing or changed): it's parked, not used. Paste it again once the server can encrypt.",
 
     // BYOK · second key (§H) — the CHEAP provider of the cost router (Groq)
-    "ajustes.byok2.label": "Second key · cheap provider",
-    "ajustes.byok2.hint": "BYOK — optional · cost router",
+    "ajustes.byok2.label": "Groq",
+    "ajustes.byok2.hint": "Cheap classification, only when there is no Claude key.",
     "ajustes.byok2.hintSaved": " · one is saved",
     "ajustes.byok2.placeholder": "gsk-… (Groq · encrypted, cheap tasks only)",
     "ajustes.byok2.placeholderSaved": "•••••••••• (saved — type to change it)",
@@ -285,16 +312,16 @@ export const ajustes = {
     "ajustes.flash.key3Parked":
       "CORPUS_ENCRYPTION_KEY isn't set on the server. Until it is, no key gets saved — on purpose, so no secret is ever stored in plaintext.",
     "ajustes.flash.key3Unavailable": "Migration 0007 (llm_api_key_3) isn't applied yet: the Anthropic key couldn't be saved.",
-    "ajustes.flash.key3Cleared": "Anthropic key removed ✓ — writing goes back to Gemini",
-    "ajustes.byok3.label": "Third key · Anthropic (Claude)",
-    "ajustes.byok3.hint": "BYOK — optional · writing",
+    "ajustes.flash.key3Cleared": "Anthropic key removed ✓ — AI goes back to Gemini",
+    "ajustes.byok3.label": "Anthropic (Claude)",
+    "ajustes.byok3.hint": "Runs every AI task.",
     "ajustes.byok3.hintSaved": " · one is saved",
-    "ajustes.byok3.placeholder": "sk-ant-… (Anthropic · encrypted, writing only)",
+    "ajustes.byok3.placeholder": "sk-ant-… (Anthropic · encrypted, never shown)",
     "ajustes.byok3.placeholderSaved": "•••••••••• (saved — type to change it)",
     "ajustes.byok3.aria": "Anthropic key (BYOK)",
     "ajustes.byok3.save": "Save Anthropic key",
     "ajustes.byok3.clear": "Remove",
-    "ajustes.byok3.note": "It only writes variants, “Adjust”, job-post tailoring and translations. Extraction and vision stay on Gemini. Without it, writing goes to Gemini (nothing breaks).",
+    "ajustes.byok3.note": "It extracts, reads images, writes variants, “Adjust”, job-post tailoring and translations. If Claude fails or there is no key, the same call goes to Gemini: nothing breaks.",
     "ajustes.byok3.unavailable": "Migration 0007 (llm_api_key_3) isn't applied yet: until then the Anthropic key can't be saved.",
 
     // ★ Probed-model selector. The API listing lies (20 listed, 11 answer), so only
@@ -337,23 +364,26 @@ export const ajustes = {
 
     // Connections status (E2) — every check really calls
     "ajustes.conn.overline": "Connections status",
-    "ajustes.conn.hint": "every check really calls · the real reason, not an optimistic ✓",
+    "ajustes.conn.hint": "Every check really calls and gives the real reason.",
     "ajustes.conn.recheck": "Check again",
     "ajustes.conn.checking": "Checking…",
     "ajustes.conn.error": "Couldn't check status",
     "ajustes.conn.ok": "online",
     "ajustes.conn.warn": "partial",
     "ajustes.conn.fail": "down",
-    "ajustes.conn.svc.gemini": "Gemini · extraction",
-    "ajustes.conn.svc.groq": "Groq · cheap router",
-    "ajustes.conn.svc.anthropic": "Anthropic · writing",
+    "ajustes.conn.svc.gemini": "Gemini · backup",
+    "ajustes.conn.svc.groq": "Groq · classification",
+    "ajustes.conn.svc.anthropic": "Anthropic · primary",
     "ajustes.conn.svc.github": "GitHub",
     "ajustes.conn.svc.supabase": "Supabase · RLS",
     "ajustes.conn.svc.storage": "Storage · files",
 
     // Your data
     "ajustes.data.overline": "Your data",
-    "ajustes.data.hint": "no permission needed, no hostile retention",
+    "ajustes.data.hint": "They are yours: download them any time.",
+    "ajustes.export.hint": "A JSON file with your master, your variants and your sources. No permission needed.",
+    "ajustes.danger.title": "Danger zone",
+    "ajustes.danger.sub": "These actions cannot be undone. Each one asks for confirmation right here.",
 
     // Delete all my data (E1 · block 1) — keeps the account
     "ajustes.wipe.label": "Delete all my data and start fresh",

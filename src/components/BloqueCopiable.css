@@ -28,10 +28,14 @@
    portapapeles (o a quien le falla) necesita ver el texto entero y poder
    seleccionarlo. De ahí el <pre> con scroll propio y `user-select:text`. */
 
+/* Forja v2: bloque hundido con radio grande dentro de la tarjeta; rótulo en
+   sans, botón de copiar en píldora (mismo gesto que .u-btn--grafito) y el texto
+   en mono, que aquí SÍ toca: es un prompt que se copia literal. */
+
 .bcp {
   width: 100%;
   border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-xl);
   background: var(--surface-sunken);
   overflow: hidden;
 }
@@ -40,39 +44,44 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
-  padding: 9px 12px;
+  gap: var(--sp-3);
+  padding: var(--sp-2) var(--sp-2) var(--sp-2) var(--sp-4);
   border-bottom: 1px solid var(--border);
 }
 
 .bcp-label {
-  font: 500 var(--fs-micro) / 1 var(--font-mono);
-  letter-spacing: 0.08em;
+  min-width: 0;
+  font: 600 var(--fs-micro) / 1.2 var(--font-sans);
+  letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--text-subtle);
-  min-width: 0;
 }
 
 .bcp-copy {
   flex: none;
-  font: 500 var(--fs-micro) / 1 var(--font-mono);
-  color: var(--text-muted);
-  padding: 7px 10px;
+  display: inline-flex;
+  align-items: center;
+  min-height: 36px;
+  padding: 0 var(--sp-4);
   border: 1px solid var(--border-strong);
-  border-radius: 5px;
-  background: transparent;
+  border-radius: var(--radius-pill);
+  background: var(--surface-elevated);
+  font: 600 var(--fs-ui) / 1 var(--font-sans);
+  color: var(--text);
   cursor: pointer;
-  transition: color 0.14s, border-color 0.14s, background-color 0.14s;
+  transition: color var(--dur-fast) var(--ease-standard), border-color var(--dur-fast) var(--ease-standard),
+    background-color var(--dur-fast) var(--ease-standard);
 }
 
-.bcp-copy:hover {
+.bcp-copy:hover,
+.bcp-copy:focus-visible {
   color: var(--accent-text);
-  border-color: var(--border-patina);
+  border-color: var(--border-brasa);
 }
 
 .bcp-pre {
   margin: 0;
-  padding: 14px 16px;
+  padding: var(--sp-4);
   /* Alto contenido: el prompt es largo a propósito (dice las reglas del formato
      una a una). Se acota para que no empuje la puerta entera fuera de pantalla,
      con scroll propio — el contenedor de la página nunca desborda en horizontal. */
@@ -85,12 +94,16 @@
   color: var(--text-muted);
 }
 
+.bcp-pre:focus-visible {
+  outline-offset: -2px;
+}
+
 .bcp-status {
   margin: 0;
-  padding: 0 12px;
+  padding: 0 var(--sp-4);
   max-height: 0;
   overflow: hidden;
-  font: 400 var(--fs-micro) / 1.5 var(--font-sans);
+  font: 500 var(--fs-data) / 1.5 var(--font-sans);
   color: var(--danger);
 }
 
@@ -98,6 +111,13 @@
    siempre en el DOM (para que se anuncie) pero no deja un hueco en reposo. */
 .bcp-status.is-fallo {
   max-height: none;
-  padding: 10px 12px;
+  padding: var(--sp-3) var(--sp-4);
   border-top: 1px dashed color-mix(in srgb, var(--danger) 45%, transparent);
+  background: var(--danger-quiet);
+}
+
+@media (max-width: 767px) {
+  .bcp-copy {
+    min-height: 44px;
+  }
 }

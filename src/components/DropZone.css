@@ -1,47 +1,79 @@
 /* ── DropZone.css — el gesto de arrastre, uno solo para todo el producto ──
-   Extraído de .imp-drop (importar.html): borde punteado + superficie
-   translúcida + reacción al hover. Prefijo propio `dz-`/`.dz`; no toca ni
+   Extraído de .imp-drop (importar.html). Prefijo propio `dz-`/`.dz`; no toca ni
    redefine ninguna clase del sistema (globals.css es intocable).
 
-   Sin @keyframes ni transform: las transiciones son de color y borde (C1,
-   140ms), exactamente las que ya tenía .imp-drop. Por eso no hay nada aquí
-   dentro de prefers-reduced-motion: no se pierde ningún movimiento porque no
-   se introduce ninguno. */
+   Forja v2: LA ZONA DE CARGA DESTACADA. Grande, centrada, con icono y borde
+   brasa discontinuo. El marcado lleva además la clase compartida `cu-carga`
+   (components/cuenta/cuenta.css); el borde y el fondo de aquí son los MISMOS
+   valores, así que da igual qué hoja cargue después: el aspecto no cambia.
+
+   Sin @keyframes ni transform: las transiciones son de color y borde. Por eso
+   no hay nada aquí dentro de prefers-reduced-motion: no se pierde ningún
+   movimiento porque no se introduce ninguno. */
 
 .dz {
-  display: block;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-3);
   width: 100%;
-  padding: 16px;
-  border: 1px dashed var(--border-strong);
-  border-radius: var(--radius-sm);
-  /* La superficie translúcida del gesto: deja intuir lo que hay detrás
-     (humo en una ventana, el vidrio de la tarjeta en un muro). */
-  background: color-mix(in srgb, var(--surface) 42%, transparent);
+  min-height: 168px;
+  padding: var(--sp-6) var(--sp-5);
+  border: 1.5px dashed var(--border-brasa);
+  border-radius: var(--radius-2xl);
+  background: color-mix(in srgb, var(--brasa-500) 6%, transparent);
   text-align: center;
-  font: 400 var(--fs-data) / 1.6 var(--font-mono);
-  color: var(--text-subtle);
+  font: 400 var(--fs-data) / 1.6 var(--font-sans);
+  color: var(--text-muted);
   cursor: pointer;
-  transition: border-color 0.14s, color 0.14s, background-color 0.14s;
+  transition: border-color var(--dur-fast) var(--ease-standard), color var(--dur-fast) var(--ease-standard),
+    background-color var(--dur-fast) var(--ease-standard);
+}
+
+.dz-ico {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 14px;
+  background: var(--surface-elevated);
+  border: 1px solid var(--border);
+  color: var(--accent-text);
+}
+
+.dz-txt {
+  max-width: 60ch;
 }
 
 .dz b {
-  color: var(--text-muted);
-  font-weight: 500;
+  font: 600 var(--fs-body) / 1.4 var(--font-sans);
+  color: var(--text);
 }
 
-.dz:hover:not(:disabled) {
-  border-color: var(--border-patina);
-  color: var(--text-muted);
+.dz:hover:not(:disabled),
+.dz:focus-visible {
+  border-color: var(--brasa-500);
+  color: var(--text);
+  background: color-mix(in srgb, var(--brasa-500) 10%, transparent);
 }
 
 /* Arrastrando encima: el mismo acuse que da .imp-box.is-drag en el volcado. */
 .dz.is-drag {
-  border-color: var(--border-patina);
-  color: var(--text-muted);
-  background: color-mix(in srgb, var(--patina-300) 9%, transparent);
+  border-style: solid;
+  border-color: var(--brasa-500);
+  color: var(--text);
+  background: color-mix(in srgb, var(--brasa-500) 14%, transparent);
 }
 
 .dz:disabled {
   opacity: var(--opacity-disabled);
   cursor: default;
+}
+
+@media (max-width: 767px) {
+  .dz {
+    min-height: 140px;
+    padding: var(--sp-5) var(--sp-4);
+  }
 }

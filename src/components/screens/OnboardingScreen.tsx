@@ -4,6 +4,8 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { AuroraTune, AURORA_HOJEO } from "@/components/Aurora";
 import { useT } from "@/lib/i18n";
+import { Chip, Icono, PanelHeader } from "@/components/ui";
+import { Pasos } from "@/components/cuenta/Pasos";
 import "./onboarding.css";
 
 /* ============================================================================
@@ -61,49 +63,34 @@ export function OnboardingScreen() {
     <div className="c-page">
       <AuroraTune strength={AURORA_HOJEO} />
 
-      <header className="c-header">
-        <div className="c-container">
-          <Link className="c-logo" href="/app">
-            Corpus
-          </Link>
-          <span
-            style={{
-              marginLeft: "14px",
-              font: "500 var(--fs-micro)/1 var(--font-mono)",
-              letterSpacing: ".14em",
-              color: "var(--text-muted)",
-            }}
-          >
-            {t("onboarding.header")}
+      <main className="cu-pagina ob-main" data-screen-label="onboarding">
+        <Pasos
+          etiqueta={t("onboarding.pasos.aria")}
+          actual={0}
+          pasos={[
+            { id: "puerta", titulo: t("onboarding.pasos.1") },
+            { id: "master", titulo: t("onboarding.pasos.2") },
+            { id: "variantes", titulo: t("onboarding.pasos.3") },
+          ]}
+        />
+
+        <header className="ob-cabeza">
+          <span className="cu-rotulo" id="ov" ref={ovRef}>
+            {t("onboarding.overline")}
           </span>
-          <div className="hd-right">
-            <div className="hd-lang">
-              <span data-on>ES</span>
-              <span>EN</span>
-            </div>
-            <div className="hd-av">DG</div>
-          </div>
-        </div>
-      </header>
-
-      <main className="ob-main c-window" data-screen-label="onboarding">
-        <span className="t-overline" id="ov" ref={ovRef}>
-          {t("onboarding.overline")}
-        </span>
-
-        <h1 className="ob-h1" id="h1" ref={h1Ref} style={{ marginTop: "20px" }}>
-          {t("onboarding.h1.pre")}
-          <em>{t("onboarding.h1.em")}</em>
-        </h1>
-
-        <p className="ob-sub" data-reveal style={{ "--d": "480ms" } as React.CSSProperties}>
-          {t("onboarding.sub")}
-        </p>
+          <h1 className="ob-h1" id="h1" ref={h1Ref}>
+            {t("onboarding.h1.pre")}
+            <em>{t("onboarding.h1.em")}</em>
+          </h1>
+          <p className="ob-sub" data-reveal style={{ "--d": "480ms" } as React.CSSProperties}>
+            {t("onboarding.sub")}
+          </p>
+        </header>
 
         <div className="ob-doors">
           <button
             type="button"
-            className="c-panel c-lift ob-door"
+            className="u-card u-card--grafito u-card--grande ob-door"
             id="doorA"
             data-reveal
             style={{ "--d": "600ms" } as React.CSSProperties}
@@ -112,40 +99,48 @@ export function OnboardingScreen() {
             aria-controls="tpl"
             onClick={() => setOpen((v) => !v)}
           >
-            <span className="t-overline">{t("onboarding.doorA.overline")}</span>
-            <h3>{t("onboarding.doorA.title")}</h3>
-            <p>
+            <span className="ob-door-cab">
+              <span className="ob-ico" aria-hidden="true">
+                <Icono nombre="master" />
+              </span>
+              <Chip>{t("onboarding.doorA.overline")}</Chip>
+            </span>
+            <span className="ob-door-t">{t("onboarding.doorA.title")}</span>
+            <span className="ob-door-b">
               {t("onboarding.doorA.body.pre")}
-              <b style={{ color: "var(--text)", fontWeight: 500 }}>
-                {t("onboarding.doorA.body.bold")}
-              </b>
+              <b>{t("onboarding.doorA.body.bold")}</b>
               {t("onboarding.doorA.body.post")}
-            </p>
-            <p className="fine">{t("onboarding.doorA.fine")}</p>
-            <span className="go" id="goA">
+            </span>
+            <span className="ob-door-fine">{t("onboarding.doorA.fine")}</span>
+            <span className="u-btn u-btn--grafito ob-go" id="goA">
               {t("onboarding.doorA.cta")}
               {open ? " ▴" : " ▾"}
             </span>
           </button>
 
           <Link
-            className="c-panel c-lift ob-door"
+            className="u-card u-card--grafito u-card--grande ob-door"
             href="/app/importar"
             data-reveal
             style={{ "--d": "680ms" } as React.CSSProperties}
             data-screen-label="onboarding-puerta-ia"
           >
-            <span className="t-overline">{t("onboarding.doorB.overline")}</span>
-            <h3>{t("onboarding.doorB.title")}</h3>
-            <p>
+            <span className="ob-door-cab">
+              <span className="ob-ico" aria-hidden="true">
+                <Icono nombre="fuentes" />
+              </span>
+              <Chip>{t("onboarding.doorB.overline")}</Chip>
+            </span>
+            <span className="ob-door-t">{t("onboarding.doorB.title")}</span>
+            <span className="ob-door-b">
               {t("onboarding.doorB.body.pre")}
-              <b style={{ color: "var(--text)", fontWeight: 500 }}>
-                {t("onboarding.doorB.body.bold")}
-              </b>
+              <b>{t("onboarding.doorB.body.bold")}</b>
               {t("onboarding.doorB.body.post")}
-            </p>
-            <p className="fine">{t("onboarding.doorB.fine")}</p>
-            <span className="go">{t("onboarding.doorB.cta")}</span>
+            </span>
+            <span className="ob-door-fine">{t("onboarding.doorB.fine")}</span>
+            <span className="u-btn u-btn--brasa ob-go">
+              {t("onboarding.doorB.cta")}
+            </span>
           </Link>
         </div>
 
@@ -155,11 +150,8 @@ export function OnboardingScreen() {
           ref={tplRef}
           data-screen-label="onboarding-plantillas"
         >
-          <div className="gh">
-            <span className="t-overline">{t("onboarding.tpl.overline")}</span>
-          </div>
-          <hr className="c-divider" />
-          <div className="rows" style={{ marginTop: "12px" }}>
+          <PanelHeader titulo={t("onboarding.tpl.overline")} />
+          <div className="ob-tpl-rejilla">
             <Link href="/app/master">
               <b>{t("onboarding.tpl.backend.title")}</b>
               <span>{t("onboarding.tpl.backend.desc")}</span>
@@ -187,7 +179,7 @@ export function OnboardingScreen() {
           </div>
         </div>
 
-        <p className="ob-note" data-reveal style={{ "--d": "760ms" } as React.CSSProperties}>
+        <p className="cu-aviso ob-note" data-reveal style={{ "--d": "760ms" } as React.CSSProperties}>
           {t("onboarding.note")}
         </p>
       </main>

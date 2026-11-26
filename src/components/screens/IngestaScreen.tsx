@@ -1,8 +1,10 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import Link from "next/link";
 import { AuroraTune, AURORA_HOJEO } from "@/components/Aurora";
+import { Button, Chip } from "@/components/ui";
+import { CabezaPantalla } from "@/components/cuenta/CabezaPantalla";
+import { Pasos } from "@/components/cuenta/Pasos";
 import "./ingesta.css";
 
 /* ============================================================================
@@ -32,6 +34,15 @@ import "./ingesta.css";
      de producto es la ruta feliz `run(false)` al montar; la rama de error
      (fail) queda implementada con sus <button> reales y su bloqueo en Promise,
      pero sin backend que señale una fuente fallida no se dispara en la maqueta.
+
+   ★ FORJA v2. Misma corrida, otra piel: .cu-pagina estrecha, pasos 1·2·3
+   arriba (leer → revisar → confirmar), el contador y el log dentro de una
+   tarjeta grafito y una barra de avance. La barra cuenta PASOS TERMINADOS de
+   la lista de lectura (STEPS) — no es un porcentaje de tiempo estimado — y,
+   como el contador, se escribe por ref desde la corrida imperativa. El
+   <header class="c-header"> se quitó: su rótulo #hdStep y el enlace «seguir
+   usando Corpus» viven ahora en la cabecera de la página. Todas las cifras son
+   de la maqueta y la pantalla lo dice con el chip «ejemplo».
    ============================================================================ */
 
 type Phase = "run" | "fin";
@@ -52,6 +63,14 @@ const STEPS: ReadonlyArray<readonly [string, string, number, string, number]> = 
 const TOTAL_ITEMS = STEPS.reduce((a, s) => a + s[4], 0); // 61
 const SIN_EVIDENCIA = 9; // canónico del paquete (staging: ⚠ sin evidencia 9)
 
+/* El recorrido que esta pantalla abre: 1 leer (aquí) → 2 revisar (staging) →
+   3 confirmar (master). */
+const PASOS = [
+  { id: "leer", titulo: "Leer tus fuentes" },
+  { id: "revisar", titulo: "Revisar en staging" },
+  { id: "confirmar", titulo: "Confirmar en tu master" },
+];
+
 export function IngestaScreen() {
   const [phase, setPhase] = useState<Phase>("run");
   const [hdStep, setHdStep] = useState("INGESTA · LEYENDO FUENTES");
@@ -61,8 +80,10 @@ export function IngestaScreen() {
   const logRef = useRef<HTMLDivElement>(null);
   const countRef = useRef<HTMLDivElement>(null);
   const finPanelRef = useRef<HTMLDivElement>(null);
+  const barRef = useRef<HTMLDivElement>(null);
   const genRef = useRef(0);
   const itemsRef = useRef(0);
+  const doneRef = useRef(0);
 
   // La corrida de la ingesta (ruta feliz). Imperativa a propósito: reveal /
   // counter escriben DOM directamente. Espera a que exista el runtime vanilla.
@@ -94,8 +115,20 @@ export function IngestaScreen() {
       return r;
     }
 
+    // Barra de avance: pasos de STEPS ya terminados / total. Por ref, como el
+    // contador (la corrida es imperativa y no pasa por estado React).
+    function paintBar() {
+      const b = barRef.current;
+      if (!b) return;
+      b.setAttribute("aria-valuenow", String(doneRef.current));
+      const fill = b.firstElementChild as HTMLElement | null;
+      if (fill) fill.style.width = `${(doneRef.current / STEPS.length) * 100}%`;
+    }
+
     function bump(n: number) {
       itemsRef.current += n;
+      doneRef.current += 1; // cada paso de STEPS llama a bump exactamente una vez
+      paintBar();
       if (countRef.current) window.CorpusMotion!.counter(countRef.current, itemsRef.current, { dur: 700 });
     }
 
@@ -109,6 +142,8 @@ export function IngestaScreen() {
     async function run(fail: boolean) {
       const my = ++genRef.current;
       itemsRef.current = 0;
+      doneRef.current = 0;
+      paintBar();
       if (countRef.current) countRef.current.textContent = "0";
       if (logRef.current) logRef.current.innerHTML = "";
       setPhase("run");
@@ -213,54 +248,65 @@ export function IngestaScreen() {
     <div className="c-page">
       <AuroraTune strength={AURORA_HOJEO} />
 
-      <header className="c-header">
-        <div className="c-container">
-          <Link className="c-logo" href="/app">
-            Corpus
-          </Link>
-          <span
-            id="hdStep"
-            style={{
-              marginLeft: "14px",
-              font: "500 var(--fs-micro)/1 var(--font-mono)",
-              letterSpacing: ".14em",
-              color: "var(--text-muted)",
-            }}
-          >
-            {hdStep}
-          </span>
-          <div className="hd-right">
-            <Link className="c-btn c-btn--quiet" href="/app">
+      <main className="cu-pagina cu-pagina--estrecha in-main c-window" data-screen-label="ingesta">
+        <CabezaPantalla
+          rotulo={<span id="hdStep">{hdStep}</span>}
+          titulo={phase === "fin" ? "Listo. Ahora, tu turno." : "Leyendo tus fuentes"}
+          sub={
+            <>
+              <Chip tono="ejemplo">ejemplo</Chip>{" "}
+              Maqueta de la espera: las fuentes y las cifras son de prueba.
+            </>
+          }
+          acciones={
+            <Button variante="fantasma" icono="flecha" href="/app">
               Seguir usando Corpus — esto avisa al terminar
-            </Link>
-          </div>
-        </div>
-      </header>
+            </Button>
+          }
+        />
 
-      <main className="in-main c-window" data-screen-label="ingesta">
+        <Pasos pasos={PASOS} actual={phase === "fin" ? 1 : 0} etiqueta="Pasos de la ingesta" />
+
         <div
           className="in-col"
           id="run"
           ref={runRef}
           style={phase === "fin" ? { display: "none" } : undefined}
         >
-          <span className="t-overline">Leyendo tus fuentes</span>
-          <div className="in-count" id="count" ref={countRef}>
-            0
-          </div>
-          <div className="in-cap">items encontrados hasta ahora</div>
-          <div
-            className="c-panel in-log"
-            id="log"
-            ref={logRef}
-            role="log"
-            aria-live="polite"
-            aria-label="Progreso de la lectura de tus fuentes"
-          ></div>
+          <section className="u-card u-card--grafito u-card--grande in-tarjeta" aria-labelledby="in-run-t">
+            <div className="in-cab">
+              <h2 className="in-t" id="in-run-t">
+                Fuente por fuente
+              </h2>
+              <div className="in-cifra">
+                <div className="in-count" id="count" ref={countRef}>
+                  0
+                </div>
+                <div className="in-cap">items encontrados hasta ahora</div>
+              </div>
+            </div>
+            <div
+              className="cu-barra in-barra"
+              ref={barRef}
+              role="progressbar"
+              aria-label="Fuentes leídas"
+              aria-valuemin={0}
+              aria-valuemax={STEPS.length}
+              aria-valuenow={0}
+            >
+              <span style={{ width: "0%" }} />
+            </div>
+            <div
+              className="in-log"
+              id="log"
+              ref={logRef}
+              role="log"
+              aria-live="polite"
+              aria-label="Progreso de la lectura de tus fuentes"
+            ></div>
+          </section>
           <p className="in-hint">
-            Entre 5 y 40 segundos según las fuentes.
-            <br />
-            Sin porcentajes inventados: te decimos qué estamos haciendo.
+            Puede tardar de unos segundos a varios minutos, según cuántas fuentes haya. Sin porcentajes inventados: te decimos qué estamos haciendo.
           </p>
         </div>
 
@@ -270,40 +316,22 @@ export function IngestaScreen() {
           ref={finRef}
           data-screen-label="ingesta-fin"
         >
-          <span className="t-overline">Extracción completa</span>
-          <h2 style={{ marginTop: "18px" }}>Listo. Ahora, tu turno.</h2>
-          <div className="c-panel fin-panel" id="finPanel" ref={finPanelRef}>
+          <div className="u-card u-card--grafito u-card--grande fin-panel" id="finPanel" ref={finPanelRef}>
+            <span className="cu-rotulo">Extracción completa</span>
             <div className="fin-head">
               <span className="n">{TOTAL_ITEMS}</span>
               <span className="l">items esperan tu revisión</span>
             </div>
             <div className="fin-noev">
-              <span className="c-ver c-ver--none">{SIN_EVIDENCIA} sin evidencia</span>
+              <Chip tono="peligro">{`${SIN_EVIDENCIA} sin evidencia`}</Chip>
               <span>marcados — la revisión te los pondrá delante, no debajo.</span>
             </div>
-          </div>
-          <div
-            style={{
-              marginTop: "34px",
-              display: "flex",
-              flexDirection: "column",
-              alignItems: "center",
-              gap: "14px",
-            }}
-          >
-            <span className="c-forge">
-              <Link className="c-btn c-btn--forge c-btn--hero" href="/app/staging">
-                Revisar en staging →
-              </Link>
-            </span>
-            <span
-              style={{
-                font: "400 var(--fs-data)/1.6 var(--font-mono)",
-                color: "var(--text-subtle)",
-              }}
-            >
-              Nada entra al master sin tu confirmación.
-            </span>
+            <div className="fin-acc">
+              <Button variante="brasa" tamano="lg" icono="flecha" href="/app/staging">
+                Revisar en staging
+              </Button>
+              <span className="fin-nota">Nada entra al master sin tu confirmación.</span>
+            </div>
           </div>
         </div>
       </main>

@@ -1,10 +1,11 @@
 "use client";
 
-import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useT } from "@/lib/i18n";
 import { AuroraTune, AURORA_TRABAJO } from "@/components/Aurora";
 import { Breadcrumb } from "@/components/Breadcrumb";
+import { Button, Card, Chip, Icono } from "@/components/ui";
+import { CabezaPantalla } from "@/components/cuenta/CabezaPantalla";
 import "./salud.css";
 
 /* ============================================================================
@@ -79,107 +80,60 @@ export function SaludScreen() {
     <div className="c-page">
       {/* Leer una pantalla que confiesa un hueco es trabajo denso: el humo baja. */}
       <AuroraTune strength={AURORA_TRABAJO} />
-      <header className="c-header">
-        <div className="c-container">
-          <Link className="c-logo" href="/app">
-            Corpus
-          </Link>
-          <nav className="hd-nav">
-            <Link href="/app">{t("nav.panel")}</Link>
-            <Link href="/app/master">{t("nav.master")}</Link>
-            <Link href="/app/variantes" aria-current="page">
-              {t("nav.variantes")}
-            </Link>
-            <Link href="/app/fuentes">{t("nav.fuentes")}</Link>
-          </nav>
-          <div className="hd-right">
-            <nav className="hd-nav" style={{ display: "flex" }}>
-              <Link href="/app/ajustes">{t("nav.ajustes")}</Link>
-            </nav>
-            <div className="hd-lang">
-              <span data-on>ES</span>
-              <span>EN</span>
-            </div>
-            {/* Aquí iba <div className="hd-av">DG</div>: las iniciales de la
-                persona inventada. Ocultas por UserMenu.css, pero afirmaban una
-                identidad que no es la del usuario. El avatar real lo pinta
-                UserMenu, montado por el layout de /app. */}
-          </div>
-        </div>
-      </header>
 
-      <div className="sl-bar" data-screen-label="salud-toolbar">
-        <div className="c-container">
-          {/* La salida: a la variante de la que cuelga esta salud, o a donde dijo
-              el ?from. Sin `fallbackLabel`: el nombre de la variante no se sabe
-              sin leerla, y «Backend — Fintech» era el de la persona inventada. */}
+      <main className="cu-pagina cu-pagina--estrecha" data-screen-label="salud">
+        {/* La salida: a la variante de la que cuelga esta salud, o a donde dijo
+            el ?from. Sin `fallbackLabel`: el nombre de la variante no se sabe
+            sin leerla. */}
+        <div className="sl-bar" data-screen-label="salud-toolbar">
           <Breadcrumb fallback={volverA} />
-          <span
-            style={{ width: "1px", height: "16px", background: "var(--border-strong)" }}
-            aria-hidden="true"
-          />
-          <span
-            style={{
-              font: "500 var(--fs-micro)/1 var(--font-mono)",
-              letterSpacing: ".14em",
-              color: "var(--text-muted)",
-            }}
-          >
-            {t("salud.sectionLabel")}
-          </span>
           {/* Donde antes iba «4 hallazgos · 0 bloqueantes» —un conteo derivado de
-              datos inventados— ahora va la verdad: no hay análisis todavía. */}
-          <span
-            id="slN"
-            style={{
-              marginLeft: "auto",
-              font: "400 var(--fs-micro)/1 var(--font-mono)",
-              color: "var(--text-subtle)",
-            }}
-          >
-            {t("salud.barPending")}
-          </span>
+              datos inventados— va la verdad: no hay análisis todavía. */}
+          <Chip>
+            <span id="slN">{t("salud.barPending")}</span>
+          </Chip>
         </div>
-      </div>
 
-      <main className="sl-main c-wall" data-screen-label="salud">
-        <div className="c-container sl-col">
-          <span className="t-overline">{t("salud.voidOverline")}</span>
-          <h2 style={{ marginTop: "14px" }}>{t("salud.voidTitle")}</h2>
-          <p className="sl-lead">
-            {t("salud.voidBody.pre")}
-            <b>{t("salud.tag.source")}</b>
-            {t("salud.voidBody.mid")}
-            <b>{t("salud.tag.criterion")}</b>
-            {t("salud.voidBody.post")}
-          </p>
-          {/* La línea que justifica el hueco. No es una disculpa: es la regla. */}
-          <p className="sl-void-ethic">{t("salud.voidEthic")}</p>
+        <CabezaPantalla
+          rotulo={t("salud.voidOverline")}
+          titulo={t("salud.voidTitle")}
+          sub={
+            <>
+              {t("salud.voidBody.pre")}
+              <b>{t("salud.tag.source")}</b>
+              {t("salud.voidBody.mid")}
+              <b>{t("salud.tag.criterion")}</b>
+              {t("salud.voidBody.post")}
+            </>
+          }
+        />
+        {/* La línea que justifica el hueco. No es una disculpa: es la regla. */}
+        <p className="cu-aviso sl-void-ethic">{t("salud.voidEthic")}</p>
 
-          <hr className="c-divider" style={{ marginTop: "30px" }} />
+        <h2 className="cu-rotulo">{t("salud.voidNextOverline")}</h2>
+        <div className="cu-rejilla cu-rejilla--2 sl-outs">
+          <Card as="article" grande className="sl-out">
+            <span className="sl-ico" aria-hidden="true">
+              <Icono nombre="master" />
+            </span>
+            {/* Nombra filtros que EXISTEN (master.filter.noEvidence / noDates /
+                dups en MasterScreen). Si alguien los quita, este texto miente:
+                tests/costuras.test.ts vigila que las tres claves sigan vivas. */}
+            <p className="cu-nota">{t("salud.voidMasterNote")}</p>
+            <Button variante="brasa" href="/app/master" icono="flecha">
+              {t("salud.voidMasterCta")}
+            </Button>
+          </Card>
 
-          <span className="t-overline" style={{ display: "block", marginTop: "26px" }}>
-            {t("salud.voidNextOverline")}
-          </span>
-
-          <div className="sl-outs">
-            <div className="c-card sl-out">
-              <Link className="c-btn c-btn--patina" href="/app/master">
-                {t("salud.voidMasterCta")}
-              </Link>
-              {/* Nombra filtros que EXISTEN (master.filter.noEvidence / noDates /
-                  dups en MasterScreen). Si alguien los quita, este texto miente:
-                  tests/costuras.test.ts vigila que las tres claves sigan vivas. */}
-              <span className="note">{t("salud.voidMasterNote")}</span>
-            </div>
-
-            <div className="c-card sl-out">
-              <Link className="c-btn" href={volverA}>
-                {t("salud.voidVariantCta")}
-              </Link>
-              <span className="note">{t("salud.voidVariantNote")}</span>
-            </div>
-          </div>
+          <Card as="article" grande className="sl-out">
+            <span className="sl-ico" aria-hidden="true">
+              <Icono nombre="variantes" />
+            </span>
+            <p className="cu-nota">{t("salud.voidVariantNote")}</p>
+            <Button variante="grafito" href={volverA} icono="flecha">
+              {t("salud.voidVariantCta")}
+            </Button>
+          </Card>
         </div>
       </main>
     </div>

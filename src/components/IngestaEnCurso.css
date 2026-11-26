@@ -1,0 +1,92 @@
+/* ── «Ingesta en curso» (IngestaEnCurso.tsx) — Forja v2 ──────────────────────
+   Tarjeta de vidrio que flota abajo a la derecha sobre cualquier pantalla de
+   /app, con la barra de fuentes terminadas. En móvil sube por encima de la
+   barra inferior del shell (64px + 8px de margen, UserMenu.css).
+   Prefijo ie-. Solo tokens de globals.css: ni un hex suelto. */
+
+.ie-pill {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  z-index: var(--z-overlay);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  width: min(calc(100vw - 32px), 360px);
+  padding: var(--sp-3) var(--sp-4);
+  border-radius: var(--radius-xl);
+  border: 1px solid var(--glass-border);
+  background: var(--glass-bg);
+  backdrop-filter: blur(var(--glass-blur)) saturate(1.2);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(1.2);
+  box-shadow: var(--elev-3);
+  color: var(--text);
+  text-decoration: none;
+  font: 400 var(--fs-ui) / 1.3 var(--font-sans);
+  transition: border-color var(--dur-fast) var(--ease-standard);
+}
+.ie-pill:hover,
+.ie-pill:focus-visible {
+  text-decoration: none;
+  border-color: var(--border-brasa);
+}
+.ie-fila {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  min-width: 0;
+}
+.ie-spin {
+  color: var(--accent-text);
+}
+.ie-txt {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.ie-t {
+  font: 600 var(--fs-ui) / 1.25 var(--font-sans);
+}
+.ie-det {
+  font: 400 var(--fs-micro) / 1.3 var(--font-mono);
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ie-ver {
+  margin-left: auto;
+  flex: none;
+  font: 600 var(--fs-micro) / 1 var(--font-sans);
+  color: var(--accent-text);
+}
+.ie-barra {
+  display: block;
+  height: 6px;
+  border-radius: var(--radius-pill);
+  background: var(--chart-track);
+  overflow: hidden;
+}
+.ie-barra > span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--brasa-fill-a), var(--brasa-fill-b));
+  transition: width var(--dur-slow) var(--ease-signature);
+}
+
+@media (max-width: 767px) {
+  .ie-pill {
+    right: 8px;
+    left: 8px;
+    bottom: 84px;
+    width: auto;
+    min-height: 44px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ie-barra > span {
+    transition: none;
+  }
+}

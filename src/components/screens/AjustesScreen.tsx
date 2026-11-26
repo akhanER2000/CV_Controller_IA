@@ -1,13 +1,14 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useBoot } from "@/lib/corpus/runtime";
 import { useLang, useT } from "@/lib/i18n";
 import { createClient } from "@/lib/supabase/client";
 import { AuroraTune, AURORA_HOJEO } from "@/components/Aurora";
 import { supabaseEnabled } from "@/lib/supabase/config";
+import { Button, Card, Chip, PanelHeader } from "@/components/ui";
+import { CabezaPantalla } from "@/components/cuenta/CabezaPantalla";
 import "./ajustes.css";
 
 /* ============================================================================
@@ -29,7 +30,8 @@ import "./ajustes.css";
    ============================================================================ */
 
 type ThemeSel = "dark" | "light" | "auto";
-type Provider = "Incluida" | "Anthropic" | "Gemini";
+/** Gemini (respaldo): la clave incluida del servidor o la propia del usuario. */
+type Provider = "Incluida" | "Propia";
 
 type ConnStatus = "ok" | "warn" | "fail";
 interface ConnService {
@@ -137,9 +139,9 @@ async function saveSettings(patch: Record<string, unknown>): Promise<SaveResult 
 function CandadoCifrado({ id }: { id: string }) {
   const t = useT();
   return (
-    <span className="aj-note show" id={id} role="note">
+    <span className="cu-aviso" id={id} role="note">
       <b>{t("ajustes.byok.lockedBadge")}</b> — {t("ajustes.byok.lockedWhy")}{" "}
-      <span style={{ fontFamily: "var(--font-mono)", color: "var(--text-subtle)" }}>
+      <span className="cu-dato" style={{ color: "var(--text-subtle)" }}>
         {t("ajustes.byok.lockedHow")}
       </span>
     </span>
@@ -265,7 +267,7 @@ export function AjustesScreen() {
         setHasKey3(!!d.hasKey3);
         setClave3Aparcada(!!d.key3Parked);
         setKey3Falta(!!d.key3Unavailable);
-        if (d.hasKey) setProvider("Anthropic");
+        if (d.hasKey) setProvider("Propia");
         const t = (d.theme as ThemeSel) ?? "dark";
         setThemeSel(t);
       })
@@ -519,618 +521,520 @@ export function AjustesScreen() {
     opcionesModelo.push({ id: modelos.elegido, responde: !!modelos.validacion?.responde });
   }
 
+  /* Candado + clave aparcada + nota: lo mismo debajo de cada campo de clave. */
+  const aparcada = (
+    <span role="status" className="cu-nota cu-nota--sutil">
+      {t("ajustes.byok.parkedSaved")}
+    </span>
+  );
+
   return (
     <div className="c-page">
       {/* Ajustes no es trabajo denso: se entra, se cambia una cosa y se sale. */}
       <AuroraTune strength={AURORA_HOJEO} />
-      <header className="c-header">
-        <div className="c-container">
-          <Link className="c-logo" href="/app">
-            Corpus
-          </Link>
-          <nav className="hd-nav">
-            <Link href="/app">{t("nav.panel")}</Link>
-            <Link href="/app/master">{t("nav.master")}</Link>
-            <Link href="/app/variantes">{t("nav.variantes")}</Link>
-            <Link href="/app/fuentes">{t("nav.fuentes")}</Link>
-          </nav>
-          <div className="hd-right">
-            <div className="hd-lang">
-              <span data-on>ES</span>
-              <span>EN</span>
-            </div>
-            <div className="hd-av">DG</div>
-          </div>
-        </div>
-      </header>
 
-      <main className="aj-main c-wall" data-screen-label="ajustes" ref={bootRef}>
-        <div className="c-container aj-col">
-          <h2>{t("ajustes.title")}</h2>
-          <span
-            role="status"
-            aria-live="polite"
-            style={{
-              minHeight: "16px",
-              font: "500 var(--fs-micro)/1 var(--font-mono)",
-              color: "var(--accent-text)",
-            }}
-          >
-            {flash}
-          </span>
+      <main className="cu-pagina cu-pagina--estrecha" data-screen-label="ajustes" ref={bootRef}>
+        <CabezaPantalla titulo={t("ajustes.title")} sub={t("ajustes.sub")} />
+        <span role="status" aria-live="polite" className="aj-flash">
+          {flash}
+        </span>
 
-          {/* ── Cuenta ── */}
-          <section className="aj-g" data-screen-label="ajustes-cuenta">
-            <div className="aj-gh">
-              <span className="t-overline">{t("ajustes.account.overline")}</span>
-            </div>
-            <hr className="c-divider" />
-            <div className="aj-rows">
-              <div className="aj-row">
-                <span className="k">
-                  <b>{t("ajustes.name.label")}</b>
-                  <span>{t("ajustes.name.hint")}</span>
-                </span>
-                <span className="v" style={{ display: "flex", gap: "10px", alignItems: "center" }}>
+        {/* ── 1 · Perfil ── */}
+        <Card as="section" grande data-screen-label="ajustes-cuenta" aria-labelledby="aj-h-perfil">
+          <PanelHeader id="aj-h-perfil" titulo={t("ajustes.profile.title")} sub={t("ajustes.profile.sub")} />
+          <div className="cu-filas">
+            <div className="cu-fila">
+              <span className="cu-fila-k">
+                <b>{t("ajustes.name.label")}</b>
+                <span>{t("ajustes.name.hint")}</span>
+              </span>
+              <span className="cu-fila-v">
+                <span className="cu-linea">
                   <input
                     className="c-input"
-                    style={{ maxWidth: "300px" }}
                     aria-label={t("ajustes.name.label")}
                     placeholder={t("ajustes.name.placeholder")}
                     value={name}
                     onChange={(e) => setName(e.target.value)}
                   />
-                  <button className="c-btn" onClick={saveName}>
+                  <Button variante="grafito" onClick={saveName}>
                     {t("common.save")}
-                  </button>
+                  </Button>
                 </span>
-              </div>
-              <div className="aj-row">
-                <span className="k">
-                  <b>{t("ajustes.email.label")}</b>
-                  <span>{t("ajustes.email.hint")}</span>
-                </span>
-                <span className="v">
+              </span>
+            </div>
+            <div className="cu-fila">
+              <span className="cu-fila-k">
+                <b>{t("ajustes.email.label")}</b>
+                <span>{t("ajustes.email.hint")}</span>
+              </span>
+              <span className="cu-fila-v">
+                <span className="cu-linea">
                   <input
                     className="c-input"
-                    style={{ maxWidth: "300px", opacity: 0.7 }}
+                    style={{ opacity: 0.7 }}
                     aria-label={t("ajustes.email.aria")}
                     value={email}
                     readOnly
                   />
                 </span>
-              </div>
-            </div>
-          </section>
-
-          {/* ── Idioma y tema ── */}
-          <section className="aj-g" data-screen-label="ajustes-idioma-tema">
-            <div className="aj-gh">
-              <span className="t-overline">{t("ajustes.langTheme.overline")}</span>
-            </div>
-            <hr className="c-divider" />
-            <div className="aj-rows">
-              <div className="aj-row">
-                <span className="k">
-                  <b>{t("ajustes.lang.label")}</b>
-                  <span>{t("ajustes.lang.hint")}</span>
-                </span>
-                <span className="v">
-                  <span className="aj-seg" id="segLang">
-                    <button aria-pressed={lang === "es"} onClick={() => setLang("es")}>
-                      {t("ajustes.lang.es")}
-                    </button>
-                    <button aria-pressed={lang === "en"} onClick={() => setLang("en")}>
-                      {t("ajustes.lang.en")}
-                    </button>
-                  </span>
-                  <span style={{ font: "400 var(--fs-micro)/1 var(--font-mono)", color: "var(--text-subtle)" }}>
-                    {t("ajustes.lang.note")}
-                  </span>
-                </span>
-              </div>
-              <div className="aj-row">
-                <span className="k">
-                  <b>{t("ajustes.theme.label")}</b>
-                  <span>{t("ajustes.theme.hint")}</span>
-                </span>
-                <span className="v">
-                  <span className="aj-seg" id="segTheme">
-                    <button data-t="dark" aria-pressed={themeSel === "dark"} onClick={() => applyTheme("dark")}>
-                      {t("ajustes.theme.dark")}
-                    </button>
-                    <button data-t="light" aria-pressed={themeSel === "light"} onClick={() => applyTheme("light")}>
-                      {t("ajustes.theme.light")}
-                    </button>
-                    <button data-t="auto" aria-pressed={themeSel === "auto"} onClick={() => applyTheme("auto")}>
-                      {t("ajustes.theme.auto")}
-                    </button>
-                  </span>
-                  <span style={{ font: "400 var(--fs-micro)/1 var(--font-mono)", color: "var(--text-subtle)" }}>
-                    {t("ajustes.theme.note")}
-                  </span>
-                </span>
-              </div>
-            </div>
-          </section>
-
-          {/* ── Inteligencia artificial ── */}
-          <section className="aj-g" data-screen-label="ajustes-ia">
-            <div className="aj-gh">
-              <span className="t-overline">{t("ajustes.ai.overline")}</span>
-            </div>
-            <hr className="c-divider" />
-            <div className="aj-rows">
-              <div className="aj-row">
-                <span className="k">
-                  <b>{t("ajustes.ai.label")}</b>
-                  <span>{t("ajustes.ai.hint")}</span>
-                </span>
-                <span className="v">
-                  <button
-                    className="aj-sw"
-                    id="swIA"
-                    role="switch"
-                    aria-checked={iaOn}
-                    aria-label={iaOn ? t("ajustes.ai.ariaOn") : t("ajustes.ai.ariaOff")}
-                    aria-describedby="iaNote"
-                    onClick={toggleIA}
-                  />
-                  <span
-                    style={{ font: "400 var(--fs-data)/1.5 var(--font-sans)", color: "var(--text-muted)" }}
-                    id="iaLabel"
-                    aria-live="polite"
-                  >
-                    {iaOn ? t("ajustes.ai.on") : t("ajustes.ai.off")}
-                  </span>
-                </span>
-              </div>
-              <div className="aj-row">
-                <span className="k">
-                  <b>{t("ajustes.byok.label")}</b>
-                  <span>{t("ajustes.byok.hint")}{hasKey ? t("ajustes.byok.hintSaved") : ""}</span>
-                </span>
-                <span className="v">
-                  <span className="aj-seg" id="segProv">
-                    <button aria-pressed={provider === "Incluida"} onClick={() => setProvider("Incluida")}>
-                      {t("ajustes.byok.included")}
-                    </button>
-                    <button aria-pressed={provider === "Anthropic"} onClick={() => setProvider("Anthropic")}>
-                      Anthropic
-                    </button>
-                    <button aria-pressed={provider === "Gemini"} onClick={() => setProvider("Gemini")}>
-                      Gemini
-                    </button>
-                  </span>
-                  <span style={{ display: "flex", gap: "10px", alignItems: "center" }}>
-                    <input
-                      className="c-input"
-                      id="byok"
-                      ref={byokRef}
-                      type="password"
-                      placeholder={
-                        byokCerrado
-                          ? t("ajustes.byok.lockedPlaceholder")
-                          : hasKey
-                            ? t("ajustes.byok.placeholderSaved")
-                            : t("ajustes.byok.placeholder")
-                      }
-                      style={{ maxWidth: "320px" }}
-                      aria-label={t("ajustes.byok.aria")}
-                      // ★ CERRADO sin cifrado: no se acepta un secreto que después se va a
-                      //   rechazar. El motivo va al lado (aria-describedby), no escondido.
-                      disabled={byokDisabled || byokCerrado}
-                      aria-describedby={byokCerrado ? "byokCandado" : undefined}
-                      value={byok}
-                      onChange={(e) => setByok(e.target.value)}
-                    />
-                    <button
-                      className="c-btn"
-                      onClick={saveKey}
-                      // "Usar la incluida" manda null: eso NO persiste ningún secreto, así
-                      // que sigue disponible aunque no haya cifrado. Guardar, no.
-                      disabled={byokCerrado && !byokDisabled}
-                    >
-                      {byokDisabled ? t("ajustes.byok.useIncluded") : t("ajustes.byok.saveKey")}
-                    </button>
-                  </span>
-                  {byokCerrado ? <CandadoCifrado id="byokCandado" /> : null}
-                  {claveAparcada ? (
-                    <span
-                      role="status"
-                      style={{ font: "400 var(--fs-micro)/1.5 var(--font-mono)", color: "var(--text-subtle)" }}
-                    >
-                      {t("ajustes.byok.parkedSaved")}
-                    </span>
-                  ) : null}
-                </span>
-              </div>
-              {/* §H · segunda clave: el proveedor BARATO del router por coste (Groq).
-                  Sin ella, el router no actúa y TODO va a Gemini — se dice en la nota. */}
-              <div className="aj-row">
-                <span className="k">
-                  <b>{t("ajustes.byok2.label")}</b>
-                  <span>{t("ajustes.byok2.hint")}{hasKey2 ? t("ajustes.byok2.hintSaved") : ""}</span>
-                </span>
-                <span className="v">
-                  <span style={{ display: "flex", gap: "10px", alignItems: "center", flexWrap: "wrap" }}>
-                    <input
-                      className="c-input"
-                      id="byok2"
-                      type="password"
-                      placeholder={
-                        byokCerrado
-                          ? t("ajustes.byok.lockedPlaceholder")
-                          : hasKey2
-                            ? t("ajustes.byok2.placeholderSaved")
-                            : t("ajustes.byok2.placeholder")
-                      }
-                      style={{ maxWidth: "320px" }}
-                      aria-label={t("ajustes.byok2.aria")}
-                      // Mismo candado que la 1ª clave: es del servidor, no del campo.
-                      disabled={byokCerrado}
-                      aria-describedby={byokCerrado ? "byok2Candado" : undefined}
-                      value={byok2}
-                      onChange={(e) => setByok2(e.target.value)}
-                    />
-                    <button
-                      className="c-btn"
-                      onClick={() => saveKey2(byok2.trim() || null)}
-                      disabled={byokCerrado}
-                    >
-                      {t("ajustes.byok2.save")}
-                    </button>
-                    {hasKey2 ? (
-                      // Quitar manda null: no persiste secreto alguno, así que el candado
-                      // no la bloquea. Es la única salida si quedó una clave aparcada.
-                      <button className="c-btn c-btn--quiet" onClick={() => saveKey2(null)}>
-                        {t("ajustes.byok2.clear")}
-                      </button>
-                    ) : null}
-                  </span>
-                  {byokCerrado ? <CandadoCifrado id="byok2Candado" /> : null}
-                  {clave2Aparcada ? (
-                    <span
-                      role="status"
-                      style={{ font: "400 var(--fs-micro)/1.5 var(--font-mono)", color: "var(--text-subtle)" }}
-                    >
-                      {t("ajustes.byok.parkedSaved")}
-                    </span>
-                  ) : null}
-                  <span style={{ font: "400 var(--fs-micro)/1.5 var(--font-mono)", color: "var(--text-subtle)" }}>
-                    {t("ajustes.byok2.note")}
-                  </span>
-                </span>
-              </div>
-              {/* Tercera clave: Anthropic (Claude), SOLO la redacción que no inventa hechos.
-                  Sin ella la redacción va a Gemini. Si falta la columna, se dice con su número. */}
-              <div className="aj-row">
-                <span className="k">
-                  <b>{t("ajustes.byok3.label")}</b>
-                  <span>{t("ajustes.byok3.hint")}{hasKey3 ? t("ajustes.byok3.hintSaved") : ""}</span>
-                </span>
-                <span className="v">
-                  <span style={{ display: "flex", gap: "10px", alignItems: "center", flexWrap: "wrap" }}>
-                    <input
-                      className="c-input"
-                      id="byok3"
-                      type="password"
-                      placeholder={
-                        byokCerrado
-                          ? t("ajustes.byok.lockedPlaceholder")
-                          : hasKey3
-                            ? t("ajustes.byok3.placeholderSaved")
-                            : t("ajustes.byok3.placeholder")
-                      }
-                      style={{ maxWidth: "320px" }}
-                      aria-label={t("ajustes.byok3.aria")}
-                      disabled={byokCerrado}
-                      aria-describedby={byokCerrado ? "byok3Candado" : undefined}
-                      value={byok3}
-                      onChange={(e) => setByok3(e.target.value)}
-                    />
-                    <button
-                      className="c-btn"
-                      onClick={() => saveKey3(byok3.trim() || null)}
-                      disabled={byokCerrado}
-                    >
-                      {t("ajustes.byok3.save")}
-                    </button>
-                    {hasKey3 ? (
-                      <button className="c-btn c-btn--quiet" onClick={() => saveKey3(null)}>
-                        {t("ajustes.byok3.clear")}
-                      </button>
-                    ) : null}
-                  </span>
-                  {byokCerrado ? <CandadoCifrado id="byok3Candado" /> : null}
-                  {key3Falta ? (
-                    <span className="aj-note show" role="status">
-                      {t("ajustes.byok3.unavailable")}
-                    </span>
-                  ) : null}
-                  {clave3Aparcada ? (
-                    <span
-                      role="status"
-                      style={{ font: "400 var(--fs-micro)/1.5 var(--font-mono)", color: "var(--text-subtle)" }}
-                    >
-                      {t("ajustes.byok.parkedSaved")}
-                    </span>
-                  ) : null}
-                  <span style={{ font: "400 var(--fs-micro)/1.5 var(--font-mono)", color: "var(--text-subtle)" }}>
-                    {t("ajustes.byok3.note")}
-                  </span>
-                </span>
-              </div>
-
-              {/* ★ MODELO DE EXTRACCIÓN — el desplegable se puebla de lo que RESPONDE,
-                  nunca del listado (20 listados · 11 responden con esta misma clave).
-                  Debajo va la evidencia: cada modelo con su veredicto y su latencia. */}
-              <div className="aj-row">
-                <span className="k">
-                  <b>{t("ajustes.modelo.label")}</b>
-                  <span>{t("ajustes.modelo.hint")}</span>
-                </span>
-                <span className="v">
-                  <span style={{ display: "flex", gap: "10px", alignItems: "center", flexWrap: "wrap" }}>
-                    <select
-                      className="c-input"
-                      id="modeloIA"
-                      style={{ maxWidth: "320px" }}
-                      aria-label={t("ajustes.modelo.aria")}
-                      value={modeloSel}
-                      onChange={(e) => setModeloSel(e.target.value)}
-                    >
-                      <option value="">
-                        {t("ajustes.modelo.optRegistro")}
-                        {modelos?.modeloRegistro ? ` · ${modelos.modeloRegistro}` : ""}
-                      </option>
-                      {opcionesModelo.map((m) => (
-                        <option key={m.id} value={m.id}>
-                          {m.id}
-                          {m.aviso === "lite" ? " · lite" : m.aviso === "preview" ? " · preview" : ""}
-                        </option>
-                      ))}
-                    </select>
-                    <button
-                      className="c-btn"
-                      onClick={() => guardarModelo(modeloSel || null)}
-                      disabled={guardandoModelo || modeloSel === (modelos?.elegido ?? "")}
-                    >
-                      {guardandoModelo ? t("ajustes.modelo.guardando") : t("ajustes.modelo.guardar")}
-                    </button>
-                    <button
-                      className="c-btn c-btn--quiet"
-                      onClick={() => cargarModelos(true)}
-                      disabled={probando || modelos?.claveFuente === "ninguna"}
-                    >
-                      {probando ? t("ajustes.modelo.probando") : t("ajustes.modelo.probar")}
-                    </button>
-                  </span>
-
-                  {/* Cuál está activo y POR QUÉ, más el espejo con el chequeo de salud. */}
-                  {modelos ? (
-                    <span style={{ font: "400 var(--fs-micro)/1.5 var(--font-mono)", color: "var(--text-subtle)" }}>
-                      <b style={{ color: "var(--accent-text)" }}>{modelos.modeloEfectivo}</b>
-                      {" · "}
-                      {modelos.origen === "elegido"
-                        ? t("ajustes.modelo.origenElegido")
-                        : t("ajustes.modelo.origenRegistro")}
-                      {modelos.validacion
-                        ? modelos.validacion.responde
-                          ? ` · ${t("ajustes.modelo.responde")}${
-                              typeof modelos.validacion.latenciaMs === "number"
-                                ? ` (${modelos.validacion.latenciaMs} ms)`
-                                : ""
-                            }`
-                          : ` · ${t("ajustes.modelo.caido")}`
-                        : ""}
-                      {" · "}
-                      {modelos.espejoOk ? t("ajustes.modelo.espejo") : ""}
-                    </span>
-                  ) : null}
-                  {modelos && !modelos.espejoOk ? (
-                    <span
-                      role="status"
-                      style={{ font: "500 var(--fs-micro)/1.5 var(--font-mono)", color: "var(--danger)" }}
-                    >
-                      {t("ajustes.modelo.espejoRoto")}
-                    </span>
-                  ) : null}
-
-                  {/* El modelo activo NO responde: motivo REAL + propuesta PROBADA. */}
-                  {modelos?.validacion && !modelos.validacion.responde ? (
-                    <span className="aj-note show" role="status">
-                      <b>{t("ajustes.modelo.noRespondeActivo")}</b>{" "}
-                      <span style={{ fontFamily: "var(--font-mono)" }}>{modelos.validacion.error}</span>
-                      {modelos.validacion.sugerencia ? (
-                        <>
-                          {" · "}
-                          {t("ajustes.modelo.sugerencia")}{" "}
-                          <b style={{ fontFamily: "var(--font-mono)" }}>{modelos.validacion.sugerencia}</b>{" "}
-                          <button
-                            className="c-btn c-btn--quiet"
-                            onClick={() => guardarModelo(modelos.validacion!.sugerencia!)}
-                            disabled={guardandoModelo}
-                          >
-                            {t("ajustes.modelo.usarSugerencia")}
-                          </button>
-                        </>
-                      ) : (
-                        <> · {t("ajustes.modelo.sinSugerencia")}</>
-                      )}
-                    </span>
-                  ) : null}
-
-                  {/* Degradaciones honestas: sin clave no hay nada que probar; sin la
-                      columna llm_model la elección no se puede guardar (va el registro). */}
-                  {modelos?.claveFuente === "ninguna" ? (
-                    <span className="aj-note show" role="status">{t("ajustes.modelo.sinClave")}</span>
-                  ) : null}
-                  {modelos?.columnaAusente ? (
-                    <span className="aj-note show" role="status">
-                      {t("ajustes.modelo.sinColumna")}
-                      {modelos.sqlPendiente ? (
-                        <span style={{ fontFamily: "var(--font-mono)", color: "var(--text-subtle)" }}>
-                          {" "}
-                          {modelos.sqlPendiente}
-                        </span>
-                      ) : null}
-                    </span>
-                  ) : null}
-                  {modelos?.catalogo?.errorListado ? (
-                    <span className="aj-note show" role="status">
-                      {t("ajustes.modelo.errorListado")}{" "}
-                      <span style={{ fontFamily: "var(--font-mono)" }}>{modelos.catalogo.errorListado}</span>
-                    </span>
-                  ) : null}
-
-                  {/* LA EVIDENCIA: listado vs. lo que responde de verdad, uno a uno. */}
-                  {modelos?.catalogo ? (
-                    <>
-                      <span style={{ font: "400 var(--fs-micro)/1.5 var(--font-mono)", color: "var(--text-subtle)" }}>
-                        {modelos.catalogo.listados} {t("ajustes.modelo.listados")} ·{" "}
-                        {modelos.catalogo.elegibles.length} {t("ajustes.modelo.responden")}
-                        {modelos.catalogo.descartados.length
-                          ? ` · ${modelos.catalogo.descartados.length} ${t("ajustes.modelo.descartados")}`
-                          : ""}
-                        {modelos.catalogo.reutilizado ? ` · ${t("ajustes.modelo.reutilizado")}` : ""}
-                      </span>
-                      <span
-                        role="list"
-                        style={{ display: "flex", flexDirection: "column", gap: "4px", marginTop: "2px" }}
-                      >
-                        {modelos.catalogo.modelos.map((m) => (
-                          <span
-                            role="listitem"
-                            key={m.id}
-                            style={{
-                              display: "flex",
-                              gap: "8px",
-                              alignItems: "baseline",
-                              flexWrap: "wrap",
-                              font: "400 var(--fs-micro)/1.6 var(--font-mono)",
-                            }}
-                          >
-                            <span className={`aj-conn-badge is-${m.responde ? "ok" : "fail"}`}>
-                              <span className="aj-dot" aria-hidden="true" />
-                              {m.responde ? t("ajustes.modelo.responde") : t("ajustes.modelo.caido")}
-                            </span>
-                            <b style={{ fontFamily: "var(--font-mono)" }}>{m.id}</b>
-                            <span style={{ color: "var(--text-subtle)" }}>
-                              {m.responde
-                                ? `${m.latenciaMs ?? "?"} ms${
-                                    m.aviso === "lite"
-                                      ? ` · ${t("ajustes.modelo.avisoLite")}`
-                                      : m.aviso === "preview"
-                                        ? ` · ${t("ajustes.modelo.avisoPreview")}`
-                                        : ""
-                                  }`
-                                : m.error}
-                            </span>
-                          </span>
-                        ))}
-                      </span>
-                    </>
-                  ) : null}
-
-                  <span style={{ font: "400 var(--fs-micro)/1.5 var(--font-mono)", color: "var(--text-subtle)" }}>
-                    {t("ajustes.modelo.probarNota")}
-                  </span>
-                </span>
-              </div>
-            </div>
-            <div className={`aj-note${iaOn ? "" : " show"}`} id="iaNote" aria-live="polite">
-              <b>{t("ajustes.manual.lead")}</b>{t("ajustes.manual.body1")}<b>{t("ajustes.manual.origin")}</b>{t("ajustes.manual.body2")}
-            </div>
-          </section>
-
-          {/* ── Estado de conexiones (E2) ── */}
-          <section className="aj-g" data-screen-label="ajustes-conexiones">
-            <div className="aj-gh">
-              <span className="t-overline">{t("ajustes.conn.overline")}</span>
-              <span style={{ font: "400 var(--fs-micro)/1 var(--font-mono)", color: "var(--text-subtle)" }}>
-                {t("ajustes.conn.hint")}
               </span>
-              <button
-                className="c-btn c-btn--quiet"
-                style={{ marginLeft: "auto" }}
-                onClick={loadConn}
-                disabled={connLoading}
-              >
-                {connLoading ? t("ajustes.conn.checking") : t("ajustes.conn.recheck")}
-              </button>
             </div>
-            <hr className="c-divider" />
-            {connErr ? (
-              <div className="aj-note show" role="status">
-                {t("ajustes.conn.error")} — {connErr}
+          </div>
+        </Card>
+
+        {/* ── 2 · Claves de IA — Anthropic principal, Gemini respaldo, Groq opcional ── */}
+        <Card as="section" grande data-screen-label="ajustes-ia" aria-labelledby="aj-h-claves">
+          <PanelHeader
+            id="aj-h-claves"
+            titulo={t("ajustes.keys.title")}
+            sub={t("ajustes.keys.sub")}
+            acciones={
+              <span className="aj-ia">
+                <span className="cu-nota" id="iaLabel" aria-live="polite">
+                  {iaOn ? t("ajustes.ai.onShort") : t("ajustes.ai.offShort")}
+                </span>
+                <button
+                  className="aj-sw"
+                  id="swIA"
+                  role="switch"
+                  aria-checked={iaOn}
+                  aria-label={iaOn ? t("ajustes.ai.ariaOn") : t("ajustes.ai.ariaOff")}
+                  aria-describedby="iaNote"
+                  onClick={toggleIA}
+                />
+              </span>
+            }
+          />
+          <div className="aj-claves">
+            <p className="cu-nota" style={{ marginTop: "-6px" }}>
+              {iaOn ? t("ajustes.ai.on") : t("ajustes.ai.off")}
+            </p>
+            {!iaOn ? (
+              <div className="cu-aviso" id="iaNote" aria-live="polite">
+                <b>{t("ajustes.manual.lead")}</b>
+                {t("ajustes.manual.body1")}
+                <b>{t("ajustes.manual.origin")}</b>
+                {t("ajustes.manual.body2")}
               </div>
+            ) : (
+              <span id="iaNote" hidden />
+            )}
+            {byokCerrado ? <CandadoCifrado id="byokCandado" /> : null}
+
+            {/* Anthropic (Claude) — principal de todas las tareas de IA */}
+            <div className="aj-clave aj-clave--principal">
+              <div className="aj-clave-cab">
+                <div>
+                  <p className="aj-clave-t">{t("ajustes.byok3.label")}</p>
+                  <p className="aj-clave-sub">
+                    {t("ajustes.byok3.hint")}
+                    {hasKey3 ? t("ajustes.byok3.hintSaved") : ""}
+                  </p>
+                </div>
+                <Chip tono="brasa">{t("ajustes.keys.principal")}</Chip>
+              </div>
+              <span className="cu-linea">
+                <input
+                  className="c-input"
+                  id="byok3"
+                  type="password"
+                  placeholder={
+                    byokCerrado
+                      ? t("ajustes.byok.lockedPlaceholder")
+                      : hasKey3
+                        ? t("ajustes.byok3.placeholderSaved")
+                        : t("ajustes.byok3.placeholder")
+                  }
+                  aria-label={t("ajustes.byok3.aria")}
+                  disabled={byokCerrado}
+                  aria-describedby={byokCerrado ? "byokCandado" : undefined}
+                  value={byok3}
+                  onChange={(e) => setByok3(e.target.value)}
+                />
+                <Button variante="grafito" onClick={() => saveKey3(byok3.trim() || null)} disabled={byokCerrado}>
+                  {t("ajustes.byok3.save")}
+                </Button>
+                {hasKey3 ? (
+                  <Button variante="fantasma" onClick={() => saveKey3(null)}>
+                    {t("ajustes.byok3.clear")}
+                  </Button>
+                ) : null}
+              </span>
+              {key3Falta ? (
+                <span className="cu-aviso" role="status">
+                  {t("ajustes.byok3.unavailable")}
+                </span>
+              ) : null}
+              {clave3Aparcada ? aparcada : null}
+              <span className="cu-nota cu-nota--sutil">{t("ajustes.byok3.note")}</span>
+            </div>
+
+            {/* Gemini — respaldo automático (la clave incluida o la tuya) */}
+            <div className="aj-clave">
+              <div className="aj-clave-cab">
+                <div>
+                  <p className="aj-clave-t">{t("ajustes.byok.label")}</p>
+                  <p className="aj-clave-sub">
+                    {t("ajustes.byok.hint")}
+                    {hasKey ? t("ajustes.byok.hintSaved") : ""}
+                  </p>
+                </div>
+                <Chip>{t("ajustes.keys.respaldo")}</Chip>
+              </div>
+              <span className="aj-seg" id="segProv" role="group" aria-label={t("ajustes.byok.aria")}>
+                <button aria-pressed={provider === "Incluida"} onClick={() => setProvider("Incluida")}>
+                  {t("ajustes.byok.included")}
+                </button>
+                <button aria-pressed={provider === "Propia"} onClick={() => setProvider("Propia")}>
+                  {t("ajustes.byok.mine")}
+                </button>
+              </span>
+              <span className="cu-linea">
+                <input
+                  className="c-input"
+                  id="byok"
+                  ref={byokRef}
+                  type="password"
+                  placeholder={
+                    byokCerrado
+                      ? t("ajustes.byok.lockedPlaceholder")
+                      : hasKey
+                        ? t("ajustes.byok.placeholderSaved")
+                        : t("ajustes.byok.placeholder")
+                  }
+                  aria-label={t("ajustes.byok.aria")}
+                  // ★ CERRADO sin cifrado: no se acepta un secreto que después se va a
+                  //   rechazar. El motivo va arriba (aria-describedby), no escondido.
+                  disabled={byokDisabled || byokCerrado}
+                  aria-describedby={byokCerrado ? "byokCandado" : undefined}
+                  value={byok}
+                  onChange={(e) => setByok(e.target.value)}
+                />
+                <Button
+                  variante="grafito"
+                  onClick={saveKey}
+                  // "Usar la incluida" manda null: eso NO persiste ningún secreto, así
+                  // que sigue disponible aunque no haya cifrado. Guardar, no.
+                  disabled={byokCerrado && !byokDisabled}
+                >
+                  {byokDisabled ? t("ajustes.byok.useIncluded") : t("ajustes.byok.saveKey")}
+                </Button>
+              </span>
+              {claveAparcada ? aparcada : null}
+              <span className="cu-nota cu-nota--sutil">{t("ajustes.byok.note")}</span>
+            </div>
+
+            {/* Groq — opcional: abarata clasificar cuando no hay clave de Claude */}
+            <div className="aj-clave">
+              <div className="aj-clave-cab">
+                <div>
+                  <p className="aj-clave-t">{t("ajustes.byok2.label")}</p>
+                  <p className="aj-clave-sub">
+                    {t("ajustes.byok2.hint")}
+                    {hasKey2 ? t("ajustes.byok2.hintSaved") : ""}
+                  </p>
+                </div>
+                <Chip>{t("ajustes.keys.opcional")}</Chip>
+              </div>
+              <span className="cu-linea">
+                <input
+                  className="c-input"
+                  id="byok2"
+                  type="password"
+                  placeholder={
+                    byokCerrado
+                      ? t("ajustes.byok.lockedPlaceholder")
+                      : hasKey2
+                        ? t("ajustes.byok2.placeholderSaved")
+                        : t("ajustes.byok2.placeholder")
+                  }
+                  aria-label={t("ajustes.byok2.aria")}
+                  // Mismo candado que las otras claves: es del servidor, no del campo.
+                  disabled={byokCerrado}
+                  aria-describedby={byokCerrado ? "byokCandado" : undefined}
+                  value={byok2}
+                  onChange={(e) => setByok2(e.target.value)}
+                />
+                <Button variante="grafito" onClick={() => saveKey2(byok2.trim() || null)} disabled={byokCerrado}>
+                  {t("ajustes.byok2.save")}
+                </Button>
+                {hasKey2 ? (
+                  // Quitar manda null: no persiste secreto alguno, así que el candado
+                  // no la bloquea. Es la única salida si quedó una clave aparcada.
+                  <Button variante="fantasma" onClick={() => saveKey2(null)}>
+                    {t("ajustes.byok2.clear")}
+                  </Button>
+                ) : null}
+              </span>
+              {clave2Aparcada ? aparcada : null}
+              <span className="cu-nota cu-nota--sutil">{t("ajustes.byok2.note")}</span>
+            </div>
+          </div>
+        </Card>
+
+        {/* ── 3 · Modelo — el desplegable se puebla de lo que RESPONDE, nunca del
+            listado. Debajo, la evidencia: cada modelo con su veredicto y su latencia. ── */}
+        <Card as="section" grande data-screen-label="ajustes-modelo" aria-labelledby="aj-h-modelo">
+          <PanelHeader id="aj-h-modelo" titulo={t("ajustes.modelo.label")} sub={t("ajustes.modelo.hint")} />
+          <div className="cu-fila-v">
+            <span className="cu-linea">
+              <select
+                className="c-input"
+                id="modeloIA"
+                aria-label={t("ajustes.modelo.aria")}
+                value={modeloSel}
+                onChange={(e) => setModeloSel(e.target.value)}
+              >
+                <option value="">
+                  {t("ajustes.modelo.optRegistro")}
+                  {modelos?.modeloRegistro ? ` · ${modelos.modeloRegistro}` : ""}
+                </option>
+                {opcionesModelo.map((m) => (
+                  <option key={m.id} value={m.id}>
+                    {m.id}
+                    {m.aviso === "lite" ? " · lite" : m.aviso === "preview" ? " · preview" : ""}
+                  </option>
+                ))}
+              </select>
+              <Button
+                variante="grafito"
+                onClick={() => guardarModelo(modeloSel || null)}
+                disabled={guardandoModelo || modeloSel === (modelos?.elegido ?? "")}
+              >
+                {guardandoModelo ? t("ajustes.modelo.guardando") : t("ajustes.modelo.guardar")}
+              </Button>
+              <Button
+                variante="fantasma"
+                onClick={() => cargarModelos(true)}
+                disabled={probando || modelos?.claveFuente === "ninguna"}
+              >
+                {probando ? t("ajustes.modelo.probando") : t("ajustes.modelo.probar")}
+              </Button>
+            </span>
+
+            {/* Cuál está activo y POR QUÉ, más el espejo con el chequeo de salud. */}
+            {modelos ? (
+              <span className="aj-activo">
+                <b>{modelos.modeloEfectivo}</b>
+                {" · "}
+                {modelos.origen === "elegido" ? t("ajustes.modelo.origenElegido") : t("ajustes.modelo.origenRegistro")}
+                {modelos.validacion
+                  ? modelos.validacion.responde
+                    ? ` · ${t("ajustes.modelo.responde")}${
+                        typeof modelos.validacion.latenciaMs === "number" ? ` (${modelos.validacion.latenciaMs} ms)` : ""
+                      }`
+                    : ` · ${t("ajustes.modelo.caido")}`
+                  : ""}
+                {modelos.espejoOk ? ` · ${t("ajustes.modelo.espejo")}` : ""}
+              </span>
             ) : null}
-            <div className="aj-rows">
-              {conn?.services?.length
-                ? conn.services.map((s) => {
-                    const statusLabel =
-                      s.status === "ok"
-                        ? t("ajustes.conn.ok")
-                        : s.status === "warn"
-                          ? t("ajustes.conn.warn")
-                          : t("ajustes.conn.fail");
-                    const meta = connMeta(s);
-                    return (
-                      <div className="aj-row aj-conn-row" key={s.id}>
-                        <span className="k">
-                          <b>{t(`ajustes.conn.svc.${s.id}`)}</b>
-                          {meta ? <span>{meta}</span> : null}
-                        </span>
-                        <span className="v aj-conn-v">
-                          <span className={`aj-conn-badge is-${s.status}`}>
-                            <span className="aj-dot" aria-hidden="true" />
-                            {statusLabel}
-                          </span>
-                          <span className="aj-conn-detail">{s.detail}</span>
-                        </span>
+            {modelos && !modelos.espejoOk ? (
+              <span role="status" className="cu-nota" style={{ color: "var(--danger)" }}>
+                {t("ajustes.modelo.espejoRoto")}
+              </span>
+            ) : null}
+
+            {/* El modelo activo NO responde: motivo REAL + propuesta PROBADA. */}
+            {modelos?.validacion && !modelos.validacion.responde ? (
+              <span className="cu-aviso" role="status">
+                <b>{t("ajustes.modelo.noRespondeActivo")}</b>{" "}
+                <span className="cu-dato">{modelos.validacion.error}</span>
+                {modelos.validacion.sugerencia ? (
+                  <>
+                    {" · "}
+                    {t("ajustes.modelo.sugerencia")} <b className="cu-dato">{modelos.validacion.sugerencia}</b>{" "}
+                    <Button
+                      variante="fantasma"
+                      onClick={() => guardarModelo(modelos.validacion!.sugerencia!)}
+                      disabled={guardandoModelo}
+                    >
+                      {t("ajustes.modelo.usarSugerencia")}
+                    </Button>
+                  </>
+                ) : (
+                  <> · {t("ajustes.modelo.sinSugerencia")}</>
+                )}
+              </span>
+            ) : null}
+
+            {/* Degradaciones honestas: sin clave no hay nada que probar; sin la
+                columna llm_model la elección no se puede guardar (va el registro). */}
+            {modelos?.claveFuente === "ninguna" ? (
+              <span className="cu-aviso" role="status">
+                {t("ajustes.modelo.sinClave")}
+              </span>
+            ) : null}
+            {modelos?.columnaAusente ? (
+              <span className="cu-aviso" role="status">
+                {t("ajustes.modelo.sinColumna")}
+                {modelos.sqlPendiente ? <span className="cu-dato"> {modelos.sqlPendiente}</span> : null}
+              </span>
+            ) : null}
+            {modelos?.catalogo?.errorListado ? (
+              <span className="cu-aviso" role="status">
+                {t("ajustes.modelo.errorListado")} <span className="cu-dato">{modelos.catalogo.errorListado}</span>
+              </span>
+            ) : null}
+
+            {/* LA EVIDENCIA: listado vs. lo que responde de verdad, uno a uno. */}
+            {modelos?.catalogo ? (
+              <>
+                <span className="cu-nota cu-nota--sutil">
+                  {modelos.catalogo.listados} {t("ajustes.modelo.listados")} · {modelos.catalogo.elegibles.length}{" "}
+                  {t("ajustes.modelo.responden")}
+                  {modelos.catalogo.descartados.length
+                    ? ` · ${modelos.catalogo.descartados.length} ${t("ajustes.modelo.descartados")}`
+                    : ""}
+                  {modelos.catalogo.reutilizado ? ` · ${t("ajustes.modelo.reutilizado")}` : ""}
+                </span>
+                <span role="list" className="aj-modelos">
+                  {modelos.catalogo.modelos.map((m) => (
+                    <span role="listitem" key={m.id} className="aj-modelo">
+                      <span className={`aj-conn-badge is-${m.responde ? "ok" : "fail"}`}>
+                        <span className="aj-dot" aria-hidden="true" />
+                        {m.responde ? t("ajustes.modelo.responde") : t("ajustes.modelo.caido")}
+                      </span>
+                      <b>{m.id}</b>
+                      <span>
+                        {m.responde
+                          ? `${m.latenciaMs ?? "?"} ms${
+                              m.aviso === "lite"
+                                ? ` · ${t("ajustes.modelo.avisoLite")}`
+                                : m.aviso === "preview"
+                                  ? ` · ${t("ajustes.modelo.avisoPreview")}`
+                                  : ""
+                            }`
+                          : m.error}
+                      </span>
+                    </span>
+                  ))}
+                </span>
+              </>
+            ) : null}
+
+            <span className="cu-nota cu-nota--sutil">{t("ajustes.modelo.probarNota")}</span>
+          </div>
+        </Card>
+
+        {/* ── 4 · Idioma y tema ── */}
+        <Card as="section" grande data-screen-label="ajustes-idioma-tema" aria-labelledby="aj-h-idioma">
+          <PanelHeader id="aj-h-idioma" titulo={t("ajustes.langTheme.overline")} />
+          <div className="cu-filas">
+            <div className="cu-fila">
+              <span className="cu-fila-k">
+                <b>{t("ajustes.lang.label")}</b>
+                <span>{t("ajustes.lang.hint")}</span>
+              </span>
+              <span className="cu-fila-v">
+                <span className="aj-seg" id="segLang">
+                  <button aria-pressed={lang === "es"} onClick={() => setLang("es")}>
+                    {t("ajustes.lang.es")}
+                  </button>
+                  <button aria-pressed={lang === "en"} onClick={() => setLang("en")}>
+                    {t("ajustes.lang.en")}
+                  </button>
+                </span>
+                <span className="cu-nota cu-nota--sutil">{t("ajustes.lang.note")}</span>
+              </span>
+            </div>
+            <div className="cu-fila">
+              <span className="cu-fila-k">
+                <b>{t("ajustes.theme.label")}</b>
+                <span>{t("ajustes.theme.hint")}</span>
+              </span>
+              <span className="cu-fila-v">
+                <span className="aj-seg" id="segTheme">
+                  <button data-t="dark" aria-pressed={themeSel === "dark"} onClick={() => applyTheme("dark")}>
+                    {t("ajustes.theme.dark")}
+                  </button>
+                  <button data-t="light" aria-pressed={themeSel === "light"} onClick={() => applyTheme("light")}>
+                    {t("ajustes.theme.light")}
+                  </button>
+                  <button data-t="auto" aria-pressed={themeSel === "auto"} onClick={() => applyTheme("auto")}>
+                    {t("ajustes.theme.auto")}
+                  </button>
+                </span>
+                <span className="cu-nota cu-nota--sutil">{t("ajustes.theme.note")}</span>
+              </span>
+            </div>
+          </div>
+        </Card>
+
+        {/* ── 5 · Estado de conexiones (E2): una tarjeta por servicio ── */}
+        <Card as="section" grande data-screen-label="ajustes-conexiones" aria-labelledby="aj-h-conn">
+          <PanelHeader
+            id="aj-h-conn"
+            titulo={t("ajustes.conn.overline")}
+            sub={t("ajustes.conn.hint")}
+            acciones={
+              <Button variante="grafito" icono="pulso" onClick={loadConn} disabled={connLoading}>
+                {connLoading ? t("ajustes.conn.checking") : t("ajustes.conn.recheck")}
+              </Button>
+            }
+          />
+          {connErr ? (
+            <div className="cu-aviso" role="status" style={{ marginBottom: "var(--sp-3)" }}>
+              {t("ajustes.conn.error")} — {connErr}
+            </div>
+          ) : null}
+          {conn?.services?.length ? (
+            <ul className="aj-conns" role="list">
+              {conn.services.map((s) => {
+                const statusLabel =
+                  s.status === "ok" ? t("ajustes.conn.ok") : s.status === "warn" ? t("ajustes.conn.warn") : t("ajustes.conn.fail");
+                const meta = connMeta(s);
+                return (
+                  <li className="aj-conn" key={s.id} data-estado={s.status}>
+                    <div className="aj-conn-cab">
+                      <div style={{ minWidth: 0 }}>
+                        <p className="aj-conn-t">{t(`ajustes.conn.svc.${s.id}`)}</p>
+                        {meta ? <p className="aj-conn-meta">{meta}</p> : null}
                       </div>
-                    );
-                  })
-                : !connErr
-                  ? (
-                    <div className="aj-row">
-                      <span
-                        className="v"
-                        style={{ color: "var(--text-subtle)", font: "400 var(--fs-data)/1.5 var(--font-mono)" }}
-                      >
-                        {t("ajustes.conn.checking")}
+                      <span className={`aj-conn-badge is-${s.status}`}>
+                        <span className="aj-dot" aria-hidden="true" />
+                        {statusLabel}
                       </span>
                     </div>
-                  )
-                  : null}
-            </div>
-          </section>
+                    <p className="aj-conn-detail">{s.detail}</p>
+                  </li>
+                );
+              })}
+            </ul>
+          ) : !connErr ? (
+            <p className="cu-nota cu-nota--sutil">{t("ajustes.conn.checking")}</p>
+          ) : null}
+        </Card>
 
-          {/* ── Tus datos (E1) — dos bloques separados ── */}
-          <section className="aj-g aj-danger" data-screen-label="ajustes-datos">
-            <div className="aj-gh">
-              <span className="t-overline">{t("ajustes.data.overline")}</span>
-              <span style={{ font: "400 var(--fs-micro)/1 var(--font-mono)", color: "var(--text-subtle)" }}>
-                {t("ajustes.data.hint")}
-              </span>
-            </div>
-            <hr className="c-divider" />
-            <div className="aj-rows">
-              {/* Bloque 1 — Borrar todos mis datos (conserva la cuenta) */}
-              <div className="aj-row">
-                <span className="k">
+        {/* ── 6 · Tus datos: descargarlos no es peligroso, va aparte ── */}
+        <Card as="section" grande data-screen-label="ajustes-datos" aria-labelledby="aj-h-datos">
+          <PanelHeader
+            id="aj-h-datos"
+            titulo={t("ajustes.data.overline")}
+            sub={t("ajustes.data.hint")}
+            acciones={
+              <a className="u-btn u-btn--grafito" href="/api/account/data" download>
+                {t("ajustes.wipe.download")}
+              </a>
+            }
+          />
+          <p className="cu-nota">{t("ajustes.export.hint")}</p>
+        </Card>
+
+        {/* ── 7 · Zona de peligro: al final, aislada, confirmación en la página ── */}
+        <Card as="section" grande className="cu-peligro" data-screen-label="ajustes-peligro" aria-labelledby="aj-h-peligro">
+          <PanelHeader id="aj-h-peligro" titulo={t("ajustes.danger.title")} sub={t("ajustes.danger.sub")} />
+          <div className="aj-peligros">
+            {/* Bloque 1 — Borrar todos mis datos (conserva la cuenta) */}
+            <div className="aj-peligro">
+              <div className="aj-peligro-cab">
+                <span className="cu-fila-k">
                   <b>{t("ajustes.wipe.label")}</b>
                   <span>{t("ajustes.wipe.hint")}</span>
                 </span>
-                <span className="v">
-                  <button
-                    className="c-btn"
-                    style={{
-                      borderColor: "color-mix(in srgb,var(--danger) 45%,transparent)",
-                      color: "var(--danger)",
-                      display: wipeOpen ? "none" : undefined,
-                    }}
+                {!wipeOpen ? (
+                  <Button
+                    className="cu-btn-peligro"
                     onClick={() => {
                       setWipeOpen(true);
                       setWipeErr(null);
@@ -1138,124 +1042,118 @@ export function AjustesScreen() {
                     }}
                   >
                     {t("ajustes.wipe.button")}
-                  </button>
-                  <span className={`aj-confirm aj-wipe${wipeOpen ? " show" : ""}`}>
-                    <span className="aj-wipe-dl">
-                      <span style={{ font: "400 var(--fs-data)/1.5 var(--font-sans)", color: "var(--text-muted)" }}>
-                        {t("ajustes.wipe.downloadLead")}
-                      </span>
-                      <a className="c-btn" href="/api/account/data" download>
-                        {t("ajustes.wipe.download")}
-                      </a>
-                    </span>
-                    <span className="aj-wipe-confirm">
-                      <span style={{ font: "400 var(--fs-data)/1.5 var(--font-sans)", color: "var(--text-muted)" }}>
-                        {t("ajustes.wipe.confirmPre")}
-                        <b style={{ fontFamily: "var(--font-mono)" }}>{WIPE_WORD}</b>
-                        {t("ajustes.wipe.confirmPost")}
-                      </span>
-                      <input
-                        className="c-input"
-                        autoComplete="off"
-                        aria-label={t("ajustes.wipe.aria")}
-                        value={wipeWord}
-                        onChange={(e) => setWipeWord(e.target.value)}
-                        style={{ maxWidth: "260px" }}
-                      />
-                      <button
-                        className="c-btn"
-                        disabled={!wipeReady || wiping}
-                        style={{ background: "var(--danger)", borderColor: "transparent", color: "var(--text-on-danger)" }}
-                        onClick={confirmWipe}
-                      >
-                        {wiping ? t("ajustes.wipe.deleting") : t("ajustes.wipe.confirmButton")}
-                      </button>
-                      <button
-                        className="c-btn c-btn--quiet"
-                        onClick={() => {
-                          setWipeOpen(false);
-                          setWipeWord("");
-                          setWipeErr(null);
-                        }}
-                      >
-                        {t("common.cancel")}
-                      </button>
-                    </span>
-                  </span>
-                  {wipeErr ? (
-                    <span role="status" style={{ font: "400 var(--fs-data)/1.5 var(--font-sans)", color: "var(--danger)" }}>
-                      {wipeErr}
-                    </span>
-                  ) : null}
-                  {wipeDone ? (
-                    <span role="status" style={{ font: "400 var(--fs-data)/1.6 var(--font-sans)", color: "var(--text-muted)" }}>
-                      {t("ajustes.wipe.doneLead")}{" "}
-                      <span style={{ fontFamily: "var(--font-mono)", color: "var(--accent-text)" }}>
-                        {wipeDone.items} {t("ajustes.wipe.uItems")} · {wipeDone.variants} {t("ajustes.wipe.uVariants")} ·{" "}
-                        {wipeDone.sources} {t("ajustes.wipe.uSources")} · {wipeDone.staged} {t("ajustes.wipe.uStaged")} ·{" "}
-                        {wipeDone.files} {t("ajustes.wipe.uFiles")}
-                      </span>
-                    </span>
-                  ) : null}
-                </span>
+                  </Button>
+                ) : null}
               </div>
+              {wipeOpen ? (
+                <div className="cu-confirmar aj-confirm">
+                  <span className="cu-linea">
+                    <span className="cu-nota">{t("ajustes.wipe.downloadLead")}</span>
+                    <a className="u-btn u-btn--grafito" href="/api/account/data" download>
+                      {t("ajustes.wipe.download")}
+                    </a>
+                  </span>
+                  <span className="cu-nota">
+                    {t("ajustes.wipe.confirmPre")}
+                    <b className="cu-dato">{WIPE_WORD}</b>
+                    {t("ajustes.wipe.confirmPost")}
+                  </span>
+                  <span className="cu-linea">
+                    <input
+                      className="c-input"
+                      autoComplete="off"
+                      aria-label={t("ajustes.wipe.aria")}
+                      value={wipeWord}
+                      onChange={(e) => setWipeWord(e.target.value)}
+                    />
+                    <Button className="cu-btn-peligro cu-btn-peligro--lleno" disabled={!wipeReady || wiping} onClick={confirmWipe}>
+                      {wiping ? t("ajustes.wipe.deleting") : t("ajustes.wipe.confirmButton")}
+                    </Button>
+                    <Button
+                      variante="fantasma"
+                      onClick={() => {
+                        setWipeOpen(false);
+                        setWipeWord("");
+                        setWipeErr(null);
+                      }}
+                    >
+                      {t("common.cancel")}
+                    </Button>
+                  </span>
+                </div>
+              ) : null}
+              {wipeErr ? (
+                <span role="status" className="cu-nota" style={{ color: "var(--danger)" }}>
+                  {wipeErr}
+                </span>
+              ) : null}
+              {wipeDone ? (
+                <span role="status" className="cu-nota">
+                  {t("ajustes.wipe.doneLead")}{" "}
+                  <span className="cu-dato" style={{ color: "var(--accent-text)" }}>
+                    {wipeDone.items} {t("ajustes.wipe.uItems")} · {wipeDone.variants} {t("ajustes.wipe.uVariants")} ·{" "}
+                    {wipeDone.sources} {t("ajustes.wipe.uSources")} · {wipeDone.staged} {t("ajustes.wipe.uStaged")} ·{" "}
+                    {wipeDone.files} {t("ajustes.wipe.uFiles")}
+                  </span>
+                </span>
+              ) : null}
+            </div>
 
-              {/* Bloque 2 — Borrar mi cuenta (separado, con su propio peso) */}
-              <div className="aj-row">
-                <span className="k">
+            {/* Bloque 2 — Borrar mi cuenta (separado, con su propio peso) */}
+            <div className="aj-peligro">
+              <div className="aj-peligro-cab">
+                <span className="cu-fila-k">
                   <b>{t("ajustes.delete.label")}</b>
                   <span>{t("ajustes.delete.hint")}</span>
                 </span>
-                <span className="v">
-                  <button
-                    className="c-btn"
-                    id="btnDel"
-                    ref={btnDelRef}
-                    style={{
-                      borderColor: "color-mix(in srgb,var(--danger) 45%,transparent)",
-                      color: "var(--danger)",
-                      display: delOpen ? "none" : undefined,
-                    }}
-                    onClick={openDel}
+                <button
+                  type="button"
+                  className="u-btn u-btn--grafito cu-btn-peligro"
+                  id="btnDel"
+                  ref={btnDelRef}
+                  style={{ display: delOpen ? "none" : undefined }}
+                  onClick={openDel}
+                >
+                  {t("ajustes.delete.button")}
+                </button>
+              </div>
+              <div className="cu-confirmar aj-confirm" id="delConfirm" hidden={!delOpen}>
+                <span className="cu-nota">
+                  {t("ajustes.delete.confirmPre")}
+                  <b className="cu-dato">BORRAR</b>
+                  {t("ajustes.delete.confirmPost")}
+                </span>
+                <span className="cu-linea">
+                  <input
+                    className="c-input"
+                    id="delWord"
+                    ref={delWordRef}
+                    autoComplete="off"
+                    aria-label={t("ajustes.delete.aria")}
+                    value={delWord}
+                    onChange={(e) => setDelWord(e.target.value)}
+                  />
+                  <Button
+                    className="cu-btn-peligro cu-btn-peligro--lleno"
+                    id="btnDel2"
+                    disabled={!delReady || deleting}
+                    onClick={confirmDelete}
                   >
-                    {t("ajustes.delete.button")}
-                  </button>
-                  <span className={`aj-confirm${delOpen ? " show" : ""}`} id="delConfirm">
-                    <span style={{ font: "400 var(--fs-data)/1.5 var(--font-sans)", color: "var(--text-muted)" }}>
-                      {t("ajustes.delete.confirmPre")}<b style={{ fontFamily: "var(--font-mono)" }}>BORRAR</b>{t("ajustes.delete.confirmPost")}
-                    </span>
-                    <input
-                      className="c-input"
-                      id="delWord"
-                      ref={delWordRef}
-                      autoComplete="off"
-                      aria-label={t("ajustes.delete.aria")}
-                      value={delWord}
-                      onChange={(e) => setDelWord(e.target.value)}
-                    />
-                    <button
-                      className="c-btn"
-                      id="btnDel2"
-                      disabled={!delReady || deleting}
-                      style={{ background: "var(--danger)", borderColor: "transparent", color: "var(--text-on-danger)" }}
-                      onClick={confirmDelete}
-                    >
-                      {deleting ? t("ajustes.delete.deleting") : t("ajustes.delete.confirmButton")}
-                    </button>
-                    <button className="c-btn c-btn--quiet" id="btnDelNo" onClick={cancelDel}>
-                      {t("common.cancel")}
-                    </button>
-                  </span>
-                  {delMsg ? (
-                    <span role="status" style={{ font: "400 var(--fs-data)/1.5 var(--font-sans)", color: "var(--text-muted)" }}>
-                      {delMsg}
-                    </span>
-                  ) : null}
+                    {deleting ? t("ajustes.delete.deleting") : t("ajustes.delete.confirmButton")}
+                  </Button>
+                  <Button variante="fantasma" id="btnDelNo" onClick={cancelDel}>
+                    {t("common.cancel")}
+                  </Button>
                 </span>
               </div>
+              {delMsg ? (
+                <span role="status" className="cu-nota">
+                  {delMsg}
+                </span>
+              ) : null}
             </div>
-          </section>
-        </div>
+          </div>
+        </Card>
       </main>
     </div>
   );

@@ -31,17 +31,19 @@ export const fuentes = {
     "fuentes.lead.bold": "qué aportó",
     "fuentes.lead.suffixReal": " y cuándo se leyó. Nada se relee ni entra al master sin pasar por staging.",
     "fuentes.lead.suffixLocal": " y qué hay de nuevo desde la última lectura. Nada se relee ni entra al master sin pasar por staging.",
-    "fuentes.dumpMore": "+ Volcar más material",
+    "fuentes.dumpMore": "Volcar más material",
+    "fuentes.titulo": "Tus fuentes",
+    "fuentes.list.heading": "Lo que ya leímos",
+    "fuentes.add.sub": "Cada tarjeta lee su material aquí mismo. Lo extraído espera en staging hasta que lo revises.",
+    "fuentes.ejemplo": "ejemplo",
 
     // Modo Supabase
     "fuentes.loading": "Leyendo tus fuentes…",
-    "fuentes.empty.overline": "Sin fuentes todavía",
     "fuentes.empty.title": "Aún no has conectado ninguna fuente.",
     "fuentes.empty.body":
       "Pega texto, sube tu CV o enlaza tu GitHub y tu portfolio. Cada fuente quedará aquí, con lo que aportó y cuándo la leímos.",
-    "fuentes.empty.cta": "Volcar lo que tengo →",
-    "fuentes.item.viewStaging": "ver en staging",
-    "fuentes.item.readStatus": "estado de la lectura",
+    "fuentes.empty.cta": "Volcar lo que tengo",
+    "fuentes.item.viewStaging": "Ver en staging",
     "fuentes.item.charsRead": "caracteres leídos",
     "fuentes.item.pages": " · {n} págs",
     "fuentes.item.added": "añadida",
@@ -94,10 +96,10 @@ export const fuentes = {
     "fuentes.gh.readDonePre": "leído —",
     "fuentes.gh.readDoneBold": "2 items nuevos",
     "fuentes.gh.readDoneSuf": " esperan en staging (nada entra solo al master)",
-    "fuentes.gh.review": "revisar →",
+    "fuentes.gh.review": "Revisar",
     "fuentes.gh.newBold": "2 repos con actividad",
     "fuentes.gh.newMid": " desde la última lectura: ",
-    "fuentes.gh.readThem": "leerlos →",
+    "fuentes.gh.readThem": "Leerlos",
     "fuentes.gh.note": "GitHub es la única fuente donde la IA no puede alucinar: no hay IA. Lo que ves es la API.",
 
     // Selector de repos
@@ -118,9 +120,9 @@ export const fuentes = {
     "fuentes.web.cmpNoChange": "sin cambios detectados",
 
     // Archivos — modo local
-    "fuentes.files.name": "archivos",
+    "fuentes.files.name": "Archivos",
     "fuentes.files.tag": "estáticos — no cambian solos",
-    "fuentes.files.upload": "+ subir otro",
+    "fuentes.files.upload": "Subir otro",
     "fuentes.files.doc1K": "2 páginas · aportó 15 items · leído 12 jul",
     "fuentes.files.doc2K": "16 bloques · aportó 6 items · fuente de primera: lo escribiste tú",
 
@@ -140,7 +142,7 @@ export const fuentes = {
     "fuentes.act.busy.uploading": "subiendo…",
     "fuentes.act.busy.extracting": "extrayendo…",
     "fuentes.act.done": "{n} ítems al staging",
-    "fuentes.act.reviewStaging": "revisar en staging →",
+    "fuentes.act.reviewStaging": "Revisar en staging",
     "fuentes.act.failed": "No se pudo completar.",
     "fuentes.act.needSession": "Inicia sesión para volcar material.",
     "fuentes.act.unsupported":
@@ -166,24 +168,24 @@ export const fuentes = {
     "fuentes.drop.li.rest": " · o pulsa para elegirlos",
 
     // Tarjeta capturas / imágenes
-    "fuentes.card.images.name": "capturas · imágenes",
+    "fuentes.card.images.name": "Capturas · imágenes",
     "fuentes.card.images.tag": "transcritas literal",
     "fuentes.card.images.body":
       "PNG, JPG o WEBP. Se transcriben palabra por palabra antes de extraer nada: lo que no se lee, no se inventa.",
     "fuentes.card.images.button": "Elegir imágenes",
 
     // Tarjeta texto pegado
-    "fuentes.card.paste.name": "texto",
+    "fuentes.card.paste.name": "Texto",
     "fuentes.card.paste.tag": "pega y extrae",
     "fuentes.card.paste.body":
       "Pega lo que tengas — un borrador, la descripción de un puesto, notas sueltas. Extraemos con evidencia.",
     "fuentes.card.paste.open": "Pegar texto",
     "fuentes.card.paste.placeholder": "Pega aquí tu experiencia, un CV en texto, notas…",
     "fuentes.card.paste.submit": "Extraer con evidencia",
-    "fuentes.card.paste.cancel": "cancelar",
+    "fuentes.card.paste.cancel": "Cancelar",
 
     // Tarjeta enlace (URL)
-    "fuentes.card.url.name": "enlace",
+    "fuentes.card.url.name": "Enlace",
     "fuentes.card.url.tag": "portfolio · blog · repo",
     "fuentes.card.url.body":
       "Pega la dirección de tu portfolio, tu blog o un repositorio. Lo leemos y proponemos items al staging.",
@@ -203,16 +205,16 @@ export const fuentes = {
     "fuentes.li2.pasteName": "LinkedIn (texto pegado)",
 
     // Acciones por fila de una fuente ya ingerida
-    "fuentes.item.resync": "releer",
+    "fuentes.item.resync": "Releer",
     "fuentes.item.resyncBusy": "releyendo…",
     "fuentes.item.resyncPasteDisabled": "el texto pegado no tiene un origen externo que releer",
     "fuentes.item.resynced": "releída — {n} al staging",
-    "fuentes.item.remove": "quitar",
+    "fuentes.item.remove": "Quitar",
     "fuentes.item.removeBusy": "quitando…",
     "fuentes.item.removeConfirm":
       "¿Quitar esta fuente? Se borran sus propuestas pendientes en staging. Lo que ya aceptaste en tu master se queda (pierde el vínculo a la fuente).",
-    "fuentes.item.removeYes": "quitar fuente",
-    "fuentes.item.removeNo": "cancelar",
+    "fuentes.item.removeYes": "Quitar fuente",
+    "fuentes.item.removeNo": "Cancelar",
   } as Record<string, string>,
   en: {
     // Source-kind labels (KIND_LABEL)
@@ -246,17 +248,19 @@ export const fuentes = {
       " and when it was read. Nothing is re-read or enters your master without passing through staging.",
     "fuentes.lead.suffixLocal":
       " and what's new since the last read. Nothing is re-read or enters your master without passing through staging.",
-    "fuentes.dumpMore": "+ Dump more material",
+    "fuentes.dumpMore": "Dump more material",
+    "fuentes.titulo": "Your sources",
+    "fuentes.list.heading": "What we've already read",
+    "fuentes.add.sub": "Each card reads its material right here. What gets extracted waits in staging until you review it.",
+    "fuentes.ejemplo": "sample",
 
     // Supabase mode
     "fuentes.loading": "Reading your sources…",
-    "fuentes.empty.overline": "No sources yet",
     "fuentes.empty.title": "You haven't connected any source yet.",
     "fuentes.empty.body":
       "Paste text, upload your resume, or link your GitHub and portfolio. Each source will live here, with what it contributed and when we read it.",
-    "fuentes.empty.cta": "Dump what I have →",
-    "fuentes.item.viewStaging": "view in staging",
-    "fuentes.item.readStatus": "reading status",
+    "fuentes.empty.cta": "Dump what I have",
+    "fuentes.item.viewStaging": "View in staging",
     "fuentes.item.charsRead": "characters read",
     "fuentes.item.pages": " · {n} pages",
     "fuentes.item.added": "added",
@@ -309,10 +313,10 @@ export const fuentes = {
     "fuentes.gh.readDonePre": "read —",
     "fuentes.gh.readDoneBold": "2 new items",
     "fuentes.gh.readDoneSuf": " wait in staging (nothing enters your master on its own)",
-    "fuentes.gh.review": "review →",
+    "fuentes.gh.review": "Review",
     "fuentes.gh.newBold": "2 repos with activity",
     "fuentes.gh.newMid": " since the last read: ",
-    "fuentes.gh.readThem": "read them →",
+    "fuentes.gh.readThem": "Read them",
     "fuentes.gh.note": "GitHub is the only source where the AI can't hallucinate: there is no AI. What you see is the API.",
 
     // Repo picker
@@ -333,9 +337,9 @@ export const fuentes = {
     "fuentes.web.cmpNoChange": "no changes detected",
 
     // Files — local mode
-    "fuentes.files.name": "files",
+    "fuentes.files.name": "Files",
     "fuentes.files.tag": "static — they don't change on their own",
-    "fuentes.files.upload": "+ upload another",
+    "fuentes.files.upload": "Upload another",
     "fuentes.files.doc1K": "2 pages · contributed 15 items · read Jul 12",
     "fuentes.files.doc2K": "16 blocks · contributed 6 items · first-hand source: you wrote it",
 
@@ -355,7 +359,7 @@ export const fuentes = {
     "fuentes.act.busy.uploading": "uploading…",
     "fuentes.act.busy.extracting": "extracting…",
     "fuentes.act.done": "{n} items to staging",
-    "fuentes.act.reviewStaging": "review in staging →",
+    "fuentes.act.reviewStaging": "Review in staging",
     "fuentes.act.failed": "Couldn't complete.",
     "fuentes.act.needSession": "Sign in to dump material.",
     "fuentes.act.unsupported":
@@ -381,24 +385,24 @@ export const fuentes = {
     "fuentes.drop.li.rest": " · or click to choose them",
 
     // Screenshots / images card
-    "fuentes.card.images.name": "screenshots · images",
+    "fuentes.card.images.name": "Screenshots · images",
     "fuentes.card.images.tag": "transcribed verbatim",
     "fuentes.card.images.body":
       "PNG, JPG or WEBP. Transcribed word for word before extracting anything: what can't be read doesn't get made up.",
     "fuentes.card.images.button": "Choose images",
 
     // Pasted-text card
-    "fuentes.card.paste.name": "text",
+    "fuentes.card.paste.name": "Text",
     "fuentes.card.paste.tag": "paste and extract",
     "fuentes.card.paste.body":
       "Paste whatever you have — a draft, a job description, loose notes. We extract with evidence.",
     "fuentes.card.paste.open": "Paste text",
     "fuentes.card.paste.placeholder": "Paste your experience, a resume as text, notes…",
     "fuentes.card.paste.submit": "Extract with evidence",
-    "fuentes.card.paste.cancel": "cancel",
+    "fuentes.card.paste.cancel": "Cancel",
 
     // Link (URL) card
-    "fuentes.card.url.name": "link",
+    "fuentes.card.url.name": "Link",
     "fuentes.card.url.tag": "portfolio · blog · repo",
     "fuentes.card.url.body":
       "Paste the address of your portfolio, your blog or a repository. We read it and propose items to staging.",
@@ -418,15 +422,15 @@ export const fuentes = {
     "fuentes.li2.pasteName": "LinkedIn (pasted text)",
 
     // Per-row actions on an already-ingested source
-    "fuentes.item.resync": "re-read",
+    "fuentes.item.resync": "Re-read",
     "fuentes.item.resyncBusy": "re-reading…",
     "fuentes.item.resyncPasteDisabled": "pasted text has no external origin to re-read",
     "fuentes.item.resynced": "re-read — {n} to staging",
-    "fuentes.item.remove": "remove",
+    "fuentes.item.remove": "Remove",
     "fuentes.item.removeBusy": "removing…",
     "fuentes.item.removeConfirm":
       "Remove this source? Its pending staging proposals are deleted. What you already accepted into your master stays (it loses the link to the source).",
-    "fuentes.item.removeYes": "remove source",
-    "fuentes.item.removeNo": "cancel",
+    "fuentes.item.removeYes": "Remove source",
+    "fuentes.item.removeNo": "Cancel",
   } as Record<string, string>,
 } as const;

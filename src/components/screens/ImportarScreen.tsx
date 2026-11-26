@@ -7,6 +7,8 @@ import { AuroraTune, AURORA_HOJEO } from "@/components/Aurora";
 import { DropZone } from "@/components/DropZone";
 import { BloqueCopiable } from "@/components/BloqueCopiable";
 import { Breadcrumb, readOrigin, withOrigin } from "@/components/Breadcrumb";
+import { Button, Card, Chip, Icono, PanelHeader } from "@/components/ui";
+import { Pasos } from "@/components/cuenta/Pasos";
 import { createClient } from "@/lib/supabase/client";
 import { fileKindFromName, FILE_ACCEPT, type FileKind } from "@/lib/db/sources";
 import { useT, useLang } from "@/lib/i18n";
@@ -459,12 +461,15 @@ export function ImportarScreen() {
     : "";
   const taMeta = t("importar.meta.words").replace("{n}", words.toLocaleString("es-CL")) + linkPart;
 
-  const hdStep =
-    screen === "ingest"
-      ? t("importar.step.ingest")
-      : screen === "done"
-        ? t("importar.step.done")
-        : t("importar.step.idle");
+  /* Los pasos 1 · 2 · 3 de la pantalla (Forja v2). Sustituyen al rótulo de paso
+     que vivía en el <header> duplicado: el paso en curso sale del MISMO estado
+     `screen` que decide qué <main> se ve, así que no pueden contar dos cosas. */
+  const pasos = [
+    { id: "volcar", titulo: t("importar.paso.volcar") },
+    { id: "leer", titulo: t("importar.paso.leer") },
+    { id: "revisar", titulo: t("importar.paso.revisar") },
+  ];
+  const pasoActual = screen === "ingest" ? 1 : screen === "done" ? 2 : 0;
 
   // charReveal (overline) + wordReveal (h1) + boot — una sola vez.
   useEffect(() => {
@@ -861,51 +866,33 @@ export function ImportarScreen() {
           intensidad. Volcar es hojear y esperar, así que va al valor alto. */}
       <AuroraTune strength={AURORA_HOJEO} />
 
-      <header className="c-header">
-        <div className="c-container">
-          <div className="hd-crumb">
-            <Link className="c-logo" href="/app">
-              Corpus
-            </Link>
-            <span className="hd-sep" />
-            {/* La salida: vuelve a donde estabas (?from=), no "al Panel". */}
-            <Breadcrumb fallback={FALLBACK} current={t("nav.importar")} />
-            <span className="hd-sep imp-hd-sep-step" />
-            <span className="hd-step" id="hdStep">
-              {hdStep}
-            </span>
-          </div>
-          <div className="hd-right">
-            <div className="hd-lang" aria-label={t("importar.langAria")}>
-              <span data-on>ES</span>
-              <span>EN</span>
-            </div>
-            <div className="hd-av">DG</div>
-          </div>
+      {/* Forja v2: el <header class="c-header"> duplicado (logo, idioma y avatar
+          de maqueta) se fue; el shell ya pinta todo eso. Lo que era PROPIO de la
+          pantalla se queda en la página: la salida (?from=) y el paso en curso,
+          que ahora son los pasos 1 · 2 · 3 visibles. */}
+      <div className="cu-pagina imp-pagina">
+        <div className="imp-top">
+          {/* La salida: vuelve a donde estabas (?from=), no "al Panel". */}
+          <Breadcrumb fallback={FALLBACK} current={t("nav.importar")} />
+          <Pasos pasos={pasos} actual={pasoActual} etiqueta={t("importar.pasos.aria")} />
         </div>
-      </header>
 
-      {/* ═══ ESTADO: VOLCADO (ventana — la aurora asoma, en calma) ═══ */}
-      <main className="imp-main c-window" id="stIdle" data-screen-label="importar-volcado" hidden={screen !== "idle"}>
-        <div className="imp-col">
-          <span className="t-overline" id="ov" ref={ovRef}>
-            {t("importar.overline")}
-          </span>
-          <h1 className="imp-h1" id="h1" ref={h1Ref}>
-            {t("importar.h1.pre")}
-            <em>{t("importar.h1.em")}</em>
-          </h1>
-          <p className="imp-sub" data-reveal style={{ "--d": "520ms" } as React.CSSProperties}>
-            {t("importar.sub")}
-          </p>
+        {/* ═══ ESTADO: VOLCADO (ventana — la aurora asoma, en calma) ═══ */}
+        <main className="imp-main c-window" id="stIdle" data-screen-label="importar-volcado" hidden={screen !== "idle"}>
+          <header className="cu-cabeza imp-cabeza">
+            <span className="cu-rotulo" id="ov" ref={ovRef}>
+              {t("importar.overline")}
+            </span>
+            <h1 className="cu-cabeza-t imp-h1" id="h1" ref={h1Ref}>
+              {t("importar.h1.pre")}
+              <em>{t("importar.h1.em")}</em>
+            </h1>
+            <p className="cu-cabeza-sub imp-sub" data-reveal style={{ "--d": "520ms" } as React.CSSProperties}>
+              {t("importar.sub")}
+            </p>
+          </header>
 
           {/* ═══ EL ÍNDICE DE LAS TRES PUERTAS ═════════════════════════════
-              Antes esta pantalla tenía dos puertas (pegar y subir) metidas en
-              la misma caja y NINGUNA decía que gastan IA: el coste se
-              descubría en el informe del final, cuando ya se había pagado. Y
-              la tercera vía —la que más se va a usar y la única sin coste ni
-              invención— no existía en la interfaz, vivía en la documentación.
-
               Las tres van aquí arriba, con el mismo tamaño, y cada una lleva
               su etiqueta de coste EN LA CARA. No es un menú que oculte nada:
               las tres superficies de trabajo están montadas más abajo y estas
@@ -917,35 +904,68 @@ export function ImportarScreen() {
             data-reveal
             style={{ "--d": "580ms" } as React.CSSProperties}
           >
-            <span className="t-overline imp-doors__h">{t("importar.puertas.overline")}</span>
+            <span className="cu-rotulo imp-doors__h">{t("importar.puertas.overline")}</span>
             <div className="imp-doors__row">
-              <button type="button" className="imp-door" id="puerta1" onClick={irAPuerta1}>
-                <span className="n">01</span>
+              <button type="button" className="imp-door u-card u-card--grafito" id="puerta1" onClick={irAPuerta1}>
+                <span className="imp-door__cab">
+                  <span className="n">01</span>
+                  <span className="imp-door__ico">
+                    <Icono nombre="doc" />
+                  </span>
+                </span>
                 <span className="h">{t("importar.puerta1.title")}</span>
                 <span className="d">{t("importar.puerta1.body")}</span>
-                <span className="cost cost--ia">{t("importar.puerta1.cost")}</span>
-                <span className="go">{t("importar.puerta1.go")} →</span>
+                <Chip tono="neutro" className="cost cost--ia">
+                  {t("importar.puerta1.cost")}
+                </Chip>
+                <span className="go">
+                  {t("importar.puerta1.go")}
+                  <Icono nombre="flecha" tamano={16} />
+                </span>
               </button>
-              <button type="button" className="imp-door" id="puerta2" onClick={irAPuerta2}>
-                <span className="n">02</span>
+              <button type="button" className="imp-door u-card u-card--grafito" id="puerta2" onClick={irAPuerta2}>
+                <span className="imp-door__cab">
+                  <span className="n">02</span>
+                  <span className="imp-door__ico">
+                    <Icono nombre="fuentes" />
+                  </span>
+                </span>
                 <span className="h">{t("importar.puerta2.title")}</span>
                 <span className="d">{t("importar.puerta2.body")}</span>
-                <span className="cost cost--ia">{t("importar.puerta2.cost")}</span>
-                <span className="go">{t("importar.puerta2.go")} →</span>
+                <Chip tono="neutro" className="cost cost--ia">
+                  {t("importar.puerta2.cost")}
+                </Chip>
+                <span className="go">
+                  {t("importar.puerta2.go")}
+                  <Icono nombre="flecha" tamano={16} />
+                </span>
               </button>
-              <button type="button" className="imp-door" id="puerta3" onClick={irAPuerta3}>
-                <span className="n">03</span>
+              <button type="button" className="imp-door u-card u-card--grafito" id="puerta3" onClick={irAPuerta3}>
+                <span className="imp-door__cab">
+                  <span className="n">03</span>
+                  <span className="imp-door__ico">
+                    <Icono nombre="master" />
+                  </span>
+                </span>
                 <span className="h">{t("importar.puerta3.title")}</span>
                 <span className="d">{t("importar.puerta3.body")}</span>
-                <span className="cost cost--free">{t("importar.puerta3.cost")}</span>
-                <span className="go">{t("importar.puerta3.go")} →</span>
+                <Chip tono="oro" className="cost cost--free">
+                  {t("importar.puerta3.cost")}
+                </Chip>
+                <span className="go">
+                  {t("importar.puerta3.go")}
+                  <Icono nombre="flecha" tamano={16} />
+                </span>
               </button>
             </div>
           </div>
 
-          <div
-            className={`c-panel imp-box${isDrag ? " is-drag" : ""}`}
+          <Card
+            as="section"
+            grande
+            className={`imp-box${isDrag ? " is-drag" : ""}`}
             id="dropzone"
+            aria-labelledby="impBoxT"
             data-reveal
             style={{ "--d": "640ms" } as React.CSSProperties}
             onDragEnter={(e) => {
@@ -970,19 +990,23 @@ export function ImportarScreen() {
               if (e.dataTransfer) addFiles(e.dataTransfer.files);
             }}
           >
-            <textarea
-              className="imp-ta"
-              id="ta"
-              ref={taRef}
-              spellCheck={false}
-              aria-label={t("importar.ta.aria")}
-              placeholder={t("importar.placeholder")}
-              value={text}
-              onChange={(e) => setText(e.target.value)}
-            />
+            <PanelHeader nivel={2} id="impBoxT" titulo={t("importar.box.title")} sub={t("importar.box.sub")} />
+
+            <div className="imp-campo">
+              <textarea
+                className="imp-ta"
+                id="ta"
+                ref={taRef}
+                spellCheck={false}
+                aria-label={t("importar.ta.aria")}
+                placeholder={t("importar.placeholder")}
+                value={text}
+                onChange={(e) => setText(e.target.value)}
+              />
+            </div>
 
             <div className={`imp-detect${sources.length ? " has" : ""}`} id="detect">
-              <span className="t-overline">{t("importar.detect.overline")}</span>
+              <span className="imp-k">{t("importar.detect.overline")}</span>
               <div className="imp-chips" id="chips">
                 {sources.map((s) => (
                   <span className={`c-chip${s.ok ? " c-chip--ok" : ""}`} key={s.host + s.path}>
@@ -992,34 +1016,6 @@ export function ImportarScreen() {
                   </span>
                 ))}
               </div>
-            </div>
-
-            <div className={`imp-files${files.length ? " has" : ""}`} id="files">
-              {files.map((f) => {
-                const statusText =
-                  f.status === "uploading"
-                    ? t("importar.file.uploading")
-                    : f.status === "error"
-                      ? `${t("importar.file.errorPrefix")}${f.error ?? t("importar.file.uploadFailed")}`
-                      : f.note
-                        ? `${t(f.tag)} · ${f.note}`
-                        : t(f.tag);
-                return (
-                  <div className="imp-file" key={f.id}>
-                    <span className="nm">{f.name}</span>
-                    <span className="sz">{f.size}</span>
-                    <span
-                      className="tag"
-                      style={f.status === "error" ? { color: "var(--danger)" } : undefined}
-                    >
-                      {statusText}
-                    </span>
-                    <button type="button" className="rm" aria-label={t("importar.file.remove")} onClick={() => removeFile(f.id)}>
-                      ×
-                    </button>
-                  </div>
-                );
-              })}
             </div>
 
             {/* El gesto canónico, ya compartido con Fuentes (components/DropZone). */}
@@ -1039,22 +1035,56 @@ export function ImportarScreen() {
               }
             />
 
+            <div className={`imp-files${files.length ? " has" : ""}`} id="files">
+              {files.map((f) => {
+                const statusText =
+                  f.status === "uploading"
+                    ? t("importar.file.uploading")
+                    : f.status === "error"
+                      ? `${t("importar.file.errorPrefix")}${f.error ?? t("importar.file.uploadFailed")}`
+                      : f.note
+                        ? `${t(f.tag)} · ${f.note}`
+                        : t(f.tag);
+                return (
+                  <div className={`imp-file is-${f.status}`} key={f.id}>
+                    <span className="imp-file__ico" aria-hidden="true">
+                      {f.status === "uploading" ? <span className="c-spin">⟳</span> : <Icono nombre="doc" />}
+                    </span>
+                    <span className="imp-file__txt">
+                      <span className="nm">{f.name}</span>
+                      <span className="tag">{statusText}</span>
+                    </span>
+                    <span className="sz">{f.size}</span>
+                    <Button
+                      variante="fantasma"
+                      soloIcono
+                      icono="cerrar"
+                      className="rm"
+                      onClick={() => removeFile(f.id)}
+                    >
+                      {t("importar.file.remove")}
+                    </Button>
+                  </div>
+                );
+              })}
+            </div>
+
             <div className="imp-meta">
               <span id="taMeta">{taMeta}</span>
               <span className="acts">
-                <button type="button" id="btnSample" onClick={useSample}>
+                <Button variante="fantasma" id="btnSample" onClick={useSample}>
                   {t("importar.useSample")}
-                </button>
-                <button type="button" id="btnClear" hidden={clearHidden} onClick={clearAll}>
+                </Button>
+                <Button variante="fantasma" id="btnClear" hidden={clearHidden} onClick={clearAll}>
                   {t("importar.clear")}
-                </button>
+                </Button>
               </span>
             </div>
-          </div>
+          </Card>
 
           {/* El momento LinkedIn: honestidad con dignidad, no un error */}
           <div
-            className="c-card imp-li"
+            className="u-card u-card--grafito imp-li"
             id="liPanel"
             ref={liPanelRef}
             hidden={!hasLi}
@@ -1064,7 +1094,7 @@ export function ImportarScreen() {
             <p>{t("importar.li.body")}</p>
             <ol>
               <li>
-                <span className="n">01</span>
+                <span className="n">1</span>
                 <span className="h">{t("importar.li.s1.h")}</span>
                 <span className="d">
                   {t("importar.li.inProfile")}
@@ -1075,7 +1105,7 @@ export function ImportarScreen() {
                 </span>
               </li>
               <li>
-                <span className="n">02</span>
+                <span className="n">2</span>
                 <span className="h">{t("importar.li.s2.h")}</span>
                 <span className="d">
                   {t("importar.li.inProfile")}
@@ -1084,31 +1114,25 @@ export function ImportarScreen() {
                 </span>
               </li>
               <li>
-                <span className="n">03</span>
+                <span className="n">3</span>
                 <span className="h">{t("importar.li.s3.h")}</span>
                 <span className="d">{t("importar.li.s3.d")}</span>
               </li>
             </ol>
           </div>
 
+          {/* La única pieza brasa de la vista: la acción que pone a leer. */}
           <div className="imp-cta" data-reveal style={{ "--d": "760ms" } as React.CSSProperties}>
-            <span className="c-forge">
-              <button
-                className="c-btn c-btn--forge c-btn--hero"
-                id="btnGo"
-                disabled={!ready}
-                onClick={() => runIngest()}
-              >
-                {t("importar.cta")}
-              </button>
-            </span>
+            <Button variante="brasa" tamano="lg" id="btnGo" disabled={!ready} onClick={() => runIngest()}>
+              {t("importar.cta")}
+            </Button>
             <Link className="imp-alt" href="/app/onboarding">
               {t("importar.altWrite")}
             </Link>
           </div>
 
           {err ? (
-            <p className="imp-note" role="alert" style={{ color: "var(--danger)" }}>
+            <p className="imp-err" role="alert">
               {err}
             </p>
           ) : null}
@@ -1117,11 +1141,8 @@ export function ImportarScreen() {
               Vive FUERA de .imp-box a propósito: esa caja captura los sueltes
               en toda su superficie, y una zona de arrastre suya dentro daría
               de alta el mismo fichero dos veces (el suelte burbujea). Aquí,
-              como hermana, no hay solape posible.
-
-              El molde es el del panel de LinkedIn: título + párrafo + <ol>
-              numerado. Un procedimiento de tres pasos explicado con dignidad,
-              que es exactamente lo que esto es. ═══════════════════════════ */}
+              como hermana, no hay solape posible. Tres pasos numerados, cada
+              uno en su bloque, montados siempre. ═══════════════════════════ */}
           <div
             className="c-panel imp-pl"
             id="plantilla"
@@ -1131,12 +1152,12 @@ export function ImportarScreen() {
             data-reveal
             style={{ "--d": "820ms" } as React.CSSProperties}
           >
-            <span className="t-overline">{t("importar.pl.overline")}</span>
-            <h3>{t("importar.pl.title")}</h3>
+            <span className="cu-rotulo">{t("importar.pl.overline")}</span>
+            <h2 className="imp-pl__t">{t("importar.pl.title")}</h2>
             <p className="imp-pl__lead">{t("importar.pl.body")}</p>
             <ol>
               <li>
-                <span className="n">01</span>
+                <span className="n cu-num">1</span>
                 <div className="h">{t("importar.pl.s1.h")}</div>
                 <div className="d">
                   <p>{t("importar.pl.s1.d")}</p>
@@ -1147,10 +1168,9 @@ export function ImportarScreen() {
 
                       EL RÓTULO DICE LO QUE BAJA: esta URL sin parámetros
                       devuelve tu master si lo tienes y el esqueleto si no, así
-                      que la etiqueta cambia con el estado. Un botón que dijera
-                      siempre «plantilla» y bajara 105 items sería una sorpresa,
-                      y las sorpresas en una descarga se pagan en confianza. */}
-                  <a className="c-btn imp-pl__dl" id="btnPlantilla" href="/api/master/plantilla" download>
+                      que la etiqueta cambia con el estado. */}
+                  <a className="u-btn u-btn--grafito imp-pl__dl" id="btnPlantilla" href="/api/master/plantilla" download>
+                    <Icono nombre="doc" />
                     {plHayMaster ? t("importar.pl.dl.mio") : t("importar.pl.download")}
                   </a>
                   {/* Las otras dos versiones del MISMO fichero. Enlaces
@@ -1158,7 +1178,7 @@ export function ImportarScreen() {
                       principal. Cada una lleva su `title` explicando qué trae.
                       «en blanco» solo aparece cuando el botón de arriba NO baja
                       el esqueleto; ofrecer dos veces lo mismo es ruido. */}
-                  <p className="imp-note" style={{ marginTop: "10px" }}>
+                  <p className="imp-pl__otras">
                     <span>{t("importar.pl.dl.otras")}</span>{" "}
                     {plHayMaster ? (
                       <>
@@ -1175,7 +1195,7 @@ export function ImportarScreen() {
                 </div>
               </li>
               <li>
-                <span className="n">02</span>
+                <span className="n cu-num">2</span>
                 <div className="h">{t("importar.pl.s2.h")}</div>
                 <div className="d">
                   <p>{t("importar.pl.s2.d")}</p>
@@ -1192,7 +1212,7 @@ export function ImportarScreen() {
                 </div>
               </li>
               <li>
-                <span className="n">03</span>
+                <span className="n cu-num">3</span>
                 <div className="h">{t("importar.pl.s3.h")}</div>
                 <div className="d">
                   <p>{t("importar.pl.s3.d")}</p>
@@ -1213,19 +1233,24 @@ export function ImportarScreen() {
                   />
 
                   {plName ? (
-                    <p className="imp-pl__file">
-                      <span className="k">{t("importar.pl.fileLabel")}</span>
-                      <b>{plName}</b>
+                    <div className="imp-pl__file">
+                      <span className="imp-file__ico" aria-hidden="true">
+                        <Icono nombre="doc" />
+                      </span>
+                      <span className="imp-file__txt">
+                        <span className="k">{t("importar.pl.fileLabel")}</span>
+                        <b>{plName}</b>
+                      </span>
                       {plBusy ? (
                         <span className="busy" role="status" aria-live="polite">
                           <span className="c-spin">⟳</span> {t("importar.pl.reading")}
                         </span>
                       ) : (
-                        <button type="button" className="imp-pl__otro" onClick={resetPlantilla}>
+                        <Button variante="fantasma" className="imp-pl__otro" onClick={resetPlantilla}>
                           {t("importar.pl.otro")}
-                        </button>
+                        </Button>
                       )}
-                    </p>
+                    </div>
                   ) : null}
 
                   {plErr ? (
@@ -1249,7 +1274,7 @@ export function ImportarScreen() {
                       confirmar dispara el segundo viaje. */}
                   {plInf ? (
                     <div className="imp-pl__inf">
-                      <span className="t-overline">{t("importar.pl.inf.overline")}</span>
+                      <span className="cu-rotulo">{t("importar.pl.inf.overline")}</span>
                       {plInf.total > 0 ? (
                         <p className="imp-pl__tot">
                           {plInf.total === 1
@@ -1267,10 +1292,9 @@ export function ImportarScreen() {
                           <span className="imp-pl__k">{t("importar.pl.inf.tipos")}</span>
                           <div className="imp-pl__tipos">
                             {plInf.tipos.map((x) => (
-                              <span className="c-chip" key={x.kind}>
-                                <b>{x.n}</b>
-                                <span>{x.kind}</span>
-                              </span>
+                              <Chip key={x.kind}>
+                                <b>{x.n}</b> {x.kind}
+                              </Chip>
                             ))}
                           </div>
                         </div>
@@ -1331,18 +1355,18 @@ export function ImportarScreen() {
 
                       {plInf.total > 0 ? (
                         <div className="imp-pl__acts">
-                          <button
-                            type="button"
-                            className="c-btn c-btn--patina"
+                          <Button
+                            variante="grafito"
+                            icono="revision"
                             id="plConfirm"
                             disabled={plConfBusy}
                             onClick={() => void confirmarPlantilla()}
                           >
                             {plConfBusy ? t("importar.pl.inf.confirmando") : t("importar.pl.inf.confirmar")}
-                          </button>
-                          <button type="button" className="imp-pl__cancel" onClick={resetPlantilla}>
+                          </Button>
+                          <Button variante="fantasma" className="imp-pl__cancel" onClick={resetPlantilla}>
                             {t("importar.pl.inf.cancelar")}
-                          </button>
+                          </Button>
                         </div>
                       ) : null}
                       <p className="imp-pl__sub">{t("importar.pl.inf.sub")}</p>
@@ -1353,48 +1377,77 @@ export function ImportarScreen() {
             </ol>
           </div>
 
-          <p className="imp-note" data-reveal style={{ "--d": "880ms" } as React.CSSProperties}>
-            <span className="c-divider" style={{ "--d": "900ms" } as React.CSSProperties} />
+          <p className="cu-nota imp-note" data-reveal style={{ "--d": "880ms" } as React.CSSProperties}>
             {t("importar.note")}
           </p>
-        </div>
-      </main>
+        </main>
 
-      {/* ═══ ESTADO: INGESTA (ventana — aurora ACTIVA: el pulso de la máquina) ═══ */}
-      <main
-        className="imp-main c-window"
-        id="stIngest"
-        ref={stIngestRef}
-        tabIndex={-1}
-        hidden={screen !== "ingest"}
-        data-screen-label="importar-ingesta"
-        aria-busy={screen === "ingest"}
-      >
-        <div className="ing-col">
-          <span className="t-overline">{t("importar.ing.overline")}</span>
-          <div className="ing-count" id="count" ref={countRef} role="status" aria-live="polite">
-            0
-          </div>
-          <div className="ing-cap">{t("importar.ing.caption")}</div>
-          {/* La fuente CONCRETA que se está leyendo, con su número de orden. No
-              hay barra de progreso porque no hay dato para dibujarla: una
-              captura tarda dos segundos y un PDF de cuarenta páginas, minuto y
-              medio. Se dice QUÉ se hace, que sí se sabe. */}
-          {progreso?.actual ? (
-            <div className="ing-cap" aria-live="polite">
-              {t("importar.job.fuente")
-                .replace("{i}", String(progreso.actual.indice))
-                .replace("{n}", String(progreso.total))}
-              {" · "}
-              {nombreDe(progreso.actual)}
+        {/* ═══ ESTADO: INGESTA (ventana — aurora ACTIVA: el pulso de la máquina) ═══ */}
+        <main
+          className="imp-main c-window"
+          id="stIngest"
+          ref={stIngestRef}
+          tabIndex={-1}
+          hidden={screen !== "ingest"}
+          data-screen-label="importar-ingesta"
+          aria-busy={screen === "ingest"}
+        >
+          <div className="u-card u-card--grafito u-card--grande ing-card">
+            <span className="cu-rotulo">{t("importar.ing.overline")}</span>
+            <div className="ing-num">
+              <div className="ing-count" id="count" ref={countRef} role="status" aria-live="polite">
+                0
+              </div>
+              <div className="ing-cap">{t("importar.ing.caption")}</div>
             </div>
-          ) : null}
+            {/* EL PROGRESO, CONTADO EN FUENTES. No es un tiempo ni un porcentaje
+                estimado: es Progreso.listas sobre Progreso.total, las fuentes
+                que ya terminaron (bien o mal) de las que se dieron de alta. Una
+                captura tarda dos segundos y un PDF largo, minuto y medio, así
+                que la barra avanza a saltos; el rótulo dice exactamente qué
+                cuenta. */}
+            {progreso && progreso.total > 0 ? (
+              <div className="ing-progreso">
+                <div
+                  className="cu-barra"
+                  role="progressbar"
+                  aria-valuemin={0}
+                  aria-valuemax={progreso.total}
+                  aria-valuenow={progreso.listas}
+                  aria-label={t("importar.job.barra")
+                    .replace("{listas}", String(progreso.listas))
+                    .replace("{n}", String(progreso.total))}
+                >
+                  <span style={{ width: `${Math.round((progreso.listas / progreso.total) * 100)}%` }} />
+                </div>
+                <span className="ing-frac">
+                  {t("importar.job.barra")
+                    .replace("{listas}", String(progreso.listas))
+                    .replace("{n}", String(progreso.total))}
+                </span>
+              </div>
+            ) : null}
+            {/* La fuente CONCRETA que se está leyendo, con su número de orden. */}
+            {progreso?.actual ? (
+              <div className="ing-actual" aria-live="polite">
+                <span className="c-spin" aria-hidden="true">
+                  ⟳
+                </span>
+                <span>
+                  {t("importar.job.fuente")
+                    .replace("{i}", String(progreso.actual.indice))
+                    .replace("{n}", String(progreso.total))}
+                  {" · "}
+                  <b>{nombreDe(progreso.actual)}</b>
+                </span>
+              </div>
+            ) : null}
+          </div>
 
-          <div className="c-panel ing-log" id="log" aria-live="polite">
+          <div className="u-card u-card--grafito ing-log" id="log" aria-live="polite">
             {filas.map((l) => {
               /* ★ El estado VISUAL no es el de la base: una fuente que terminó
-                 con CERO items no lleva ✓ verde. Ese tick sobre un cero era
-                 justo la mentira de las 14 capturas. La lógica vive en
+                 con CERO items no lleva ✓ verde. La lógica vive en
                  `estadoVisual` (pura, con su mutante en los tests) y no aquí:
                  el shell y esta pantalla tienen que contar lo mismo. */
               const st = estadoVisual(l);
@@ -1421,18 +1474,13 @@ export function ImportarScreen() {
           {/* ★ LA PAUSA, DICHA CON TODAS SUS LETRAS. Cuando una invocación se
               queda sin presupuesto el trabajo NO se ha roto: está esperando. Se
               explica y se ofrece el botón, aunque el observador ya lo esté
-              retomando solo — un usuario mirando una pantalla quieta merece
-              saber por qué está quieta y poder empujar él. */}
+              retomando solo. */}
           {progreso?.pausado ? (
-            <div className="c-card" style={{ width: "100%", marginTop: 14, textAlign: "left", padding: "16px 20px" }} role="status">
-              <span className="t-overline">{t("importar.job.pausadoTitle")}</span>
-              <p style={{ margin: "10px 0 0", color: "var(--text-muted)", fontSize: "var(--fs-ui)" }}>
-                {t("importar.job.pausadoBody")}
-              </p>
-              <p style={{ margin: "10px 0 0" }}>
-                <button
-                  type="button"
-                  className="c-btn"
+            <Card as="section" className="ing-pausa" role="status">
+              <PanelHeader titulo={t("importar.job.pausadoTitle")} sub={t("importar.job.pausadoBody")} />
+              <div className="cu-linea">
+                <Button
+                  variante="brasa"
                   disabled={reanudando}
                   onClick={() => {
                     if (!jobId) return;
@@ -1446,42 +1494,42 @@ export function ImportarScreen() {
                   ) : (
                     t("importar.job.pausadoCta")
                   )}
-                </button>
-              </p>
-            </div>
+                </Button>
+              </div>
+            </Card>
           ) : null}
 
           {/* El fallo del SONDEO no se traga: si la pantalla no puede leer el
               estado, lo dice — el trabajo puede seguir vivo en el servidor. */}
           {errObs ? (
-            <p className="imp-note" role="alert" style={{ color: "var(--danger)" }}>
+            <p className="imp-err" role="alert">
               {t("importar.job.sondeoFallo").replace("{motivo}", errObs)}
             </p>
           ) : null}
 
-          <p className="ing-hint">
+          <p className="cu-nota ing-hint">
             {t("importar.ing.hint1")}
             <br />
             {t("importar.ing.hint2")}
             <br />
             {t("importar.job.seguir")}
           </p>
-        </div>
-      </main>
+        </main>
 
-      {/* ═══ ESTADO: FIN (el ÚNICO shimmer de todo el producto) ═══ */}
-      <main
-        className="imp-main c-window"
-        id="stDone"
-        ref={stDoneRef}
-        tabIndex={-1}
-        hidden={screen !== "done"}
-        data-screen-label="importar-fin"
-      >
-        <div className="fin-col">
-          <span className="t-overline">{t("importar.fin.overline")}</span>
-          <h2 style={{ marginTop: "18px" }}>{t("importar.fin.title")}</h2>
-          <div className="c-panel fin-panel" id="finPanel" ref={finPanelRef}>
+        {/* ═══ ESTADO: FIN (el ÚNICO shimmer de todo el producto) ═══ */}
+        <main
+          className="imp-main c-window"
+          id="stDone"
+          ref={stDoneRef}
+          tabIndex={-1}
+          hidden={screen !== "done"}
+          data-screen-label="importar-fin"
+        >
+          <header className="cu-cabeza">
+            <span className="cu-rotulo">{t("importar.fin.overline")}</span>
+            <h2 className="cu-cabeza-t">{t("importar.fin.title")}</h2>
+          </header>
+          <div className="u-card u-card--grafito u-card--grande fin-panel" id="finPanel" ref={finPanelRef}>
             <div className="fin-head">
               <span className="n" id="finCount">
                 {result?.counts.total ?? 0}
@@ -1510,107 +1558,96 @@ export function ImportarScreen() {
             </div>
           </div>
 
-          {/* ★ EL CONSUMO, A LA VISTA. Antes no se leía el `usage` que devuelve el
-              proveedor en NINGUNA de las llamadas del repo, así que el gasto era
-              invisible: se podía multiplicar por cinco sin que apareciera en
-              ninguna pantalla — y lo estaba. Sin precio en pesos (el plan de cada
-              uno es distinto e inventarlo sería un número sin fuente); con los
-              hechos, que sí son verificables. */}
-          {result?.consumo ? (
-            <div className="c-card" style={{ width: "100%", marginTop: 14, textAlign: "left", padding: "16px 20px" }}>
-              <span className="t-overline">{t("importar.fin.consumo.overline")}</span>
-              <p style={{ margin: "10px 0 0", color: "var(--text-muted)", fontSize: "var(--fs-ui)" }}>
-                {result.consumo.desdeCache
-                  ? t("importar.fin.consumo.cache")
-                  : [
-                      t("importar.fin.consumo.leido").replace(
-                        "{kb}",
-                        String(Math.max(1, Math.round(result.consumo.caracteresDocumento / 1024))),
-                      ),
-                      result.consumo.llamadas === 1
-                        ? t("importar.fin.consumo.llamadasUna")
-                        : t("importar.fin.consumo.llamadas").replace("{n}", String(result.consumo.llamadas)),
-                      // Con alguna llamada sin `usage`, el total NO se presenta
-                      // como exacto: se dice «≥» y cuántas faltan.
-                      result.consumo.llamadasSinUso > 0
-                        ? t("importar.fin.consumo.tokensSuelo")
-                            .replace("{n}", result.consumo.tokensEntrada.toLocaleString(lang === "en" ? "en-US" : "es-CL"))
-                            .replace("{sin}", String(result.consumo.llamadasSinUso))
-                        : t("importar.fin.consumo.tokens").replace(
-                            "{n}",
-                            result.consumo.tokensEntrada.toLocaleString(lang === "en" ? "en-US" : "es-CL"),
-                          ),
-                    ].join(" · ")}
-              </p>
-              {result.consumo.desdeCache ? null : (
-                <p style={{ margin: "8px 0 0", color: "var(--text-muted)", fontSize: "var(--fs-micro, 12px)" }}>
-                  {t("importar.fin.consumo.nota")}
-                </p>
-              )}
-            </div>
-          ) : null}
-
-          {/* ★★ LAS SECCIONES QUE NO SE MANDARON AL MODELO, UNA A UNA Y POR SU
-              NOMBRE. Esta es la regla capital del producto: ningún dato del
-              usuario se descarta en silencio. El reparto por secciones ahorra
-              justo porque no manda a extraer el relato del cuestionario — y
-              precisamente por eso el usuario tiene que VER exactamente qué se
-              quedó fuera y poder pedir que se lea entero. */}
-          {result && result.contexto.length > 0 ? (
-            <div className="c-card" style={{ width: "100%", marginTop: 14, textAlign: "left", padding: "16px 20px" }}>
-              <span className="t-overline">{t("importar.fin.contexto.overline")}</span>
-              <p style={{ margin: "10px 0 0", color: "var(--text-muted)", fontSize: "var(--fs-ui)" }}>
-                {(result.contexto.length === 1
-                  ? t("importar.fin.contexto.bodyUna")
-                  : t("importar.fin.contexto.body").replace("{n}", String(result.contexto.length))
-                ).replace(
-                  "{kb}",
-                  String(
-                    Math.max(1, Math.round(result.contexto.reduce((n, s) => n + s.caracteres, 0) / 1024)),
-                  ),
-                )}
-              </p>
-              <ul style={{ margin: "10px 0 0", paddingLeft: 18, color: "var(--text-muted)", fontSize: "var(--fs-ui)" }}>
-                {result.contexto.map((s, i) => (
-                  <li key={i} style={{ marginBottom: 4 }}>
-                    {s.titulo}{" "}
-                    <span style={{ opacity: 0.7 }}>
-                      · {t("importar.fin.contexto.chars").replace("{n}", s.caracteres.toLocaleString(lang === "en" ? "en-US" : "es-CL"))}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-              <p style={{ margin: "8px 0 0", color: "var(--text-muted)", fontSize: "var(--fs-micro, 12px)" }}>
-                {t("importar.fin.contexto.releer")}
-              </p>
-            </div>
-          ) : null}
-
-          {/* Avisos honestos por archivo (PDF escaneado sin capa, imagen ilegible…):
-              nunca se inventa lo que no se pudo leer. */}
-          {warnings.length > 0 ? (
-            <div className="c-card" style={{ width: "100%", marginTop: 14, textAlign: "left", padding: "16px 20px" }}>
-              <span className="t-overline">{t("importar.fin.warnings")}</span>
-              <ul style={{ margin: "10px 0 0", paddingLeft: 18, color: "var(--text-muted)", fontSize: "var(--fs-ui)" }}>
-                {warnings.map((w, i) => (
-                  <li key={i} style={{ marginBottom: 4 }}>
-                    {w}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          ) : null}
-
           <div className="fin-cta">
-            <span className="c-forge">
-              <Link className="c-btn c-btn--forge c-btn--hero" href={withOrigin("/app/staging", origen)}>
-                {t("importar.fin.reviewCta")}
-              </Link>
-            </span>
-            <span className="fin-sub">{t("importar.fin.sub")}</span>
+            <Button variante="brasa" tamano="lg" href={withOrigin("/app/staging", origen)}>
+              {t("importar.fin.reviewCta")}
+            </Button>
+            <span className="cu-nota">{t("importar.fin.sub")}</span>
           </div>
-        </div>
-      </main>
+
+          <div className="cu-rejilla cu-rejilla--2 fin-rejilla">
+            {/* ★ EL CONSUMO, A LA VISTA. Sin precio en pesos (el plan de cada
+                uno es distinto e inventarlo sería un número sin fuente); con
+                los hechos, que sí son verificables. */}
+            {result?.consumo ? (
+              <Card as="section" className="fin-card">
+                <PanelHeader titulo={t("importar.fin.consumo.overline")} />
+                <p className="fin-card__p">
+                  {result.consumo.desdeCache
+                    ? t("importar.fin.consumo.cache")
+                    : [
+                        t("importar.fin.consumo.leido").replace(
+                          "{kb}",
+                          String(Math.max(1, Math.round(result.consumo.caracteresDocumento / 1024))),
+                        ),
+                        result.consumo.llamadas === 1
+                          ? t("importar.fin.consumo.llamadasUna")
+                          : t("importar.fin.consumo.llamadas").replace("{n}", String(result.consumo.llamadas)),
+                        // Con alguna llamada sin `usage`, el total NO se presenta
+                        // como exacto: se dice «≥» y cuántas faltan.
+                        result.consumo.llamadasSinUso > 0
+                          ? t("importar.fin.consumo.tokensSuelo")
+                              .replace("{n}", result.consumo.tokensEntrada.toLocaleString(lang === "en" ? "en-US" : "es-CL"))
+                              .replace("{sin}", String(result.consumo.llamadasSinUso))
+                          : t("importar.fin.consumo.tokens").replace(
+                              "{n}",
+                              result.consumo.tokensEntrada.toLocaleString(lang === "en" ? "en-US" : "es-CL"),
+                            ),
+                      ].join(" · ")}
+                </p>
+                {result.consumo.desdeCache ? null : <p className="cu-nota">{t("importar.fin.consumo.nota")}</p>}
+              </Card>
+            ) : null}
+
+            {/* ★★ LAS SECCIONES QUE NO SE MANDARON AL MODELO, UNA A UNA Y POR SU
+                NOMBRE. Ningún dato del usuario se descarta en silencio: tiene
+                que VER exactamente qué se quedó fuera y poder pedir que se lea
+                entero. */}
+            {result && result.contexto.length > 0 ? (
+              <Card as="section" className="fin-card">
+                <PanelHeader titulo={t("importar.fin.contexto.overline")} />
+                <p className="fin-card__p">
+                  {(result.contexto.length === 1
+                    ? t("importar.fin.contexto.bodyUna")
+                    : t("importar.fin.contexto.body").replace("{n}", String(result.contexto.length))
+                  ).replace(
+                    "{kb}",
+                    String(
+                      Math.max(1, Math.round(result.contexto.reduce((n, s) => n + s.caracteres, 0) / 1024)),
+                    ),
+                  )}
+                </p>
+                <ul className="fin-lista">
+                  {result.contexto.map((s, i) => (
+                    <li key={i}>
+                      <span>{s.titulo}</span>
+                      <span className="fin-lista__dato">
+                        {t("importar.fin.contexto.chars").replace("{n}", s.caracteres.toLocaleString(lang === "en" ? "en-US" : "es-CL"))}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+                <p className="cu-nota">{t("importar.fin.contexto.releer")}</p>
+              </Card>
+            ) : null}
+
+            {/* Avisos honestos por archivo (PDF escaneado sin capa, imagen ilegible…):
+                nunca se inventa lo que no se pudo leer. */}
+            {warnings.length > 0 ? (
+              <Card as="section" className="fin-card">
+                <PanelHeader titulo={t("importar.fin.warnings")} />
+                <ul className="fin-lista">
+                  {warnings.map((w, i) => (
+                    <li key={i}>
+                      <span>{w}</span>
+                    </li>
+                  ))}
+                </ul>
+              </Card>
+            ) : null}
+          </div>
+        </main>
+      </div>
     </div>
   );
 }

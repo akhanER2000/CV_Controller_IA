@@ -1,14 +1,56 @@
-/* Toast de deshacer — flotante, abajo al centro, sobre cualquier pantalla. */
-.c-undo{position:fixed;left:50%;bottom:26px;transform:translateX(-50%);z-index:60;
-  display:flex;align-items:center;gap:14px;max-width:min(560px,calc(100vw - 32px));
-  padding:10px 12px 10px 16px;background:var(--surface);border:1px solid var(--border-strong);
-  border-radius:var(--radius-md);box-shadow:0 8px 30px rgba(0,0,0,.35);
-  font:400 12.5px/1.4 var(--font-sans);color:var(--text)}
-/* El toast flota sobre cualquier pantalla, así que su sombra es lo único que lo
-   separa del contenido. En porcelana el negro al 35% lo rodea de un halo sucio;
-   con tinta a alfa baja sigue despegado y no mancha. */
-[data-theme="light"] .c-undo{box-shadow:0 8px 30px rgba(20,24,26,.14)}
-.c-undo__msg{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.c-undo__btn{flex:none;font:600 11px/1 var(--font-mono);letter-spacing:.08em;text-transform:uppercase;
-  color:var(--accent-text);padding:8px 10px;border:1px solid var(--border-patina);border-radius:6px;cursor:pointer}
-.c-undo__btn:hover{background:var(--surface-sunken)}
+/* Toast de deshacer — flotante, abajo al centro, sobre cualquier pantalla.
+   Forja v2: tarjeta de vidrio con radio grande, mensaje en sans y «Deshacer»
+   como botón táctil. La sombra es --elev-3, que ya trae su versión porcelana
+   (antes había un rgba por tema escrito aquí a mano). En móvil sube por encima
+   de la barra inferior del shell. Va sobre «ingesta en curso» si coinciden. */
+.c-undo {
+  position: fixed;
+  left: 50%;
+  bottom: 24px;
+  transform: translateX(-50%);
+  z-index: calc(var(--z-overlay) + 1);
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  max-width: min(560px, calc(100vw - 32px));
+  padding: var(--sp-2) var(--sp-2) var(--sp-2) var(--sp-4);
+  border-radius: var(--radius-xl);
+  border: 1px solid var(--glass-border);
+  background: var(--glass-bg);
+  backdrop-filter: blur(var(--glass-blur)) saturate(1.2);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(1.2);
+  box-shadow: var(--elev-3);
+  font: 400 var(--fs-ui) / 1.4 var(--font-sans);
+  color: var(--text);
+}
+.c-undo__msg {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.c-undo__btn {
+  flex: none;
+  min-height: 36px;
+  padding: 0 var(--sp-4);
+  border-radius: 12px;
+  border: 1px solid var(--border-brasa);
+  background: var(--surface-elevated);
+  font: 600 var(--fs-ui) / 1 var(--font-sans);
+  color: var(--accent-text);
+  cursor: pointer;
+  transition: background-color var(--dur-fast) var(--ease-standard);
+}
+.c-undo__btn:hover,
+.c-undo__btn:focus-visible {
+  background: var(--surface-sunken);
+}
+@media (max-width: 767px) {
+  .c-undo {
+    bottom: 84px;
+    width: calc(100vw - 16px);
+    max-width: none;
+  }
+  .c-undo__btn {
+    min-height: 44px;
+  }
+}

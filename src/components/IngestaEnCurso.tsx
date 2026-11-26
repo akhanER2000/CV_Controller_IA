@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useT } from "@/lib/i18n";
 import { useIngesta } from "@/lib/ingesta/useIngesta";
+import "./IngestaEnCurso.css";
 
 /**
  * ════════════════════════════════════════════════════════════════════════════
@@ -22,9 +23,11 @@ import { useIngesta } from "@/lib/ingesta/useIngesta";
  * sigue ahí cuando no hay nada que indicar es ruido, y este producto no puede
  * permitirse enseñar estados que no son ciertos.
  *
- * Estilos EN LÍNEA a propósito: son ocho reglas para un solo nodo y todas usan
- * tokens que ya existen en globals.css. Un .css nuevo entraría en el barrido de
- * `tests/pulido-visual.test.ts` sin aportar nada que compartir.
+ * FORJA v2: tarjeta de vidrio abajo a la derecha (abajo a la izquierda tapaba
+ * el pie del lateral; en móvil sube por encima de la barra inferior) con una
+ * barra de avance. La barra es `listas / total` — fuentes YA terminadas sobre
+ * las que hay, ambas leídas de la base —, no un porcentaje de tiempo. Sus
+ * estilos van en IngestaEnCurso.css (prefijo ie-), solo con tokens.
  * ════════════════════════════════════════════════════════════════════════════
  */
 export function IngestaEnCurso() {
@@ -40,56 +43,32 @@ export function IngestaEnCurso() {
     .replace("{total}", String(progreso.total))
     .replace("{items}", String(progreso.items));
 
+  // Fracción de fuentes terminadas (dato de la base, no una estimación).
+  const avance = Math.min(100, Math.max(0, (progreso.listas / progreso.total) * 100));
+
   return (
     <Link
       href="/app/importar"
+      className="ie-pill"
       aria-label={t("ingesta.shell.aria")}
       role="status"
       aria-live="polite"
       data-screen-label="ingesta-en-curso"
-      style={{
-        position: "fixed",
-        left: "14px",
-        bottom: "14px",
-        zIndex: "var(--z-overlay)" as unknown as number,
-        display: "flex",
-        alignItems: "center",
-        gap: "10px",
-        maxWidth: "min(92vw, 380px)",
-        padding: "10px 14px",
-        borderRadius: "var(--radius-xs)",
-        border: "1px solid var(--border)",
-        background: "var(--surface-elevated)",
-        boxShadow: "var(--shadow-2)",
-        textDecoration: "none",
-        color: "var(--text)",
-        font: "400 var(--fs-ui)/1.3 var(--font-sans)",
-      }}
     >
-      <span className="c-spin" aria-hidden="true" style={{ color: "var(--patina-500)" }}>
-        ⟳
-      </span>
-      <span style={{ display: "flex", flexDirection: "column", gap: "2px", minWidth: 0 }}>
-        <b style={{ font: "500 var(--fs-ui)/1.2 var(--font-sans)" }}>
-          {progreso.pausado ? t("ingesta.shell.pausada") : t("ingesta.shell.enCurso")}
-        </b>
-        <span
-          style={{
-            font: "400 var(--fs-micro)/1.3 var(--font-mono)",
-            color: "var(--text-muted)",
-            overflow: "hidden",
-            textOverflow: "ellipsis",
-            whiteSpace: "nowrap",
-          }}
-        >
-          {detalle}
+      <span className="ie-fila">
+        <span className="c-spin ie-spin" aria-hidden="true">
+          ⟳
+        </span>
+        <span className="ie-txt">
+          <b className="ie-t">{progreso.pausado ? t("ingesta.shell.pausada") : t("ingesta.shell.enCurso")}</b>
+          <span className="ie-det">{detalle}</span>
+        </span>
+        <span className="ie-ver" aria-hidden="true">
+          {t("ingesta.shell.ver")} →
         </span>
       </span>
-      <span
-        aria-hidden="true"
-        style={{ marginLeft: "auto", font: "400 var(--fs-micro)/1 var(--font-mono)", color: "var(--link)" }}
-      >
-        {t("ingesta.shell.ver")} →
+      <span className="ie-barra" aria-hidden="true">
+        <span style={{ width: `${avance}%` }} />
       </span>
     </Link>
   );

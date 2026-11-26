@@ -1,112 +1,396 @@
-/* ── fuentes.html — VENTANA. Inventario de fuentes vivas; monta la aurora. ──
-   PORTE LITERAL del 2º <style> de corpus-design/04-pantallas/fuentes.html
-   (fuera de data-corpus-system). Sin @keyframes propios. Clases sin renombrar.
+/* ── Fuentes — Forja v2 ──────────────────────────────────────────────────────
+   La página es .cu-pagina (cuenta.css) y cada fuente / cada puerta es una
+   <Card> grafito (ui.css). Aquí solo va lo propio de Fuentes, con prefijo fu-:
+   el informe en baldosas, las líneas de estado por fases, las vías de LinkedIn,
+   la zona de arrastre destacada y la maqueta del modo local.
+   Mobile-first: una columna; la rejilla de dos la da .cu-rejilla--2.
+   Solo tokens de globals.css: ni un hex suelto.
 
-   Cambio de gramática: Fuentes pasó de muro a ventana (aquí se DECIDE por qué
-   vía entra el material, no se lee trabajo denso). Las tarjetas .fu-card llevan
-   ahora .c-panel en vez de .c-card, así que sus rellenos internos macizos
-   (var(--surface) opaco) taparían el vidrio: el bloque del final los pasa a
-   translúcidos. Nada de esto toca globals.css. */
-.fu-main{flex:1;padding:30px 0 120px}
-.fu-lead{display:flex;align-items:baseline;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:16px}
-.fu-lead p{color:var(--text-muted);font-size:var(--fs-ui);max-width:62ch}
-.fu-card{margin-top:14px;overflow:hidden}
-.fu-h{display:flex;align-items:baseline;gap:12px;padding:16px 22px 12px;flex-wrap:wrap}
-.fu-h .nm{font:500 15px/1 var(--font-mono)}
-.fu-h .tag{font:500 9px/1 var(--font-mono);letter-spacing:.1em;text-transform:uppercase;color:var(--text-subtle);border:1px solid var(--border);border-radius:4px;padding:4px 7px}
-.fu-h .tag.star{color:var(--accent-text);border-color:var(--border-patina)}
-.fu-h .acts{margin-left:auto;display:flex;gap:8px}
-.fu-facts{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:var(--border);border-top:1px solid var(--border)}
-.fu-facts>div{background:var(--surface);padding:12px 22px 14px}
-.fu-facts .v{font:500 17px/1.1 var(--font-mono)}
-.fu-facts .k{margin-top:4px;font:400 var(--fs-micro)/1.4 var(--font-sans);color:var(--text-muted)}
-.fu-new{display:flex;align-items:center;gap:10px;padding:12px 22px;border-top:1px solid var(--border);
-  font:400 var(--fs-data)/1.5 var(--font-mono);color:var(--text-muted)}
-.fu-new b{color:var(--accent-text);font-weight:500}
-.fu-new .go{margin-left:auto}
-.fu-note{padding:11px 22px 15px;border-top:1px dashed var(--border);font:400 var(--fs-micro)/1.7 var(--font-mono);color:var(--text-subtle)}
-/* selector de repos */
-.fu-repos{display:none;border-top:1px solid var(--border);background:var(--surface-sunken)}
-.fu-repos.open{display:block}
-.fu-rh{display:flex;align-items:baseline;gap:12px;padding:12px 22px;font:400 var(--fs-micro)/1.5 var(--font-mono);color:var(--text-muted)}
-.fu-rh b{color:var(--text);font-weight:500}
-.fu-repo{display:flex;align-items:baseline;gap:12px;padding:9px 22px;border-top:1px solid var(--border);font:400 var(--fs-data)/1.5 var(--font-mono)}
-.fu-repo:hover{background:var(--surface)}
-.fu-repo input{accent-color:var(--patina-500);transform:translateY(1px)}
-.fu-repo .nm{color:var(--text);min-width:170px}
-.fu-repo .meta{color:var(--text-subtle);flex:1}
-.fu-repo .why{color:var(--text-subtle);font-size:10px;letter-spacing:.06em;text-transform:uppercase}
-.fu-repo.off .nm,.fu-repo.off .meta{color:var(--text-subtle)}
-/* linkedin */
-.fu-li p{padding:2px 22px 14px;color:var(--text-muted);font-size:13px;line-height:1.65;max-width:70ch}
-.fu-li .vias{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:var(--border);border-top:1px solid var(--border)}
-.fu-li .vias>a{background:color-mix(in srgb,var(--surface) 58%,transparent);padding:13px 18px;font:400 var(--fs-data)/1.6 var(--font-sans);color:var(--text-muted);text-decoration:none}
-.fu-li .vias>a:hover{background:color-mix(in srgb,var(--surface-elevated) 72%,transparent);color:var(--text)}
-.fu-li .vias b{display:block;color:var(--text);font-weight:500;margin-bottom:3px}
-.fu-add{margin-top:22px;display:flex;gap:10px;flex-wrap:wrap}
-.fu-add input{max-width:420px}
-@media (max-width:768px){.fu-facts{grid-template-columns:repeat(2,1fr)}.fu-li .vias{grid-template-columns:1fr}}
+   Historia: hasta Forja v2 esto era el PORTE LITERAL del <style> de
+   corpus-design/04-pantallas/fuentes.html (paneles de vidrio .c-panel, todo en
+   monoespaciada). Las clases que el JSX conserva (fu-report, fu-rchip, fu-status,
+   fu-repos, fu-repo, fu-facts, fu-new…) mantienen su nombre y su papel. */
 
-/* ── Cableado B — acciones in situ (modo Supabase). Clases nuevas con prefijo fu-. ── */
-.fu-sub{margin-top:30px;padding:0 2px 2px}
-.fu-body{padding:2px 22px 14px;color:var(--text-muted);font:400 13px/1.65 var(--font-sans);max-width:72ch}
-.fu-form{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:12px 22px 16px;border-top:1px solid var(--border)}
-.fu-form .c-input{flex:1;min-width:220px;max-width:460px}
-.fu-at{font:400 13px/1 var(--font-mono);color:var(--text-subtle)}
-.fu-inline{padding:12px 22px 16px;border-top:1px solid var(--border);display:flex;flex-direction:column;gap:10px}
-.fu-ta{width:100%;min-height:120px;resize:vertical;font:400 var(--fs-data)/1.6 var(--font-mono)}
-.fu-inline-acts{display:flex;gap:8px;flex-wrap:wrap}
-/* estado por fases: reutiliza la voz de .fu-new (mono, borde superior) */
-.fu-status{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:12px 22px;border-top:1px solid var(--border);
-  font:400 var(--fs-data)/1.5 var(--font-mono);color:var(--text-muted)}
-.fu-status.is-ok{color:var(--text)}
-.fu-status.is-err{color:var(--danger)}
-.fu-status .go{margin-left:auto}
-.fu-extra{flex-basis:100%;color:var(--text-subtle);font:400 var(--fs-micro)/1.6 var(--font-mono)}
-/* confirmación inline de "quitar" (sin window.confirm) */
-.fu-confirm{padding:12px 22px 16px;border-top:1px dashed var(--border);display:flex;flex-direction:column;gap:10px;
-  font:400 13px/1.6 var(--font-sans);color:var(--text-muted)}
-.fu-confirm-acts{display:flex;gap:8px;flex-wrap:wrap}
-/* Zona de arrastre compartida (components/DropZone) dentro de una tarjeta:
-   solo COLOCACIÓN — el aspecto del gesto vive en DropZone.css. */
-.dz.fu-drop{margin:0 22px 16px;width:auto}
+.fu-pagina {
+  gap: var(--sp-6);
+}
+.fu-lead-b {
+  color: var(--text);
+  font-weight: 600;
+}
+.fu-seccion {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+}
+.fu-seccion > .u-ph {
+  margin-bottom: 0;
+}
 
-/* ── El vidrio por dentro ────────────────────────────────────────────────────
-   .c-panel es translúcido; cualquier relleno macizo dentro lo convierte otra
-   vez en tarjeta opaca. Estos son los rellenos de Fuentes, en su versión
-   ahumada. Las líneas de 1px del grid siguen viéndose porque la celda y el
-   hueco tienen ahora tonos distintos, no porque una sea opaca. */
-.fu-card .fu-facts>div{background:color-mix(in srgb,var(--surface) 58%,transparent)}
-.fu-card .fu-repos{background:color-mix(in srgb,var(--surface-sunken) 62%,transparent)}
-.fu-card .fu-repo:hover{background:color-mix(in srgb,var(--surface) 58%,transparent)}
-.fu-card .c-input{background:color-mix(in srgb,var(--surface-sunken) 70%,transparent)}
+/* ── La tarjeta: columna con aire regular ───────────────────────────────── */
+.fu-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  min-width: 0;
+}
+.fu-card > .u-ph {
+  margin-bottom: 0;
+}
+.fu-ancha {
+  grid-column: 1 / -1;
+}
+.fu-ph-acc {
+  flex-wrap: wrap;
+}
+.fu-ph-acc .u-ph-acc {
+  flex-wrap: wrap;
+}
+.fu-dato {
+  font-family: var(--font-mono);
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
 
-/* ── Informe por fuente (bloque D) ───────────────────────────────────────────
-   Reemplaza el .fu-facts de columnas FIJAS (grid-template-columns hardcodeado a
-   "1fr 1fr 1fr") por chips que FLUYEN: añadir un dato es añadir un chip, sin tocar
-   ningún literal de columnas. Misma voz tipográfica que .fu-facts (valor mono
-   grande + etiqueta micro), pero en flex-wrap. Cada chip lleva su propia línea de
-   1px a la izquierda para conservar el ritmo de rejilla del panel de vidrio. */
-.fu-report{display:flex;flex-wrap:wrap;gap:1px;background:var(--border);border-top:1px solid var(--border)}
-.fu-rchip{flex:1 1 auto;min-width:120px;background:color-mix(in srgb,var(--surface) 58%,transparent);padding:12px 22px 14px}
-.fu-rchip .v{font:500 15px/1.2 var(--font-mono);color:var(--text);display:flex;align-items:baseline;gap:7px;flex-wrap:wrap}
-.fu-rchip .k{margin-top:4px;font:400 var(--fs-micro)/1.4 var(--font-sans);color:var(--text-muted)}
-/* una cifra que pide revisión (duplicado / sin evidencia por decidir): se tiñe el
-   valor, no el fondo, para que salte sin gritar. El cero se queda neutro. */
-.fu-rchip--warn .v{color:var(--accent-text)}
-/* el sello de procedencia dentro del chip de lectura: «transcrito por IA» */
-.fu-rtag{font:500 8px/1 var(--font-mono);letter-spacing:.09em;text-transform:uppercase;color:var(--text-subtle);
-  border:1px solid var(--border);border-radius:4px;padding:3px 5px;transform:translateY(-1px)}
-/* notas del informe (caché, contexto no extraído): voz de .fu-note pero sin borde
-   punteado propio, porque cuelgan directamente del informe. */
-.fu-rnote{padding:11px 22px;border-top:1px solid var(--border);
-  font:400 var(--fs-micro)/1.6 var(--font-mono);color:var(--text-subtle)}
-.fu-rnote--ctx{color:var(--text-muted);border-top:1px dashed var(--border)}
-@media (max-width:768px){.fu-rchip{min-width:44%}}
+/* Rótulos arriba de la tarjeta (tipo, sello, «ejemplo»). Un rótulo largo
+   baja de línea en vez de desbordar a 390px. */
+.fu-tags {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2);
+}
+.fu-tags .u-chip {
+  height: auto;
+  min-height: 24px;
+  padding-block: 4px;
+  line-height: 1.3;
+  white-space: normal;
+}
 
-/* vías de LinkedIn como botones ejecutables (mismo look que los enlaces .vias>a) */
-.fu-li .vias>button{background:color-mix(in srgb,var(--surface) 58%,transparent);border:0;text-align:left;cursor:pointer;padding:13px 18px;
-  font:400 var(--fs-data)/1.6 var(--font-sans);color:var(--text-muted)}
-.fu-li .vias>button:hover:not(:disabled){background:color-mix(in srgb,var(--surface-elevated) 72%,transparent);color:var(--text)}
-.fu-li .vias>button:disabled{opacity:var(--opacity-disabled);cursor:default}
-.fu-li .vias>button b{display:block;color:var(--text);font-weight:500;margin-bottom:3px}
+/* Cabecera de una fuente ya leída: nombre + tipo + estado */
+.fu-h {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+.fu-h .nm {
+  margin: 0;
+  font: 600 15px / 1.35 var(--font-sans);
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+
+/* Acciones de la tarjeta: al pie, separadas por una línea */
+.fu-card .acts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  margin-top: auto;
+  padding-top: var(--sp-3);
+  border-top: 1px solid var(--border);
+}
+
+/* ── Informe por fuente (bloque D): baldosas que fluyen ─────────────────────
+   Un dato más es una baldosa más; ninguna columna fijada a mano. */
+.fu-report,
+.fu-facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 116px), 1fr));
+  gap: var(--sp-2);
+}
+.fu-rchip,
+.fu-facts > div {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  padding: var(--sp-3);
+  border-radius: var(--radius-lg);
+  background: var(--surface-sunken);
+  border: 1px solid var(--border);
+}
+.fu-rchip .v,
+.fu-facts .v {
+  font: 600 16px / 1.2 var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+.fu-rchip .k,
+.fu-facts .k {
+  font: 400 var(--fs-micro) / 1.4 var(--font-sans);
+  color: var(--text-muted);
+}
+/* una cifra que pide revisión (cero ítems, duplicado, sin evidencia): se tiñe el
+   valor y el borde, no el fondo, para que salte sin gritar. */
+.fu-rchip--warn {
+  border-color: var(--border-brasa);
+}
+.fu-rchip--warn .v {
+  color: var(--accent-text);
+}
+/* el sello de procedencia dentro de la baldosa de lectura: «transcrito por IA» */
+.fu-rtag {
+  align-self: flex-start;
+  margin-top: 2px;
+  padding: 3px 7px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--border-strong);
+  font: 500 10px / 1.2 var(--font-sans);
+  color: var(--text-subtle);
+}
+.fu-facts--doc .v {
+  font-size: var(--fs-ui);
+  font-weight: 500;
+}
+/* notas del informe (caché, contexto no extraído) */
+.fu-rnote {
+  font: 400 var(--fs-data) / 1.55 var(--font-sans);
+  color: var(--text-subtle);
+}
+.fu-rnote--ctx {
+  color: var(--text-muted);
+}
+
+/* ── Líneas de estado por fases (subir → extraer → resultado) ───────────── */
+.fu-status,
+.fu-new {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: var(--sp-3) var(--sp-4);
+  border-radius: var(--radius-lg);
+  background: var(--surface-sunken);
+  border: 1px solid var(--border);
+  font: 400 var(--fs-ui) / 1.5 var(--font-sans);
+  color: var(--text-muted);
+}
+.fu-new b {
+  color: var(--accent-text);
+  font-weight: 600;
+}
+.fu-status.is-ok {
+  color: var(--text);
+}
+.fu-status.is-err {
+  color: var(--danger);
+  background: var(--danger-quiet);
+  border-color: color-mix(in srgb, var(--danger) 40%, transparent);
+}
+.fu-status .go,
+.fu-new .go {
+  margin-left: auto;
+}
+.fu-extra {
+  flex-basis: 100%;
+  font: 400 var(--fs-data) / 1.55 var(--font-sans);
+  color: var(--text-subtle);
+  overflow-wrap: anywhere;
+}
+
+/* Confirmación de «quitar» en la página (sin window.confirm): .cu-confirmar */
+.fu-confirm {
+  font: 400 var(--fs-ui) / 1.6 var(--font-sans);
+  color: var(--text-muted);
+}
+.fu-confirm-acts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+}
+
+/* ── Formularios in situ ────────────────────────────────────────────────── */
+.fu-inline {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+}
+.fu-ta {
+  min-height: 140px;
+  resize: vertical;
+}
+.fu-inline-acts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+}
+.fu-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2);
+}
+.fu-form .c-input {
+  flex: 1 1 200px;
+  min-width: 0;
+}
+.fu-at {
+  font: 400 var(--fs-ui) / 1 var(--font-mono);
+  color: var(--text-subtle);
+}
+.fu-note {
+  font: 400 var(--fs-data) / 1.55 var(--font-sans);
+  color: var(--text-subtle);
+}
+
+/* ── Zona de arrastre destacada (components/DropZone + .cu-carga) ───────────
+   Dos clases para ganar a .dz sin depender del orden de carga. */
+.dz.fu-drop {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  width: 100%;
+  min-height: 104px;
+  padding: var(--sp-5) var(--sp-4);
+  border: 1.5px dashed var(--border-brasa);
+  border-radius: var(--radius-xl);
+  background: color-mix(in srgb, var(--brasa-500) 6%, transparent);
+  font: 400 var(--fs-ui) / 1.5 var(--font-sans);
+  color: var(--text-muted);
+}
+.dz.fu-drop b {
+  display: block;
+  color: var(--text);
+  font-weight: 600;
+}
+.dz.fu-drop:hover:not(:disabled),
+.dz.fu-drop.is-drag {
+  border-color: var(--accent-text);
+  background: color-mix(in srgb, var(--brasa-500) 11%, transparent);
+  color: var(--text);
+}
+
+/* ── LinkedIn: las tres vías como baldosas pulsables ────────────────────── */
+.fu-li .vias {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--sp-2);
+}
+.fu-li .vias > a,
+.fu-li .vias > button {
+  display: block;
+  min-height: 44px;
+  padding: var(--sp-3) var(--sp-4);
+  border-radius: var(--radius-lg);
+  background: var(--surface-sunken);
+  border: 1px solid var(--border);
+  text-align: left;
+  font: 400 var(--fs-data) / 1.55 var(--font-sans);
+  color: var(--text-muted);
+  text-decoration: none;
+  cursor: pointer;
+  transition: border-color var(--dur-fast) var(--ease-standard), color var(--dur-fast) var(--ease-standard);
+}
+.fu-li .vias > a:hover,
+.fu-li .vias > a:focus-visible,
+.fu-li .vias > button:hover:not(:disabled),
+.fu-li .vias > button:focus-visible {
+  border-color: var(--border-brasa);
+  color: var(--text);
+}
+.fu-li .vias > button[aria-expanded="true"] {
+  border-color: var(--border-brasa);
+}
+.fu-li .vias > button:disabled {
+  opacity: var(--opacity-disabled);
+  cursor: default;
+}
+.fu-li .vias b {
+  display: block;
+  margin-bottom: 2px;
+  font: 600 var(--fs-ui) / 1.4 var(--font-sans);
+  color: var(--text);
+}
+
+/* ── Vacío ──────────────────────────────────────────────────────────────── */
+.fu-vacio .u-empty {
+  border: 0;
+  padding-block: var(--sp-5);
+}
+
+/* ── MODO LOCAL: selector de repos (maqueta) ────────────────────────────── */
+.fu-repos {
+  display: none;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border);
+  background: var(--surface-sunken);
+  overflow: hidden;
+}
+.fu-repos.open {
+  display: block;
+}
+.fu-rh {
+  padding: var(--sp-3) var(--sp-4);
+  font: 400 var(--fs-data) / 1.6 var(--font-sans);
+  color: var(--text-muted);
+}
+.fu-rh b {
+  color: var(--text);
+  font-weight: 600;
+}
+.fu-repo {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px var(--sp-3);
+  min-height: 44px;
+  padding: var(--sp-2) var(--sp-4);
+  border-top: 1px solid var(--border);
+  font: 400 var(--fs-data) / 1.5 var(--font-sans);
+  cursor: pointer;
+}
+.fu-repo:hover {
+  background: var(--surface-elevated);
+}
+.fu-repo input {
+  accent-color: var(--brasa-500);
+  width: 16px;
+  height: 16px;
+}
+.fu-repo .nm {
+  font-family: var(--font-mono);
+  color: var(--text);
+  min-width: 150px;
+}
+.fu-repo .meta {
+  flex: 1;
+  color: var(--text-subtle);
+}
+.fu-repo .why {
+  font-size: var(--fs-micro);
+  color: var(--text-subtle);
+}
+.fu-repo.off .nm,
+.fu-repo.off .meta {
+  color: var(--text-subtle);
+}
+
+.fu-add {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+}
+.fu-add .c-input {
+  flex: 1 1 240px;
+  max-width: 460px;
+}
+
+@media (min-width: 720px) {
+  .fu-li .vias {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+@media (max-width: 767px) {
+  .fu-card .u-btn,
+  .fu-add .u-btn {
+    min-height: 44px;
+  }
+  .fu-form .c-input,
+  .fu-add .c-input {
+    min-height: 44px;
+  }
+}

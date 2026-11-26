@@ -3,6 +3,10 @@
 export const onboarding = {
   es: {
     "onboarding.header": "EMPEZAR",
+    "onboarding.pasos.aria": "Cómo se empieza en Corpus",
+    "onboarding.pasos.1": "Elige cómo empezar",
+    "onboarding.pasos.2": "Arma tu master",
+    "onboarding.pasos.3": "Pide variantes",
 
     "onboarding.overline": "Un master, N variantes — partamos por el master",
 
@@ -50,6 +54,10 @@ export const onboarding = {
   } as Record<string, string>,
   en: {
     "onboarding.header": "START",
+    "onboarding.pasos.aria": "How you start in Corpus",
+    "onboarding.pasos.1": "Choose how to start",
+    "onboarding.pasos.2": "Build your master",
+    "onboarding.pasos.3": "Ask for variants",
 
     "onboarding.overline": "One master, N variants — let's start with the master",
 

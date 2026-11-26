@@ -1,190 +1,221 @@
-/* ── importar.html — VENTANA. Vuélcalo: pega lo que tengas, cita la evidencia. ──
-   PORTE LITERAL del 2º <style> de corpus-design/04-pantallas/importar.html
-   (fuera de data-corpus-system). Sin @keyframes propios: reutiliza los del
-   sistema (cWordIn, cCharIn, cEnter, cShimmer, cSpin…). Clases sin renombrar. */
-.imp-main{flex:1;display:flex;flex-direction:column;align-items:center;padding:64px var(--container-pad) 96px}
-.imp-col{width:100%;max-width:760px;display:flex;flex-direction:column;align-items:center;text-align:center}
-.imp-col>.t-overline{margin-bottom:22px}
-.imp-h1{font-size:var(--fs-hero);max-width:15ch}
+/* ── importar.css — VOLCAR MATERIAL en Forja v2 ────────────────────────────────
+   Antes: porte literal de corpus-design/04-pantallas/importar.html (columna
+   centrada, listas planas, mucho texto en mono). Ahora: la página de cuenta de
+   Forja v2 — pasos 1 · 2 · 3 arriba (cu-pasos), tarjetas grafito con radio
+   grande, títulos en sans 600 y mono SOLO para datos cortos (recuentos, tamaños,
+   números de línea, el prompt copiable). Una sola pieza brasa por vista: el
+   botón que pone a leer (o el que lleva a la revisión, en el fin).
+
+   El orden ENTRE tarjetas lo dan las clases cu-* de components/cuenta/cuenta.css
+   y el material lo da .u-card (components/ui). Aquí solo va lo propio de la
+   pantalla. Solo tokens de globals.css: ni un hex suelto.
+
+   ⚠ Hay reglas con forma EXACTA que leen los tests (tres-puertas, pulido-visual):
+   `.imp-door{`, `.imp-doors__row{display:grid;grid-template-columns:repeat(3,1fr)`,
+   `.imp-ta:focus{outline:none}`, `.imp-box:focus-within{… --focus-ring` antes de
+   `.imp-box.is-drag`, y `.bcp.imp-pl__prompt`. Se reescriben en una línea a
+   propósito. Sin @keyframes propios. */
+
+/* ── Página ──────────────────────────────────────────────────────────────── */
+.imp-top{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:var(--sp-3)}
+.imp-main{display:flex;flex-direction:column;gap:var(--sp-5);min-width:0}
+.imp-main:focus{outline:none}
 .imp-h1 em{font-style:italic}
-.imp-sub{max-width:52ch;margin-top:18px;color:var(--text-muted);font-size:var(--fs-lead);line-height:1.65}
-.imp-box{width:100%;margin-top:40px;text-align:left;overflow:hidden}
-/* EL FOCO DEL VOLCADO (bloque C · estados). `.imp-ta:focus{outline:none}` —tres
-   líneas más abajo— apaga el aro del sistema y no ponía NADA en su lugar: se
-   tabulaba hasta el campo más importante de la pantalla y no se veía. Apagarlo
-   en el <textarea> está bien (la caja ENTERA es el campo; un aro pegado al borde
-   interior se lee como un error de maquetación), así que el acuse se sube al
-   contenedor, que es lo que el ojo trata como el control.
-   Mismo gesto exacto que `.c-input:focus` del sistema —borde de --focus-ring y
-   halo de 3px al 16%—, así el volcado no inventa un foco propio.
-   Va ANTES que `.is-drag` a propósito: las dos reglas pesan igual (0,2,0) y en un
-   empate gana la última, o sea que arrastrar por encima sigue mandando sobre
-   estar enfocado, que es el orden correcto de las dos noticias. */
-.imp-box:focus-within{border-color:var(--focus-ring);
-  box-shadow:0 0 0 3px color-mix(in srgb,var(--focus-ring) 16%,transparent),var(--shadow-2)}
-.imp-box.is-drag{border-color:var(--border-patina);box-shadow:0 0 0 3px color-mix(in srgb,var(--patina-300) 14%,transparent),var(--shadow-2)}
-.imp-ta{display:block;width:100%;background:transparent;border:0;resize:none;color:var(--text);
-  font:400 15px/1.7 var(--font-sans);padding:26px 28px 14px;min-height:240px;max-height:50vh;overflow:auto}
-.imp-ta:focus{outline:none}
-.imp-ta::placeholder{color:var(--text-subtle);opacity:.85}
-.imp-meta{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:10px 28px 14px;
-  font:400 var(--fs-micro)/1 var(--font-mono);color:var(--text-subtle)}
-.imp-meta .acts{display:flex;gap:4px}
-.imp-meta button{font:500 var(--fs-micro)/1 var(--font-mono);color:var(--text-muted);padding:6px 8px;border-radius:5px}
-.imp-meta button:hover{color:var(--accent-text);background:var(--surface)}
-.imp-detect{padding:0 28px 6px;display:none}
-.imp-detect.has{display:block}
-.imp-detect .t-overline{display:block;margin-bottom:10px;font-size:10px}
-.imp-chips{display:flex;flex-wrap:wrap;gap:8px}
-.imp-files{padding:0 28px 8px;display:none}
-.imp-files.has{display:block}
-.imp-file{display:flex;align-items:center;gap:12px;padding:9px 12px;margin-bottom:6px;
-  background:var(--surface-sunken);border:1px solid var(--border);border-radius:var(--radius-sm);
-  font:400 var(--fs-data)/1 var(--font-mono);color:var(--text)}
-.imp-file .sz{color:var(--text-subtle)}
-.imp-file .tag{margin-left:auto;color:var(--text-subtle);font-size:10px;letter-spacing:.08em;text-transform:uppercase}
-.imp-file .rm{color:var(--text-subtle);padding:2px 6px;border-radius:4px;line-height:1}
-.imp-file .rm:hover{color:var(--danger);background:var(--danger-quiet)}
-/* El ASPECTO de la zona de arrastre ya no vive aquí: se extrajo a
-   components/DropZone.css (.dz) para que Fuentes use el mismo gesto y no una
-   copia parecida. Lo que queda es solo COLOCACIÓN dentro de la caja de volcado
-   — con `width:auto` para que el ancho lo fijen los márgenes, no el 100% de .dz. */
-.dz.imp-drop{margin:0 28px 24px;width:auto}
-/* LinkedIn: el momento de honestidad. Guía, no error. */
-.imp-li{width:100%;margin-top:14px;text-align:left;padding:22px 26px}
-.imp-li h3{font-size:15px;margin-bottom:4px}
-.imp-li>p{color:var(--text-muted);font-size:var(--fs-ui);max-width:58ch}
-.imp-li ol{list-style:none;padding:0;margin:16px 0 0;display:flex;flex-direction:column}
-.imp-li li{display:grid;grid-template-columns:28px 1fr;gap:2px 14px;padding:13px 0;border-top:1px solid var(--border)}
-.imp-li li .n{grid-row:span 2;font:500 13px/1.4 var(--font-mono);color:var(--accent-text)}
-.imp-li li .h{font:500 var(--fs-ui)/1.4 var(--font-sans);color:var(--text)}
-.imp-li li .d{font:400 var(--fs-data)/1.6 var(--font-sans);color:var(--text-muted)}
-.imp-li li .d .c-kbd{margin:0 1px}
+.imp-k{display:block;font:600 var(--fs-micro)/1.2 var(--font-sans);letter-spacing:.06em;text-transform:uppercase;color:var(--text-subtle)}
+
 /* ── EL ÍNDICE DE LAS TRES PUERTAS ──────────────────────────────────────────
    Tres tarjetas IDÉNTICAS en tamaño, borde y tipografía. Lo único que las
    distingue es la etiqueta de coste, que es la diferencia REAL entre ellas: dos
    gastan tokens y una no. Si la tercera se pintara más pequeña o más apagada
-   por ser "la alternativa", el copy diría una cosa y la jerarquía visual otra —
-   y la jerarquía visual siempre gana. */
-.imp-doors{width:100%;margin-top:34px;text-align:left}
-.imp-doors__h{display:block;margin-bottom:12px}
-.imp-doors__row{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
-.imp-door{display:flex;flex-direction:column;align-items:flex-start;gap:6px;padding:16px 16px 14px;
-  text-align:left;border:1px solid var(--border-strong);border-radius:var(--radius-md);
-  background:color-mix(in srgb,var(--surface) 42%,transparent);cursor:pointer;
-  transition:border-color .14s,background-color .14s}
-.imp-door:hover{border-color:var(--border-patina);background:var(--surface)}
-.imp-door .n{font:500 var(--fs-micro)/1 var(--font-mono);letter-spacing:.1em;color:var(--accent-text)}
-.imp-door .h{font:500 var(--fs-body)/1.35 var(--font-sans);color:var(--text)}
+   por ser "la alternativa", el copy diría una cosa y la jerarquía visual otra. */
+.imp-doors{display:flex;flex-direction:column;gap:var(--sp-3)}
+.imp-doors__row{display:grid;grid-template-columns:repeat(3,1fr);gap:var(--sp-4)}
+.imp-door{display:flex;flex-direction:column;align-items:flex-start;gap:var(--sp-2);text-align:left;cursor:pointer;
+  transition:border-color var(--dur-base) var(--ease-standard),box-shadow var(--dur-base) var(--ease-standard)}
+.imp-door:hover,.imp-door:focus-visible{border-color:var(--border-brasa)}
+.imp-door__cab{display:flex;align-items:center;justify-content:space-between;width:100%}
+.imp-door .n{font:500 var(--fs-micro)/1 var(--font-mono);letter-spacing:.1em;color:var(--text-subtle)}
+.imp-door__ico{display:grid;place-items:center;width:36px;height:36px;border-radius:12px;
+  background:var(--surface-elevated);border:1px solid var(--border);color:var(--accent-text)}
+.imp-door .h{margin-top:var(--sp-2);font:600 var(--fs-body)/1.35 var(--font-sans);color:var(--text)}
 .imp-door .d{flex:1;font:400 var(--fs-data)/1.55 var(--font-sans);color:var(--text-muted)}
-/* La etiqueta de coste: lo primero que el usuario necesita saber y lo último
-   que se contaba. Va en píldora para que se lea de un vistazo, no en letra
-   pequeña al pie. */
-.imp-door .cost{margin-top:4px;padding:5px 8px;border-radius:99px;border:1px solid var(--border);
-  font:500 10px/1.4 var(--font-mono);letter-spacing:.06em;text-transform:uppercase}
-.imp-door .cost--ia{color:var(--text-subtle)}
-.imp-door .cost--free{color:var(--accent-text);border-color:var(--border-patina);
-  background:color-mix(in srgb,var(--accent-text) 8%,transparent)}
-.imp-door .go{margin-top:8px;font:500 var(--fs-micro)/1 var(--font-mono);color:var(--text-subtle)}
-.imp-door:hover .go{color:var(--accent-text)}
+/* La etiqueta de coste: lo primero que el usuario necesita saber. Píldora
+   (<Chip>) para leerse de un vistazo; puede partir en dos líneas en estrecho. */
+.imp-door .cost{margin-top:var(--sp-1);height:auto;min-height:24px;padding-block:4px;white-space:normal;line-height:1.3}
+.imp-door .go{display:inline-flex;align-items:center;gap:6px;margin-top:var(--sp-2);
+  font:600 var(--fs-ui)/1 var(--font-sans);color:var(--text-muted)}
+.imp-door:hover .go,.imp-door:focus-visible .go{color:var(--accent-text)}
+
+/* ── La tarjeta del volcado ──────────────────────────────────────────────────
+   EL FOCO DEL VOLCADO. `.imp-ta:focus{outline:none}` apaga el aro del sistema
+   en el <textarea>; el acuse se sube al contenedor, que es lo que el ojo trata
+   como el control. Mismo gesto que `.c-input:focus` del sistema. Va ANTES que
+   `.is-drag` a propósito: las dos reglas pesan igual (0,2,0) y en un empate gana
+   la última, así arrastrar por encima manda sobre estar enfocado. */
+.imp-box{display:flex;flex-direction:column;gap:var(--sp-4)}
+.imp-box:focus-within{border-color:var(--focus-ring);
+  box-shadow:0 0 0 3px color-mix(in srgb,var(--focus-ring) 16%,transparent),var(--elev-2)}
+.imp-box.is-drag{border-color:var(--border-brasa);box-shadow:0 0 0 3px color-mix(in srgb,var(--brasa-500) 14%,transparent),var(--elev-2)}
+.imp-campo{border-radius:var(--radius-xl);background:var(--surface-sunken);border:1px solid var(--border);
+  transition:border-color var(--dur-fast) var(--ease-standard)}
+.imp-campo:focus-within{border-color:var(--border-strong)}
+.imp-ta{display:block;width:100%;background:transparent;border:0;resize:none;color:var(--text);
+  font:400 15px/1.7 var(--font-sans);padding:var(--sp-4) var(--sp-5);min-height:240px;max-height:50vh;overflow:auto}
+.imp-ta:focus{outline:none}
+.imp-ta::placeholder{color:var(--text-subtle);opacity:.85}
+.imp-detect{display:none}
+.imp-detect.has{display:flex;flex-direction:column;gap:var(--sp-2)}
+.imp-chips{display:flex;flex-wrap:wrap;gap:var(--sp-2)}
+/* La zona de arrastre: su aspecto vive en components/DropZone.css (.dz, la
+   zona de carga destacada). Aquí solo su colocación. */
+.dz.imp-drop{width:100%}
+.imp-files{display:none}
+.imp-files.has{display:flex;flex-direction:column;gap:var(--sp-2)}
+.imp-file,.imp-pl__file{display:flex;align-items:center;gap:var(--sp-3);min-width:0;
+  padding:var(--sp-2) var(--sp-2) var(--sp-2) var(--sp-3);background:var(--surface-sunken);
+  border:1px solid var(--border);border-radius:var(--radius-lg)}
+.imp-file__ico{display:grid;place-items:center;width:32px;height:32px;flex:none;border-radius:10px;
+  background:var(--surface-elevated);color:var(--accent-text)}
+.imp-file__txt{display:flex;flex-direction:column;gap:2px;flex:1;min-width:0}
+.imp-file .nm,.imp-pl__file b{font:600 var(--fs-ui)/1.35 var(--font-sans);color:var(--text);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.imp-file .tag{font:400 var(--fs-micro)/1.4 var(--font-sans);color:var(--text-muted)}
+.imp-file.is-error .tag{color:var(--danger)}
+.imp-file .sz{flex:none;font:400 var(--fs-micro)/1 var(--font-mono);color:var(--text-subtle)}
+.imp-file .rm:hover,.imp-file .rm:focus-visible{color:var(--danger)}
+.imp-meta{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:var(--sp-3);
+  font:400 var(--fs-micro)/1 var(--font-mono);color:var(--text-subtle)}
+.imp-meta .acts{display:flex;flex-wrap:wrap;gap:var(--sp-1)}
+
+/* ── LinkedIn: el momento de honestidad. Guía, no error. ─────────────────── */
+.imp-li{display:flex;flex-direction:column;gap:var(--sp-2)}
+.imp-li h3{font:600 var(--fs-body)/1.35 var(--font-sans);color:var(--text)}
+.imp-li>p{font:400 var(--fs-ui)/1.6 var(--font-sans);color:var(--text-muted);max-width:62ch}
+.imp-li ol{list-style:none;padding:0;margin:var(--sp-2) 0 0;display:flex;flex-direction:column}
+.imp-li li{display:grid;grid-template-columns:28px 1fr;gap:2px var(--sp-3);padding:var(--sp-3) 0;border-top:1px solid var(--border)}
+.imp-li li .n{grid-row:span 2;display:grid;place-items:center;width:26px;height:26px;border-radius:50%;
+  border:1px solid var(--border-strong);font:600 var(--fs-micro)/1 var(--font-mono);color:var(--accent-text)}
+.imp-li li .h{font:600 var(--fs-ui)/1.4 var(--font-sans);color:var(--text)}
+.imp-li li .d{font:400 var(--fs-data)/1.6 var(--font-sans);color:var(--text-muted)}
+.imp-li li .d .c-kbd{margin:0 1px}
+
+/* ── Acción principal y avisos ───────────────────────────────────────────── */
+.imp-cta{display:flex;align-items:center;flex-wrap:wrap;gap:var(--sp-4)}
+.imp-alt{display:inline-flex;align-items:center;min-height:44px;font:500 var(--fs-ui)/1.3 var(--font-sans)}
+.imp-err{padding:var(--sp-3) var(--sp-4);border-radius:var(--radius-lg);
+  border:1px solid color-mix(in srgb,var(--danger) 40%,transparent);background:var(--danger-quiet);
+  font:500 var(--fs-ui)/1.55 var(--font-sans);color:var(--danger)}
+.imp-note{max-width:64ch}
 
 /* ── PUERTA 3 · LA PLANTILLA ESTRUCTURADA ───────────────────────────────────
-   Mismo molde que .imp-li (título + párrafo + <ol> numerado): un procedimiento
-   de tres pasos explicado con dignidad. Clases propias porque el contenido no
-   es el mismo —aquí dentro viven un ancla de descarga, un bloque copiable, una
-   zona de arrastre y un informe— y meter bloques dentro del <span class="d">
-   de .imp-li sería HTML inválido. */
-.imp-pl{width:100%;margin-top:34px;text-align:left;padding:24px 26px}
+   El marcado conserva `c-panel imp-pl` (lo leen los tests); aquí se le da el
+   material grafito de Forja v2 en vez del vidrio del panel del sistema. Cada
+   paso es un bloque hundido con su número. */
+.imp-main .imp-pl{padding:var(--sp-5) var(--sp-6);border-radius:var(--radius-2xl);
+  background:linear-gradient(170deg,var(--forja-card-a),var(--forja-card-b));
+  backdrop-filter:none;-webkit-backdrop-filter:none;border:1px solid var(--border);box-shadow:var(--elev-2)}
 .imp-pl:focus{outline:none}
-.imp-pl h3{font-size:17px;margin-top:12px}
-.imp-pl__lead{margin-top:6px;max-width:64ch;color:var(--text-muted);font-size:var(--fs-ui);line-height:1.65}
-.imp-pl ol{list-style:none;padding:0;margin:18px 0 0;display:flex;flex-direction:column}
-.imp-pl li{display:grid;grid-template-columns:28px 1fr;gap:6px 14px;padding:16px 0;border-top:1px solid var(--border)}
-.imp-pl li .n{grid-row:span 2;font:500 13px/1.4 var(--font-mono);color:var(--accent-text)}
-.imp-pl li .h{font:500 var(--fs-body)/1.4 var(--font-sans);color:var(--text)}
+.imp-pl:focus-visible{border-color:var(--focus-ring)}
+.imp-pl__t{margin-top:var(--sp-2);font:600 var(--fs-h3)/1.3 var(--font-sans);color:var(--text)}
+.imp-pl__lead{margin-top:var(--sp-2);max-width:64ch;font:400 var(--fs-ui)/1.65 var(--font-sans);color:var(--text-muted)}
+.imp-pl ol{list-style:none;padding:0;margin:var(--sp-5) 0 0;display:flex;flex-direction:column;gap:var(--sp-3)}
+.imp-pl ol>li{display:grid;grid-template-columns:28px 1fr;gap:var(--sp-2) var(--sp-4);padding:var(--sp-4) var(--sp-5);
+  border-radius:var(--radius-xl);background:var(--surface-sunken);border:1px solid var(--border)}
+.imp-pl ol>li>.n{grid-row:span 2}
+.imp-pl ol>li>.h{align-self:center;font:600 var(--fs-body)/1.4 var(--font-sans);color:var(--text)}
 /* min-width:0 — sin esto el <pre> del bloque copiable estira la columna del
    grid y la página entera desborda en horizontal. */
-.imp-pl li .d{min-width:0;font:400 var(--fs-ui)/1.6 var(--font-sans);color:var(--text-muted)}
-.imp-pl li .d>p{margin:0;max-width:64ch}
-.imp-pl__dl{margin-top:12px}
-.bcp.imp-pl__prompt{margin-top:12px}
-.dz.imp-pl__drop{margin-top:14px}
-
-.imp-pl__file{display:flex;align-items:center;flex-wrap:wrap;gap:8px;margin-top:12px;
-  font:400 var(--fs-data)/1.5 var(--font-mono);color:var(--text-muted)}
-.imp-pl__file .k{color:var(--text-subtle)}
-.imp-pl__file b{font-weight:500;color:var(--text)}
-.imp-pl__file .busy{margin-left:auto;color:var(--accent-text)}
-.imp-pl__otro{margin-left:auto;padding:5px 8px;border-radius:5px;border:1px solid var(--border);
-  font:500 var(--fs-micro)/1 var(--font-mono);color:var(--text-subtle)}
-.imp-pl__otro:hover{color:var(--text);border-color:var(--border-patina)}
-.imp-pl__err{margin-top:12px;max-width:64ch;font:500 var(--fs-ui)/1.55 var(--font-sans);color:var(--danger)}
-.imp-pl__raw{margin-top:12px}
-.imp-pl__raw p{margin:0 0 8px;max-width:64ch;font:500 var(--fs-ui)/1.55 var(--font-sans);color:var(--danger)}
-.imp-pl__raw pre{margin:0;padding:12px;max-height:200px;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere;
-  background:var(--surface-sunken);border:1px solid var(--border);border-radius:var(--radius-sm);
+.imp-pl ol>li>.d{min-width:0;display:flex;flex-direction:column;align-items:flex-start;gap:var(--sp-3);
+  font:400 var(--fs-ui)/1.6 var(--font-sans);color:var(--text-muted)}
+.imp-pl ol>li>.d>p{margin:0;max-width:64ch}
+.imp-pl__otras{font:400 var(--fs-data)/1.6 var(--font-sans);color:var(--text-subtle)}
+.bcp.imp-pl__prompt{margin-top:0}
+.dz.imp-pl__drop{width:100%}
+.imp-pl__file{width:100%;flex-wrap:wrap}
+.imp-pl__file .k{font:400 var(--fs-micro)/1.4 var(--font-sans);color:var(--text-subtle)}
+.imp-pl__file .busy{margin-left:auto;display:inline-flex;gap:6px;align-items:center;
+  font:500 var(--fs-data)/1 var(--font-sans);color:var(--accent-text)}
+.imp-pl__err{width:100%;max-width:64ch;font:500 var(--fs-ui)/1.55 var(--font-sans);color:var(--danger)}
+.imp-pl__raw{width:100%}
+.imp-pl__raw p{margin:0 0 var(--sp-2);max-width:64ch;font:500 var(--fs-ui)/1.55 var(--font-sans);color:var(--danger)}
+.imp-pl__raw pre{margin:0;padding:var(--sp-3);max-height:200px;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere;
+  background:var(--surface-sunken);border:1px solid var(--border);border-radius:var(--radius-lg);
   font:400 var(--fs-data)/1.6 var(--font-mono);color:var(--text-subtle)}
 
-/* El informe previo: se lee ANTES de que nada se mueva. Borde de pátina porque
-   es el momento en el que el sistema te está enseñando su lectura, no un
-   resultado ya consumado. */
-.imp-pl__inf{margin-top:16px;padding:16px 18px;background:var(--surface-sunken);
-  border:1px solid var(--border-patina);border-radius:var(--radius-md)}
-.imp-pl__tot{margin:10px 0 0;font:500 var(--fs-lead)/1.35 var(--font-sans);color:var(--text)}
-.imp-pl__blk{margin-top:16px;padding-top:12px;border-top:1px solid var(--border)}
-.imp-pl__k{display:block;font:500 var(--fs-micro)/1 var(--font-mono);letter-spacing:.08em;
+/* El informe previo: se lee ANTES de que nada se mueva. Tarjeta elevada dentro
+   del paso: es el sistema enseñando su lectura, no un resultado consumado. */
+.imp-pl__inf{width:100%;padding:var(--sp-4) var(--sp-5);background:var(--surface-elevated);
+  border:1px solid var(--border-strong);border-radius:var(--radius-xl)}
+.imp-pl__tot{margin:var(--sp-2) 0 0;font:600 var(--fs-lead)/1.35 var(--font-sans);color:var(--text)}
+.imp-pl__blk{margin-top:var(--sp-4);padding-top:var(--sp-3);border-top:1px solid var(--border)}
+.imp-pl__k{display:block;font:600 var(--fs-micro)/1.2 var(--font-sans);letter-spacing:.06em;
   text-transform:uppercase;color:var(--text-subtle)}
-.imp-pl__blkd{margin:8px 0 0;max-width:70ch;font:400 var(--fs-micro)/1.6 var(--font-sans);color:var(--text-muted)}
-.imp-pl__tipos{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
-.imp-pl__tipos .c-chip b{font-weight:500;color:var(--text)}
-.imp-pl__lines{margin:10px 0 0;padding:0;list-style:none;display:flex;flex-direction:column;gap:6px}
-.imp-pl__lines li{display:flex;align-items:baseline;gap:8px;
-  font:400 var(--fs-data)/1.6 var(--font-mono);color:var(--text-muted)}
-.imp-pl__lines .ln{flex:none;color:var(--text-subtle)}
+.imp-pl__blkd{margin:var(--sp-2) 0 0;max-width:70ch;font:400 var(--fs-data)/1.6 var(--font-sans);color:var(--text-muted)}
+.imp-pl__tipos{display:flex;flex-wrap:wrap;gap:6px;margin-top:var(--sp-2)}
+.imp-pl__tipos .u-chip b{font-family:var(--font-mono);color:var(--text)}
+.imp-pl__lines{margin:var(--sp-2) 0 0;padding:0;list-style:none;display:flex;flex-direction:column;gap:6px}
+.imp-pl__lines li{display:flex;align-items:baseline;gap:var(--sp-2);
+  font:400 var(--fs-data)/1.6 var(--font-sans);color:var(--text-muted)}
+.imp-pl__lines .ln{flex:none;font:500 var(--fs-micro)/1.6 var(--font-mono);color:var(--text-subtle)}
 .imp-pl__lines .tx{min-width:0;overflow-wrap:anywhere}
-.imp-pl__acts{display:flex;align-items:center;flex-wrap:wrap;gap:12px;margin-top:18px}
-.imp-pl__cancel{padding:6px 8px;border-radius:5px;font:500 var(--fs-micro)/1 var(--font-mono);color:var(--text-subtle)}
-.imp-pl__cancel:hover{color:var(--danger)}
-.imp-pl__sub{margin:12px 0 0;max-width:70ch;font:400 var(--fs-micro)/1.6 var(--font-sans);color:var(--text-subtle)}
+.imp-pl__acts{display:flex;align-items:center;flex-wrap:wrap;gap:var(--sp-3);margin-top:var(--sp-4)}
+.imp-pl__cancel:hover,.imp-pl__cancel:focus-visible{color:var(--danger)}
+.imp-pl__sub{margin:var(--sp-3) 0 0;max-width:70ch;font:400 var(--fs-micro)/1.6 var(--font-sans);color:var(--text-subtle)}
 
-.imp-cta{margin-top:40px;display:flex;flex-direction:column;align-items:center;gap:18px}
-.imp-alt{font-size:var(--fs-ui)}
-.imp-note{margin-top:46px;max-width:52ch;font:400 var(--fs-micro)/1.8 var(--font-mono);color:var(--text-subtle)}
-.imp-note .c-divider{margin-bottom:18px}
-/* ── Ingesta: la espera ── */
-.ing-col{width:100%;max-width:600px;display:flex;flex-direction:column;align-items:center;text-align:center;padding-top:34px}
-.ing-count{margin-top:34px;font:500 76px/1 var(--font-mono);letter-spacing:-.04em;font-variant-numeric:tabular-nums}
-.ing-cap{margin-top:10px;color:var(--text-muted);font-size:var(--fs-ui)}
-.ing-log{width:100%;margin-top:38px;text-align:left;padding:8px 0}
-.ing-row{display:grid;grid-template-columns:34px 1fr auto;align-items:baseline;gap:0 10px;
-  padding:11px 22px;font:400 var(--fs-data)/1.5 var(--font-mono)}
+/* ── Ingesta: la espera ──────────────────────────────────────────────────── */
+.ing-card{display:flex;flex-direction:column;gap:var(--sp-4)}
+.ing-num{display:flex;align-items:baseline;flex-wrap:wrap;gap:var(--sp-2) var(--sp-3)}
+.ing-count{font:600 64px/1 var(--font-sans);letter-spacing:-.03em;font-variant-numeric:tabular-nums;color:var(--text)}
+.ing-cap{font:400 var(--fs-body)/1.4 var(--font-sans);color:var(--text-muted)}
+.ing-progreso{display:flex;flex-direction:column;gap:var(--sp-2)}
+.ing-frac{font:500 var(--fs-data)/1.2 var(--font-mono);color:var(--text-muted)}
+.ing-actual{display:flex;align-items:center;gap:var(--sp-2);padding:var(--sp-3) var(--sp-4);
+  border-radius:var(--radius-lg);background:var(--surface-sunken);border:1px solid var(--border);
+  font:400 var(--fs-ui)/1.5 var(--font-sans);color:var(--text-muted)}
+.ing-actual b{font-weight:600;color:var(--text)}
+.ing-actual .c-spin{color:var(--accent-text)}
+.ing-log{padding:var(--sp-2) 0}
+.ing-log:empty{display:none}
+.ing-row{display:grid;grid-template-columns:28px 1fr auto;align-items:center;gap:0 var(--sp-3);
+  padding:var(--sp-3) var(--card-pad-x);font:400 var(--fs-ui)/1.5 var(--font-sans)}
 .ing-row+.ing-row{border-top:1px solid var(--border)}
-.ing-row .st{text-align:center;color:var(--text-subtle)}
+.ing-row .st{display:grid;place-items:center;width:26px;height:26px;border-radius:50%;
+  background:var(--surface-elevated);font:600 var(--fs-micro)/1 var(--font-sans);color:var(--text-subtle)}
 .ing-row.is-run .st{color:var(--accent-text)}
 .ing-row.is-ok .st{color:var(--ver-ok)}
 .ing-row.is-err .st{color:var(--ver-none)}
-.ing-row .src{color:var(--text)}
-.ing-row .det{color:var(--text-subtle);text-align:right}
+.ing-row .src{min-width:0;font-weight:600;color:var(--text);overflow-wrap:anywhere}
+.ing-row .det{font:400 var(--fs-data)/1.5 var(--font-sans);color:var(--text-muted);text-align:right}
 .ing-row.is-err .det{color:var(--danger)}
-.ing-err-acts{grid-column:2/4;display:flex;gap:8px;margin-top:8px}
-.ing-err-acts button{font:500 var(--fs-micro)/1 var(--font-mono);padding:7px 10px;border:1px solid var(--border-strong);border-radius:5px;color:var(--text-muted)}
-.ing-err-acts button:hover{color:var(--text);border-color:var(--border-patina)}
-.ing-hint{margin-top:26px;font:400 var(--fs-micro)/1.7 var(--font-mono);color:var(--text-subtle)}
-/* ── Fin: el único shimmer del producto ── */
-.fin-col{width:100%;max-width:600px;display:flex;flex-direction:column;align-items:center;text-align:center;padding-top:24px}
-.fin-panel{width:100%;margin-top:36px;text-align:left;overflow:hidden}
-.fin-head{display:flex;align-items:baseline;justify-content:space-between;padding:20px 24px 16px}
-.fin-head .n{font:500 40px/1 var(--font-mono);letter-spacing:-.03em}
-.fin-head .l{color:var(--text-muted);font-size:var(--fs-ui)}
-.fin-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:var(--border);border-top:1px solid var(--border)}
-.fin-cell{background:var(--surface);padding:14px 16px 16px}
-.fin-cell .v{font:500 22px/1 var(--font-mono)}
-.fin-cell .k{margin-top:6px;font:400 var(--fs-micro)/1.4 var(--font-sans);color:var(--text-muted)}
-.fin-noev{display:flex;align-items:center;gap:10px;padding:14px 24px;border-top:1px dashed color-mix(in srgb,var(--danger) 45%,transparent);
+.ing-pausa{display:flex;flex-direction:column;gap:var(--sp-3)}
+
+/* ── Fin: el único shimmer del producto ──────────────────────────────────────
+   Acotado a .imp-main: ingesta.css declara las mismas clases fin-* para su
+   pantalla y las dos hojas pueden convivir cargadas en la misma sesión. */
+.imp-main .fin-panel{padding:0;overflow:hidden}
+.imp-main .fin-head{display:flex;align-items:baseline;flex-wrap:wrap;gap:var(--sp-2) var(--sp-3);padding:var(--sp-5) var(--sp-6) var(--sp-4)}
+.imp-main .fin-head .n{font:600 48px/1 var(--font-sans);letter-spacing:-.03em;font-variant-numeric:tabular-nums;color:var(--text)}
+.imp-main .fin-head .l{font:400 var(--fs-body)/1.4 var(--font-sans);color:var(--text-muted)}
+.imp-main .fin-grid{display:grid;grid-template-columns:repeat(3,1fr);border-top:1px solid var(--border)}
+.imp-main .fin-cell{padding:var(--sp-4) var(--sp-6)}
+.imp-main .fin-cell+.fin-cell{border-left:1px solid var(--border)}
+.imp-main .fin-cell .v{font:600 24px/1 var(--font-sans);font-variant-numeric:tabular-nums;color:var(--text)}
+.imp-main .fin-cell .k{margin-top:6px;font:400 var(--fs-data)/1.4 var(--font-sans);color:var(--text-muted)}
+.imp-main .fin-noev{display:flex;align-items:center;flex-wrap:wrap;gap:var(--sp-2) var(--sp-3);padding:var(--sp-4) var(--sp-6);
+  border-top:1px dashed color-mix(in srgb,var(--danger) 45%,transparent);
   font:400 var(--fs-data)/1.5 var(--font-sans);color:var(--text-muted)}
-.fin-cta{margin-top:36px;display:flex;flex-direction:column;align-items:center;gap:14px}
-.fin-sub{font:400 var(--fs-data)/1.6 var(--font-mono);color:var(--text-subtle)}
-/* header */
+.fin-cta{display:flex;align-items:center;flex-wrap:wrap;gap:var(--sp-3) var(--sp-4)}
+.fin-rejilla:empty{display:none}
+.fin-card{display:flex;flex-direction:column;gap:var(--sp-3)}
+.fin-card__p{font:400 var(--fs-ui)/1.6 var(--font-sans);color:var(--text-muted)}
+.fin-lista{list-style:none;margin:0;padding:0;display:flex;flex-direction:column}
+.fin-lista li{display:flex;justify-content:space-between;align-items:baseline;gap:var(--sp-3);padding:var(--sp-2) 0;
+  border-top:1px solid var(--border);font:400 var(--fs-ui)/1.5 var(--font-sans);color:var(--text)}
+.fin-lista__dato{flex:none;font:400 var(--fs-micro)/1.5 var(--font-mono);color:var(--text-subtle)}
+
+/* ── Cabecera de pantalla ANTIGUA ────────────────────────────────────────────
+   Importar ya no pinta su <header class="c-header">, pero estas reglas son
+   globales y Staging sigue usando .hd-crumb en el suyo: se quedan. */
 .hd-crumb{display:flex;align-items:center;gap:14px;min-width:0}
 .hd-sep{width:1px;height:18px;background:var(--border-strong)}
 .hd-step{font:500 var(--fs-micro)/1 var(--font-mono);letter-spacing:.14em;color:var(--text-muted)}
@@ -194,26 +225,24 @@
 .hd-lang span[data-on]{color:var(--text);background:var(--surface-elevated)}
 .hd-av{width:28px;height:28px;border-radius:50%;background:var(--surface-elevated);border:1px solid var(--border-strong);
   display:grid;place-items:center;font:500 10px/1 var(--font-mono);color:var(--text-muted)}
-@media (max-width:768px){
-  .imp-h1{font-size:40px}
-  .imp-main{padding-top:40px}
-  .imp-ta{min-height:190px;padding:20px 20px 10px}
-  .imp-meta,.imp-detect,.imp-files{padding-inline:20px}
-  .dz.imp-drop{margin-inline:20px}
+
+/* ── Estrecho: una columna, todo táctil ─────────────────────────────────── */
+@media (max-width:767px){
   /* Las tres puertas se apilan; siguen siendo tres tarjetas iguales, ninguna
      se pliega ni se esconde tras un "ver más". */
   .imp-doors__row{grid-template-columns:1fr}
-  .imp-pl{padding:20px}
-  .imp-pl li{grid-template-columns:24px 1fr;gap:6px 10px}
-  .fin-grid{grid-template-columns:repeat(2,1fr)}
-  .ing-count{font-size:56px}
-  /* En estrecho manda LA SALIDA: cae el rótulo de paso (y su separador, que si
-     no queda de barra huérfana); el botón volver del <Breadcrumb> no cae nunca. */
-  .hd-step,.imp-hd-sep-step{display:none}
-}
-@media (max-width:480px){
-  .imp-h1{font-size:32px}
-  .imp-sub{font-size:var(--fs-body)}
-  .ing-row{grid-template-columns:24px 1fr;padding:10px 14px}
+  .imp-ta{min-height:190px;padding:var(--sp-3) var(--sp-4)}
+  .imp-main .imp-pl{padding:var(--sp-4)}
+  .imp-pl ol>li{grid-template-columns:28px 1fr;gap:var(--sp-2) var(--sp-3);padding:var(--sp-3)}
+  .imp-pl ol>li>.n{grid-row:auto}
+  .imp-pl ol>li>.d{grid-column:1/-1}
+  .imp-main .imp-pl__dl{width:100%;justify-content:center}
+  .imp-cta .u-btn{width:100%;justify-content:center}
+  .ing-count{font-size:48px}
+  .ing-row{grid-template-columns:28px 1fr;padding-inline:var(--sp-4)}
   .ing-row .det{grid-column:2;text-align:left;margin-top:2px}
+  .imp-main .fin-head{padding:var(--sp-4)}
+  .imp-main .fin-cell{padding:var(--sp-3)}
+  .imp-main .fin-noev{padding:var(--sp-3) var(--sp-4)}
+  .fin-cta .u-btn{width:100%;justify-content:center}
 }
