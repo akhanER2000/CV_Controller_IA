@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { toPlainText } from "@/lib/cv/resume";
+import { Chip } from "@/components/ui";
 import { useLang, useT } from "@/lib/i18n";
 import { demoCv, demoSections, type DemoSection } from "./demo-data";
 
@@ -58,10 +59,10 @@ export function SplitAts() {
   return (
     <div className="ls-split">
       {/* ── Cara A: el documento ─────────────────────────────────────────── */}
-      <figure className="ls-face c-panel">
+      <figure className="ls-face u-card u-card--crema">
         <figcaption className="ls-face__cap">
           <span className="t-overline">{t("landing.split.docLabel")}</span>
-          <span className="c-chip">{t("landing.split.sample")}</span>
+          <Chip>{t("landing.split.sample")}</Chip>
         </figcaption>
 
         <div className="ls-paper-wrap">
@@ -130,7 +131,7 @@ export function SplitAts() {
       </figure>
 
       {/* ── Cara B: lo que el parser extrae ──────────────────────────────── */}
-      <figure className="ls-face c-panel">
+      <figure className="ls-face u-card u-card--grafito">
         <figcaption className="ls-face__cap">
           <span className="t-overline">{t("landing.split.rawLabel")}</span>
         </figcaption>

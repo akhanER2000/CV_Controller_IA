@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Aurora, useAuroraTune, AURORA_HOJEO } from "@/components/Aurora";
+import { Button } from "@/components/ui";
 import { useT } from "@/lib/i18n";
 import { useBoot } from "@/lib/corpus/runtime";
 import { createClient } from "@/lib/supabase/client";
@@ -19,8 +20,9 @@ import "./auth.css";
    nadie la monta: la monta el layout una sola vez y cada pantalla declara su
    intensidad. Entrar es ceremonia, no trabajo: humo entero (0.55).
 
-   La spec autoriza convertir el CTA en un <form> real conservando las clases
-   c-btn c-btn--forge c-btn--lg y el wrapper span.c-forge — es lo que se hace aquí.
+   Forja v2 (lote pantallas-forja-v2): el formulario es una tarjeta grande
+   centrada (material grafito) con una franja de brasa arriba; el CTA es el
+   Button brasa de src/components/ui. Google y GitHub no cambian de lógica.
    Sin claves de Supabase (modo local) el CTA solo navega (maqueta).
    ============================================================================ */
 
@@ -121,7 +123,7 @@ export function AuthScreen({ initial = "login" }: { initial?: Mode }) {
         </p>
 
         <form
-          className="c-panel au-panel"
+          className="u-card u-card--grafito u-card--grande au-panel"
           data-reveal
           style={{ "--d": "260ms" } as React.CSSProperties}
           onSubmit={submit}
@@ -136,7 +138,7 @@ export function AuthScreen({ initial = "login" }: { initial?: Mode }) {
           </div>
 
           {info ? (
-            <div className="au-err show" role="status" style={{ borderColor: "var(--border-patina)", background: "transparent" }}>
+            <div className="au-err show" role="status" style={{ borderColor: "var(--border-brasa)", background: "transparent" }}>
               {info}
             </div>
           ) : null}
@@ -189,26 +191,18 @@ export function AuthScreen({ initial = "login" }: { initial?: Mode }) {
           </div>
 
           <div className="au-cta">
-            <span className="c-forge" style={{ width: "100%" }}>
-              <button
-                type="submit"
-                className="c-btn c-btn--forge c-btn--lg"
-                id="auGo"
-                style={{ width: "100%" }}
-                disabled={busy}
-              >
-                {busy ? "…" : signup ? t("auth.cta.signup") : t("auth.cta.login")}
-              </button>
-            </span>
+            <Button type="submit" variante="brasa" tamano="lg" id="auGo" disabled={busy}>
+              {busy ? "…" : signup ? t("auth.cta.signup") : t("auth.cta.login")}
+            </Button>
           </div>
 
           <div className="au-alt">
-            <button type="button" className="c-btn" onClick={() => oauth("google")}>
+            <Button variante="grafito" onClick={() => oauth("google")}>
               {t("auth.oauth.google")}
-            </button>
-            <button type="button" className="c-btn" onClick={() => oauth("github")}>
+            </Button>
+            <Button variante="grafito" onClick={() => oauth("github")}>
               {t("auth.oauth.github")}
-            </button>
+            </Button>
           </div>
 
           <div className="au-links">

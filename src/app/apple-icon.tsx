@@ -13,14 +13,16 @@ import { ImageResponse } from "next/og";
      problema es el contrario, llenar demasiado.
 
    Radio del cuadrado: 20% del lado, la proporción del wordmark (17.6 de 88).
-   Colores: --bg #0A0C0B (grafito) y --patina-500 #43B3A0, literales de tokens.
+   Colores (Forja v2): --bg #0E0C0B (grafito) y la brasa rellena --brasa-fill-a
+   #F58C4A → --brasa-fill-b #EA6D2C, literales de tokens.
    ============================================================================ */
 
 export const size = { width: 180, height: 180 };
 export const contentType = "image/png";
 
-const GRAFITO = "#0A0C0B"; // --bg (dark)
-const PATINA = "#43B3A0"; // --patina-500
+const GRAFITO = "#0E0C0B"; // --bg (dark)
+const BRASA_A = "#F58C4A"; // --brasa-fill-a
+const BRASA_B = "#EA6D2C"; // --brasa-fill-b
 
 export default function AppleIcon() {
   return new ImageResponse(
@@ -35,7 +37,7 @@ export default function AppleIcon() {
           background: GRAFITO,
         }}
       >
-        <div style={{ width: 88, height: 88, background: PATINA, borderRadius: 17.6 }} />
+        <div style={{ width: 88, height: 88, backgroundImage: `linear-gradient(135deg, ${BRASA_A}, ${BRASA_B})`, borderRadius: 17.6 }} />
       </div>
     ),
     { ...size },

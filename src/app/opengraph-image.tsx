@@ -6,14 +6,16 @@ import { ImageResponse } from "next/og";
    Tarjeta social · convención `src/app/opengraph-image.tsx` (1200×630).
 
    Sin esto, pegar el enlace en WhatsApp o LinkedIn pinta un rectángulo gris.
-   La tarjeta lleva EL WORDMARK REAL —«Corpus» + el cuadrado de pátina, la misma
+   La tarjeta lleva EL WORDMARK REAL —«Corpus» + el cuadrado de brasa, la misma
    marca de `.c-logo`— y una línea de producto honesta: la misma promesa que ya
    declara `metadata.description` en layout.tsx. Cero cifras: no hay usuarios que
    presumir ni «10.000 CV generados» que inventar.
 
-   Colores literales de tokens (globals.css):
-     --bg #0A0C0B · --surface #121615 · --text #F2F4F2 · --text-muted #AFB6B3
-     --text-subtle #7E8784 · --patina-500 #43B3A0 · --border-patina rgba(95,198,169,.55)
+   Colores literales de tokens (globals.css, Forja v2, tema oscuro):
+     --bg #0E0C0B · --surface #171412 · --text #F5F1EB · --text-muted #BDB4AA
+     --text-subtle #8F857C · --brasa-fill-a #F58C4A · --brasa-fill-b #EA6D2C
+     · --border-brasa rgba(255,154,85,.55). El resplandor cálido es --brasa-500
+     #F2782F al 22%, el mismo de la atmósfera de la landing.
 
    TIPOGRAFÍA. El wordmark es Playfair Display (--font-display) y el cuerpo es
    Geist (--font-sans); ambos .ttf viven en src/lib/fonts/ y son los MISMOS que
@@ -31,13 +33,15 @@ export const alt = "Corpus — el sistema de registro de tu carrera";
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
 
-const GRAFITO = "#0A0C0B";
-const SURFACE = "#121615";
-const TEXT = "#F2F4F2";
-const TEXT_MUTED = "#AFB6B3";
-const TEXT_SUBTLE = "#7E8784";
-const PATINA = "#43B3A0";
-const HAIRLINE = "rgba(95, 198, 169, 0.55)"; // --border-patina
+const GRAFITO = "#0E0C0B"; // --bg
+const SURFACE = "#171412"; // --surface
+const TEXT = "#F5F1EB"; // --text
+const TEXT_MUTED = "#BDB4AA"; // --text-muted
+const TEXT_SUBTLE = "#8F857C"; // --text-subtle
+const BRASA_A = "#F58C4A"; // --brasa-fill-a
+const BRASA_B = "#EA6D2C"; // --brasa-fill-b
+const GLOW = "rgba(242, 120, 47, 0.22)"; // --brasa-500 al 22%
+const HAIRLINE = "rgba(255, 154, 85, 0.55)"; // --border-brasa
 
 type Font = { name: string; data: ArrayBuffer; weight: 400 | 500 | 600; style: "normal" };
 
@@ -72,7 +76,7 @@ export default async function OpengraphImage() {
           justifyContent: "center",
           padding: "0 96px",
           backgroundColor: GRAFITO,
-          backgroundImage: `linear-gradient(135deg, ${GRAFITO} 0%, ${SURFACE} 100%)`,
+          backgroundImage: `radial-gradient(900px 520px at 88% -10%, ${GLOW}, transparent 70%), linear-gradient(135deg, ${GRAFITO} 0%, ${SURFACE} 100%)`,
           fontFamily: "Geist",
         }}
       >
@@ -91,7 +95,7 @@ export default async function OpengraphImage() {
           >
             Corpus
           </div>
-          <div style={{ width: 26, height: 26, marginLeft: 16, marginTop: 6, background: PATINA, borderRadius: 5.2 }} />
+          <div style={{ width: 26, height: 26, marginLeft: 16, marginTop: 6, backgroundImage: `linear-gradient(135deg, ${BRASA_A}, ${BRASA_B})`, borderRadius: 5.2 }} />
         </div>
 
         <div
@@ -111,8 +115,11 @@ export default async function OpengraphImage() {
           Un master profile canónico del que se derivan tus variantes de CV.
         </div>
 
-        {/* Hairline de pátina: el mismo recurso que usa la UI para marcar estado. */}
-        <div style={{ display: "flex", width: 180, height: 1, marginTop: 52, background: HAIRLINE }} />
+        {/* Barra de brasa rellena + hairline: el material de Forja v2. */}
+        <div style={{ display: "flex", alignItems: "center", marginTop: 52 }}>
+          <div style={{ display: "flex", width: 72, height: 6, borderRadius: 3, backgroundImage: `linear-gradient(90deg, ${BRASA_A}, ${BRASA_B})` }} />
+          <div style={{ display: "flex", width: 140, height: 1, marginLeft: 12, background: HAIRLINE }} />
+        </div>
 
         <div
           style={{

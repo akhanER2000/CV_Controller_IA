@@ -5,12 +5,13 @@ import { ImageResponse } from "next/og";
 
    NO se inventa un isotipo: la marca ya existe. El wordmark es «Corpus» seguido
    de un cuadrado de acento — `.c-logo::after` en globals.css: 5×5 px, radio 1px,
-   `background: var(--patina-500)`. El icono ES ESE CUADRADO, aislado, sobre el
+   `background: var(--brasa-500)` (Forja v2). El icono ES ESE CUADRADO, aislado, sobre el
    grafito de la app.
 
    Colores literales de los tokens (globals.css §paleta), no aproximados:
-     · grafito  --bg (tema oscuro) ......... #0A0C0B
-     · pátina   --patina-500 (marca) ....... #43B3A0   (7.66:1 sobre grafito)
+     · grafito  --bg (tema oscuro) ......... #0E0C0B
+     · brasa    --brasa-fill-a → -fill-b ... #F58C4A → #EA6D2C (la brasa rellena
+                de Forja v2; --brasa-500 #F2782F da 6.97:1 sobre grafito)
 
    DISEÑADO A 16 px, escalado a 32. El error clásico del favicon es dibujar a
    512 y encoger: el cuadrado queda con tanto margen que en la pestaña
@@ -31,8 +32,9 @@ import { ImageResponse } from "next/og";
 export const size = { width: 32, height: 32 };
 export const contentType = "image/png";
 
-const GRAFITO = "#0A0C0B"; // --bg (dark)
-const PATINA = "#43B3A0"; // --patina-500
+const GRAFITO = "#0E0C0B"; // --bg (dark)
+const BRASA_A = "#F58C4A"; // --brasa-fill-a
+const BRASA_B = "#EA6D2C"; // --brasa-fill-b
 
 export default function Icon() {
   return new ImageResponse(
@@ -48,7 +50,7 @@ export default function Icon() {
           borderRadius: 7,
         }}
       >
-        <div style={{ width: 18, height: 18, background: PATINA, borderRadius: 3.6 }} />
+        <div style={{ width: 18, height: 18, backgroundImage: `linear-gradient(135deg, ${BRASA_A}, ${BRASA_B})`, borderRadius: 3.6 }} />
       </div>
     ),
     { ...size },

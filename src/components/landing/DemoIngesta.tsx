@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { Button, Chip } from "@/components/ui";
 import { useLang, useT } from "@/lib/i18n";
 import { bi, demoItems, demoPaste } from "./demo-data";
 import { playShimmer } from "./motion";
@@ -89,14 +90,9 @@ export function DemoIngesta() {
       <div className="ls-demo__in">
         <div className="ls-demo__cap">
           <span className="t-overline">{t("landing.demo.pasteLabel")}</span>
-          <button
-            type="button"
-            className={`c-btn${done ? " c-btn--quiet" : ""}`}
-            onClick={run}
-            disabled={phase === "run"}
-          >
+          <Button variante={done ? "grafito" : "brasa"} onClick={run} disabled={phase === "run"}>
             {done ? t("landing.demo.replay") : t("landing.demo.run")}
-          </button>
+          </Button>
         </div>
         {/* No es un <textarea>: nadie va a escribir aquí, y un campo real
             pausaría la aurora al recibir el foco (motion.js). Es la misma
@@ -108,10 +104,9 @@ export function DemoIngesta() {
       <div className="ls-demo__out" ref={resultRef}>
         <div className="ls-demo__cap">
           <span className="t-overline">{t("landing.demo.resultTitle")}</span>
-          <span className="c-chip c-chip--ok">
-            <span className="dot" />
+          <Chip tono="oro">
             <b>{done ? demoItems.length : phase === "run" ? "…" : ""}</b>
-          </span>
+          </Chip>
         </div>
 
         <ol className="ls-log" aria-live="polite">
@@ -129,22 +124,20 @@ export function DemoIngesta() {
           {demoItems.map((it, i) => (
             <li
               key={i}
-              className={`ls-item c-card${done ? " is-in" : ""}${it.ver === "partial" ? " is-partial" : ""}`}
+              className={`ls-item u-card u-card--grafito${done ? " is-in" : ""}${it.ver === "partial" ? " is-partial" : ""}`}
               style={{ "--d": `${i * 80}ms` } as React.CSSProperties}
             >
               <div className="ls-item__head">
                 <span className="t-overline">{t(`landing.demo.kind.${it.kind}`)}</span>
-                <span className={`c-ver c-ver--${it.ver === "ok" ? "ok" : "partial"}`}>
+                <Chip tono={it.ver === "ok" ? "oro" : "neutro"}>
                   {it.ver === "ok" ? t("landing.demo.verOk") : t("landing.demo.verPartial")}
-                </span>
+                </Chip>
               </div>
 
               {it.chips ? (
                 <div className="ls-item__chips">
                   {it.chips.map((c) => (
-                    <span className="c-chip" key={c}>
-                      {c}
-                    </span>
+                    <Chip key={c}>{c}</Chip>
                   ))}
                 </div>
               ) : (

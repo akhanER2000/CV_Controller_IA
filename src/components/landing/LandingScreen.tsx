@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { Aurora } from "@/components/Aurora";
+import { Button, Card, Chip } from "@/components/ui";
 import { useLang, useT } from "@/lib/i18n";
 import { DemoIngesta } from "./DemoIngesta";
 import { SplitAts } from "./SplitAts";
@@ -27,9 +28,11 @@ import "./landing.css";
    prompts/00-INVESTIGACION.md, con la fuente que ahí figura, y
    tests/landing-claims.test.ts falla si alguien mete una cuarta.
 
-   Gramática de fondo (aurora.css): las secciones de LECTURA son muro (c-wall) y
-   las de respiración son ventana (c-window). El split es ventana con paneles de
-   vidrio: es el bloque que se mira, no el que se lee de corrido.
+   Forja v2 (lote pantallas-forja-v2): cada bloque vive en una tarjeta de
+   src/components/ui (grafito, crema o brasa) sobre la atmósfera cálida, para que
+   la puerta pública sea de la misma familia que la app. La BRASA rellena manda
+   en el hero y en el cierre (una por pantalla); la CREMA es el folio: la hoja
+   del split, la procedencia y el precio. Mismo copy y mismas promesas.
    ============================================================================ */
 
 export interface TemplateCard {
@@ -67,7 +70,7 @@ export function LandingScreen({ templates }: { templates: TemplateSummary }) {
         {t("landing.skipToContent")}
       </a>
 
-      <header className="c-header">
+      <header className="c-header ls-hd">
         <div className="c-container">
           <Link className="c-logo" href="/">
             Corpus
@@ -100,9 +103,9 @@ export function LandingScreen({ templates }: { templates: TemplateSummary }) {
             <Link className="ls-hd-login" href="/login">
               {t("landing.cta.login")}
             </Link>
-            <Link className="c-btn" href="/signup">
+            <Button variante="brasa" href="/signup">
               {t("landing.cta.signup")}
-            </Link>
+            </Button>
           </div>
         </div>
       </header>
@@ -110,37 +113,38 @@ export function LandingScreen({ templates }: { templates: TemplateSummary }) {
       <main id="ls-main">
         {/* ── 1 · EL PROBLEMA ──────────────────────────────────────────────── */}
         <section className="ls-hero c-window" ref={heroRef}>
-          <div className="c-container ls-hero__in">
+          <div className="c-container">
+          <Card material="brasa" grande className="ls-hero__in">
             <span className="t-overline" data-reveal>
               {t("landing.hero.overline")}
             </span>
             <h1 data-reveal style={d(90)}>
               {t("landing.hero.title")}
             </h1>
-            <p className="t-lead t-muted ls-hero__lead" data-reveal style={d(200)}>
+            <p className="t-lead ls-hero__lead" data-reveal style={d(200)}>
               {t("landing.hero.lead")}
             </p>
             <div className="ls-hero__cta" data-reveal style={d(320)}>
-              <span className="c-forge">
-                <Link className="c-btn c-btn--forge c-btn--hero" href="/signup">
-                  {t("landing.hero.cta")}
-                </Link>
-              </span>
-              <a className="c-btn c-btn--quiet c-btn--lg" href="#ats">
+              <Button variante="tinta" tamano="lg" href="/signup">
+                {t("landing.hero.cta")}
+              </Button>
+              <a className="u-btn u-btn--lg ls-btn-borde" href="#ats">
                 {t("landing.hero.ctaAlt")} ↓
               </a>
             </div>
             <p className="ls-hero__fine" data-reveal style={d(420)}>
               {t("landing.hero.fine")}
             </p>
+          </Card>
           </div>
         </section>
 
         <hr className="c-divider" data-io />
 
         {/* ── 2 · EL MOMENTO MÁGICO ────────────────────────────────────────── */}
-        <section className="ls-sec c-wall" id="demo">
+        <section className="ls-sec" id="demo">
           <div className="c-container">
+          <Card grande className="ls-blk">
             <header className="ls-head" data-io data-reveal="soft">
               <span className="t-overline">{t("landing.demo.overline")}</span>
               <h2>{t("landing.demo.title")}</h2>
@@ -154,14 +158,16 @@ export function LandingScreen({ templates }: { templates: TemplateSummary }) {
             <p className="ls-note" data-io data-reveal="soft">
               {t("landing.demo.disclaimer")}
             </p>
+          </Card>
           </div>
         </section>
 
-        <hr className="c-divider c-divider--patina" data-io />
+        <hr className="c-divider" data-io />
 
         {/* ── 3 · ★ EL SPLIT ──────────────────────────────────────────────── */}
-        <section className="ls-sec ls-sec--star c-window" id="ats">
+        <section className="ls-sec ls-sec--star" id="ats">
           <div className="c-container">
+          <Card grande className="ls-blk">
             <header className="ls-head ls-head--wide" data-io data-reveal="soft">
               <span className="t-overline">{t("landing.split.overline")}</span>
               <h2 className="ls-h2--big">{t("landing.split.title")}</h2>
@@ -178,13 +184,14 @@ export function LandingScreen({ templates }: { templates: TemplateSummary }) {
             <p className="ls-note" data-io data-reveal="soft">
               {t("landing.split.foot")}
             </p>
+          </Card>
           </div>
         </section>
 
         <hr className="c-divider" data-io />
 
         {/* ── LAS TRES CIFRAS (con fuente y límites) ───────────────────────── */}
-        <section className="ls-sec c-wall">
+        <section className="ls-sec">
           <div className="c-container">
             <header className="ls-head" data-io data-reveal="soft">
               <span className="t-overline">{t("landing.ev.overline")}</span>
@@ -193,7 +200,7 @@ export function LandingScreen({ templates }: { templates: TemplateSummary }) {
 
             <div className="ls-ev c-stagger-css">
               {(["a", "b", "c"] as const).map((k) => (
-                <article className="ls-ev__c c-card" key={k} data-io data-reveal="soft">
+                <Card as="article" className="ls-ev__c" key={k} data-io data-reveal="soft">
                   <p className="ls-ev__fig t-accent">{t(`landing.ev.${k}.figure`)}</p>
                   <p className="ls-ev__claim">{t(`landing.ev.${k}.claim`)}</p>
                   <p className="ls-ev__src">
@@ -204,7 +211,7 @@ export function LandingScreen({ templates }: { templates: TemplateSummary }) {
                     <span className="t-overline">{t("landing.ev.caveatLabel")}</span>
                     {t(`landing.ev.${k}.caveat`)}
                   </p>
-                </article>
+                </Card>
               ))}
             </div>
 
@@ -217,7 +224,7 @@ export function LandingScreen({ templates }: { templates: TemplateSummary }) {
         <hr className="c-divider" data-io />
 
         {/* ── 4 · ANTI-ALUCINACIÓN ─────────────────────────────────────────── */}
-        <section className="ls-sec c-wall">
+        <section className="ls-sec">
           <div className="c-container">
             <header className="ls-head ls-head--wide" data-io data-reveal="soft">
               <span className="t-overline">{t("landing.anti.overline")}</span>
@@ -228,25 +235,25 @@ export function LandingScreen({ templates }: { templates: TemplateSummary }) {
             <div className="ls-anti">
               <div className="ls-anti__cards c-stagger-css">
                 {(["a", "b", "c"] as const).map((k) => (
-                  <article className="ls-anti__c c-card" key={k} data-io data-reveal="soft">
+                  <Card as="article" className="ls-anti__c" key={k} data-io data-reveal="soft">
                     <h3>{t(`landing.anti.${k}.title`)}</h3>
                     <p className="t-muted">{t(`landing.anti.${k}.body`)}</p>
-                  </article>
+                  </Card>
                 ))}
               </div>
 
-              <div className="ls-prov" data-io data-reveal="soft">
+              <Card material="crema" grande className="ls-prov" data-io data-reveal="soft">
                 <span className="t-overline">{t("landing.anti.exampleTitle")}</span>
                 {demoProvenance.map((p, i) => (
                   <div
-                    className={`ls-prov__i c-card${p.ver === "none" ? " c-noev" : " c-override"}`}
+                    className={`ls-prov__i${p.ver === "none" ? " is-none" : ""}`}
                     key={i}
                   >
                     <p className="ls-prov__txt">{bi(p.text, lang)}</p>
                     <div className="ls-prov__meta">
-                      <span className={`c-ver c-ver--${p.ver}`}>
+                      <Chip tono={p.ver === "ok" ? "oro" : "peligro"}>
                         {p.ver === "ok" ? t("landing.demo.verOk") : t("landing.anti.verNone")}
-                      </span>
+                      </Chip>
                       <span className="ls-prov__src">{bi(p.origin, lang)}</span>
                     </div>
                     {p.fragment ? (
@@ -255,7 +262,7 @@ export function LandingScreen({ templates }: { templates: TemplateSummary }) {
                   </div>
                 ))}
                 <p className="ls-note ls-note--tight">{t("landing.anti.exampleNote")}</p>
-              </div>
+              </Card>
             </div>
           </div>
         </section>
@@ -263,8 +270,9 @@ export function LandingScreen({ templates }: { templates: TemplateSummary }) {
         <hr className="c-divider" data-io />
 
         {/* ── 5 · EL CATÁLOGO ─────────────────────────────────────────────── */}
-        <section className="ls-sec c-wall c-wall--surface" id="plantillas">
+        <section className="ls-sec" id="plantillas">
           <div className="c-container">
+          <Card grande className="ls-blk">
             <header className="ls-head" data-io data-reveal="soft">
               <span className="t-overline">{t("landing.tpl.overline")}</span>
               {/* El número sale de listTemplates() en tiempo de build: si el
@@ -280,8 +288,7 @@ export function LandingScreen({ templates }: { templates: TemplateSummary }) {
 
             <ul className="ls-tpl" data-io data-reveal="soft">
               {templates.items.map((tpl) => (
-                <li className={`c-chip ls-tpl__i${tpl.gama === "ats" ? " c-chip--ok" : ""}`} key={tpl.id}>
-                  <span className="dot" />
+                <li className={`u-chip ls-tpl__i${tpl.gama === "ats" ? " u-chip--oro" : ""}`} key={tpl.id}>
                   <b>{tpl.name}</b>
                   <span className="t-subtle">
                     {tpl.gama === "ats" ? t("landing.tpl.atsLabel") : t("landing.tpl.visualLabel")}
@@ -294,14 +301,16 @@ export function LandingScreen({ templates }: { templates: TemplateSummary }) {
               <p className="ls-note ls-note--tight">{t("landing.tpl.warn")}</p>
               <p className="ls-note ls-note--tight">{t("landing.tpl.same")}</p>
             </div>
+          </Card>
           </div>
         </section>
 
         <hr className="c-divider" data-io />
 
         {/* ── 6 · PRECIO ──────────────────────────────────────────────────── */}
-        <section className="ls-sec c-wall" id="precio">
+        <section className="ls-sec" id="precio">
           <div className="c-container">
+          <Card material="crema" grande className="ls-blk">
             <header className="ls-head" data-io data-reveal="soft">
               <span className="t-overline">{t("landing.price.overline")}</span>
               <h2>{t("landing.price.title")}</h2>
@@ -310,36 +319,37 @@ export function LandingScreen({ templates }: { templates: TemplateSummary }) {
             <ul className="ls-price c-stagger-css">
               {(["a", "b", "c", "d"] as const).map((k) => (
                 <li className="ls-price__i" key={k} data-io data-reveal="soft">
-                  <span className="c-pulse-dot" />
+                  <span className="ls-price__dot" aria-hidden="true" />
                   {t(`landing.price.${k}`)}
                 </li>
               ))}
             </ul>
+          </Card>
           </div>
         </section>
 
-        <hr className="c-divider c-divider--patina" data-io />
+        <hr className="c-divider" data-io />
 
         {/* ── CIERRE ──────────────────────────────────────────────────────── */}
-        <section className="ls-sec ls-end c-window">
-          <div className="c-container ls-end__in" data-io data-reveal="soft">
+        <section className="ls-sec ls-end">
+          <div className="c-container">
+          <Card material="brasa" grande className="ls-end__in" data-io data-reveal="soft">
             <h2 className="ls-h2--big">{t("landing.end.title")}</h2>
-            <p className="t-lead t-muted">{t("landing.end.lead")}</p>
+            <p className="t-lead">{t("landing.end.lead")}</p>
             <div className="ls-hero__cta">
-              <span className="c-forge">
-                <Link className="c-btn c-btn--forge c-btn--hero" href="/signup">
-                  {t("landing.end.cta")}
-                </Link>
-              </span>
-              <Link className="c-btn c-btn--quiet c-btn--lg" href="/login">
+              <Button variante="tinta" tamano="lg" href="/signup">
+                {t("landing.end.cta")}
+              </Button>
+              <Link className="u-btn u-btn--lg ls-btn-borde" href="/login">
                 {t("landing.end.alt")}
               </Link>
             </div>
+          </Card>
           </div>
         </section>
       </main>
 
-      <footer className="ls-footer c-wall">
+      <footer className="ls-footer">
         <div className="c-container">
           <hr className="c-divider" data-io />
           <div className="ls-footer__in">

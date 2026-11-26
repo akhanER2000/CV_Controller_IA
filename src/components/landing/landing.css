@@ -12,9 +12,59 @@
    ============================================================================ */
 
 .ls {
-  /* Ritmo vertical de sección y ancho de la columna de lectura. */
-  --ls-sec: var(--sp-9);
+  /* Ritmo vertical de sección y ancho de la columna de lectura. Con las
+     tarjetas de Forja v2 el aire lo ponen ellas: la sección respira menos. */
+  --ls-sec: var(--sp-8);
   --ls-read: 62ch;
+  /* Atmósfera cálida (Forja v2): el resplandor de la fragua detrás del hero,
+     el mismo que tiñe el fondo de la app. Solo tokens. */
+  background:
+    radial-gradient(1100px 620px at 82% -6%, color-mix(in srgb, var(--brasa-500) 22%, transparent), transparent 70%),
+    radial-gradient(900px 700px at -10% 40%, color-mix(in srgb, var(--brasa-700) 14%, transparent), transparent 70%);
+}
+
+/* Cabecera flotante de vidrio, como la barra superior del shell. */
+.ls-hd {
+  background: var(--glass-bg);
+  border-bottom: 1px solid var(--glass-border);
+  backdrop-filter: blur(var(--glass-blur)) saturate(1.2);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(1.2);
+}
+
+/* Bloque-tarjeta de sección (grafito o crema, grande). */
+.ls-blk { padding: var(--sp-7) var(--sp-7); }
+
+/* Texto del sistema dentro de la BRASA y la CREMA: siempre su tinta. */
+.ls .u-card--brasa .t-overline,
+.ls .u-card--brasa .t-lead,
+.ls .u-card--brasa .ls-hero__fine { color: var(--ink-on-brasa-muted); }
+.ls .u-card--brasa h1,
+.ls .u-card--brasa h2 { color: var(--ink-on-brasa); }
+.ls .u-card--crema .t-overline,
+.ls .u-card--crema .t-muted,
+.ls .u-card--crema .t-subtle,
+.ls .u-card--crema .t-lead,
+.ls .u-card--crema .ls-note,
+.ls .u-card--crema .ls-hint { color: var(--ink-on-crema-muted); }
+
+/* Acción secundaria SOBRE brasa: contorno de tinta (un botón grafito o naranja
+   ahí desaparece o rompe el material). */
+.ls-btn-borde {
+  background: transparent;
+  border-color: var(--ink-on-brasa);
+  color: var(--ink-on-brasa);
+}
+/* ui.css pinta los <a> dentro de brasa/crema con `color: inherit` + subrayado;
+   un botón-enlace no es un enlace de texto: recupera su color y va sin subrayar. */
+.ls .u-card--brasa .u-btn { text-decoration: none; }
+.ls .u-card--brasa .u-btn--tinta { color: var(--brasa-300); }
+.ls .u-card--brasa .u-btn--tinta:hover,
+.ls .u-card--brasa .u-btn--tinta:focus-visible { color: var(--brasa-100); }
+.ls-btn-borde:hover,
+.ls-btn-borde:focus-visible {
+  color: var(--ink-on-brasa);
+  background: color-mix(in srgb, var(--ink-on-brasa) 10%, transparent);
+  text-decoration: none;
 }
 
 /* Salto al contenido: visible solo con teclado. */
@@ -25,7 +75,7 @@
   z-index: var(--z-overlay);
   padding: 10px 16px;
   background: var(--surface-elevated);
-  border: 1px solid var(--border-patina);
+  border: 1px solid var(--border-brasa);
   border-radius: var(--radius-sm);
   font: 500 var(--fs-ui)/1 var(--font-sans);
 }
@@ -72,8 +122,9 @@
   color: var(--text-subtle);
 }
 
-/* ── 1 · HERO (ventana: el fondo vivo se ve) ───────────────────────────────── */
-.ls-hero { padding: calc(var(--sp-9) + var(--sp-5)) 0 var(--sp-9); }
+/* ── 1 · HERO: la tarjeta BRASA rellena manda en la vista ───────────────────── */
+.ls-hero { padding: var(--sp-8) 0 var(--sp-6); }
+.ls-hero__in { padding: var(--sp-8) var(--sp-8) var(--sp-7); }
 .ls-hero h1 {
   margin-top: var(--sp-4);
   max-width: 22ch;
@@ -159,7 +210,7 @@
   margin-top: var(--sp-4);
   font-size: var(--fs-ui);
   color: var(--text-muted);
-  border-left: 2px solid var(--border-patina);
+  border-left: 2px solid var(--border-brasa);
   padding-left: var(--sp-3);
 }
 
@@ -171,7 +222,7 @@
   gap: var(--sp-5);
   align-items: stretch;
 }
-.ls-face { display: flex; flex-direction: column; padding: 16px 16px 18px; min-width: 0; }
+.ls-face { display: flex; flex-direction: column; padding: 16px 16px 18px; min-width: 0; margin: 0; }
 .ls-face__cap {
   display: flex;
   align-items: center;
@@ -182,39 +233,38 @@
   border-bottom: 1px solid var(--border);
 }
 .ls-face__cap .t-overline { line-height: 1.5; }
+.u-card--crema .ls-face__cap { border-bottom-color: var(--crema-hondo); }
 
 .ls-paper-wrap, .ls-raw-wrap { flex: 1; min-height: 0; display: flex; }
 
 /* ── LA HOJA ────────────────────────────────────────────────────────────────
    Anatomía y medidas de la plantilla 'ats-clasica' (src/lib/cv/catalog.ts):
-   nombre 22pt Playfair 600 en pátina · cuerpo 10pt/1.45 · encabezados 10.5pt
+   nombre 22pt Playfair 600 en acento · cuerpo 10pt/1.45 · encabezados 10.5pt
    peso 700 EN MAYÚSCULAS y SIN tracking (el tracking hace que el parser extraiga
    "R E S U M E N": prohibido en el documento) · fechas a la derecha por flex,
    nunca por tabla · viñeta "• " · una sola columna, sin foto y sin iconos.
    1pt = 1px (--pt), así que la hoja mide los 612px de una carta. */
 .ls-paper {
   --pt: 1px;
-  /* Variables PROPIAS del documento (no tocan ni sombrean los tokens del
-     sistema): son los valores de la paleta 'patina' de catalog.ts, medidos
-     contra papel #FFFFFF. */
-  --doc-ink: #14181A;
-  --doc-muted: #454B49;
-  --doc-hair: #D8DAD6;
-  --doc-accent: #1F6E5A;
+  /* Forja v2: la hoja es el FOLIO (crema). Tintas medidas en
+     tests/tema-porcelana.test.ts: ink 14.55 · muted 6.95 · acento 4.81 ✓ AA. */
+  --doc-ink: var(--ink-on-crema);
+  --doc-muted: var(--ink-on-crema-muted);
+  --doc-hair: var(--crema-hondo);
+  --doc-accent: var(--accent-on-crema);
   width: 100%;
   max-width: calc(612 * var(--pt));
   margin-inline: auto;
   padding: calc(38 * var(--pt)) calc(44 * var(--pt));
-  background: #FFFFFF;
+  background: var(--crema);
   color: var(--doc-ink);
   border-radius: var(--radius-sm);
-  box-shadow: 0 2px 24px rgba(0, 0, 0, .5);
+  box-shadow: var(--elev-1);
   font-family: var(--font-sans);
   font-size: calc(10 * var(--pt));
   line-height: 1.45;
   overflow: hidden;
 }
-[data-theme="light"] .ls-paper { box-shadow: 0 2px 18px rgba(20, 24, 26, .14); }
 
 .ls-p-sec { transition: opacity var(--dur-base) var(--ease-standard); }
 .ls-p-name {
@@ -295,7 +345,7 @@
 
 /* La correspondencia: la misma información, en sus dos caras. */
 .is-dim { opacity: .38; }
-.ls-raw-blk.is-hl { color: var(--text); background: color-mix(in srgb, var(--patina-500) 16%, transparent); }
+.ls-raw-blk.is-hl { color: var(--text); background: color-mix(in srgb, var(--brasa-500) 16%, transparent); }
 .ls-p-sec.is-hl { box-shadow: 0 0 0 calc(3 * var(--pt)) color-mix(in srgb, var(--doc-accent) 14%, transparent); border-radius: 2px; }
 
 /* ── Las tres cifras ───────────────────────────────────────────────────────── */
@@ -331,7 +381,16 @@
 .ls-anti__c { padding: var(--sp-5); }
 .ls-anti__c h3 { margin-bottom: 6px; }
 .ls-prov { display: grid; gap: var(--sp-3); }
-.ls-prov__i { padding: 14px 16px; }
+.ls-prov__i {
+  padding: 14px 16px;
+  border-radius: var(--radius-xl);
+  background: var(--crema-hondo);
+  border-left: 3px solid var(--accent-on-crema);
+}
+.ls-prov__i.is-none { border-left-style: dashed; border-left-color: var(--ink-on-crema-muted); }
+.u-card--crema .ls-prov__src { color: var(--ink-on-crema-muted); }
+.u-card--crema .ls-prov__frag { color: var(--ink-on-crema-muted); border-left-color: var(--ink-on-crema-muted); }
+.u-card--crema .u-chip--oro { color: var(--accent-on-crema); }
 .ls-prov__txt { font-size: var(--fs-ui); line-height: 1.55; }
 .ls-prov__meta {
   margin-top: 9px;
@@ -359,7 +418,7 @@
   flex-wrap: wrap;
   gap: 8px;
 }
-.ls-tpl__i { height: auto; padding: 6px 10px; }
+.ls-tpl__i { height: auto; padding: 6px 12px; gap: 8px; font-size: var(--fs-ui); }
 .ls-tpl__i .t-subtle { font-size: 10px; letter-spacing: .1em; text-transform: uppercase; }
 .ls-tpl__notes { display: grid; gap: 0; }
 
@@ -379,13 +438,21 @@
   gap: var(--sp-3);
   font-size: var(--fs-lead);
   line-height: 1.6;
-  color: var(--text-muted);
+  color: var(--ink-on-crema);
 }
-.ls-price__i .c-pulse-dot { margin-top: .55em; }
+.ls-price__dot {
+  width: 10px;
+  height: 10px;
+  margin-top: .55em;
+  border-radius: 3px;
+  background: linear-gradient(135deg, var(--brasa-fill-a), var(--brasa-fill-b));
+}
 
 /* ── Cierre y pie ──────────────────────────────────────────────────────────── */
-.ls-end { padding: var(--sp-9) 0; }
-.ls-end__in { max-width: 60ch; }
+.ls-end { padding: var(--sp-8) 0; }
+.ls-end__in { padding: var(--sp-8); }
+.ls-end__in > * { max-width: 60ch; }
+.ls-end__in h2 { margin-bottom: var(--sp-4); }
 .ls-end .ls-hero__cta { margin-top: var(--sp-6); }
 .ls-footer { padding: 0 0 var(--sp-7); }
 .ls-footer__in {
@@ -406,8 +473,10 @@
   .ls-raw { max-height: 420px; }
 }
 @media (max-width: 860px) {
-  .ls { --ls-sec: var(--sp-8); }
-  .ls-hero { padding: var(--sp-8) 0; }
+  .ls { --ls-sec: var(--sp-7); }
+  .ls-hero { padding: var(--sp-6) 0 var(--sp-4); }
+  .ls-hero__in, .ls-end__in { padding: var(--sp-6) var(--sp-5); }
+  .ls-blk { padding: var(--sp-5) var(--sp-4); }
   .ls-hero h1 { font-size: var(--fs-display); max-width: none; }
   .ls-h2--big { font-size: var(--fs-h2); }
   .ls-ev { grid-template-columns: minmax(0, 1fr); }
@@ -416,8 +485,10 @@
 }
 @media (max-width: 560px) {
   .ls-paper { --pt: .66px; }
-  .ls-hero__cta .c-btn { width: 100%; }
-  .ls-hero__cta .c-forge { width: 100%; }
+  .ls-hero__cta .u-btn { width: 100%; }
+  /* "desincronizadas" no cabe a tamaño display dentro de la tarjeta a 390px. */
+  .ls-hero h1 { font-size: var(--fs-h2); }
+  .ls-hero__in, .ls-end__in { padding: var(--sp-5) var(--sp-4); }
 }
 
 /* ── Movimiento propio de la landing ───────────────────────────────────────
