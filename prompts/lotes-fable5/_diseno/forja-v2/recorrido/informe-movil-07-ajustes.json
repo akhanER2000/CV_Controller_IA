@@ -1,0 +1,15 @@
+{
+  "fecha": "2026-11-26T15:18:20.285Z",
+  "base": "http://localhost:3000",
+  "vistas": [
+    {
+      "vista": "07-ajustes-movil",
+      "cortados": [],
+      "superpuestos": [],
+      "anchoDoc": 390,
+      "anchoVista": 390,
+      "tapados": []
+    }
+  ],
+  "errores": []
+}

@@ -1,0 +1,43 @@
+{
+  "fecha": "2026-11-26T15:15:22.742Z",
+  "base": "http://localhost:3000",
+  "vistas": [
+    {
+      "vista": "04-variantes-escritorio",
+      "pdf": "CV-AI-ML-Engineer.pdf",
+      "cortados": [],
+      "superpuestos": [],
+      "anchoDoc": 1440,
+      "anchoVista": 1440
+    },
+    {
+      "vista": "07-ajustes-escritorio",
+      "cortados": [],
+      "superpuestos": [],
+      "anchoDoc": 1440,
+      "anchoVista": 1440
+    },
+    {
+      "vista": "08-salud-escritorio",
+      "cortados": [],
+      "superpuestos": [],
+      "anchoDoc": 1440,
+      "anchoVista": 1440
+    },
+    {
+      "vista": "09-fuentes-escritorio",
+      "cortados": [],
+      "superpuestos": [],
+      "anchoDoc": 1440,
+      "anchoVista": 1440
+    },
+    {
+      "vista": "13-cuenta-escritorio",
+      "cortados": [],
+      "superpuestos": [],
+      "anchoDoc": 1440,
+      "anchoVista": 1440
+    }
+  ],
+  "errores": []
+}

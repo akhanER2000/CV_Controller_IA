@@ -14,7 +14,13 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 
-const BASE = process.argv[2] ?? "http://localhost:3000";
+// Filtros para correr una vista a la vez sin cargar el servidor compartido:
+//   --tam=escritorio|movil   --vistas=04-variantes,07-ajustes (prefijos de n)
+const ARGS = process.argv.slice(2);
+const flag = (k) => ARGS.find((a) => a.startsWith(`--${k}=`))?.slice(k.length + 3);
+const BASE = ARGS.find((a) => !a.startsWith("--")) ?? "http://localhost:3000";
+const SOLO_TAM = flag("tam");
+const SOLO_VISTAS = flag("vistas")?.split(",").filter(Boolean);
 const OUT = path.dirname(fileURLToPath(import.meta.url));
 const cuenta = JSON.parse(readFileSync("supabase/cuenta-prueba.json", "utf8"));
 
@@ -116,7 +122,7 @@ function tapadosPorBarra() {
 
 const navegador = await chromium.launch();
 const informe = { fecha: new Date().toISOString(), base: BASE, vistas: [], errores: [] };
-for (const t of TAMANOS) {
+for (const t of TAMANOS.filter((x) => !SOLO_TAM || x.sufijo === SOLO_TAM)) {
   const ctx = await navegador.newContext({
     viewport: t.viewport,
     deviceScaleFactor: t.movil ? 2 : 1,
@@ -153,7 +159,7 @@ for (const t of TAMANOS) {
     { n: "12-onboarding", ruta: "/app/onboarding" },
     { n: "13-cuenta", ruta: "/app/cuenta" },
   ];
-  for (const p of PASOS) {
+  for (const p of PASOS.filter((x) => !SOLO_VISTAS || SOLO_VISTAS.some((v) => x.n.startsWith(v)))) {
     for (let intento = 1; intento <= 3; intento++) {
       let fallo = false;
       const alFallar = () => (fallo = true);
@@ -214,7 +220,7 @@ for (const t of TAMANOS) {
       // El botón PDF de la fila descarga el PDF de ESA variante (mismo /api/cv).
       const pdf = pag.locator(".vr-acciones .pdf").first();
       if (await pdf.isVisible().catch(() => false)) {
-        const espera = pag.waitForEvent("download", { timeout: 60_000 }).catch(() => null);
+        const espera = pag.waitForEvent("download", { timeout: 180_000 }).catch(() => null);
         await pdf.click();
         const d = await espera;
         if (d) {
@@ -241,7 +247,7 @@ for (const t of TAMANOS) {
   await ctx.close();
 }
 await navegador.close();
-writeFileSync(path.join(OUT, "informe.json"), JSON.stringify(informe, null, 2) + "\n", "utf8");
+writeFileSync(path.join(OUT, SOLO_TAM || SOLO_VISTAS ? `informe-${SOLO_TAM ?? "todos"}${SOLO_VISTAS ? "-" + SOLO_VISTAS.join("+") : ""}.json` : "informe.json"), JSON.stringify(informe, null, 2) + "\n", "utf8");
 for (const v of informe.vistas) {
   const desborde = v.anchoDoc > v.anchoVista ? ` DESBORDE ${v.anchoDoc}>${v.anchoVista}` : "";
   const tap = v.tapados ? ` · tapados ${v.tapados.length}` : "";

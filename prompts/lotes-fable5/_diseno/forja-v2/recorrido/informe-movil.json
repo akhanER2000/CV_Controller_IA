@@ -1,0 +1,126 @@
+{
+  "fecha": "2026-11-26T15:15:51.643Z",
+  "base": "http://localhost:3000",
+  "vistas": [
+    {
+      "vista": "01-panel-movil",
+      "cortados": [],
+      "superpuestos": [],
+      "anchoDoc": 390,
+      "anchoVista": 390,
+      "tapados": []
+    },
+    {
+      "vista": "02-master-movil",
+      "cortados": [],
+      "superpuestos": [
+        [
+          "AeroFit — Evaluación de aptitud médica a",
+          "escrito por ti"
+        ],
+        [
+          "Motor RAG médico-aeronáutico",
+          "escrito por ti"
+        ]
+      ],
+      "anchoDoc": 390,
+      "anchoVista": 390,
+      "tapados": []
+    },
+    {
+      "vista": "03-revision-movil",
+      "cortados": [],
+      "superpuestos": [],
+      "anchoDoc": 390,
+      "anchoVista": 390,
+      "tapados": []
+    },
+    {
+      "vista": "04-variantes-movil",
+      "pdf": "CV-AI-ML-Engineer.pdf",
+      "cortados": [],
+      "superpuestos": [],
+      "anchoDoc": 390,
+      "anchoVista": 390,
+      "tapados": []
+    },
+    {
+      "vista": "05-editor-movil",
+      "tresPaginas": "true",
+      "pdf": "CV-Akhan-Lorenzo-Andr-s-Espinoza-Rojas.pdf",
+      "cortados": [],
+      "superpuestos": [],
+      "anchoDoc": 429,
+      "anchoVista": 429,
+      "tapados": []
+    },
+    {
+      "vista": "06-importar-movil",
+      "cortados": [],
+      "superpuestos": [],
+      "anchoDoc": 390,
+      "anchoVista": 390,
+      "tapados": []
+    },
+    {
+      "vista": "07-ajustes-movil",
+      "cortados": [],
+      "superpuestos": [],
+      "anchoDoc": 390,
+      "anchoVista": 390,
+      "tapados": []
+    },
+    {
+      "vista": "08-salud-movil",
+      "cortados": [],
+      "superpuestos": [],
+      "anchoDoc": 390,
+      "anchoVista": 390,
+      "tapados": []
+    },
+    {
+      "vista": "09-fuentes-movil",
+      "cortados": [],
+      "superpuestos": [],
+      "anchoDoc": 390,
+      "anchoVista": 390,
+      "tapados": []
+    },
+    {
+      "vista": "10-ingesta-movil",
+      "cortados": [],
+      "superpuestos": [],
+      "anchoDoc": 390,
+      "anchoVista": 390,
+      "tapados": []
+    },
+    {
+      "vista": "11-adaptar-movil",
+      "cortados": [],
+      "superpuestos": [],
+      "anchoDoc": 390,
+      "anchoVista": 390,
+      "tapados": []
+    },
+    {
+      "vista": "12-onboarding-movil",
+      "cortados": [],
+      "superpuestos": [],
+      "anchoDoc": 390,
+      "anchoVista": 390,
+      "tapados": []
+    },
+    {
+      "vista": "13-cuenta-movil",
+      "cortados": [],
+      "superpuestos": [],
+      "anchoDoc": 390,
+      "anchoVista": 390,
+      "tapados": []
+    }
+  ],
+  "errores": [
+    "movil http://localhost:3000/app/variantes: Invalid or unexpected token",
+    "movil /app/variantes: intento 1 con error de página"
+  ]
+}

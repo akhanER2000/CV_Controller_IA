@@ -1,0 +1,15 @@
+{
+  "fecha": "2026-11-26T15:17:49.224Z",
+  "base": "http://localhost:3000",
+  "vistas": [
+    {
+      "vista": "02-master-movil",
+      "cortados": [],
+      "superpuestos": [],
+      "anchoDoc": 390,
+      "anchoVista": 390,
+      "tapados": []
+    }
+  ],
+  "errores": []
+}
