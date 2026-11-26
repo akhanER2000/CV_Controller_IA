@@ -148,9 +148,11 @@ test("ajuste + reglas · Máximo 2 + Incluir siempre PharmIQ + No mencionar Unit
   }
   expect(variantId, "ninguna selección desborda las 2 páginas").not.toBe("");
 
-  // Un item oculto A MANO (una aptitud que no es de PharmIQ): el ajuste no lo devuelve.
+  // Un item oculto A MANO (una viñeta que no es de PharmIQ): el ajuste no lo devuelve.
   const det0 = (await (await req.get(`/api/variants/${variantId}`)).json()) as { items: VItem[] };
-  const aOcultar = det0.items.find((i) => i.kind === "skill" && i.visible)!;
+  const aOcultar = det0.items.find((i) => i.kind === "bullet" && i.visible && !pharm.includes(i.item_id));
+  expect(aOcultar, "hay una viñeta fuera de PharmIQ que ocultar").toBeTruthy();
+  if (!aOcultar) return;
   expect((await req.patch(`/api/variants/${variantId}/items`, { data: { id: aOcultar.id, visible: false } })).ok()).toBeTruthy();
 
   const antes = await pdf(req, variantId);
