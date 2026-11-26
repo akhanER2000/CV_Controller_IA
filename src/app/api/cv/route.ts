@@ -6,6 +6,8 @@ import { createClient } from "@/lib/supabase/server";
 import { buildResumeData } from "@/lib/db/queries";
 import { buildVariantResumeData } from "@/lib/db/variants";
 import { autofit, plantillaDe, type ResultadoAutofit } from "@/lib/cv/autofit";
+import { esPlantillaUsuario } from "@/lib/cv/templates";
+import { resolverPlantillaDelDocumento } from "@/lib/cv/plantillas-usuario";
 
 // react-pdf necesita el runtime de Node (fontkit, streams). unpdf también.
 export const runtime = "nodejs";
@@ -106,7 +108,16 @@ export async function POST(req: Request) {
   let buf: Buffer;
   let ajuste: ResultadoAutofit | null = null;
   try {
-    const opts = body.opts ?? {};
+    let opts = body.opts ?? {};
+    // Plantilla a medida del usuario ("u:<uuid>", 0011): se lee con SU sesión y se
+    // registra antes del render; si no es suya o no existe, sale la de por defecto.
+    if (esPlantillaUsuario(data.templateId) || esPlantillaUsuario(opts.templateId)) {
+      const sb = await createClient();
+      const {
+        data: { user },
+      } = await sb.auth.getUser();
+      ({ data, opts = {} } = await resolverPlantillaDelDocumento(sb, user?.id ?? null, data, opts));
+    }
     if (body.paginas != null) {
       ajuste = await autofit(data, plantillaDe(data, opts), body.paginas, opts);
       buf = Buffer.from(ajuste.buf);

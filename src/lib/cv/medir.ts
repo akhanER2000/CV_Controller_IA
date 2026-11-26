@@ -167,3 +167,25 @@ export async function medirPdf(
 export function lineasQueSobran(medida: MedidaPdf, paginasObjetivo: number): number {
   return medida.total - medida.caben * paginasObjetivo;
 }
+
+/**
+ * Las líneas que sobran DE VERDAD — la cifra que se le enseña al usuario y al modelo.
+ *
+ * `lineasQueSobran` cuenta la caja en alturas de línea de cuerpo y por eso promete
+ * de más: una página real de la gama trae ~45 líneas donde la cuenta dice 54 (el
+ * aire de sección, los rótulos y las entradas que no se parten no son cuerpo).
+ * Medido en la cuenta de prueba: 3 páginas reales (38 + 45 + 26) contra un objetivo
+ * de 2 daban «sobra 1 línea»; se recortaba una línea y el CV seguía en 3 páginas.
+ *
+ * La cifra honesta sale del reparto REAL que hizo el motor: si el documento pasa del
+ * objetivo, sobra al menos todo lo que cayó en las páginas de más (esas líneas no
+ * tienen dónde ir: las páginas de antes ya las llenó el motor). Nunca menos que la
+ * cuenta teórica. Si ya cabe en páginas reales, nada sobra: se devuelve el sitio
+ * libre teórico (≤ 0), para que «cabe» y «sobran N» no se contradigan nunca.
+ */
+export function lineasQueSobranReales(medida: MedidaPdf, paginasObjetivo: number): number {
+  const teorico = lineasQueSobran(medida, paginasObjetivo);
+  if (medida.porPagina.length <= paginasObjetivo) return Math.min(teorico, 0);
+  const deMas = medida.porPagina.slice(paginasObjetivo).reduce((a, b) => a + b, 0);
+  return Math.max(teorico, deMas);
+}

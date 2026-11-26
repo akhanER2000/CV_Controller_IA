@@ -175,3 +175,13 @@ body:has(.tg-veil) .c-aurora{z-index:60}
   .tg-cmpitem{width:calc(50% - 8px)}
   .tg-cmphint{display:none}
 }
+
+/* ── Pestañas Catálogo / Personalizadas y tarjeta de plantilla propia (0011) ── */
+.tg-tabs{margin-right:auto}
+.tg-propia .tg-meta{display:flex;flex-direction:column;gap:6px;position:relative;z-index:1}
+.tg-propia .tg-name{font-weight:600}
+.tg-acts{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin:0}
+.tg-acts span{font-size:var(--fs-micro);color:var(--text-muted);flex-basis:100%}
+.tg-ren{display:flex;flex-wrap:wrap;gap:6px}
+.tg-ren input{flex:1 1 140px;min-width:0;padding:6px 8px;border:1px solid var(--border-strong);border-radius:6px;
+  background:var(--surface);color:var(--text);font:inherit}

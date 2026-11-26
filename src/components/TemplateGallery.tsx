@@ -548,6 +548,227 @@ export function TemplateThumb({
   );
 }
 
+/**
+ * La página 1 de un PDF que YA se renderizó y midió en el servidor (la cascada de
+ * «Ajustar páginas» lo trae en base64). Mismo rasterizador que la galería: lo que se
+ * ve es exactamente el documento cuyas páginas se contaron, sin un segundo render.
+ */
+export function MiniaturaPdf({ pdf, alt }: { pdf: string; alt: string }) {
+  const t = useT();
+  const [url, setUrl] = useState("");
+  const [error, setError] = useState("");
+  useEffect(() => {
+    let vivo = true;
+    setUrl("");
+    setError("");
+    void (async () => {
+      try {
+        const bin = atob(pdf);
+        const bytes = new Uint8Array(bin.length);
+        for (let i = 0; i < bin.length; i += 1) bytes[i] = bin.charCodeAt(i);
+        const [u] = await rasterize(bytes, 220, DPR_MAX, 1);
+        if (vivo) setUrl(u ?? "");
+      } catch (e) {
+        console.error("[ajuste] no se pudo rasterizar la miniatura", e);
+        if (vivo) setError(reason(e));
+      }
+    })();
+    return () => {
+      vivo = false;
+    };
+  }, [pdf]);
+  if (url) {
+    // eslint-disable-next-line @next/next/no-img-element
+    return <img className="tg-sheet" src={url} alt={alt} draggable={false} />;
+  }
+  return (
+    <span className={"tg-sheet" + (error ? " tg-sheet--fail" : " tg-sheet--wait c-skel")} role={error ? "note" : undefined}>
+      {error ? <span className="tg-failw">{t("editor.gal_thumbFailed")} · {error}</span> : null}
+    </span>
+  );
+}
+
+// ── Plantillas personalizadas (0011) ─────────────────────────────────────────
+interface PlantillaPropia {
+  id: string;
+  nombre: string;
+  base: string;
+  params: { cuerpo?: number };
+}
+
+/**
+ * La pestaña «Personalizadas»: las plantillas a medida que armó el motor desde
+ * «Ajustar páginas». Usar = la misma elección que una del catálogo (onPick);
+ * renombrar y eliminar van a /api/plantillas/[id]. Eliminar pide confirmación EN
+ * la tarjeta (nunca un diálogo del navegador).
+ */
+function PlantillasPropias({
+  activeTemplateId,
+  data,
+  docHash,
+  signal,
+  templates,
+  onPick,
+}: {
+  activeTemplateId: string;
+  data: ResumeData;
+  docHash: string;
+  signal: AbortSignal | null;
+  templates: CvTemplate[];
+  onPick: (id: string) => void;
+}) {
+  const t = useT();
+  const [lista, setLista] = useState<PlantillaPropia[] | null>(null);
+  const [error, setError] = useState("");
+  const [editando, setEditando] = useState<string | null>(null);
+  const [nombre, setNombre] = useState("");
+  const [borrando, setBorrando] = useState<string | null>(null);
+
+  const cargar = useCallback(async () => {
+    setError("");
+    try {
+      const res = await fetch("/api/plantillas", { cache: "no-store" });
+      if (!res.ok) throw new Error(await readApiError(res));
+      const j = (await res.json()) as { plantillas?: PlantillaPropia[] };
+      setLista(j.plantillas ?? []);
+    } catch (e) {
+      console.error("[galería] no se pudieron leer las plantillas propias", e);
+      setError(reason(e));
+      setLista([]);
+    }
+  }, []);
+  useEffect(() => {
+    void cargar();
+  }, [cargar]);
+
+  const renombrar = async (id: string) => {
+    try {
+      const res = await fetch(`/api/plantillas/${encodeURIComponent(id)}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ nombre }),
+      });
+      if (!res.ok) throw new Error(await readApiError(res));
+      setEditando(null);
+      await cargar();
+    } catch (e) {
+      setError(reason(e));
+    }
+  };
+  const eliminar = async (id: string) => {
+    try {
+      const res = await fetch(`/api/plantillas/${encodeURIComponent(id)}`, { method: "DELETE" });
+      if (!res.ok) throw new Error(await readApiError(res));
+      setBorrando(null);
+      await cargar();
+    } catch (e) {
+      setError(reason(e));
+    }
+  };
+
+  const nombreBase = (id: string) => templates.find((x) => x.id === id)?.name ?? id;
+  if (lista === null) return <p className="tg-none">{t("ajuste.propiasCargando")}</p>;
+  return (
+    <div className="tg-body" data-pestana="propias">
+      {error && (
+        <p className="tg-none" role="status">
+          {t("ajuste.propiasErr").replace("{r}", error)}
+        </p>
+      )}
+      {lista.length === 0 ? (
+        <p className="tg-none">{t("ajuste.propiasVacio")}</p>
+      ) : (
+        <div className="tg-grid c-hairgrid">
+          {lista.map((p) => {
+            const active = p.id === activeTemplateId;
+            return (
+              <article className={"tg-card tg-propia" + (active ? " is-active" : "")} key={p.id} data-tpl={p.id}>
+                <div className="tg-shot">
+                  <Shot
+                    thumbKey={thumbKey(p.id, "", "", docHash)}
+                    body={bodyFor(data, p.id, "", "")}
+                    enabled
+                    signal={signal}
+                    alt={t("editor.gal_thumbAlt").replace("{name}", p.nombre)}
+                    labels={{
+                      building: t("editor.gal_building"),
+                      failed: t("editor.gal_thumbFailed"),
+                      retry: t("editor.gal_retry"),
+                    }}
+                  />
+                  {active && <span className="tg-badge">{t("editor.gal_active")}</span>}
+                </div>
+                <div className="tg-meta">
+                  {editando === p.id ? (
+                    <form
+                      className="tg-ren"
+                      onSubmit={(e) => {
+                        e.preventDefault();
+                        void renombrar(p.id);
+                      }}
+                    >
+                      <input
+                        aria-label={t("ajuste.renombrarAria")}
+                        value={nombre}
+                        maxLength={60}
+                        autoFocus
+                        onChange={(e) => setNombre(e.target.value)}
+                      />
+                      <button type="submit" className="c-btn">
+                        {t("ajuste.guardarNombre")}
+                      </button>
+                      <button type="button" className="c-btn c-btn--quiet" onClick={() => setEditando(null)}>
+                        {t("ajuste.cancelar")}
+                      </button>
+                    </form>
+                  ) : (
+                    <p className="tg-name">{p.nombre}</p>
+                  )}
+                  <p className="tg-desc">
+                    {t("ajuste.propiaBase")
+                      .replace("{b}", nombreBase(p.base))
+                      .replace("{s}", String(p.params.cuerpo ?? "").replace(".", ","))}
+                  </p>
+                  {borrando === p.id ? (
+                    <p className="tg-acts" role="group">
+                      <span>{t("ajuste.eliminarConfirma")}</span>
+                      <button type="button" className="c-btn" onClick={() => void eliminar(p.id)}>
+                        {t("ajuste.siEliminar")}
+                      </button>
+                      <button type="button" className="c-btn c-btn--quiet" onClick={() => setBorrando(null)}>
+                        {t("ajuste.cancelar")}
+                      </button>
+                    </p>
+                  ) : (
+                    <p className="tg-acts">
+                      <button type="button" className="c-btn" disabled={active} onClick={() => onPick(p.id)}>
+                        {active ? t("ajuste.enUso") : t("ajuste.usar")}
+                      </button>
+                      <button
+                        type="button"
+                        className="c-btn c-btn--quiet"
+                        onClick={() => {
+                          setNombre(p.nombre);
+                          setEditando(p.id);
+                        }}
+                      >
+                        {t("ajuste.renombrar")}
+                      </button>
+                      <button type="button" className="c-btn c-btn--quiet" onClick={() => setBorrando(p.id)}>
+                        {t("ajuste.eliminar")}
+                      </button>
+                    </p>
+                  )}
+                </div>
+              </article>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Atmósfera ────────────────────────────────────────────────────────────────
 
 /**
@@ -624,6 +845,10 @@ export function TemplateGallery({
   const [font, setFont] = useState("");
   const [color, setColor] = useState("");
   const [onlyRecommended, setOnlyRecommended] = useState(false);
+  /** Catálogo o «Personalizadas» (las plantillas a medida del usuario, 0011). */
+  const [pestana, setPestana] = useState<"catalogo" | "propias">(() =>
+    activeTemplateId.startsWith("u:") ? "propias" : "catalogo",
+  );
   const [compare, setCompare] = useState<string[]>([]);
   /** Qué plantilla está AMPLIADA (null = ninguna). Se guarda el id y no el índice:
    *  el índice caduca en cuanto cambia un filtro; el id no. */
@@ -815,14 +1040,35 @@ export function TemplateGallery({
       >
         <header className="tg-head">
           <span className="t-overline">{t("editor.gal_title")}</span>
-          <span className="tg-count">
-            {t("editor.gal_count").replace("{n}", String(visible.length)).replace("{m}", String(templates.length))}
-          </span>
+          <div className="tg-seg tg-tabs" role="group" aria-label={t("editor.gal_title")}>
+            {(["catalogo", "propias"] as const).map((p) => (
+              <button key={p} type="button" id={`tgTab-${p}`} aria-pressed={pestana === p} onClick={() => setPestana(p)}>
+                {t(p === "catalogo" ? "ajuste.tabCatalogo" : "ajuste.tabPropias")}
+              </button>
+            ))}
+          </div>
+          {pestana === "catalogo" && (
+            <span className="tg-count">
+              {t("editor.gal_count").replace("{n}", String(visible.length)).replace("{m}", String(templates.length))}
+            </span>
+          )}
           <button type="button" className="c-btn c-btn--quiet tg-close" ref={closeRef} onClick={onClose}>
             {t("editor.gal_done")}
           </button>
         </header>
 
+        {pestana === "propias" && (
+          <PlantillasPropias
+            activeTemplateId={activeTemplateId}
+            data={data}
+            docHash={docHash}
+            signal={generation?.signal ?? null}
+            templates={templates}
+            onPick={onPickTemplate}
+          />
+        )}
+        {pestana === "catalogo" && (
+        <>
         {/* Filtros. La gama es un campo propio (no una etiqueta); las etiquetas son
             el vocabulario CERRADO de templates.ts, traducido, nunca inventado. */}
         <div className="tg-filters">
@@ -1036,6 +1282,8 @@ export function TemplateGallery({
             </div>
           )}
         </div>
+        </>
+        )}
 
         <footer className="tg-foot">{t("editor.gal_foot")}</footer>
       </div>

@@ -709,6 +709,31 @@ export function listTypographies(): TemplateTypography[] {
   return [...seen.values()];
 }
 
+// ── Plantillas a medida del usuario (ids "u:<uuid>") ─────────────────────────
+/**
+ * Las plantillas que arma el MOTOR para un usuario (plantilla-medida.ts) no viven
+ * en el catálogo: viven en `plantillas_usuario` (0011) como base + parámetros. Para
+ * que el render, el texto plano y el autofit las resuelvan con la MISMA
+ * getTemplate() de siempre, el servidor las registra aquí antes de renderizar
+ * (plantillas-usuario.ts). Un id "u:…" que nadie registró cae en la de por
+ * defecto, como cualquier id desconocido: nunca deja a nadie sin CV.
+ */
+export const PREFIJO_PLANTILLA_USUARIO = "u:";
+const USER_REGISTRY = new Map<string, CvTemplate>();
+
+export function esPlantillaUsuario(id?: string | null): boolean {
+  return typeof id === "string" && id.startsWith(PREFIJO_PLANTILLA_USUARIO);
+}
+export function registrarPlantillaUsuario(t: CvTemplate): void {
+  if (esPlantillaUsuario(t.id)) USER_REGISTRY.set(t.id, t);
+}
+export function olvidarPlantillaUsuario(id: string): void {
+  USER_REGISTRY.delete(id);
+}
+export function plantillaUsuarioRegistrada(id: string): CvTemplate | undefined {
+  return USER_REGISTRY.get(id);
+}
+
 /** Id de la plantilla por defecto: la gama ATS manda. */
 export const DEFAULT_TEMPLATE_ID = "ats-clasica";
 
@@ -718,7 +743,7 @@ export const DEFAULT_TEMPLATE_ID = "ats-clasica";
  */
 export function getTemplate(id?: string | null): CvTemplate {
   if (id) {
-    const t = REGISTRY.get(id);
+    const t = esPlantillaUsuario(id) ? USER_REGISTRY.get(id) : REGISTRY.get(id);
     if (t) return t;
   }
   return REGISTRY.get(DEFAULT_TEMPLATE_ID) ?? [...REGISTRY.values()][0]!;

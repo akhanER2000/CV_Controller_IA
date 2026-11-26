@@ -9,6 +9,10 @@ import { contextoMemoria, mensajesConMemoria, type ContextoMemoria } from "@/lib
 // Cuántas páginas quiere el usuario: 1, 2 o 3 (objetivoDe vive en autofit.ts, con
 // su test; un route.ts de Next no puede exportar nada que no sea del contrato).
 import { autofit, objetivoDe, plantillaDe } from "@/lib/cv/autofit";
+import { cascada } from "@/lib/cv/cascada";
+import { comprobar, plantillaDeParams, validarParams, type ParamsMedida } from "@/lib/cv/plantilla-medida";
+import { guardarPlantillaUsuario, resolverPlantillaDelDocumento } from "@/lib/cv/plantillas-usuario";
+import { renderResumeToBuffer } from "@/lib/cv/ResumePDF";
 import {
   construirAjuste,
   itemDeAjuste,
@@ -25,10 +29,17 @@ export const runtime = "nodejs";
 export const maxDuration = 300;
 
 /**
- * «AJUSTAR A N PÁGINAS» (1, 2 o 3) — la ruta. Dos acciones, las dos MANUALES:
+ * «AJUSTAR A N PÁGINAS» (1, 2 o 3) — la ruta. Tres acciones, todas MANUALES:
  *
- *   POST { accion:'analizar' }                    → una PROPUESTA revisable.
+ *   POST { accion:'analizar' }                    → una PROPUESTA revisable + la CASCADA.
  *   POST { accion:'acortar', id, propuesto }      → aplica UN acortado, ya aceptado.
+ *   POST { accion:'guardar-medida', params, nombre? } → guarda la plantilla a medida
+ *        (paso 3) como plantilla del usuario, tras volver a comprobarla aquí.
+ *
+ * LA CASCADA (DA-A1, cascada.ts): 1 · autofit y recortes en la plantilla actual;
+ * 2 · plantillas del catálogo donde el mismo contenido cabe; 3 · plantilla a medida.
+ * Viaja dentro de `ajuste.cascada`; cada paso dice si deja el CV en las páginas
+ * pedidas, MEDIDAS en el PDF real.
  *
  * No existe un «aplicar todo», y no es un olvido: es la regla. Quitar y reordenar
  * viajan por el contrato que ya existe (DELETE/PATCH /api/variants/[id]/items), uno
@@ -56,8 +67,11 @@ function geminiAjusteLLM(apiKey?: string, apiKey3?: string, mem?: ContextoMemori
   const SYS =
     "Eres un asistente que ayuda a que un CV QUEPA en un número de páginas. Te doy los items " +
     "VISIBLES de la variante (id, tipo y texto), el rol objetivo y CUÁNTAS LÍNEAS SOBRAN (medidas " +
-    "sobre el PDF real). Tu tarea tiene tres partes y NINGUNA es escribir un CV nuevo:\n" +
-    "(1) QUITAR: los items menos relevantes para el rol objetivo, los que sobrarían primero.\n" +
+    "sobre el PDF real: son las líneas que cayeron en las páginas de más). Tu tarea tiene tres " +
+    "partes y NINGUNA es escribir un CV nuevo:\n" +
+    "(1) QUITAR: los items menos relevantes para el rol objetivo, los que sobrarían primero. Propón " +
+    "los SUFICIENTES para cubrir las líneas que sobran (una viñeta ocupa de 1 a 3 líneas; un rol " +
+    "entero, su cabecera más sus viñetas): quedarse corto deja el CV en las mismas páginas.\n" +
     "(2) ORDEN: los ids de las VIÑETAS en el orden en que deberían ir dentro de su experiencia " +
     "(lo más fuerte arriba). Solo viñetas.\n" +
     "(3) ACORTAR: reescrituras MÁS CORTAS del mismo texto.\n" +
@@ -97,7 +111,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   } = await sb.auth.getUser();
   if (!user) return fallo("Sesión requerida.", 401);
 
-  let body: { accion?: string; paginas?: number; id?: string; propuesto?: string };
+  let body: { accion?: string; paginas?: number; id?: string; propuesto?: string; params?: ParamsMedida; nombre?: string };
   try {
     body = await req.json();
   } catch {
@@ -147,14 +161,38 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     }
   }
 
+  // ── GUARDAR LA PLANTILLA A MEDIDA (paso 3) ─────────────────────────────────
+  // Los parámetros llegan del cliente y NO se creen: se validan contra los límites
+  // ATS y se vuelve a renderizar ESTA variante con ellos para comprobar round-trip,
+  // medida y contraste aquí. Solo entonces se guarda.
+  if (body.accion === "guardar-medida") {
+    const params = body.params;
+    if (!params || typeof params !== "object") return fallo("Faltan los parámetros de la plantilla.", 400);
+    const v = validarParams(params);
+    if (!v.ok) return fallo(`No se guardó: ${v.razon}.`, 422);
+    try {
+      const resume = await buildVariantResumeData(sb, user.id, variantId);
+      const borrador = plantillaDeParams(params);
+      const doc = { ...resume, templateId: borrador.id, paletteId: undefined, typographyId: undefined };
+      const buf = new Uint8Array(await renderResumeToBuffer(doc, {}));
+      const c = await comprobar({ ...resume, paletteId: undefined, typographyId: undefined }, borrador, buf);
+      if (c.razon) return fallo(`No se guardó: ${c.razon}.`, 422);
+      const p = await guardarPlantillaUsuario(sb, user.id, params, body.nombre);
+      return NextResponse.json({ ok: true, plantilla: { id: p.id, nombre: p.nombre } });
+    } catch (e) {
+      console.error("[api/ajustar] no se pudo guardar la plantilla a medida", variantId, e);
+      return fallo(motivo(e), 500);
+    }
+  }
+
   // ── ANALIZAR ───────────────────────────────────────────────────────────────
   const paginasObjetivo = objetivoDe(body.paginas);
 
+  // Sin clave de IA el paso 1 se queda sin recortes propuestos, pero la cascada
+  // (autofit, catálogo y plantilla a medida) es del motor y corre igual.
   const byok = (await getUserLlmKey(sb, user.id)) ?? undefined;
   const byok3 = (await getUserLlmKey3(sb, user.id)) ?? undefined;
-  if (!hayClaveIA(byok, byok3)) {
-    return fallo("Falta configurar una clave de IA (BYOK, ANTHROPIC_API_KEY o GEMINI_API_KEY del servidor).", 503);
-  }
+  const conIA = hayClaveIA(byok, byok3);
 
   try {
     const detalle = await getVariant(sb, user.id, variantId);
@@ -166,18 +204,45 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     //     Se mide DESPUÉS del autofit: si bajando el cuerpo (hasta 10 pt) ya cabe,
     //     no sobra nada; si no, «sobran» se cuenta a 10 pt, que es el documento que
     //     el usuario está viendo en el preview.
-    const resume = await buildVariantResumeData(sb, user.id, variantId);
-    const { medida, sobran } = await autofit(resume, plantillaDe(resume), paginasObjetivo);
+    const { data: resume } = await resolverPlantillaDelDocumento(
+      sb,
+      user.id,
+      await buildVariantResumeData(sb, user.id, variantId),
+    );
+    const actual = await autofit(resume, plantillaDe(resume), paginasObjetivo);
+    const { medida, sobran } = actual;
 
     // 2 · PROPONER. Solo los VISIBLES: lo oculto no ocupa líneas y proponer quitarlo
     //     sería teatro.
     const items: AjusteItem[] = detalle.items.map(itemDeAjuste);
     const targetTitle = detalle.variant.target_title ?? "";
 
-    const propuesta = await construirAjuste(
-      { targetTitle, items, paginas: medida.porPagina.length, paginasObjetivo, sobran },
-      { llm: geminiAjusteLLM(byok, byok3, await contextoMemoria(sb, user.id, "ajustar")) },
-    );
+    // Si ya cabe, no se gasta una llamada al modelo: no hay nada que recortar. Y si el
+    // modelo falla, la cascada (que es del motor) sigue sin recortes y lo dice.
+    const sinPlan =
+      (notas: string): AjusteLLM =>
+      async () => ({ quitar: [], orden: [], acortar: [], notas });
+    const entrada = { targetTitle, items, paginas: medida.porPagina.length, paginasObjetivo, sobran };
+    let propuesta;
+    if (conIA && actual.noCabe) {
+      try {
+        propuesta = await construirAjuste(entrada, {
+          llm: geminiAjusteLLM(byok, byok3, await contextoMemoria(sb, user.id, "ajustar")),
+        });
+      } catch (e) {
+        console.error("[api/ajustar] el modelo no respondió; la cascada sigue sin recortes", variantId, e);
+        propuesta = await construirAjuste(entrada, {
+          llm: sinPlan(`La IA no respondió (${motivo(e)}): no hay recortes propuestos; la cascada sigue con el motor.`),
+        });
+      }
+    } else {
+      propuesta = await construirAjuste(entrada, {
+        llm: sinPlan(conIA ? "" : "Sin clave de IA: no hay recortes propuestos; la cascada sigue con el motor."),
+      });
+    }
+
+    // 3 · LA CASCADA: ¿alcanza con lo de arriba? Si no, catálogo y plantilla a medida.
+    const informe = await cascada({ data: resume, objetivo: paginasObjetivo, actual, items, propuesta });
 
     // Los descartes se registran EN EL SERVIDOR además de viajar al cliente: si un
     // día el modelo empieza a comerse cifras en masa, tiene que verse en los logs y
@@ -188,7 +253,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       }
     }
 
-    return NextResponse.json({ ajuste: propuesta });
+    return NextResponse.json({ ajuste: { ...propuesta, cascada: { ...informe, variantId } } });
   } catch (e) {
     console.error("[api/ajustar] no se pudo armar la propuesta", variantId, e);
     return fallo(motivo(e), 500);

@@ -24,6 +24,7 @@ import { tailor } from "./dict/tailor";
 import { salud } from "./dict/salud";
 import { fuentes } from "./dict/fuentes";
 import { ajustes } from "./dict/ajustes";
+import { ajusteCascada } from "./dict/ajuste-cascada";
 
 type Table = Record<string, string>;
 interface Namespace {
@@ -33,7 +34,7 @@ interface Namespace {
 
 const parts: Namespace[] = [
   menuCuenta, common, landing, auth, onboarding, importar, staging, dashboard,
-  master, variantes, editor, tailor, salud, fuentes, ajustes,
+  master, variantes, editor, tailor, salud, fuentes, ajustes, ajusteCascada,
 ];
 
 const merge = (lang: "es" | "en"): Table => Object.assign({}, ...parts.map((p) => p[lang]));

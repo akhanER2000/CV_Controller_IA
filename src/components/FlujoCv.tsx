@@ -1,9 +1,12 @@
 // Sin "use client": solo lo importa el editor (que ya es cliente), y así sus
 // props pueden ser funciones sin el aviso de props serializables.
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { StatusChip, type EstadoChip } from "@/components/ui/StatusChip";
 import { useT } from "@/lib/i18n";
 import type { AutofitInfo, EstadoDoc, Fit, FitFalta, FitTipoFalta, PropEnLinea } from "@/components/flujo-cv";
+import type { Cascada, PasoActual, PasoCatalogo, PasoMedida } from "@/lib/cv/cascada";
+import { MiniaturaPdf } from "@/components/TemplateGallery";
+import { AnchoFijo } from "@/components/ui/Progreso";
 import { Desplegable, Kbd } from "@/components/editor/Desplegable";
 import { TECLA } from "@/components/editor/atajos";
 import "./FlujoCv.css";
@@ -51,6 +54,12 @@ export function GuiaAjuste(props: {
   onSiguiente: () => void;
   /** lo que va en el hueco «acciones de IA» (Afinar con IA) */
   ia?: ReactNode;
+  /**
+   * Aplicar una plantilla elegida en la cascada (paso 2 o 3). El editor la pasa con
+   * su `savePresentation({ templateId })`; sin ella, el panel la guarda por la API
+   * de la variante y recarga (ver DECISIONES, DA-AC).
+   */
+  onUsarPlantilla?: (templateId: string) => void;
 }) {
   const t = useT();
   const [abierto, setAbierto] = useState(false);
@@ -195,7 +204,8 @@ export function GuiaAjuste(props: {
         disabled={busy}
         onClick={props.onProponer}
       >
-        {busy ? t("editor.edAjustando") : t("editor.fitOpen")}
+        {/* AnchoFijo (DA-EE3): «Ajustar páginas» y «ajustando…» ocupan lo mismo; la barra no se mueve. */}
+        <AnchoFijo ocupado={busy} reposo={t("editor.fitOpen")} carga={t("editor.edAjustando")} />
       </button>
       {/* HUECO RESERVADO para las acciones de IA (lo llena el lote siguiente).
           Sin lógica: vacío no ocupa sitio (:empty en FlujoCv.css). */}
@@ -221,7 +231,225 @@ export function GuiaAjuste(props: {
           {err}
         </span>
       )}
+      <PanelCascada
+        cascada={(fit as (Fit & { cascada?: Cascada }) | null)?.cascada ?? null}
+        paginasTxt={paginasTxt}
+        onUsar={props.onUsarPlantilla}
+      />
     </div>
+  );
+}
+
+// ── La cascada de «Ajustar páginas» (DA-A1) ─────────────────────────────────
+/**
+ * Los tres pasos EN ORDEN y cuál resolvió el problema. Se abre solo cuando llega un
+ * análisis nuevo (una cascada por clic en «Ajustar páginas») y se cierra a mano.
+ * Todas las cifras son del PDF real que midió el servidor; las miniaturas son ESE
+ * mismo PDF, no un render aparte.
+ */
+function PanelCascada({
+  cascada,
+  paginasTxt,
+  onUsar,
+}: {
+  cascada: Cascada | null;
+  paginasTxt: (n: number) => string;
+  onUsar?: (templateId: string) => void;
+}) {
+  const t = useT();
+  const [abierto, setAbierto] = useState(false);
+  const [ocupado, setOcupado] = useState<string | null>(null);
+  const [msg, setMsg] = useState("");
+  useEffect(() => {
+    setAbierto(cascada != null);
+    setMsg("");
+    setOcupado(null);
+  }, [cascada]);
+  if (!cascada || !abierto) return null;
+
+  const coma = (n: number) => String(n).replace(".", ",");
+  const { objetivo, resueltoPor } = cascada;
+  const paso = <P,>(n: 1 | 2 | 3) => cascada.pasos.find((p) => p.paso === n) as P | undefined;
+  const p1 = paso<PasoActual>(1);
+  const p2 = paso<PasoCatalogo>(2);
+  const p3 = paso<PasoMedida>(3);
+  const NOMBRE = { 1: t("ajuste.paso1"), 2: t("ajuste.paso2"), 3: t("ajuste.paso3") } as const;
+  const varianteId = cascada.variantId;
+
+  const aplicar = async (templateId: string) => {
+    if (onUsar) {
+      onUsar(templateId);
+      setMsg(t("ajuste.usada"));
+      return;
+    }
+    // Sin el manejador del editor: la presentación se guarda en la variante y se
+    // recarga, para que el editor lea la plantilla nueva de la base.
+    const res = await fetch(`/api/variants/${varianteId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ presentation: { templateId } }),
+    });
+    if (!res.ok) throw new Error(((await res.json().catch(() => null)) as { error?: string } | null)?.error ?? `HTTP ${res.status}`);
+    setMsg(t("ajuste.usada"));
+    window.location.reload();
+  };
+  const usar = async (clave: string, fn: () => Promise<void>) => {
+    setOcupado(clave);
+    setMsg("");
+    try {
+      await fn();
+    } catch (e) {
+      console.error("[ajuste] no se pudo aplicar la plantilla de la cascada", e);
+      setMsg(t("ajuste.errUsar").replace("{r}", e instanceof Error ? e.message : String(e)));
+    } finally {
+      setOcupado(null);
+    }
+  };
+  const guardarMedida = async (params: NonNullable<PasoMedida["params"]>) => {
+    const res = await fetch(`/api/variants/${varianteId}/ajustar`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ accion: "guardar-medida", params }),
+    });
+    const j = (await res.json().catch(() => null)) as { plantilla?: { id: string }; error?: string } | null;
+    if (!res.ok || !j?.plantilla) throw new Error(j?.error ?? `HTTP ${res.status}`);
+    await aplicar(j.plantilla.id);
+  };
+
+  const estadoDe = (p: { resuelve: boolean } | undefined) =>
+    !p ? "noHizoFalta" : p.resuelve ? "resuelve" : "noAlcanza";
+  const chipDe = (e: string): EstadoChip => (e === "resuelve" ? "ok" : e === "noAlcanza" ? "aviso" : "neutro");
+
+  return (
+    <section className="flu-cascada" id="edCascada" aria-label={t("ajuste.cascadaT").replace("{p}", paginasTxt(objetivo))}>
+      <header>
+        <span className="t-overline">{t("ajuste.cascadaT").replace("{p}", paginasTxt(objetivo))}</span>
+        <button type="button" className="flu-cas-x" aria-label={t("ajuste.cancelar")} onClick={() => setAbierto(false)}>
+          ×
+        </button>
+      </header>
+      <p className="flu-cas-res" data-resuelto={resueltoPor ?? "ninguno"}>
+        {resueltoPor
+          ? t("ajuste.resueltoPor").replace("{n}", String(resueltoPor)).replace("{paso}", NOMBRE[resueltoPor])
+          : t("ajuste.sinResolver").replace("{p}", paginasTxt(objetivo))}
+      </p>
+      {!resueltoPor && <p className="flu-cas-hint">{t("ajuste.sinResolverHint")}</p>}
+      <ol className="flu-cas-pasos">
+        {([1, 2, 3] as const).map((n) => {
+          const p = n === 1 ? p1 : n === 2 ? p2 : p3;
+          const e = estadoDe(p);
+          return (
+            <li key={n} data-paso={n} data-estado={e}>
+              <div className="flu-cas-cab">
+                <b>
+                  {n} · {NOMBRE[n]}
+                </b>
+                <StatusChip estado={chipDe(e)}>{t(`ajuste.${e}`)}</StatusChip>
+              </div>
+              {n === 1 && p1 && (
+                <>
+                  <p>
+                    {p1.paginas <= objetivo
+                      ? t("ajuste.p1Cabe").replace("{s}", coma(p1.cuerpo)).replace("{p}", paginasTxt(objetivo))
+                      : t("ajuste.p1Mide")
+                          .replace("{s}", coma(p1.cuerpo))
+                          .replace("{n}", String(p1.paginas))
+                          .replace("{l}", String(p1.sobran))}
+                  </p>
+                  {p1.paginas > objetivo && (
+                    <p>
+                      {p1.paginasConRecortes == null
+                        ? t("ajuste.p1SinRecortes")
+                        : t("ajuste.p1Recortes")
+                            .replace("{r}", String(p1.propuestas))
+                            .replace("{n}", String(p1.paginasConRecortes))}
+                      {p1.sinSimular > 0 && <> {t("ajuste.p1RecortesAprox").replace("{x}", String(p1.sinSimular))}</>}
+                    </p>
+                  )}
+                </>
+              )}
+              {n === 2 && p2 && (
+                <>
+                  <p>
+                    {(p2.candidatas.length ? t("ajuste.p2Medidas") : t("ajuste.p2Ninguna"))
+                      .replace("{m}", String(p2.medidas))
+                      .replace("{c}", String(p2.candidatas.length))}
+                  </p>
+                  {p2.candidatas.length > 0 && (
+                    <ul className="flu-cas-cands">
+                      {p2.candidatas.map((c) => (
+                        <li key={c.templateId} data-tpl={c.templateId}>
+                          <span className="flu-cas-mini">
+                            <MiniaturaPdf pdf={c.pdf} alt={t("ajuste.miniAria").replace("{n}", String(c.paginas))} />
+                          </span>
+                          <span className="flu-cas-nom">
+                            <b>{c.nombre}</b>
+                            <span>
+                              {t("ajuste.p2Cand").replace("{p}", paginasTxt(c.paginas)).replace("{s}", coma(c.cuerpo))}
+                            </span>
+                          </span>
+                          <button
+                            type="button"
+                            className="c-btn"
+                            disabled={ocupado != null}
+                            onClick={() => void usar(c.templateId, () => aplicar(c.templateId))}
+                          >
+                            {ocupado === c.templateId ? t("ajuste.guardando") : t("ajuste.usarEsta")}
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </>
+              )}
+              {n === 3 && p3 && (
+                <>
+                  {p3.resuelve && p3.params ? (
+                    <div className="flu-cas-cands">
+                      <div className="flu-cas-medida">
+                        {p3.pdf && (
+                          <span className="flu-cas-mini">
+                            <MiniaturaPdf pdf={p3.pdf} alt={t("ajuste.miniAria").replace("{n}", String(p3.paginas))} />
+                          </span>
+                        )}
+                        <span className="flu-cas-nom">
+                          <span>
+                            {t("ajuste.p3Cabe")
+                              .replace("{s}", coma(p3.params.cuerpo))
+                              .replace("{v}", coma(p3.params.margenVmm))
+                              .replace("{h}", coma(p3.params.margenHmm))
+                              .replace("{i}", coma(p3.params.interlineado))}
+                          </span>
+                        </span>
+                        <button
+                          type="button"
+                          className="c-btn"
+                          disabled={ocupado != null}
+                          onClick={() => void usar("medida", () => guardarMedida(p3.params!))}
+                        >
+                          {ocupado === "medida" ? t("ajuste.guardando") : t("ajuste.usarMedida")}
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <p>
+                      {p3.paginas > objetivo
+                        ? t("ajuste.p3NoCabe").replace("{n}", String(p3.paginas))
+                        : t("ajuste.p3Falla").replace("{r}", p3.razon ?? "")}
+                    </p>
+                  )}
+                </>
+              )}
+            </li>
+          );
+        })}
+      </ol>
+      {msg && (
+        <p className="flu-cas-msg" role="status">
+          {msg}
+        </p>
+      )}
+    </section>
   );
 }
 

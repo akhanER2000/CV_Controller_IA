@@ -11,10 +11,10 @@
  * motor que el preview y la descarga, y «cabe» se decide sobre ese PDF:
  *   · sus páginas REALES (numPages) ≤ objetivo — el salto de página lo decide el
  *     motor de maquetación y solo se sabe renderizando (medir.ts lo advierte);
- *   · y, en una columna, `lineasQueSobran ≤ 0` — la misma cuenta que enseña el
- *     panel de recorte, para que «cabe» y «sobran N líneas» no se contradigan.
- *     En la gama de barra lateral esa cuenta suma dos columnas que comparten
- *     página y no significa nada; ahí manda solo el número de páginas.
+ *   · `sobran` es `lineasQueSobranReales`: la cuenta sale del reparto REAL de
+ *     líneas por página (lo que cayó en las páginas de más), no de la capacidad
+ *     teórica de la caja, que prometía ~20 % de sitio que no existe. Con páginas
+ *     reales ≤ objetivo nunca es positiva: «cabe» y «sobran N» no se contradicen.
  *
  * Búsqueda binaria sobre la rejilla de 0,25 pt entre 10 y el cuerpo de la
  * plantilla (más el propio cuerpo base, que puede no caer en la rejilla). El caso
@@ -25,7 +25,7 @@
  */
 
 import { renderResumeToBuffer, type RenderOpts } from "./ResumePDF";
-import { medirPdf, lineasQueSobran, type MedidaPdf } from "./medir";
+import { medirPdf, lineasQueSobranReales, type MedidaPdf } from "./medir";
 import {
   CUERPO_MIN_PT,
   escalarMetricas,
@@ -61,7 +61,7 @@ export interface ResultadoAutofit {
   buf: Uint8Array;
   /** Su medida, con la métrica de ESE cuerpo. */
   medida: MedidaPdf;
-  /** lineasQueSobran(medida, objetivo). */
+  /** lineasQueSobranReales(medida, objetivo). */
   sobran: number;
 }
 
@@ -102,7 +102,6 @@ export async function autofit(
 ): Promise<ResultadoAutofit> {
   const objetivo = objetivoDe(objetivoPedido);
   const base = plantilla.metrics.bodySize;
-  const unaColumna = !plantilla.layout.sidebar;
   const cache = new Map<number, ResultadoAutofit>();
 
   const probar = async (size: number): Promise<ResultadoAutofit> => {
@@ -111,8 +110,8 @@ export async function autofit(
     const buf = await deps.render(resume, { ...opts, bodySize: size < base ? size : undefined });
     const metrica = resolveMetrics(escalarMetricas(plantilla.metrics, size));
     const medida = await deps.medir(buf, metrica);
-    const sobran = lineasQueSobran(medida, objetivo);
-    const cabe = medida.porPagina.length <= objetivo && (!unaColumna || sobran <= 0);
+    const sobran = lineasQueSobranReales(medida, objetivo);
+    const cabe = medida.porPagina.length <= objetivo;
     const r: ResultadoAutofit = { bodySize: size, base, noCabe: !cabe, objetivo, buf, medida, sobran };
     cache.set(size, r);
     return r;
