@@ -1,0 +1,100 @@
+/* Progreso (Progreso.tsx) — solo tokens de globals.css; ni un hex suelto.
+   Sin @keyframes propios: el giro es cSpin de motion.css, y solo con
+   prefers-reduced-motion: no-preference. */
+
+.u-prog {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  min-height: 32px;
+  padding: 0 var(--sp-3) 0 var(--sp-2);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-pill);
+  background: var(--surface);
+  color: var(--text);
+  font: 500 var(--fs-micro) / 1.2 var(--font-sans);
+  white-space: nowrap;
+  pointer-events: none;
+}
+.u-prog:not([data-activo]) {
+  visibility: hidden;
+}
+
+/* Flotante: fijo en la ventana, abajo y al centro. No ocupa sitio en el flujo. */
+.u-prog[data-colocacion="flotante"] {
+  position: fixed;
+  left: 50%;
+  bottom: var(--sp-5);
+  z-index: 60;
+  transform: translateX(-50%);
+  box-shadow: var(--elev-2);
+  max-width: calc(100vw - 2 * var(--sp-4));
+}
+/* En sitio: el hueco existe siempre (visibility, nunca display:none). */
+.u-prog[data-colocacion="en-sitio"] {
+  vertical-align: middle;
+}
+
+.u-prog-txt {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.u-prog-anillo {
+  flex: none;
+  display: block;
+}
+.u-prog-anillo circle {
+  fill: none;
+  stroke-width: 2;
+}
+.u-prog-anillo .pista {
+  stroke: var(--border-strong);
+}
+.u-prog-anillo .arco {
+  stroke: var(--accent);
+  stroke-linecap: round;
+  transform: rotate(-90deg);
+  transform-origin: 50% 50%;
+  transition: stroke-dashoffset var(--dur-base) var(--ease-standard);
+}
+
+/* Los pasos: un segmento fino por paso real. */
+.u-prog-pasos {
+  display: inline-flex;
+  gap: 3px;
+  margin-left: var(--sp-1);
+}
+.u-prog-pasos > span {
+  width: 14px;
+  height: 3px;
+  border-radius: var(--radius-pill);
+  background: var(--border-strong);
+}
+.u-prog-pasos > span[data-estado="hecho"] {
+  background: var(--accent);
+}
+.u-prog-pasos > span[data-estado="ahora"] {
+  background: var(--accent);
+  opacity: 0.55;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .u-prog-anillo[data-modo="indet"] {
+    animation: cSpin 1.2s linear infinite;
+  }
+}
+
+/* AnchoFijo: las dos etiquetas en la misma celda; el ancho es el de la mayor. */
+.u-fijo {
+  display: inline-grid;
+}
+.u-fijo > span {
+  grid-area: 1 / 1;
+  visibility: hidden;
+  white-space: nowrap;
+  text-align: center;
+}
+.u-fijo > span[data-visible] {
+  visibility: visible;
+}
