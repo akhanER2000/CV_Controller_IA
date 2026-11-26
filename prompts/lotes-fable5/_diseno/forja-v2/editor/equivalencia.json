@@ -1,5 +1,5 @@
 {
-  "fecha": "2026-11-26T15:21:59.421Z",
+  "fecha": "2026-11-26T16:35:32.758Z",
   "comparacion": "A = decisiones por las llamadas de los manejadores (DELETE items · PATCH sort_order · POST ajustar acortar); B = mismas decisiones por el editor fluido (la primera con J + A; el resto con clic); gemelas con huella idéntica antes de tocarlas",
   "abrirNoCambia": {
     "items": true,
@@ -9,7 +9,7 @@
   "textoPdfIgual": true,
   "huellaPdfIgual": true,
   "huellaAEstable": true,
-  "huellaB": "82c756470807ff51cad49e102f9b21351ccd437b957b341a7122a60cf522b373",
+  "huellaB": "ea44c7407aa4535e118d7b2dbd6bd74cb2ed1693c2275f0049650b2e6c228e8e",
   "paginas": {
     "A": 1,
     "B": 1
