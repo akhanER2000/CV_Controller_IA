@@ -618,6 +618,11 @@ export function TemplateGallery({
   const t = useT();
   const [tags, setTags] = useState<TemplateTag[]>([]);
   const [gama, setGama] = useState<GamaFilter>("all");
+  /** Filtros por el diseño PROPIO de la plantilla: familia del titular y paleta.
+   *  "" = cualquiera. No confundir con el intercambio de paleta/pareja de abajo,
+   *  que cambia cómo se pintan las miniaturas, no cuáles se ven. */
+  const [font, setFont] = useState("");
+  const [color, setColor] = useState("");
   const [onlyRecommended, setOnlyRecommended] = useState(false);
   const [compare, setCompare] = useState<string[]>([]);
   /** Qué plantilla está AMPLIADA (null = ninguna). Se guarda el id y no el índice:
@@ -690,16 +695,30 @@ export function TemplateGallery({
     return TEMPLATE_TAGS.filter((tag) => present.has(tag));
   }, [templates]);
 
+  // Familias y colores que EXISTEN en el catálogo (mismo criterio que las etiquetas:
+  // un filtro que solo sabe vaciar no se ofrece).
+  const availableFonts = useMemo(
+    () => [...new Set(templates.map((tpl) => tpl.typography.display))].sort((a, b) => a.localeCompare(b)),
+    [templates],
+  );
+  const availableColors = useMemo(() => {
+    const seen = new Map<string, { id: string; name: string; accent: string }>();
+    for (const tpl of templates) if (!seen.has(tpl.palette.id)) seen.set(tpl.palette.id, tpl.palette);
+    return [...seen.values()];
+  }, [templates]);
+
   const visible = useMemo(() => {
     // templatesByTags aplica la semántica Y (todas las etiquetas pedidas) sobre el
     // catálogo vivo — el mismo del que sale la prop `templates`.
     let list = tags.length ? templatesByTags(tags) : templates;
     if (gama !== "all") list = list.filter((tpl) => tpl.gama === gama);
+    if (font) list = list.filter((tpl) => tpl.typography.display === font);
+    if (color) list = list.filter((tpl) => tpl.palette.id === color);
     if (onlyRecommended) list = list.filter((tpl) => recOrder.has(tpl.id));
     // Las recomendadas primero y en su orden; el resto, en el orden del catálogo.
     const rank = (tpl: CvTemplate) => recOrder.get(tpl.id) ?? Number.MAX_SAFE_INTEGER;
     return [...list].sort((a, b) => rank(a) - rank(b));
-  }, [templates, tags, gama, onlyRecommended, recOrder]);
+  }, [templates, tags, gama, font, color, onlyRecommended, recOrder]);
 
   // PRE-RENDER de las recomendadas: se piden al abrir aunque aún no se hayan
   // cruzado con el observador. Son 6-8, no 30.
@@ -833,13 +852,37 @@ export function TemplateGallery({
               {t(`editor.gal_tag_${tag}`)}
             </button>
           ))}
-          {(tags.length > 0 || gama !== "all" || onlyRecommended) && (
+          <label className="tg-pickf">
+            <span className="tg-dlabel">{t("editor.gal_filterFont")}</span>
+            <select value={font} onChange={(e) => setFont(e.target.value)}>
+              <option value="">{t("editor.gal_anyFont")}</option>
+              {availableFonts.map((f) => (
+                <option key={f} value={f}>
+                  {f}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="tg-pickf">
+            <span className="tg-dlabel">{t("editor.gal_filterColor")}</span>
+            <select value={color} onChange={(e) => setColor(e.target.value)}>
+              <option value="">{t("editor.gal_anyColor")}</option>
+              {availableColors.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          {(tags.length > 0 || gama !== "all" || onlyRecommended || font || color) && (
             <button
               type="button"
               className="tg-clear"
               onClick={() => {
                 setTags([]);
                 setGama("all");
+                setFont("");
+                setColor("");
                 setOnlyRecommended(false);
               }}
             >
@@ -964,6 +1007,11 @@ export function TemplateGallery({
                           ⚠ {tpl.warning}
                         </p>
                       )}
+                      {/* La ETIQUETA de diseño: familia del titular y color propio. */}
+                      <p className="tg-face" aria-label={t("editor.gal_faceAria")}>
+                        <span className="tg-dot" style={{ background: tpl.palette.accent }} aria-hidden="true" />
+                        {tpl.typography.display} · {tpl.palette.name}
+                      </p>
                       {own.length > 0 && (
                         <p className="tg-tags">
                           {own.map((tag) => (

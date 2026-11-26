@@ -67,8 +67,10 @@
  * composición típica —dos columnas, barras, iconos— es justo lo que rompe el
  * parseo. Copiamos el oficio, no el producto ajeno.
  *
- * MATERIAL DISPONIBLE (src/lib/fonts/, no se añaden .ttf nuevos):
+ * MATERIAL DISPONIBLE (src/lib/fonts/, solo .ttf ESTÁTICOS OFL de google/fonts):
  *   Geist 400/500/600/700 · Geist Mono 400/500 · Playfair Display 500/600/Italic500
+ *   IBM Plex Serif 400/500/600/700/Italic500 · Spectral 500/600/Italic500
+ *   Crimson Text 600/700
  */
 
 import type { CvTemplate, SectionId, TemplateMetrics, TemplatePalette, TemplateTypography } from "./templates";
@@ -133,6 +135,36 @@ export const PALETTES: TemplatePalette[] = [
     ink: GRAFITO,
     muted: APAGADO,
     hair: "#CFD3CE",
+    paper: PORCELANA,
+  },
+  // ── FORMALES (plantillas-catalogo) ─────────────────────────────────────────
+  // Medidos contra #FFFFFF con contrast.ts. El color sigue en rótulos y filetes;
+  // el cuerpo, en GRAFITO.
+  {
+    // ORO VIEJO: el oro que se LEE es oscuro (#7A5A14 → 6.36:1, AA); el oro claro
+    // (#CFB06A → 2.09:1) solo existe como FILETE, nunca como texto. Es la única
+    // paleta cuyo filete lleva color, y lleva el MISMO tono que el acento (41-42°):
+    // sigue siendo un solo color en dos intensidades, no dos colores.
+    id: "oro",
+    name: "Oro viejo",
+    accent: "#7A5A14",
+    ink: GRAFITO,
+    muted: APAGADO,
+    hair: "#CFB06A",
+    paper: PORCELANA,
+  },
+  paleta("burdeos", "Burdeos", "#6A1B2E"), // 11.61:1
+  paleta("azul-tinta", "Azul tinta", "#1E2B44"), // 14.15:1
+  paleta("botella", "Verde botella", "#1D4A34"), // 10.09:1
+  {
+    // Grafito cálido: tinta con un punto de sepia (croma 0.043) y un filete cálido
+    // a juego. Para quien quiere la sobriedad del negro sin su frialdad.
+    id: "grafito-calido",
+    name: "Grafito cálido",
+    accent: "#45403A", // 10.26:1
+    ink: GRAFITO,
+    muted: "#4D4740", // 9.17:1
+    hair: "#D6D1CA",
     paper: PORCELANA,
   },
 ];
@@ -217,6 +249,49 @@ export const TYPOGRAPHIES: TemplateTypography[] = [
     displayWeight: 500,
     headingFamily: "display",
     monoFigures: true,
+  },
+  // ── FORMALES (plantillas-catalogo): tres familias OFL nuevas, siempre en DOS
+  // familias como mucho y nunca mono. IBM Plex Serif es la única que también hace
+  // de CUERPO (su ojo medio es grande: a 10 pt se lee como Geist). Spectral y
+  // Crimson Text solo titulan: su ojo medio es pequeño y en cuerpo de 10 pt se leen
+  // peor de lo que lucen.
+  {
+    // Una sola serif de arriba abajo: aire de escritura notarial.
+    id: "plex",
+    name: "IBM Plex Serif",
+    display: "IBM Plex Serif",
+    body: "IBM Plex Serif",
+    displayWeight: 600,
+    headingFamily: "display",
+  },
+  {
+    id: "plex-geist",
+    name: "Plex Serif + Geist",
+    display: "IBM Plex Serif",
+    body: "Geist",
+    displayWeight: 600,
+    headingFamily: "body",
+    labelItalic: true,
+  },
+  {
+    // ⚠ Spectral solo está en 500/600 (y la cursiva 500): quien rotule con ella
+    // pide headingWeight 600 (lo fija el test de pesos).
+    id: "spectral",
+    name: "Spectral + Geist",
+    display: "Spectral",
+    body: "Geist",
+    displayWeight: 600,
+    headingFamily: "display",
+    labelItalic: true,
+  },
+  {
+    // Crimson Text: la garalda del catálogo. Solo 600/700.
+    id: "crimson",
+    name: "Crimson Text + Geist",
+    display: "Crimson Text",
+    body: "Geist",
+    displayWeight: 700,
+    headingFamily: "display",
   },
 ];
 
@@ -507,7 +582,10 @@ export const TEMPLATES: CvTemplate[] = [
     "ats-registro", "Registro",
     "Fechas pegadas al cargo, viñeta de guion y habilidades a dos líneas. Densa y sin una sola línea decorativa.",
     "granate", "instrumento",
-    M("denso", "enLinea", { bulletMarker: "dash", skillStyle: "paired" }),
+    // Margen 38 mm (no los 34 del ritmo): con las fechas pegadas al cargo la línea
+    // de cargo es la más larga del catálogo, y la mediana de un perfil corto se iba a
+    // 76 caracteres (auditoría de plantillas).
+    M("denso", "enLinea", { bulletMarker: "dash", skillStyle: "paired", pageMarginH: "38mm" }),
     ["tecnica", "1pagina", "ingenieria"],
   ),
   ats(
@@ -919,6 +997,72 @@ export const TEMPLATES: CvTemplate[] = [
       headingRule: false, headingWeight: 600,
     }),
     ["tecnica", "2paginas", "datos-ia"],
+  ),
+
+  // ── FORMALES (plantillas-catalogo) ─────────────────────────────────────────
+  // Tipografía con oficio y acentos de joyería (oro viejo, burdeos, azul tinta,
+  // verde botella, grafito cálido). Siguen siendo gama ATS: una columna, el color
+  // solo en rótulos y filetes y el cuerpo en tinta oscura.
+  ats(
+    "ats-oro-viejo", "Oro viejo",
+    "Nombre en Spectral centrado bajo un filete dorado, subtítulo en cursiva y rótulos con tracking. Formal y cálida, para dirección y perfiles senior.",
+    "oro", "spectral",
+    M("amplio", "portada", {
+      headingWeight: 600, headingTracking: 0.6, bulletMarker: "emdash", contactStyle: "inline", skillStyle: "paired",
+    }),
+    ["editorial", "2paginas", "general"],
+  ),
+  ats(
+    "ats-notaria", "Notaría",
+    "IBM Plex Serif de arriba abajo, nombre en caja alta centrado y filete doble en burdeos. Para derecho, banca y sector público.",
+    "burdeos", "plex",
+    M("normal", "plana", {
+      nameAlign: "center", nameCase: "upper", nameTracking: 0.8, contactStyle: "split",
+      headingRuleStyle: "double", bulletMarker: "dash",
+    }),
+    ["clasica", "2paginas", "general"],
+  ),
+  ats(
+    "ats-tinta-azul", "Tinta azul",
+    "Titular en Plex Serif con subtítulo en cursiva sobre columna colgante, en azul tinta. Una página sobria para consultoría y gestión.",
+    "azul-tinta", "plex-geist",
+    M("denso", "colgante", { hangingWidth: "30%", headingRuleStyle: "partial", contactStyle: "split" }),
+    ["clasica", "1pagina", "general"],
+  ),
+  ats(
+    "ats-botella", "Verde botella",
+    "Garalda Crimson en nombre y rótulos, filete encima del rótulo en verde botella y la experiencia primero.",
+    "botella", "crimson",
+    M("amplio", "cornisa", { sectionOrder: ORDEN.experiencia, bulletMarker: "dash", contactStyle: "split" }),
+    ["editorial", "2paginas", "general"],
+  ),
+  ats(
+    "ats-grafito-calido", "Grafito cálido",
+    "Todo en IBM Plex Serif, fechas pegadas al cargo y sin filetes, en un grafito con punto de sepia. Densa y callada.",
+    "grafito-calido", "plex",
+    M("denso", "enLinea", { skillStyle: "paired", contactLabels: false }),
+    ["minimal", "1pagina", "general"],
+  ),
+  ats(
+    "ats-lamina", "Lámina",
+    "Formación delante, columna colgante fina y filete doble en oro claro bajo rótulos en oro viejo. Para becas, posgrados y docencia.",
+    "oro", "plex",
+    M("normal", "colganteFina", { sectionOrder: ORDEN.formacion, headingRuleStyle: "double", bulletMarker: "emdash" }),
+    ["editorial", "2paginas", "academia"],
+  ),
+  ats(
+    "ats-sello", "Sello",
+    "Spectral en nombre y rótulos sobre columna colgante ancha, filete dorado corto y habilidades en línea. Una página para perfiles de datos con aire formal.",
+    "oro", "spectral",
+    M("denso", "colganteAncha", { headingWeight: 600, headingRuleStyle: "partial", skillStyle: "inline", bulletMarker: "dash" }),
+    ["moderna", "1pagina", "datos-ia"],
+  ),
+  ats(
+    "ats-despacho", "Despacho",
+    "Burdeos y garalda Crimson, contacto a la derecha frente al nombre y cabecera cerrada con filete. Una página para dirección y consejo.",
+    "burdeos", "crimson",
+    M("denso", "credencial", { nameRule: true, sectionOrder: ORDEN.experiencia, dateStyle: "own-line", bulletMarker: "dash" }),
+    ["clasica", "1pagina", "general"],
   ),
 
   // ── GAMA VISUAL ────────────────────────────────────────────────────────────

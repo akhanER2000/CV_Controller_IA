@@ -47,6 +47,16 @@ const datos = JSON.parse(
   ),
 ) as ResumeData;
 
+/** El tono (0-360°) de un hex. */
+function tono(hex: string): number {
+  const { r, g, b } = parseHex(hex);
+  const [R, G, B] = [r / 255, g / 255, b / 255];
+  const M = Math.max(R, G, B), m = Math.min(R, G, B), d = M - m;
+  if (!d) return 0;
+  const h = M === R ? ((G - B) / d) % 6 : M === G ? (B - R) / d + 2 : (R - G) / d + 4;
+  return (h * 60 + 360) % 360;
+}
+
 /** Cuánto color tiene un hex (0 = gris perfecto). Distancia entre canales. */
 function croma(hex: string): number {
   const { r, g, b } = parseHex(hex);
@@ -443,8 +453,14 @@ describe("catálogo de plantillas · contraste verificado (WCAG AA)", () => {
 
   it("5 · UN SOLO ACENTO: tinta, apagado y filete son neutros — el color es uno", () => {
     for (const p of paletas) {
-      for (const [campo, hex] of [["ink", p.ink], ["muted", p.muted], ["hair", p.hair]] as const) {
+      for (const [campo, hex] of [["ink", p.ink], ["muted", p.muted]] as const) {
         expect(croma(hex), `paleta ${p.id}: ${campo} ${hex} tiene color propio`).toBeLessThanOrEqual(0.08);
+      }
+      // El FILETE puede llevar color solo si es el MISMO tono que el acento (el oro
+      // claro de «Oro viejo»): un color en dos intensidades sigue siendo un color.
+      if (croma(p.hair) > 0.08) {
+        const d = Math.abs(tono(p.hair) - tono(p.accent));
+        expect(Math.min(d, 360 - d), `paleta ${p.id}: filete ${p.hair} de otro color que el acento`).toBeLessThanOrEqual(12);
       }
     }
   });
@@ -456,8 +472,8 @@ describe("catálogo de plantillas · contraste verificado (WCAG AA)", () => {
 });
 
 describe("catálogo de plantillas · parejas tipográficas", () => {
-  // Lo que hay en src/lib/fonts/ y está registrado en ResumePDF. No se añaden .ttf.
-  const FAMILIAS = ["Geist", "Geist Mono", "Playfair Display"];
+  // Lo que hay en src/lib/fonts/ y está registrado en ResumePDF (.ttf estáticos OFL).
+  const FAMILIAS = ["Geist", "Geist Mono", "Playfair Display", "IBM Plex Serif", "Spectral", "Crimson Text"];
   const parejas = listTypographies();
 
   it("1 · son un puñado de parejas ya emparejadas, no un selector de 200 fuentes", () => {
@@ -465,7 +481,8 @@ describe("catálogo de plantillas · parejas tipográficas", () => {
     // de "parejas" serían la misma combinación con otro nombre. La variedad del
     // catálogo sale de los ejes de composición, no de inventar parejas.
     expect(parejas.length).toBeGreaterThanOrEqual(3);
-    expect(parejas.length).toBeLessThanOrEqual(6);
+    // Con SEIS familias en el repo el tope sube a diez: sigue siendo un puñado.
+    expect(parejas.length).toBeLessThanOrEqual(10);
     expect(new Set(parejas.map((t) => t.id)).size).toBe(parejas.length);
   });
 
@@ -482,6 +499,9 @@ describe("catálogo de plantillas · parejas tipográficas", () => {
     Geist: [400, 500, 600, 700],
     "Geist Mono": [400, 500],
     "Playfair Display": [500, 600],
+    "IBM Plex Serif": [400, 500, 600, 700],
+    Spectral: [500, 600],
+    "Crimson Text": [600, 700],
   };
 
   it("3 · pesos que existen: Playfair 500/600, Geist Mono 400/500, Geist hasta 700", () => {

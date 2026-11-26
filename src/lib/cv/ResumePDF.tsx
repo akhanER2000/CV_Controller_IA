@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 import { existsSync } from "node:fs";
 import path from "node:path";
 import * as QRCode from "qrcode";
+import { altoCaja } from "./medir";
 import {
   selectContent,
   buildVCard,
@@ -120,6 +121,37 @@ Font.register({
   fonts: [
     { src: f("GeistMono-Regular.ttf"), fontWeight: 400 },
     { src: f("GeistMono-Medium.ttf"), fontWeight: 500 },
+  ],
+});
+// Familias formales (plantillas-catalogo). Todas OFL, tomadas tal cual de
+// github.com/google/fonts en .ttf ESTÁTICOS — los variables no valen: @react-pdf
+// solo dibuja la instancia por defecto y un "600" saldría en 400 sin avisar. Su
+// licencia va al lado (OFL-<Familia>.txt). Se registran SOLO los pesos que el
+// catálogo pide: Plex Serif hace de cuerpo (400/600/700) y de titular (500/600 y
+// la cursiva 500 del subtítulo); Spectral y Crimson solo titulan.
+Font.register({
+  family: "IBM Plex Serif",
+  fonts: [
+    { src: f("IBMPlexSerif-Regular.ttf"), fontWeight: 400 },
+    { src: f("IBMPlexSerif-Medium.ttf"), fontWeight: 500 },
+    { src: f("IBMPlexSerif-SemiBold.ttf"), fontWeight: 600 },
+    { src: f("IBMPlexSerif-Bold.ttf"), fontWeight: 700 },
+    { src: f("IBMPlexSerif-MediumItalic.ttf"), fontWeight: 500, fontStyle: "italic" },
+  ],
+});
+Font.register({
+  family: "Spectral",
+  fonts: [
+    { src: f("Spectral-Medium.ttf"), fontWeight: 500 },
+    { src: f("Spectral-SemiBold.ttf"), fontWeight: 600 },
+    { src: f("Spectral-MediumItalic.ttf"), fontWeight: 500, fontStyle: "italic" },
+  ],
+});
+Font.register({
+  family: "Crimson Text",
+  fonts: [
+    { src: f("CrimsonText-SemiBold.ttf"), fontWeight: 600 },
+    { src: f("CrimsonText-Bold.ttf"), fontWeight: 700 },
   ],
 });
 
@@ -288,11 +320,16 @@ function stylesFor(tpl: CvTemplate) {
     skline: { fontSize: body, lineHeight: m.skillLeading, marginTop: m.skillGap },
     skLabel: { fontWeight: 600 },
     erow: { flexDirection: "row", justifyContent: "space-between", alignItems: "baseline", marginTop: m.entryGap },
-    t: { fontWeight: 700, fontSize: m.entryTitleSize, lineHeight: 1.3, flexShrink: 1 },
-    tEdu: { fontWeight: 700, fontSize: m.eduTitleSize, lineHeight: 1.3, flexShrink: 1 },
+    // Cargo con base 0 y la fecha sin encoger: el motor mide el texto del cargo con
+    // el hueco que DEJA la fecha. Con `flexShrink` a secas lo medía a su ancho
+    // natural y un cargo largo se montaba 10 pt sobre la fecha sin partirse
+    // (auditoría de plantillas: «… S.A. (etapa 1)» pisando «ene 2020»). Es el mismo
+    // arreglo que ya lleva la columna principal de la gama visual (`main`).
+    t: { fontWeight: 700, fontSize: m.entryTitleSize, lineHeight: 1.3, flexShrink: 1, flexGrow: 1, flexBasis: 0 },
+    tEdu: { fontWeight: 700, fontSize: m.eduTitleSize, lineHeight: 1.3, flexShrink: 1, flexGrow: 1, flexBasis: 0 },
     d: {
       fontFamily: ty.figuresFace, fontWeight: 400, fontSize: m.dateSize,
-      lineHeight: 1.3, color: p.muted, paddingLeft: m.dateGap,
+      lineHeight: 1.3, color: p.muted, paddingLeft: m.dateGap, flexShrink: 0,
     },
     /** Fechas cuando NO van a la derecha: el cargo abre su propio bloque. */
     tSolo: { fontWeight: 700, fontSize: m.entryTitleSize, lineHeight: 1.3, marginTop: m.entryGap },
@@ -577,6 +614,20 @@ export function ResumePDF({
    * emiten el MISMO texto y en el mismo orden que entryLines() del texto plano —
    * cambia dónde cae, no qué dice.
    */
+  /**
+   * ¿Cabe la entrada ENTERA en una página? Si no, NO puede ir en wrap={false}: un
+   * bloque irrompible más alto que la página hace que @react-pdf ENCOJA todo lo
+   * demás de esa página para meterlo — la cabecera, las habilidades y las viñetas
+   * salían montadas unas sobre otras (auditoría de plantillas: un rol de 56
+   * viñetas). Estimación a la baja de la medida (55 caracteres por línea, menos de
+   * lo que lleva cualquier plantilla) para que el error sea siempre hacia «se
+   * puede partir», que es inocuo; y umbral en el 75 % de la caja.
+   */
+  const cabeEnPagina = (textos: string[]): boolean => {
+    const lineas = 2 + textos.reduce((n, x) => n + Math.max(1, Math.ceil(x.length / 55)), 0);
+    return lineas * m.bodySize * m.bodyLeading + m.entryGap <= 0.75 * altoCaja(m);
+  };
+
   const entrada = (
     titulo: ReactNode,
     fechas: string,
@@ -584,7 +635,12 @@ export function ResumePDF({
     edu: boolean,
     key: number,
     hijos?: ReactNode,
+    textos: string[] = [],
   ) => {
+    // Si no cabe entera, se parte; pero el encabezado de la entrada (cargo, fechas,
+    // organización) nunca se queda huérfano al pie: pide ~3 líneas detrás.
+    const entera = cabeEnPagina(textos);
+    const sinHuerfano = entera ? undefined : 3 * m.bodySize * m.bodyLeading;
     // COLUMNA COLGANTE. La entrada entera es UNA fila: a la izquierda las fechas y
     // la organización, a la derecha el cargo y sus viñetas. El content stream sale
     // en ese mismo orden (fechas → organización → cargo → viñetas) y entryLines()
@@ -594,7 +650,7 @@ export function ResumePDF({
     // que se cierra en sí misma, dentro del flujo único del documento.
     if (m.dateStyle === "hanging") {
       return (
-        <View key={key} style={s.hangRow} wrap={false}>
+        <View key={key} style={s.hangRow} wrap={!entera} minPresenceAhead={sinHuerfano}>
           <View style={s.hangGutter}>
             <Text style={s.dHang}>{fechas}</Text>
             <Text style={s.orgHang}>{pie}</Text>
@@ -610,7 +666,11 @@ export function ResumePDF({
       m.dateStyle === "right" ? (
         <View style={s.erow}>
           <Text style={edu ? s.tEdu : s.t}>{titulo}</Text>
-          <Text style={s.d}>{fechas}</Text>
+          {/* El espacio DURO delante no se ve (la fecha va a la derecha) y es el
+              que separa cargo y fecha cuando el cargo se parte en dos líneas: sin
+              él, el PDF re-parseado decía "S.A. (etapa 1)ene 2020" (auditoría). Un
+              espacio normal no sirve: el motor lo recorta al inicio de línea. */}
+          <Text style={s.d}>{` ${fechas}`}</Text>
         </View>
       ) : m.dateStyle === "inline" ? (
         <Text style={edu ? s.tEduSolo : s.tSolo}>
@@ -626,10 +686,14 @@ export function ResumePDF({
     // wrap={false}: la entrada ENTERA (cargo, fechas, ubicación y viñetas) no se
     // parte entre páginas. Un empleo cuyo encabezado queda huérfano al pie de la
     // página 1 no solo se ve mal: descoloca al parser que empareja cargo y fechas.
+    // Salvo que no quepa en una página (cabeEnPagina): entonces se parte por las
+    // viñetas y el encabezado se queda con las primeras.
     return (
-      <View key={key} wrap={false}>
-        {cuerpo}
-        <Text style={s.org}>{pie}</Text>
+      <View key={key} wrap={!entera}>
+        <View wrap={false} minPresenceAhead={sinHuerfano}>
+          {cuerpo}
+          <Text style={s.org}>{pie}</Text>
+        </View>
         {hijos}
       </View>
     );
@@ -673,6 +737,7 @@ export function ResumePDF({
           false,
           i,
           w.bullets.map((bl, j) => bullet(tt(bl), j)),
+          w.bullets.map((bl) => tt(bl)),
         ),
       )}
     </>
@@ -858,5 +923,55 @@ export async function renderResumeToBuffer(data: ResumeData, opts: RenderOpts = 
       }
     }
   }
+  try {
+    await calentarFuentes();
+  } catch (e) {
+    // Calentar es una garantía, no un requisito: si una fuente no carga, el render
+    // sigue (y fallará con su propio mensaje si de verdad la necesita).
+    console.error("[cv] no se pudieron precalentar las fuentes:", e);
+  }
   return renderToBuffer(<ResumePDF data={data} opts={opts} qrImage={qrImage} />);
+}
+
+/**
+ * TRAMPA 4 (la que rompía el round-trip del SEGUNDO documento del proceso) — un
+ * glifo cacheado SIN su carácter.
+ *
+ * fontkit cachea cada glifo la primera vez que se pide, con los caracteres de ESA
+ * petición. Al subsetear un glifo COMPUESTO («Ó» = «O» + tilde) pide sus componentes
+ * sin carácter ninguno, y la «O» queda cacheada con `codePoints: []`. La caché vive
+ * en el objeto fuente, que @react-pdf comparte entre renders: el siguiente documento
+ * que escriba una «O» en esa fuente la emite con un ToUnicode vacío, y el parser lee
+ * el código crudo — «PROYECTOS» salía «PR3YECT3S» (auditoría de plantillas: un CV
+ * con EDUCACIÓN y sin PROYECTOS, y después otro con PROYECTOS). En /api/cv, con la
+ * lambda caliente, eso es el CV de un usuario rompiendo el del siguiente.
+ *
+ * Arreglo: antes del primer render, cada fuente registrada se carga y se pide cada
+ * carácter de su cmap (salvo los de compatibilidad, ver abajo), así todos los
+ * glifos con carácter nacen con el suyo y el subset ya no puede cachearlos vacíos.
+ * Una vez por fuente y por proceso.
+ */
+type FuenteRegistrada = { data?: unknown; load?: () => Promise<unknown> };
+type FuenteFontkit = { characterSet?: number[]; glyphForCodePoint?: (cp: number) => unknown };
+const CALENTADAS = new WeakSet<object>();
+async function calentarFuentes(): Promise<void> {
+  const familias = Font.getRegisteredFonts() as unknown as Record<string, { sources?: FuenteRegistrada[] }>;
+  for (const familia of Object.values(familias)) {
+    for (const fuente of familia.sources ?? []) {
+      if (!fuente.data && fuente.load) await fuente.load();
+      const f = fuente.data as FuenteFontkit | undefined;
+      if (!f || typeof f !== "object" || CALENTADAS.has(f)) continue;
+      if (f.characterSet && f.glyphForCodePoint) {
+        for (const cp of f.characterSet) {
+          // Fuera los caracteres de COMPATIBILIDAD (ligaduras «ﬁ», volados…): su glifo
+          // es el que el GSUB pone por «f»+«i», y cacheado con un solo carácter
+          // descuadra el mapa glifo→texto del motor (partía «C|atólica»).
+          const ch = String.fromCodePoint(cp);
+          if (ch.normalize("NFKD") !== ch.normalize("NFD")) continue;
+          f.glyphForCodePoint(cp);
+        }
+      }
+      CALENTADAS.add(f);
+    }
+  }
 }

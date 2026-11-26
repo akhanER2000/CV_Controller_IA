@@ -12,6 +12,10 @@ const nextConfig = {
   // tipografía por defecto. Ya pasó una vez; por eso está comentado.
   outputFileTracingIncludes: {
     "/api/cv": ["./src/lib/fonts/*.ttf"],
+    // Ajustar también renderiza (autofit → ResumePDF) para medir; sin esto se
+    // quedaba sin fuentes al desplegar. Comodín en el segmento dinámico: "[id]"
+    // sería una clase de caracteres para el glob.
+    "/api/variants/*/ajustar": ["./src/lib/fonts/*.ttf"],
     "/opengraph-image": ["./src/lib/fonts/*.ttf"],
     "/twitter-image": ["./src/lib/fonts/*.ttf"],
     "/icon": ["./src/lib/fonts/*.ttf"],
