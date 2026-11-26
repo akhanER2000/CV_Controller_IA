@@ -7,6 +7,9 @@ import { AuroraTune, AURORA_TRABAJO } from "@/components/Aurora";
 import { Breadcrumb, withOrigin } from "@/components/Breadcrumb";
 import { stagingProgress, ZERO_COUNTS, type StagingCounts } from "@/lib/db/staging-counts";
 import { readMergeProposal, type MergeProposal } from "@/lib/db/sources";
+import { Icono, KpiCard } from "@/components/ui";
+import { SeccionPlegable } from "@/components/panel/SeccionPlegable";
+import "@/components/panel/panel.css";
 import "./staging.css";
 
 /* ============================================================================
@@ -190,6 +193,16 @@ export function StagingScreen() {
   const [openDate, setOpenDate] = useState<Set<string>>(new Set());
   const [dateDraft, setDateDraft] = useState<Record<string, string>>({});
   const [filter, setFilter] = useState<"all" | Ver>("all");
+  // Forja v2: búsqueda en la cola y secciones plegables (solo vista; no tocan datos).
+  const [q, setQ] = useState("");
+  const [plegadas, setPlegadas] = useState<ReadonlySet<string>>(new Set());
+  const plegar = (id: string) =>
+    setPlegadas((p) => {
+      const n = new Set(p);
+      if (n.has(id)) n.delete(id);
+      else n.add(id);
+      return n;
+    });
 
   /* La comparación abierta (id del item marcado) y, dentro, de qué lado se queda
      cada campo. Empieza toda en «esta»: un valor por defecto que el usuario ve y
@@ -539,7 +552,10 @@ export function StagingScreen() {
     });
   }
 
-  const shown = (it: Item) => filter === "all" || verOf(it) === filter;
+  const qn = q.trim().toLocaleLowerCase();
+  const coincide = (it: Item) =>
+    !qn || textOf(it).toLocaleLowerCase().includes(qn) || (it.evidence_snippet ?? "").toLocaleLowerCase().includes(qn);
+  const shown = (it: Item) => (filter === "all" || verOf(it) === filter) && coincide(it);
 
   const parents = items.filter((it) => it.kind !== "bullet");
   const group = (kind: string) => parents.filter((it) => it.kind === kind);
@@ -730,32 +746,28 @@ export function StagingScreen() {
   }
 
   return (
-    <div className="c-page">
+    <div className="c-page stg-page">
       {/* Revisar item a item es trabajo denso: el humo baja y no estorba. */}
       <AuroraTune strength={AURORA_TRABAJO} />
-      <header className="c-header">
-        <div className="c-container">
-          <div className="hd-crumb stg-crumb">
-            <Link className="c-logo" href="/app">
-              Corpus
-            </Link>
-            <span className="stg-hd-sep" aria-hidden="true" />
-            {/* La salida. Volver NO tira el trabajo revisado: aceptar/descartar
-                ya escribió en el servidor, así que al regresar la cola se
-                recarga con exactamente lo que quedaba pendiente. */}
-            <Breadcrumb fallback={FALLBACK} current={t("nav.staging")} />
-            <span className="stg-hd-sep stg-hd-sep--step" aria-hidden="true" />
-            <span className="stg-hd-step">{t("staging.microStep")}</span>
-          </div>
-          <div className="hd-right">
-            <div className="hd-lang">
-              <span data-on>ES</span>
-              <span>EN</span>
-            </div>
-            <div className="hd-av">DG</div>
-          </div>
-        </div>
-      </header>
+      <div className="c-container stg-crumb stg-crumb--v2">
+        {/* La salida. Volver NO tira el trabajo revisado: aceptar/descartar
+            ya escribió en el servidor, así que al regresar la cola se
+            recarga con exactamente lo que quedaba pendiente. */}
+        <Breadcrumb fallback={FALLBACK} current={t("nav.staging")} />
+        <span className="stg-hd-sep stg-hd-sep--step" aria-hidden="true" />
+        <span className="stg-hd-step">{t("staging.microStep")}</span>
+      </div>
+
+      {/* Fila KPI (Forja v2). Las tres cifras salen de GET /api/staging: la cola
+          pendiente (items) y los recuentos aceptado/descartado (counts). */}
+      {!loading && !err ? (
+        <section className="c-container pn-kpis stg-kpis" aria-label={t("staging.title")}>
+          <KpiCard etiqueta={t("staging.v2.kpi.pending")} valor={pend} fuente={t("staging.v2.fuente")} icono="revision" material="brasa" />
+          <KpiCard etiqueta={t("staging.v2.kpi.accepted")} valor={progress.accepted} fuente={t("staging.v2.fuente")} icono="master" />
+          <KpiCard etiqueta={t("staging.v2.kpi.rejected")} valor={progress.rejected} fuente={t("staging.v2.fuente")} icono="cerrar" />
+          <KpiCard etiqueta={t("staging.v2.kpi.verified")} valor={counts.ok} fuente={t("staging.v2.fuente")} icono="revision" />
+        </section>
+      ) : null}
 
       <div className="stg-sub" data-screen-label="staging-cabecera">
         <div className="c-container">
@@ -789,6 +801,16 @@ export function StagingScreen() {
               ⚠ {t("staging.filterNone")} <span>{counts.none}</span>
             </button>
           </div>
+          <label className="pn-buscar stg-buscar">
+            <Icono nombre="buscar" />
+            <input
+              type="search"
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              placeholder={t("staging.v2.searchPlaceholder")}
+              aria-label={t("staging.v2.searchAria")}
+            />
+          </label>
         </div>
       </div>
 
@@ -837,7 +859,7 @@ export function StagingScreen() {
             ) : null}
 
             <button
-              className="c-btn c-btn--patina"
+              className="u-btn u-btn--brasa"
               onClick={acceptVerified}
               disabled={busy.has("__batch__") || !batch.eligible}
             >
@@ -849,53 +871,83 @@ export function StagingScreen() {
 
           <div hidden={showEmpty || loading}>
             {group("basics").length + group("summary").length > 0 && (
-              <section className="stg-g">
-                <div className="stg-gh">
-                  <span className="t-overline">{t("staging.groupProfile")}</span>
-                </div>
-                <hr className="c-divider" />
+              <SeccionPlegable
+                id="stg-perfil"
+                className="stg-g"
+                titulo={t("staging.groupProfile")}
+                meta={String(group("basics").length + group("summary").length)}
+                plegada={plegadas.has("perfil")}
+                onPlegar={() => plegar("perfil")}
+                etiquetaPlegar={t("staging.v2.fold")}
+                etiquetaDesplegar={t("staging.v2.unfold")}
+              >
                 {group("basics").map((it) => (
                   <Unit key={it.id} it={it} cls="stg-b" />
                 ))}
                 {group("summary").map((it) => (
                   <Unit key={it.id} it={it} cls="stg-b" />
                 ))}
-              </section>
+              </SeccionPlegable>
             )}
 
             {group("work").length > 0 && (
-              <section className="stg-g" data-g="exp">
-                <div className="stg-gh">
-                  <span className="t-overline">{t("staging.groupExperience")}</span>
-                </div>
-                <hr className="c-divider" />
-                {group("work").map((w) => (
-                  <div className="c-card stg-card" key={w.id}>
-                    <Unit it={w} cls="stg-chead" />
-                    {bulletsOf(w.id).map((b) => (
-                      <Unit key={b.id} it={b} cls="stg-b" />
-                    ))}
-                  </div>
-                ))}
-              </section>
+              <SeccionPlegable
+                id="stg-exp"
+                className="stg-g"
+                dataG="exp"
+                titulo={t("staging.groupExperience")}
+                meta={String(group("work").length)}
+                plegada={plegadas.has("exp")}
+                onPlegar={() => plegar("exp")}
+                etiquetaPlegar={t("staging.v2.fold")}
+                etiquetaDesplegar={t("staging.v2.unfold")}
+              >
+                {group("work").map((w) =>
+                  /* Con búsqueda, un rol sin coincidencias (ni él ni sus viñetas) no
+                     deja una tarjeta vacía. Sin búsqueda, se pinta como siempre. */
+                  qn && !coincide(w) && !bulletsOf(w.id).some(coincide) ? null : (
+                    <div className="c-card stg-card" key={w.id}>
+                      <Unit it={w} cls="stg-chead" />
+                      {bulletsOf(w.id).map((b) => (
+                        <Unit key={b.id} it={b} cls="stg-b" />
+                      ))}
+                    </div>
+                  ),
+                )}
+              </SeccionPlegable>
             )}
 
             {group("skill").length > 0 && (
-              <section className="stg-g" data-g="sk">
-                <div className="stg-gh">
-                  <span className="t-overline">{t("staging.groupSkills")}</span>
-                </div>
-                <hr className="c-divider" />
+              <SeccionPlegable
+                id="stg-sk"
+                className="stg-g"
+                dataG="sk"
+                titulo={t("staging.groupSkills")}
+                meta={String(group("skill").length)}
+                plegada={plegadas.has("sk")}
+                onPlegar={() => plegar("sk")}
+                etiquetaPlegar={t("staging.v2.fold")}
+                etiquetaDesplegar={t("staging.v2.unfold")}
+              >
                 {group("skill").map((it) => (
                   <Unit key={it.id} it={it} cls="stg-b" />
                 ))}
-              </section>
+              </SeccionPlegable>
             )}
 
             {group("project").length > 0 && (
-              <section className="stg-g" data-g="pj">
-                <div className="stg-gh">
-                  <span className="t-overline">{t("staging.groupProjects")}</span>
+              <SeccionPlegable
+                id="stg-pj"
+                className="stg-g"
+                dataG="pj"
+                titulo={t("staging.groupProjects")}
+                meta={String(group("project").length)}
+                plegada={plegadas.has("pj")}
+                onPlegar={() => plegar("pj")}
+                etiquetaPlegar={t("staging.v2.fold")}
+                etiquetaDesplegar={t("staging.v2.unfold")}
+                acciones={
+                  <>
                   {/* Doce grupos de habilidades disfrazados de proyecto no se
                       arreglan a doce clics. El número es real: son los proyectos
                       que classifyProjectShape marcó, contados aquí mismo. */}
@@ -910,24 +962,31 @@ export function StagingScreen() {
                         : t("staging.skillGroupAll").replace("{n}", String(gruposDeSkills.length))}
                     </button>
                   ) : null}
-                </div>
-                <hr className="c-divider" />
+                  </>
+                }
+              >
                 {group("project").map((it) => (
                   <Unit key={it.id} it={it} cls="stg-b" />
                 ))}
-              </section>
+              </SeccionPlegable>
             )}
 
             {group("education").length > 0 && (
-              <section className="stg-g" data-g="ct">
-                <div className="stg-gh">
-                  <span className="t-overline">{t("staging.groupEducation")}</span>
-                </div>
-                <hr className="c-divider" />
+              <SeccionPlegable
+                id="stg-ct"
+                className="stg-g"
+                dataG="ct"
+                titulo={t("staging.groupEducation")}
+                meta={String(group("education").length)}
+                plegada={plegadas.has("ct")}
+                onPlegar={() => plegar("ct")}
+                etiquetaPlegar={t("staging.v2.fold")}
+                etiquetaDesplegar={t("staging.v2.unfold")}
+              >
                 {group("education").map((it) => (
                   <Unit key={it.id} it={it} cls="stg-b" />
                 ))}
-              </section>
+              </SeccionPlegable>
             )}
           </div>
 

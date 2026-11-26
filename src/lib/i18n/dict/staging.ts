@@ -124,6 +124,16 @@ export const staging = {
     "staging.errRead": "No se pudo leer el staging.",
     "staging.errAccept": "No se pudo.",
     "staging.errGeneric": "Error",
+    // ── Forja v2 (panel-datos) ──
+    "staging.v2.kpi.pending": "Pendientes",
+    "staging.v2.kpi.accepted": "Al master",
+    "staging.v2.kpi.rejected": "Descartados",
+    "staging.v2.kpi.verified": "Pendientes verificados",
+    "staging.v2.fuente": "revisión",
+    "staging.v2.searchAria": "Buscar en la revisión",
+    "staging.v2.searchPlaceholder": "Buscar en lo pendiente…",
+    "staging.v2.fold": "plegar",
+    "staging.v2.unfold": "desplegar",
   } as Record<string, string>,
   en: {
     "staging.microStep": "INTAKE · STEP 2 OF 2 — REVIEW",
@@ -245,5 +255,15 @@ export const staging = {
     "staging.errRead": "Couldn't read your staging.",
     "staging.errAccept": "Couldn't complete that.",
     "staging.errGeneric": "Error",
+    // ── Forja v2 (panel-datos) ──
+    "staging.v2.kpi.pending": "Pending",
+    "staging.v2.kpi.accepted": "To master",
+    "staging.v2.kpi.rejected": "Discarded",
+    "staging.v2.kpi.verified": "Verified pending",
+    "staging.v2.fuente": "review",
+    "staging.v2.searchAria": "Search the review",
+    "staging.v2.searchPlaceholder": "Search what's pending…",
+    "staging.v2.fold": "collapse",
+    "staging.v2.unfold": "expand",
   } as Record<string, string>,
 } as const;

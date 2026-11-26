@@ -359,6 +359,16 @@ export const master = {
     "master.ref.migration": "Falta aplicar las migraciones de referencias en Supabase (0004 y 0005). Hasta entonces esta sección no puede guardar nada.",
     "master.ref.saveFail": "no se pudo guardar la referencia: {r}",
     "master.ref.needName": "Escribe al menos el nombre de la persona.",
+    // ── Forja v2 (panel-datos) ──
+    "master.v2.kpiAria": "Tu master en cifras",
+    "master.v2.kpi.items": "Ítems",
+    "master.v2.kpi.roles": "Roles",
+    "master.v2.kpi.skills": "Grupos de habilidades",
+    "master.v2.kpi.projects": "Proyectos",
+    "master.v2.fuente.master": "master",
+    "master.v2.fuente.experience": "master · experiencia",
+    "master.v2.fuente.skills": "master · habilidades",
+    "master.v2.fuente.projects": "master · proyectos",
   } as Record<string, string>,
   en: {
     // Toolbar
@@ -704,5 +714,15 @@ export const master = {
     "master.ref.migration": "The reference migrations (0004 and 0005) still need to be applied in Supabase. Until then this section cannot save anything.",
     "master.ref.saveFail": "couldn't save the reference: {r}",
     "master.ref.needName": "Type at least the person's name.",
+    // ── Forja v2 (panel-datos) ──
+    "master.v2.kpiAria": "Your master in numbers",
+    "master.v2.kpi.items": "Items",
+    "master.v2.kpi.roles": "Roles",
+    "master.v2.kpi.skills": "Skill groups",
+    "master.v2.kpi.projects": "Projects",
+    "master.v2.fuente.master": "master",
+    "master.v2.fuente.experience": "master · experience",
+    "master.v2.fuente.skills": "master · skills",
+    "master.v2.fuente.projects": "master · projects",
   } as Record<string, string>,
 } as const;

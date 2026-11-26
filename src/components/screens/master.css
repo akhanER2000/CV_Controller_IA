@@ -7,14 +7,18 @@
    pantallas densas (ver la doctrina en globals.css §3), así que el contenido
    necesita SU superficie. El desenfoque NO se repite por item: lo pone una sola
    vez .c-wall en el <main>. Con cientos de items, una capa de composición. */
-.ms-sub{position:sticky;top:var(--header-h);z-index:9;background:color-mix(in srgb,var(--bg) 86%,transparent);
+/* Forja v2 (panel-datos): la barra ya no cuelga de una cabecera de pantalla (el
+   shell pone la barra superior en el flujo), así que se pega arriba del todo.
+   Búsqueda en píldora y filtros como pestañas en píldora. */
+.ms-page .ms-kpis{width:100%;max-width:var(--container);margin:0 auto;padding:var(--sp-4) var(--container-pad) 0}
+.ms-sub{position:sticky;top:0;z-index:9;background:color-mix(in srgb,var(--bg) 86%,transparent);
   backdrop-filter:blur(8px);border-bottom:1px solid var(--border)}
 .ms-sub .c-container{display:flex;align-items:center;gap:14px;padding-block:12px;flex-wrap:wrap}
-.ms-sub input{max-width:320px;height:36px;font-size:var(--fs-ui)}
-.ms-f{display:flex;gap:6px}
-.ms-f button{font:500 var(--fs-micro)/1 var(--font-mono);padding:8px 10px;border:1px solid var(--border);border-radius:6px;color:var(--text-muted)}
-.ms-f button:hover{color:var(--text);border-color:var(--border-strong)}
-.ms-f button[aria-pressed="true"]{color:var(--text);background:var(--surface-elevated);border-color:var(--border-patina)}
+.ms-sub input{max-width:320px;height:40px;font-size:var(--fs-ui);border-radius:var(--radius-pill);padding-inline:var(--sp-4)}
+.ms-f{display:flex;gap:4px;padding:4px;border:1px solid var(--border);border-radius:var(--radius-pill);background:var(--surface-elevated);flex-wrap:wrap}
+.ms-f button{font:500 var(--fs-micro)/1 var(--font-sans);padding:9px 14px;border:0;border-radius:var(--radius-pill);color:var(--text-muted)}
+.ms-f button:hover{color:var(--text)}
+.ms-f button[aria-pressed="true"]{color:var(--ink-on-brasa);background:linear-gradient(160deg,var(--brasa-fill-a),var(--brasa-fill-b))}
 .ms-sub .n{margin-left:auto;font:400 var(--fs-micro)/1 var(--font-mono);color:var(--text-subtle)}
 .ms-main{flex:1;padding:26px 0 120px;--ms-ritmo-seccion:40px}
 /* ★ EL RITMO VERTICAL DEL REGISTRO, en un solo sitio y con DOS clientes.

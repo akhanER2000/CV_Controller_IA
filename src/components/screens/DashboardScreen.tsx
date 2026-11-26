@@ -1,11 +1,14 @@
 "use client";
 
-import { Fragment, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { AuroraTune, AURORA_HOJEO, AURORA_TRABAJO } from "@/components/Aurora";
 import { useT, useLang } from "@/lib/i18n";
 import { useBoot } from "@/lib/corpus/runtime";
 import { supabaseEnabled } from "@/lib/supabase/config";
+import { Anillo, Area, Barras, Button, Card, Chip, EmptyState, Icono, KpiCard, PanelHeader, type Dato } from "@/components/ui";
+import { itemsPorTipo, ultimaActualizacion, variantesPorMes, verificacion, type ItemLite } from "@/components/panel/datos";
+import "@/components/panel/panel.css";
 import "./dashboard.css";
 
 type T = (key: string) => string;
@@ -37,12 +40,16 @@ type T = (key: string) => string;
    Clases db-vrow/nm/obj/st/pdf intactas.
    ============================================================================ */
 
-type VariantView = { nm: string; obj: string; touch: string; outdated: boolean };
-type SourceView = { nm: string; factsLines: string[]; newText?: string; quietText?: string };
+type VariantView = { id?: string; nm: string; obj: string; touch: string; outdated: boolean; updatedAt?: string };
+type SourceView = { nm: string; factsLines: string[]; newText?: string; quietText?: string; createdAt?: string };
 type Finding = { k: string; text: string; anchor: string };
 
 interface DashData {
+  /** false = maqueta del modo local (sus cifras se rotulan «ejemplo»). */
+  real: boolean;
   masterItems: number;
+  sourcesCount: number;
+  items: ItemLite[];
   variants: VariantView[];
   outdated: number;
   sources: SourceView[];
@@ -52,7 +59,10 @@ interface DashData {
 
 /* ── Maqueta del MODO LOCAL (persona Diego Gatica). Nunca se usa con Supabase. ─ */
 const DEMO: DashData = {
+  real: false,
   masterItems: 52,
+  sourcesCount: 4,
+  items: [],
   outdated: 2,
   pendingStaging: 2,
   variants: [
@@ -120,42 +130,33 @@ function deriveFindings(items: MasterItemLite[], t: T): Finding[] {
   return out;
 }
 
-/* Fila de una variante. Enlace estirado (navega a variantes) + botón PDF hermano
-   por encima (descarga sin entrar). Auto-placement del grid: nm→pdf→st→obj. */
-function VariantRow({ v }: { v: VariantView }) {
+/* Fila de una variante reciente. Enlaza directo a su editor (menos clics). */
+function FilaVariante({ v }: { v: VariantView }) {
   const t = useT();
   return (
-    <div className="db-vrow" style={{ position: "relative" }}>
+    <li>
       <Link
-        href="/app/variantes"
+        className="pn-fila-item"
+        href={v.id ? `/app/variantes/${v.id}` : "/app/variantes"}
         aria-label={t("dashboard.variant.aria").replace("{nm}", v.nm).replace("{obj}", v.obj)}
-        style={{ position: "absolute", inset: 0, zIndex: 0 }}
-      />
-      <span className="nm">
-        {v.outdated ? <span className="c-pulse-dot" title={t("dashboard.variant.outdatedDot")} /> : null}
-        {v.nm}
-      </span>
-      <button
-        type="button"
-        className="pdf"
-        title={t("dashboard.variant.pdfTitle")}
-        style={{ position: "relative", zIndex: 1 }}
-        onClick={() => {
-          /* PDF de la variante: pendiente del render por-variante. */
-        }}
       >
-        {t("dashboard.variant.pdf")}
-      </button>
-      <span className="st">
-        {v.outdated ? <span className="old">{t("dashboard.variant.outdated")}</span> : t("dashboard.variant.upToDate")}
-        <br />
-        {v.touch}
-      </span>
-      <span className="obj">
-        {t("dashboard.variant.target")}
-        {v.obj}
-      </span>
-    </div>
+        <span className="pn-fila-ico" aria-hidden="true">
+          <Icono nombre="variantes" />
+        </span>
+        <span className="pn-fila-txt">
+          <span className="pn-fila-nm">{v.nm}</span>
+          <span className="pn-fila-sub">
+            {t("dashboard.variant.target")}
+            {v.obj} · {v.touch}
+          </span>
+        </span>
+        {v.outdated ? (
+          <Chip tono="brasa">{t("dashboard.variant.outdatedDot")}</Chip>
+        ) : (
+          <Chip>{t("dashboard.variant.upToDate")}</Chip>
+        )}
+      </Link>
+    </li>
   );
 }
 
@@ -180,23 +181,31 @@ export function DashboardScreen() {
         if (!active) return;
         const items = (m.items ?? []) as MasterItemLite[];
         const summary = m.summary ?? { masterItems: items.length, outdatedVariants: 0, pendingStaging: 0 };
-        const variants = ((v.variants ?? []) as { name: string; targetTitle: string | null; updatedAt: string; outdated: boolean }[]).map((x) => ({
+        const rawVariants = (v.variants ?? []) as { id: string; name: string; targetTitle: string | null; updatedAt: string; outdated: boolean }[];
+        const variants = rawVariants.map((x) => ({
+          id: x.id,
           nm: x.name,
           obj: x.targetTitle || t("dashboard.variant.noTarget"),
           touch: t("dashboard.variant.touched").replace("{rel}", rel(x.updatedAt, t)),
           outdated: x.outdated,
+          updatedAt: x.updatedAt,
         }));
         const numLocale = lang === "en" ? "en-US" : "es-CL";
-        const sources = ((s.sources ?? []) as { kind: string; originalName: string | null; sourceUrl: string | null; status: string; rawTextLength: number; createdAt: string }[]).map((x) => ({
+        const rawSources = (s.sources ?? []) as { kind: string; originalName: string | null; sourceUrl: string | null; status: string; rawTextLength: number; createdAt: string }[];
+        const sources = rawSources.map((x) => ({
           nm: x.originalName || x.sourceUrl || kindLabel(x.kind, t),
           factsLines: [
             `${kindLabel(x.kind, t)} · ${x.rawTextLength.toLocaleString(numLocale)} ${t("dashboard.source.chars")}`,
             t("dashboard.source.read").replace("{rel}", rel(x.createdAt, t)),
           ],
           quietText: x.status === "extracted" ? t("dashboard.source.extracted") : t("dashboard.source.static"),
+          createdAt: x.createdAt,
         }));
         setData({
+          real: true,
           masterItems: summary.masterItems ?? items.length,
+          sourcesCount: summary.sources ?? sources.length,
+          items: items.map((i) => ({ kind: i.kind, evidenceVerified: Boolean(i.evidenceVerified) })),
           variants,
           outdated: summary.outdatedVariants ?? variants.filter((x) => x.outdated).length,
           sources,
@@ -204,7 +213,8 @@ export function DashboardScreen() {
           pendingStaging: summary.pendingStaging ?? 0,
         });
       } catch {
-        if (active) setData({ masterItems: 0, variants: [], outdated: 0, sources: [], findings: [], pendingStaging: 0 });
+        if (active)
+          setData({ real: true, masterItems: 0, sourcesCount: 0, items: [], variants: [], outdated: 0, sources: [], findings: [], pendingStaging: 0 });
       } finally {
         if (active) setLoading(false);
       }
@@ -214,33 +224,13 @@ export function DashboardScreen() {
     };
     // Recarga al cambiar de idioma: los strings DERIVADOS del servidor (tocada
     // {rel}, "leída {rel}", nº de caracteres con locale) se formatean con el `t`
-    // del closure, así que hay que reconstruirlos con el idioma nuevo. Los demás
-    // textos ya son reactivos porque salen de `t(...)` en el render. El resto de
-    // dependencias (`t`) cambia de identidad junto con `lang`.
+    // del closure. `t` cambia de identidad junto con `lang`.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lang]);
 
   const isEmpty = !!data && data.masterItems === 0 && data.variants.length === 0;
-
-  const suffix = data
-    ? t("dashboard.strip.suffix").replace("{n}", String(data.masterItems)).replace("{m}", String(data.sources.length))
-    : "";
-  // SSR y primer render: fallback fijo. En cliente lo reescribe con la fecha real.
-  const [dateStr, setDateStr] = useState(t("nav.panel"));
-
   const bootRef = useBoot<HTMLElement>();
   const emptyRef = useRef<HTMLElement>(null);
-
-  useEffect(() => {
-    if (!data) return;
-    try {
-      const d = new Date();
-      const f = d.toLocaleDateString(lang === "en" ? "en-US" : "es-CL", { weekday: "long", day: "numeric", month: "long" });
-      setDateStr(f.charAt(0).toUpperCase() + f.slice(1) + suffix);
-    } catch {
-      setDateStr(`${t("nav.panel")}${suffix}`);
-    }
-  }, [suffix, data, lang, t]);
 
   // Estado vacío: entrada C2 (enter) + boot del scope, cuando exista el runtime.
   useEffect(() => {
@@ -261,69 +251,23 @@ export function DashboardScreen() {
     return () => window.clearInterval(id);
   }, [isEmpty]);
 
-  const header = (
-    <header className="c-header">
-      <div className="c-container">
-        <Link className="c-logo" href="/app">
-          Corpus
-        </Link>
-        <nav className="hd-nav">
-          <Link href="/app" aria-current="page">
-            {t("nav.panel")}
-          </Link>
-          <Link href="/app/master">{t("nav.master")}</Link>
-          <Link href="/app/variantes">{t("nav.variantes")}</Link>
-          <Link href="/app/fuentes">{t("nav.fuentes")}</Link>
-        </nav>
-        <div className="hd-right">
-          {/* Bloque C · espaciado. Aquí había un <Link className="hd-nav"> con un
-              <span> dentro que RECOPIABA a mano las declaraciones de `.hd-nav a`
-              (globals.css:449) en un `style` en línea: la misma fuente, el mismo
-              color y el mismo padding, escritos otra vez. Y la copia salía
-              incompleta —sin border-radius y sin :hover—, así que el enlace de
-              Ajustes era el único del encabezado que no se encendía al pasar por
-              encima. Se pasa a la forma que ya usan Fuentes, Salud, Tailor y
-              Variantes: un <nav class="hd-nav"> de un solo enlace. Ninguna
-              declaración repetida y los estados los da el sistema. */}
-          <nav className="hd-nav" style={{ display: "flex" }}>
-            <Link href="/app/ajustes">{t("nav.ajustes")}</Link>
-          </nav>
-          <div className="hd-lang">
-            <span data-on>ES</span>
-            <span>EN</span>
-          </div>
-          <div className="hd-av">DG</div>
-        </div>
-      </div>
-    </header>
-  );
-
-  // Mientras carga (modo Supabase): superficie neutra, sin declarar intensidad,
-  // para no mover el dial dos veces antes de saber en qué estado estamos.
+  // Mientras carga: superficie neutra, sin declarar intensidad (no mover el dial
+  // dos veces antes de saber en qué estado estamos).
   if (loading || !data) {
     return (
-      <div className="c-page">
-        {header}
-        <main className="db-main c-wall" data-screen-label="dashboard-cargando">
-          <div className="c-container">
-            <div className="db-strip">
-              <span className="t-overline">{t("dashboard.loading")}</span>
-            </div>
-            <hr className="c-divider" style={{ marginBottom: "2px" }} />
-          </div>
-        </main>
-      </div>
+      <main className="pn-pagina" data-screen-label="dashboard-cargando">
+        <p className="t-overline" role="status">
+          {t("dashboard.loading")}
+        </p>
+      </main>
     );
   }
 
-  return (
-    <div className="c-page">
-      <AuroraTune strength={isEmpty ? AURORA_HOJEO : AURORA_TRABAJO} />
-
-      {header}
-
-      {isEmpty ? (
-        /* ═══ VACÍO: día 1. Sin superficie: la aurora respira entera. ═══ */
+  if (isEmpty) {
+    /* ═══ VACÍO: día 1. Sin superficie: la aurora respira entera. ═══ */
+    return (
+      <>
+        <AuroraTune strength={AURORA_HOJEO} />
         <main className="db-empty c-window show" data-screen-label="dashboard-vacio" ref={emptyRef}>
           <span className="t-overline">{t("dashboard.empty.overline")}</span>
           <h1 style={{ marginTop: "20px" }}>
@@ -347,118 +291,230 @@ export function DashboardScreen() {
           </div>
           <p className="fine">{t("dashboard.empty.fine")}</p>
         </main>
-      ) : (
-        /* ═══ DENSO: el estado, no un saludo. El bento sobre vidrio (.c-wall). ═══ */
-        <main className="db-main c-wall" data-screen-label="dashboard-denso" ref={bootRef}>
-          <div className="c-container">
-            <div className="db-strip">
-              <span className="t-overline">{dateStr}</span>
-              <span className="acts">
-                <Link className="c-btn c-btn--quiet" href="/app/variantes">
-                  {t("common.tailor")}
-                </Link>
-                <Link className="c-btn c-btn--patina" href="/app/variantes">
-                  {t("dashboard.strip.newVariant")}
-                </Link>
-              </span>
+      </>
+    );
+  }
+
+  /* ═══ DENSO: Forja v2. Cada número de esta rama sale de una consulta real
+     (ver src/components/panel/datos.ts); en el modo local sin Supabase la
+     maqueta va rotulada «ejemplo» en la fuente de cada cifra. ═══ */
+  const fu = (k: string) => (data.real ? t(`dashboard.v2.fuente.${k}`) : t("dashboard.v2.fuente.demo"));
+  const verif = verificacion(data.items);
+  const tipos: Dato[] = itemsPorTipo(data.items).map((x) => {
+    const key = `dashboard.v2.tipo.${x.kind}`;
+    const etq = t(key);
+    return { etiqueta: etq === key ? x.kind : etq, valor: x.n };
+  });
+  const numLocale = lang === "en" ? "en-US" : "es-CL";
+  const conFecha = data.variants.flatMap((x) => (x.updatedAt ? [{ updatedAt: x.updatedAt }] : []));
+  const serie: Dato[] = variantesPorMes(conFecha).map((x) => {
+    const [y, mo] = x.mes.split("-").map(Number);
+    const etiqueta = new Date(Date.UTC(y!, mo! - 1, 15)).toLocaleDateString(numLocale, {
+      month: "short",
+      year: "2-digit",
+      timeZone: "UTC",
+    });
+    return { etiqueta, valor: x.n };
+  });
+  const ultima = ultimaActualizacion([...data.variants.map((x) => x.updatedAt), ...data.sources.map((x) => x.createdAt)]);
+  const pref = t("dashboard.v2.fuentePrefix");
+
+  return (
+    <>
+      <AuroraTune strength={AURORA_TRABAJO} />
+      <main className="pn-pagina db-v2" data-screen-label="dashboard-denso" ref={bootRef}>
+        <section className="pn-kpis" aria-label={t("nav.panel")}>
+          <KpiCard etiqueta={t("dashboard.v2.kpi.items")} valor={data.masterItems} fuente={fu("master")} icono="master" />
+          <KpiCard etiqueta={t("dashboard.v2.kpi.variants")} valor={data.variants.length} fuente={fu("variants")} icono="variantes" />
+          {verif ? (
+            <KpiCard
+              etiqueta={t("dashboard.v2.kpi.verified")}
+              valor={verif.pct}
+              unidad="%"
+              nota={t("dashboard.v2.kpi.verifiedNote").replace("{v}", String(verif.verificados)).replace("{n}", String(verif.total))}
+              fuente={fu("evidence")}
+              icono="revision"
+            />
+          ) : null}
+          <KpiCard etiqueta={t("dashboard.v2.kpi.sources")} valor={data.sourcesCount} fuente={fu("sources")} icono="fuentes" />
+          {ultima ? (
+            <KpiCard etiqueta={t("dashboard.v2.kpi.updated")} valor={rel(ultima, t)} fuente={fu("updated")} icono="pulso" />
+          ) : null}
+        </section>
+
+        <div className="pn-rejilla">
+          <Card material="brasa" grande as="section" className="pn-hero pn-c7" aria-labelledby="db-hero-t">
+            <p className="pn-over">{t("dashboard.v2.hero.over")}</p>
+            <h2 className="pn-big" id="db-hero-t">
+              {t("dashboard.v2.hero.title")}
+            </h2>
+            <p className="pn-sub">{t("dashboard.v2.hero.sub")}</p>
+            <div className="pn-fila">
+              <Button variante="tinta" icono="mas" href="/app/variantes">
+                {t("dashboard.v2.hero.new")}
+              </Button>
+              <Button variante="tinta" icono="fuentes" href="/app/importar">
+                {t("dashboard.v2.hero.import")}
+              </Button>
+              <Button variante="tinta" icono="revision" href="/app/staging">
+                {data.pendingStaging > 0
+                  ? t("dashboard.v2.hero.reviewN").replace("{n}", String(data.pendingStaging))
+                  : t("dashboard.v2.hero.review")}
+              </Button>
             </div>
-            <hr className="c-divider" style={{ marginBottom: "2px" }} />
-            <div className="db-bento">
-              <section className="db-cell db-v" data-screen-label="dashboard-variantes">
-                <div className="db-ch">
-                  <span className="t-overline">{t("nav.variantes")}</span>
-                  <span className="n">
-                    {data.variants.length} · {data.outdated}{" "}
-                    {t(data.outdated === 1 ? "dashboard.variants.outdated.one" : "dashboard.variants.outdated.other")}
-                  </span>
-                  <Link href="/app/variantes">{t("dashboard.variants.seeAll")}</Link>
-                </div>
-                <div>
-                  {data.variants.length ? (
-                    data.variants.map((v) => <VariantRow key={v.nm} v={v} />)
-                  ) : (
-                    /* Bloque C · el `style={{padding:"12px 0"}}` que había aquí
-                       pisaba el canalón de .db-fine y dejaba «Aún no hay variantes ·
-                       Crea la primera →» pegado al borde de la celda, desalineado
-                       con la cabecera de su propia tarjeta. Un padding en línea gana
-                       SIEMPRE a la hoja: por eso el candado de tests/espaciado.test.ts
-                       prohíbe escribir padding en el `style` de esta pantalla. Sin él,
-                       la clase ya trae el canalón del sistema. */
-                    <div className="db-fine">
-                      {t("dashboard.variants.emptyRow")}
-                      <Link href="/app/variantes">{t("dashboard.variants.createFirst")}</Link>
-                    </div>
-                  )}
-                </div>
-              </section>
+          </Card>
 
-              <div className="db-side">
-                <section className="db-cell db-s" data-screen-label="dashboard-salud">
-                  <div className="db-ch">
-                    <span className="t-overline">{t("dashboard.health.overline")}</span>
-                    <span className="n">{t("dashboard.health.n")}</span>
-                  </div>
-                  {data.findings.length ? (
-                    data.findings.map((h) => (
-                      <Link key={h.anchor} className="db-srow" href={`/app/master#${h.anchor}`}>
-                        <span className="k">{h.k}</span>
-                        {h.text}
-                        <span className="go">→</span>
-                      </Link>
-                    ))
-                  ) : (
-                    <div className="db-fine">{t("dashboard.health.clear")}</div>
-                  )}
-                  <div className="db-fine">{t("dashboard.health.fine")}</div>
-                </section>
+          <Card material="crema" grande as="section" className="pn-tarjeta pn-c5">
+            <PanelHeader titulo={t("dashboard.v2.verif.title")} sub={t("dashboard.v2.verif.sub")} />
+            {verif ? (
+              <>
+                <div className="pn-centro">
+                  <Anillo
+                    valor={verif.verificados}
+                    total={verif.total}
+                    titulo={t("dashboard.v2.verif.title")}
+                    sub={t("dashboard.v2.verif.center").replace("{v}", String(verif.verificados)).replace("{n}", String(verif.total))}
+                    sobre="crema"
+                  />
+                </div>
+                <p className="pn-fuente">
+                  {pref}
+                  {fu("evidence")}
+                </p>
+              </>
+            ) : (
+              <EmptyState titulo={t("dashboard.v2.verif.emptyT")} icono="revision" />
+            )}
+          </Card>
 
-                {data.pendingStaging > 0 ? (
-                  <section className="db-cell db-s" data-screen-label="dashboard-staging">
-                    <Link className="db-stg" href="/app/staging">
-                      <span className="k t-accent">{data.pendingStaging}</span>
-                      <span className="tx">{t("dashboard.staging.pending")}</span>
-                      <span className="go">{t("dashboard.staging.review")}</span>
-                    </Link>
-                  </section>
-                ) : null}
+          <Card grande as="section" className="pn-tarjeta pn-c5">
+            <PanelHeader titulo={t("dashboard.v2.tipos.title")} sub={t("dashboard.v2.tipos.sub")} />
+            {tipos.length ? (
+              <>
+                <Barras datos={tipos} titulo={t("dashboard.v2.tipos.chart")} />
+                <p className="pn-fuente">
+                  {pref}
+                  {fu("master")}
+                </p>
+              </>
+            ) : (
+              <EmptyState
+                titulo={t("dashboard.v2.tipos.emptyT")}
+                icono="master"
+                accion={
+                  <Button variante="grafito" icono="fuentes" href="/app/importar">
+                    {t("dashboard.v2.hero.import")}
+                  </Button>
+                }
+              />
+            )}
+          </Card>
+
+          <Card grande as="section" className="pn-tarjeta pn-c7">
+            <PanelHeader
+              titulo={t("dashboard.v2.recent.title")}
+              meta={String(data.variants.length)}
+              acciones={
+                <Button variante="fantasma" icono="flecha" href="/app/variantes">
+                  {t("dashboard.v2.recent.seeAll")}
+                </Button>
+              }
+            />
+            {data.variants.length ? (
+              <ul className="pn-lista">
+                {data.variants.slice(0, 4).map((v) => (
+                  <FilaVariante key={v.id ?? v.nm} v={v} />
+                ))}
+              </ul>
+            ) : (
+              <div className="db-fine">
+                {t("dashboard.variants.emptyRow")}
+                <Link href="/app/variantes">{t("dashboard.variants.createFirst")}</Link>
               </div>
+            )}
+          </Card>
 
-              <section className="db-cell db-f" data-screen-label="dashboard-fuentes">
-                {data.sources.length ? (
-                  data.sources.map((s) => (
-                    <div className="db-fcell" key={s.nm}>
-                      <span className="nm">{s.nm}</span>
-                      <div className="facts">
-                        {s.factsLines.map((line, j) => (
-                          <Fragment key={line}>
-                            {j > 0 ? <br /> : null}
-                            {line}
-                          </Fragment>
-                        ))}
-                      </div>
-                      {s.newText ? (
-                        <Link className="new" href="/app/fuentes">
-                          <span className="c-pulse-dot" />
-                          {s.newText}
-                        </Link>
-                      ) : null}
-                      {s.quietText ? <div className="quiet">{s.quietText}</div> : null}
-                    </div>
-                  ))
-                ) : (
-                  <div className="db-fcell">
-                    <span className="nm">{t("dashboard.sources.emptyName")}</span>
-                    <div className="facts">{t("dashboard.sources.emptyFacts")}</div>
-                    <Link className="new" href="/app/importar">
-                      {t("dashboard.sources.emptyCta")}
+          <Card grande as="section" className="pn-tarjeta pn-c7">
+            <PanelHeader titulo={t("dashboard.v2.serie.title")} sub={t("dashboard.v2.serie.sub")} />
+            {serie.length >= 2 ? (
+              <>
+                <Area datos={serie} titulo={t("dashboard.v2.serie.chart")} />
+                <p className="pn-fuente">
+                  {pref}
+                  {fu("variants")}
+                </p>
+              </>
+            ) : (
+              <EmptyState titulo={t("dashboard.v2.serie.emptyT")} texto={t("dashboard.v2.serie.emptyB")} icono="pulso" />
+            )}
+          </Card>
+
+          <Card grande as="section" className="pn-tarjeta pn-c5">
+            <PanelHeader titulo={t("dashboard.health.overline")} sub={t("dashboard.health.n")} />
+            {data.findings.length ? (
+              <ul className="pn-lista">
+                {data.findings.map((h) => (
+                  <li key={h.anchor}>
+                    <Link className="pn-fila-item" href={`/app/master#${h.anchor}`}>
+                      <span className="pn-fila-k">{h.k}</span>
+                      <span className="pn-fila-txt">
+                        <span className="pn-fila-sub">{h.text}</span>
+                      </span>
+                      <Icono nombre="flecha" />
                     </Link>
-                  </div>
-                )}
-              </section>
-            </div>
-          </div>
-        </main>
-      )}
-    </div>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="pn-fuente">{t("dashboard.health.clear")}</p>
+            )}
+            <p className="pn-fuente">{t("dashboard.health.fine")}</p>
+          </Card>
+
+          <Card grande as="section" className="pn-tarjeta pn-c12">
+            <PanelHeader
+              titulo={t("dashboard.v2.sources.title")}
+              meta={String(data.sourcesCount)}
+              acciones={
+                <Button variante="fantasma" icono="flecha" href="/app/fuentes">
+                  {t("dashboard.v2.sources.seeAll")}
+                </Button>
+              }
+            />
+            {data.sources.length ? (
+              <ul className="pn-lista pn-lista--rejilla">
+                {data.sources.slice(0, 6).map((s) => (
+                  <li key={s.nm + (s.createdAt ?? "")} className="pn-fila-item">
+                    <span className="pn-fila-ico" aria-hidden="true">
+                      <Icono nombre="fuentes" />
+                    </span>
+                    <span className="pn-fila-txt">
+                      <span className="pn-fila-nm">{s.nm}</span>
+                      {s.factsLines.map((line) => (
+                        <span className="pn-fila-sub" key={line}>
+                          {line}
+                        </span>
+                      ))}
+                      {s.quietText ? <span className="pn-fila-sub">{s.quietText}</span> : null}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <EmptyState
+                titulo={t("dashboard.sources.emptyName")}
+                texto={t("dashboard.sources.emptyFacts")}
+                icono="fuentes"
+                accion={
+                  <Button variante="brasa" icono="fuentes" href="/app/importar">
+                    {t("dashboard.sources.emptyCta")}
+                  </Button>
+                }
+              />
+            )}
+          </Card>
+        </div>
+      </main>
+    </>
   );
 }

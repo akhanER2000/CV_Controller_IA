@@ -8,6 +8,9 @@ import { supabaseEnabled } from "@/lib/supabase/config";
 import { AuroraTune, AURORA_HOJEO } from "@/components/Aurora";
 import { useUndoToast } from "@/components/UndoToast";
 import { Breadcrumb, ORIGIN_PARAM, isInternalAppPath } from "@/components/Breadcrumb";
+import { Button, Card, Chip, EmptyState, Icono, Tabs } from "@/components/ui";
+import { filtrarVariantes, type EstadoVariante } from "@/components/panel/datos";
+import "@/components/panel/panel.css";
 import "./variantes.css";
 
 /* ============================================================================
@@ -172,6 +175,14 @@ export function VariantesScreen() {
   const [nameDraft, setNameDraft] = useState("");
   const [busyId, setBusyId] = useState<string | null>(null);
   const [draftIds, setDraftIds] = useState<Set<string>>(new Set());
+  // Conteos reales por variante (GET /api/variants/[id]?counts=1 → variant_items):
+  // referencias al master y overrides tuyos. Sin conteo, la tarjeta no pinta cifra.
+  const [conteos, setConteos] = useState<Record<string, { itemCount: number; overrideCount: number }>>({});
+  // Objetivo de páginas que elegiste en el editor (localStorage corpus.paginas.<id>,
+  // DA-15). Es TU objetivo en este navegador, no páginas medidas: se rotula así.
+  const [paginas, setPaginas] = useState<Record<string, number>>({});
+  const [busqueda, setBusqueda] = useState("");
+  const [estado, setEstado] = useState<EstadoVariante>("todas");
   const undo = useUndoToast();
 
   // Creación de variantes. El tercer modo ("tailor") es la TERCERA PUERTA: crear un
@@ -219,9 +230,10 @@ export function VariantesScreen() {
         }));
         setVariants(list);
         setMasterItems((data.masterItems as number) ?? 0);
-        // «Borrador»: variante SIN título objetivo Y SIN items. Solo se consultan las
-        // que no tienen objetivo (subconjunto), con un fetch ligero de conteos.
-        const candidates = list.filter((v) => v.id && !(v.rawObj && v.rawObj.trim()));
+        // Conteos de cada variante (referencias y overrides que enseña su tarjeta),
+        // con un fetch ligero por variante. De ellos sale también el «borrador»:
+        // variante SIN título objetivo Y SIN items.
+        const candidates = list.filter((v) => v.id);
         if (candidates.length) {
           // Con techo de concurrencia: ver enLotes(). Sin él, una cuenta con
           // muchas variantes en blanco disparaba una petición por cada una, todas
@@ -233,15 +245,18 @@ export function VariantesScreen() {
               try {
                 const r = await fetch(`/api/variants/${v.id}?counts=1`);
                 if (!r.ok) return null;
-                const j = (await r.json()) as { itemCount?: number };
-                return (j.itemCount ?? 0) === 0 ? v.id! : null;
+                const j = (await r.json()) as { itemCount?: number; overrideCount?: number };
+                return { v, itemCount: j.itemCount ?? 0, overrideCount: j.overrideCount ?? 0 };
               } catch {
                 return null;
               }
             },
             () => active,
-          ).then((ids) => {
-            if (active) setDraftIds(new Set(ids.filter((x): x is string => !!x)));
+          ).then((res) => {
+            if (!active) return;
+            const ok = res.filter((x): x is NonNullable<typeof x> => !!x);
+            setConteos(Object.fromEntries(ok.map((x) => [x.v.id!, { itemCount: x.itemCount, overrideCount: x.overrideCount }])));
+            setDraftIds(new Set(ok.filter((x) => x.itemCount === 0 && !(x.v.rawObj && x.v.rawObj.trim())).map((x) => x.v.id!)));
           });
         } else if (active) {
           setDraftIds(new Set());
@@ -572,6 +587,24 @@ export function VariantesScreen() {
     }
   }
 
+  // Objetivo de páginas de cada variante: lo guarda el editor en localStorage
+  // (corpus.paginas.<id>, DA-15). Se lee ya montado (leerlo al renderizar haría
+  // discrepar servidor y cliente) y puede lanzar en modo privado: entonces no hay
+  // cifra que pintar, y no se pinta.
+  useEffect(() => {
+    const out: Record<string, number> = {};
+    try {
+      for (const v of variants) {
+        if (!v.id) continue;
+        const n = Number(window.localStorage.getItem(`corpus.paginas.${v.id}`));
+        if (n === 1 || n === 2 || n === 3) out[v.id] = n;
+      }
+    } catch {
+      /* sin almacenamiento: sin objetivo que enseñar */
+    }
+    setPaginas(out);
+  }, [variants]);
+
   // Panel de creación (se muestra en el lead y, con master, también en el vacío).
   const createPanel = (
     <div className="vr-create">
@@ -767,268 +800,292 @@ export function VariantesScreen() {
     </div>
   );
 
+  // Búsqueda + filtro de estado sobre la lista ya cargada. Se filtra SIN reindexar:
+  // las acciones de fila (renombrar, duplicar, eliminar, desplegar) trabajan con el
+  // índice de `variants`, así que las ocultas devuelven null en su sitio.
+  const visibles = new Set(filtrarVariantes(variants, busqueda, estado));
+  const nAlDia = variants.filter((v) => !v.old).length;
+  const nViejas = variants.length - nAlDia;
+
   return (
-    <div className="c-page">
+    <>
       {/* Galería de variantes: se hojea, no se redacta. El humo, entero. */}
       <AuroraTune strength={AURORA_HOJEO} />
-      <header className="c-header">
-        <div className="c-container">
-          <Link className="c-logo" href="/app">
-            Corpus
-          </Link>
-          {/* Solo cuando el ?from= declara un viaje real (p. ej. desde Staging).
-              Ver debeMostrarMiga(): en una pestaña raíz, un «volver» permanente
-              sería una miga inventada. */}
-          <Suspense fallback={null}>
-            <MigaSoloSiVienesDeAlgunSitio current={t("nav.variantes")} />
-          </Suspense>
-          <nav className="hd-nav">
-            <Link href="/app">{t("nav.panel")}</Link>
-            <Link href="/app/master">{t("nav.master")}</Link>
-            <Link href="/app/variantes" aria-current="page">
-              {t("nav.variantes")}
-            </Link>
-            <Link href="/app/fuentes">{t("nav.fuentes")}</Link>
-          </nav>
-          <div className="hd-right">
-            <nav className="hd-nav" style={{ display: "flex" }}>
-              <Link href="/app/ajustes">{t("nav.ajustes")}</Link>
-            </nav>
-            <div className="hd-lang">
-              <span data-on>ES</span>
-              <span>EN</span>
-            </div>
-            {/* Aquí iba <div className="hd-av">DG</div>: las iniciales de la
-                persona inventada de la maqueta. Ocultas por UserMenu.css, pero
-                afirmaban una identidad que no es la del usuario. El avatar real
-                lo pinta UserMenu, montado por el layout de /app. */}
-          </div>
+      <main className="pn-pagina vr-main" data-screen-label="variantes" ref={mainRef}>
+        {/* Solo cuando el ?from= declara un viaje real (p. ej. desde Staging).
+            Ver debeMostrarMiga(): en una pestaña raíz, un «volver» permanente
+            sería una miga inventada. */}
+        <Suspense fallback={null}>
+          <MigaSoloSiVienesDeAlgunSitio current={t("nav.variantes")} />
+        </Suspense>
+        <div className="u-sr" aria-live="polite">
+          {announce}
         </div>
-      </header>
 
-      <main className="vr-main c-wall" data-screen-label="variantes" ref={mainRef}>
-        <div className="c-container">
-          <div
-            aria-live="polite"
-            style={{ position: "absolute", width: 1, height: 1, padding: 0, margin: -1, overflow: "hidden", clip: "rect(0 0 0 0)", whiteSpace: "nowrap", border: 0 }}
-          >
-            {announce}
-          </div>
+        {loading ? (
+          <p className="t-overline" role="status">
+            {t("variantes.loading")}
+          </p>
+        ) : null}
 
-          {loading ? (
-            <p className="t-overline" style={{ color: "var(--text-muted)" }}>
-              {t("variantes.loading")}
-            </p>
-          ) : null}
-
-          {!empty && !loading && (
-            <div className="vr-lead">
-              <p>
-                <b>
-                  {t("variantes.leadCount")
-                    .replace("{n}", String(variants.length))
-                    .replace("{s}", variants.length === 1 ? "" : "s")}
-                </b>{" "}
-                {t("variantes.leadBody")}
-              </p>
+        {!empty && !loading && (
+          <Card material="brasa" grande as="section" className="vr-hero" aria-labelledby="vr-hero-t">
+            <div className="vr-hero-txt">
+              <p className="pn-over">{t("variantes.v2.heroOver")}</p>
+              <h1 className="pn-big" id="vr-hero-t">
+                {t("variantes.v2.heroTitle")}
+              </h1>
+              <p className="pn-sub">{t("variantes.v2.heroSub")}</p>
             </div>
-          )}
+            {createPanel}
+          </Card>
+        )}
 
-          {!empty && !loading && createPanel}
-
-          {!empty && !loading && <hr className="c-divider" />}
-
-          {!empty && !loading && (
-            <div className="vr-list" id="list">
-              {variants.map((v, i) => {
-                const open = openRows.has(i);
-                const diffId = `vr-diff-${i}`;
-                const href = editorHref(v);
-                return (
-                  <div
-                    className={`vr-row${open ? " open" : ""}`}
-                    data-i={i}
-                    /* Clave por id real cuando lo hay: con el índice, eliminar una
-                       fila reciclaba el estado de la siguiente (el input de
-                       renombrar se quedaba con el nombre de la que ya no está). */
-                    key={v.id ?? `demo-${i}`}
-                    data-reveal="soft"
-                    style={{ "--d": `${Math.min(i, 24) * 40}ms` } as React.CSSProperties}
-                  >
-                    <div
-                      className="vr-top"
-                      {...(v.old
-                        ? {
-                            "data-toggle": true,
-                            role: "button",
-                            tabIndex: 0,
-                            "aria-expanded": open,
-                            "aria-controls": diffId,
-                            onClick: (e: React.MouseEvent<HTMLDivElement>) => {
-                              if ((e.target as HTMLElement).closest(".pdf, a")) return;
-                              toggleRow(i);
-                            },
-                            onKeyDown: (e: React.KeyboardEvent<HTMLDivElement>) => {
-                              if (e.target !== e.currentTarget) return;
-                              if (e.key === "Enter" || e.key === " ") {
-                                e.preventDefault();
-                                toggleRow(i);
-                              }
-                            },
-                          }
-                        : {})}
-                    >
-                      <span className="nm">
-                        {v.old && <span className="c-pulse-dot" title={t("variantes.dotTitle")} aria-hidden="true" />}
-                        {renaming === i ? (
-                          <input
-                            className="vr-rename c-input"
-                            autoFocus
-                            value={nameDraft}
-                            aria-label={t("variantes.renameAria")}
-                            onChange={(e) => setNameDraft(e.target.value)}
-                            onClick={(e) => e.stopPropagation()}
-                            onBlur={() => commitRename(i)}
-                            onKeyDown={(e) => {
-                              e.stopPropagation();
-                              if (e.key === "Enter") {
-                                e.preventDefault();
-                                commitRename(i);
-                              } else if (e.key === "Escape") {
-                                e.preventDefault();
-                                setRenaming(null);
-                              }
-                            }}
-                          />
-                        ) : supabaseEnabled && v.id ? (
-                          <button
-                            type="button"
-                            className="vr-name"
-                            title={t("variantes.renameTitle")}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              startRename(i);
-                            }}
-                          >
-                            {v.nm}
-                          </button>
-                        ) : (
-                          v.nm
-                        )}
-                        {v.id && draftIds.has(v.id) && (
-                          <span className="vr-chip-draft" title={t("variantes.draftTitle")}>
-                            {t("variantes.draftChip")}
-                          </span>
-                        )}
-                      </span>
-                      <button type="button" className="pdf" title={t("variantes.pdfTitle")} onClick={(e) => e.stopPropagation()}>
-                        {t("variantes.pdfBtn")}
-                      </button>
-                      <span className="meta">
-                        {v.old ? <span className="old">{t("variantes.metaOutdated")}</span> : t("variantes.metaUpToDate")}
-                        <br />
-                        {v.touch}
-                        {v.pg ? ` · ${v.pg}` : ""}
-                      </span>
-                      <Link className="open" href={href}>
-                        {t("variantes.openLink")}
-                      </Link>
-                      {supabaseEnabled && v.id && (
-                        <span className="vr-acts">
-                          <button
-                            type="button"
-                            className="dup"
-                            title={t("variantes.rowDuplicate")}
-                            aria-label={t("variantes.rowDuplicate")}
-                            disabled={busyId === v.id}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              void duplicateRow(i);
-                            }}
-                          >
-                            {t("variantes.rowDuplicateShort")}
-                          </button>
-                          <button
-                            type="button"
-                            className="del"
-                            title={t("variantes.rowDelete")}
-                            aria-label={t("variantes.rowDelete")}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              void deleteRow(i);
-                            }}
-                          >
-                            {t("variantes.rowDeleteShort")}
-                          </button>
-                        </span>
-                      )}
-                      <span className="obj">{t("variantes.objectivePrefix")}{v.obj}</span>
-                    </div>
-
-                    {v.old && (
-                      <div className="vr-diff" id={diffId}>
-                        <span className="t-overline">{t("variantes.diffOverline")}</span>
-                        <div className="vr-dline">
-                          <span style={{ color: "var(--text-subtle)" }}>
-                            {t("variantes.diffBody")}
-                          </span>
-                        </div>
-                        {/* Lo que la interfaz NO puede prometer, dicho en su sitio:
-                            la señal no se apaga desde aquí. Sin esta línea, la
-                            ausencia de botones parecería un olvido. */}
-                        <div className="vr-dline vr-dpending">{t("variantes.diffPending")}</div>
-                        <div className="vr-dacts">
-                          <Link className="c-btn c-btn--quiet" style={{ height: "30px", fontSize: "10px" }} href={href}>
-                            {t("variantes.diffOpenEditor")}
-                          </Link>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          )}
-
-          {empty && (
-            <div className="vr-empty show" id="empty">
-              <span className="t-overline">{t("variantes.emptyOverline")}</span>
-              <h2 style={{ marginTop: "16px" }}>
-                {canCreate ? (
-                  <>
-                    {t("variantes.emptyHasMasterLine1")
-                      .replace("{n}", String(masterItems))
-                      .replace("{s}", masterItems === 1 ? "" : "s")}
-                    <br />
-                    {t("variantes.emptyHasMasterLine2")}
-                  </>
-                ) : (
-                  <>
-                    {t("variantes.emptyNoMasterLine1")}
-                    <br />
-                    {t("variantes.emptyNoMasterLine2")}
-                  </>
-                )}
+        {!empty && !loading && (
+          <section className="vr-lista" aria-labelledby="vr-list-t">
+            <div className="pn-herr">
+              <h2 className="pn-sec-t" id="vr-list-t">
+                {t("variantes.v2.listTitle")}
               </h2>
-              <p>
-                {canCreate ? t("variantes.emptyHasMasterBody") : t("variantes.emptyNoMasterBody")}
-              </p>
-              {canCreate ? (
-                <div style={{ marginTop: "26px" }}>{createPanel}</div>
-              ) : (
-                <div style={{ marginTop: "26px" }}>
-                  <span className="c-forge">
-                    <Link className="c-btn c-btn--forge c-btn--lg" href="/app/importar">
-                      {t("variantes.emptyDumpCta")}
-                    </Link>
-                  </span>
-                </div>
-              )}
+              <span className="pn-cuenta">
+                {t("variantes.leadCount")
+                  .replace("{n}", String(variants.length))
+                  .replace("{s}", variants.length === 1 ? "" : "s")}
+              </span>
+              <label className="pn-buscar">
+                <Icono nombre="buscar" />
+                <input
+                  type="search"
+                  value={busqueda}
+                  onChange={(e) => setBusqueda(e.target.value)}
+                  placeholder={t("variantes.v2.searchPlaceholder")}
+                  aria-label={t("variantes.v2.searchAria")}
+                />
+              </label>
             </div>
-          )}
-        </div>
+            <Tabs
+              etiqueta={t("variantes.v2.filterAria")}
+              valor={estado}
+              onCambio={(id) => setEstado(id as EstadoVariante)}
+              items={[
+                { id: "todas", etiqueta: `${t("variantes.v2.fAll")} · ${variants.length}` },
+                { id: "aldia", etiqueta: `${t("variantes.v2.fUpToDate")} · ${nAlDia}` },
+                { id: "desactualizadas", etiqueta: `${t("variantes.v2.fOutdated")} · ${nViejas}` },
+              ]}
+            >
+              {visibles.size === 0 ? (
+                <EmptyState titulo={t("variantes.v2.noMatchT")} texto={t("variantes.v2.noMatchB")} icono="buscar" />
+              ) : null}
+              <div className="vr-list" id="list">
+                {variants.map((v, i) => {
+                  if (!visibles.has(v)) return null;
+                  const open = openRows.has(i);
+                  const diffId = `vr-diff-${i}`;
+                  const href = editorHref(v);
+                  const c = v.id ? conteos[v.id] : undefined;
+                  const pag = v.id ? paginas[v.id] : undefined;
+                  return (
+                    <Card
+                      as="article"
+                      className={`vr-row${open ? " open" : ""}`}
+                      data-i={i}
+                      /* Clave por id real cuando lo hay: con el índice, eliminar una
+                         fila reciclaba el estado de la siguiente (el input de
+                         renombrar se quedaba con el nombre de la que ya no está). */
+                      key={v.id ?? `demo-${i}`}
+                      data-reveal="soft"
+                      style={{ "--d": `${Math.min(i, 24) * 40}ms` } as React.CSSProperties}
+                    >
+                      <div
+                        className="vr-top"
+                        {...(v.old
+                          ? {
+                              "data-toggle": true,
+                              role: "button",
+                              tabIndex: 0,
+                              "aria-expanded": open,
+                              "aria-controls": diffId,
+                              onClick: (e: React.MouseEvent<HTMLDivElement>) => {
+                                if ((e.target as HTMLElement).closest(".pdf, a, .vr-name, .vr-rename")) return;
+                                toggleRow(i);
+                              },
+                              onKeyDown: (e: React.KeyboardEvent<HTMLDivElement>) => {
+                                if (e.target !== e.currentTarget) return;
+                                if (e.key === "Enter" || e.key === " ") {
+                                  e.preventDefault();
+                                  toggleRow(i);
+                                }
+                              },
+                            }
+                          : {})}
+                      >
+                        <span className="nm">
+                          {renaming === i ? (
+                            <input
+                              className="vr-rename c-input"
+                              autoFocus
+                              value={nameDraft}
+                              aria-label={t("variantes.renameAria")}
+                              onChange={(e) => setNameDraft(e.target.value)}
+                              onClick={(e) => e.stopPropagation()}
+                              onBlur={() => commitRename(i)}
+                              onKeyDown={(e) => {
+                                e.stopPropagation();
+                                if (e.key === "Enter") {
+                                  e.preventDefault();
+                                  commitRename(i);
+                                } else if (e.key === "Escape") {
+                                  e.preventDefault();
+                                  setRenaming(null);
+                                }
+                              }}
+                            />
+                          ) : supabaseEnabled && v.id ? (
+                            <button
+                              type="button"
+                              className="vr-name"
+                              title={t("variantes.renameTitle")}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                startRename(i);
+                              }}
+                            >
+                              {v.nm}
+                            </button>
+                          ) : (
+                            v.nm
+                          )}
+                        </span>
+                        <span className="obj">
+                          {t("variantes.objectivePrefix")}
+                          {v.obj}
+                        </span>
+                        <span className="vr-chips">
+                          {v.old ? (
+                            <Chip tono="brasa">
+                              <span className="c-pulse-dot" title={t("variantes.dotTitle")} aria-hidden="true" />{" "}
+                              {t("variantes.metaOutdated")}
+                            </Chip>
+                          ) : (
+                            <Chip>{t("variantes.metaUpToDate")}</Chip>
+                          )}
+                          {v.id && draftIds.has(v.id) ? (
+                            <span className="vr-chip-draft" title={t("variantes.draftTitle")}>
+                              {t("variantes.draftChip")}
+                            </span>
+                          ) : null}
+                          {c ? (
+                            <Chip>{t("variantes.v2.refs").replace("{n}", String(c.itemCount))}</Chip>
+                          ) : null}
+                          {c && c.overrideCount > 0 ? (
+                            <Chip tono="oro">{t("variantes.v2.overrides").replace("{n}", String(c.overrideCount))}</Chip>
+                          ) : null}
+                          {pag ? (
+                            <span title={t("variantes.v2.pagesTitle")}>
+                              <Chip>{t("variantes.v2.pages").replace("{n}", String(pag))}</Chip>
+                            </span>
+                          ) : null}
+                        </span>
+                        <span className="meta">
+                          {v.touch}
+                          {v.pg ? ` · ${v.pg}` : ""}
+                        </span>
+                      </div>
+
+                      {/* Acciones SIEMPRE visibles (antes aparecían al pasar el
+                          ratón): abrir, PDF, duplicar y eliminar a un clic. */}
+                      <div className="vr-acciones">
+                        <Link className="open u-btn u-btn--brasa" href={href}>
+                          <Icono nombre="doc" />
+                          {t("variantes.v2.open")}
+                        </Link>
+                        <button type="button" className="pdf u-btn u-btn--grafito" title={t("variantes.pdfTitle")}>
+                          {t("variantes.pdfBtn")}
+                        </button>
+                        {supabaseEnabled && v.id && (
+                          <span className="vr-acts">
+                            <button
+                              type="button"
+                              className="dup u-btn u-btn--fantasma"
+                              title={t("variantes.rowDuplicate")}
+                              aria-label={t("variantes.rowDuplicate")}
+                              disabled={busyId === v.id}
+                              onClick={() => void duplicateRow(i)}
+                            >
+                              {t("variantes.rowDuplicateShort")}
+                            </button>
+                            <button
+                              type="button"
+                              className="del u-btn u-btn--fantasma"
+                              title={t("variantes.rowDelete")}
+                              aria-label={t("variantes.rowDelete")}
+                              onClick={() => void deleteRow(i)}
+                            >
+                              {t("variantes.rowDeleteShort")}
+                            </button>
+                          </span>
+                        )}
+                      </div>
+
+                      {v.old && (
+                        <div className="vr-diff" id={diffId}>
+                          <span className="t-overline">{t("variantes.diffOverline")}</span>
+                          <div className="vr-dline">
+                            <span className="vr-dbody">{t("variantes.diffBody")}</span>
+                          </div>
+                          {/* Lo que la interfaz NO puede prometer, dicho en su sitio:
+                              la señal no se apaga desde aquí. Sin esta línea, la
+                              ausencia de botones parecería un olvido. */}
+                          <div className="vr-dline vr-dpending">{t("variantes.diffPending")}</div>
+                          <div className="vr-dacts">
+                            <Link className="u-btn u-btn--grafito" href={href}>
+                              {t("variantes.diffOpenEditor")}
+                            </Link>
+                          </div>
+                        </div>
+                      )}
+                    </Card>
+                  );
+                })}
+              </div>
+            </Tabs>
+          </section>
+        )}
+
+        {empty && (
+          <div className="vr-empty show" id="empty">
+            <span className="t-overline">{t("variantes.emptyOverline")}</span>
+            <h2 style={{ marginTop: "16px" }}>
+              {canCreate ? (
+                <>
+                  {t("variantes.emptyHasMasterLine1")
+                    .replace("{n}", String(masterItems))
+                    .replace("{s}", masterItems === 1 ? "" : "s")}
+                  <br />
+                  {t("variantes.emptyHasMasterLine2")}
+                </>
+              ) : (
+                <>
+                  {t("variantes.emptyNoMasterLine1")}
+                  <br />
+                  {t("variantes.emptyNoMasterLine2")}
+                </>
+              )}
+            </h2>
+            <p>{canCreate ? t("variantes.emptyHasMasterBody") : t("variantes.emptyNoMasterBody")}</p>
+            {canCreate ? (
+              <div style={{ marginTop: "26px" }}>{createPanel}</div>
+            ) : (
+              <div style={{ marginTop: "26px" }}>
+                <Button variante="brasa" tamano="lg" icono="fuentes" href="/app/importar">
+                  {t("variantes.emptyDumpCta")}
+                </Button>
+              </div>
+            )}
+          </div>
+        )}
       </main>
       {undo.node}
-    </div>
+    </>
   );
 }

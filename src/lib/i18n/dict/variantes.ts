@@ -108,6 +108,24 @@ export const variantes = {
     // aria-live que miente es peor que uno que calla: nadie puede verificarlo.
     "variantes.announceAiCreated":
       "Variante «{nm}» creada con IA como punto de partida. Ábrela para revisarla.",
+    // ── Forja v2 (panel-datos) ──
+    "variantes.v2.heroOver": "Una oferta nueva",
+    "variantes.v2.heroTitle": "Pega el aviso y sale una variante",
+    "variantes.v2.heroSub": "Hecha de tu master, con cada línea atada a su fuente.",
+    "variantes.v2.listTitle": "Tus variantes",
+    "variantes.v2.searchAria": "Buscar variantes",
+    "variantes.v2.searchPlaceholder": "Buscar por nombre u objetivo…",
+    "variantes.v2.filterAria": "Filtrar variantes por estado",
+    "variantes.v2.fAll": "Todas",
+    "variantes.v2.fUpToDate": "Al día",
+    "variantes.v2.fOutdated": "Desactualizadas",
+    "variantes.v2.noMatchT": "Ninguna variante coincide",
+    "variantes.v2.noMatchB": "Prueba con otro texto o cambia el filtro.",
+    "variantes.v2.refs": "{n} referencias",
+    "variantes.v2.overrides": "{n} overrides",
+    "variantes.v2.pages": "objetivo: {n} pág",
+    "variantes.v2.pagesTitle": "Objetivo de páginas que elegiste en el editor (guardado en este navegador)",
+    "variantes.v2.open": "Abrir editor",
   } as Record<string, string>,
   en: {
     "variantes.loading": "Reading your variants…",
@@ -202,5 +220,23 @@ export const variantes = {
 
     "variantes.announceAiCreated":
       "Variant «{nm}» created with AI as a starting point. Open it to review.",
+    // ── Forja v2 (panel-datos) ──
+    "variantes.v2.heroOver": "A new offer",
+    "variantes.v2.heroTitle": "Paste the job post and out comes a variant",
+    "variantes.v2.heroSub": "Made from your master, with every line tied to its source.",
+    "variantes.v2.listTitle": "Your variants",
+    "variantes.v2.searchAria": "Search variants",
+    "variantes.v2.searchPlaceholder": "Search by name or target…",
+    "variantes.v2.filterAria": "Filter variants by status",
+    "variantes.v2.fAll": "All",
+    "variantes.v2.fUpToDate": "Up to date",
+    "variantes.v2.fOutdated": "Out of date",
+    "variantes.v2.noMatchT": "No variant matches",
+    "variantes.v2.noMatchB": "Try other text or change the filter.",
+    "variantes.v2.refs": "{n} references",
+    "variantes.v2.overrides": "{n} overrides",
+    "variantes.v2.pages": "target: {n} pp",
+    "variantes.v2.pagesTitle": "Page target you chose in the editor (stored in this browser)",
+    "variantes.v2.open": "Open editor",
   } as Record<string, string>,
 } as const;

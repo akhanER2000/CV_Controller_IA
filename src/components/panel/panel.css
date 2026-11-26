@@ -1,0 +1,267 @@
+/* Piezas de panel-datos (Forja v2). Prefijo pn-. Solo tokens, ningún hex. */
+
+/* ── Página: el contenido de una pantalla bajo la barra superior ─────────── */
+.pn-pagina {
+  position: relative;
+  z-index: var(--z-page);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-5);
+  padding: var(--sp-4) var(--lt-gap) var(--sp-8) 8px;
+  min-width: 0;
+}
+
+/* ── Fila de KPI ─────────────────────────────────────────────────────────── */
+.pn-kpis {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: var(--sp-4);
+}
+
+/* ── Tarjeta brasa de entrada (atmósfera cálida, sin fotos) ──────────────── */
+.pn-hero {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  min-width: 0;
+}
+.pn-over {
+  font: 500 var(--fs-micro) / 1 var(--font-mono);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink-on-brasa-muted);
+}
+.pn-big {
+  max-width: 16ch;
+  font: 500 var(--fs-display) / 1.08 var(--font-display);
+  letter-spacing: -0.015em;
+}
+.pn-sub {
+  max-width: 52ch;
+  font: 400 var(--fs-body) / 1.5 var(--font-sans);
+  color: var(--ink-on-brasa-muted);
+}
+.pn-fila {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-3);
+}
+.pn-hero .pn-fila {
+  margin-top: var(--sp-3);
+}
+
+/* ── Rejilla de tarjetas ─────────────────────────────────────────────────── */
+.pn-rejilla {
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  gap: var(--sp-4);
+}
+.pn-c4 { grid-column: span 4; min-width: 0; }
+.pn-c5 { grid-column: span 5; min-width: 0; }
+.pn-c6 { grid-column: span 6; min-width: 0; }
+.pn-c7 { grid-column: span 7; min-width: 0; }
+.pn-c8 { grid-column: span 8; min-width: 0; }
+.pn-c12 { grid-column: 1 / -1; min-width: 0; }
+@media (max-width: 1100px) {
+  .pn-c4, .pn-c5, .pn-c6, .pn-c7, .pn-c8 { grid-column: 1 / -1; }
+}
+
+/* Contenido de tarjeta: cabecera + cuerpo con aire */
+.pn-tarjeta {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+  min-width: 0;
+}
+.pn-fuente {
+  margin-top: auto;
+  font: 400 var(--fs-micro) / 1.4 var(--font-mono);
+  color: var(--text-subtle);
+}
+.u-card--crema .pn-fuente { color: var(--ink-on-crema-muted); }
+.pn-centro {
+  display: flex;
+  justify-content: center;
+}
+
+/* Lista corta dentro de una tarjeta (variantes recientes, hallazgos, fuentes) */
+.pn-lista {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.pn-fila-item {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: var(--sp-3) var(--sp-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xl);
+  background: var(--surface-elevated);
+  color: inherit;
+  text-decoration: none;
+  min-width: 0;
+}
+a.pn-fila-item:hover {
+  border-color: var(--border-patina);
+  text-decoration: none;
+  color: inherit;
+}
+.pn-fila-ico {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-md);
+  background: linear-gradient(160deg, var(--brasa-fill-a), var(--brasa-fill-b));
+  color: var(--ink-on-brasa);
+}
+.pn-fila-txt {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+}
+.pn-fila-nm {
+  font: 500 var(--fs-ui) / 1.3 var(--font-sans);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pn-fila-sub {
+  font: 400 var(--fs-micro) / 1.4 var(--font-mono);
+  color: var(--text-subtle);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pn-fila-k {
+  flex: none;
+  min-width: 28px;
+  font: 500 var(--fs-body) / 1 var(--font-mono);
+  color: var(--text);
+}
+
+/* ── Sección plegable (Master, Revisión) ─────────────────────────────────── */
+.pn-sec {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+  min-width: 0;
+  scroll-margin-top: var(--sp-6);
+}
+.pn-sec-h {
+  display: flex;
+  align-items: baseline;
+  gap: var(--sp-3);
+  flex-wrap: wrap;
+}
+.pn-sec-t {
+  font: 500 var(--fs-h3) / 1.2 var(--font-display);
+  letter-spacing: -0.01em;
+  margin: 0;
+}
+.pn-sec-meta {
+  font: 400 var(--fs-micro) / 1 var(--font-mono);
+  color: var(--text-subtle);
+}
+.pn-sec-acc {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+.pn-sec-fold {
+  font: 500 var(--fs-micro) / 1 var(--font-mono);
+  color: var(--text-muted);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  padding: 7px 12px;
+}
+.pn-sec-fold:hover {
+  color: var(--accent-text);
+  border-color: var(--border-patina);
+}
+.pn-sec-fold:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+.pn-sec.folded {
+  gap: 0;
+}
+
+/* ── Barra de herramientas: búsqueda + pestañas + recuento ──────────────── */
+.pn-herr {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  flex-wrap: wrap;
+}
+.pn-buscar {
+  position: relative;
+  flex: 1 1 240px;
+  max-width: 420px;
+  min-width: 0;
+}
+.pn-buscar .u-ico,
+.pn-buscar svg {
+  position: absolute;
+  left: 14px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--text-subtle);
+  pointer-events: none;
+}
+.pn-buscar input {
+  width: 100%;
+  height: 42px;
+  padding: 0 var(--sp-4) 0 40px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  background: var(--surface-elevated);
+  color: var(--text);
+  font: 400 var(--fs-ui) / 1 var(--font-sans);
+}
+.pn-buscar input:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+.pn-cuenta {
+  font: 400 var(--fs-micro) / 1 var(--font-mono);
+  color: var(--text-subtle);
+}
+.pn-herr-acc {
+  margin-left: auto;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  align-items: center;
+}
+
+@media (max-width: 768px) {
+  .pn-pagina {
+    padding: var(--sp-3) var(--sp-4) calc(var(--sp-8) + 72px);
+    gap: var(--sp-4);
+  }
+  .pn-kpis {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--sp-3);
+  }
+  .pn-big {
+    font-size: var(--fs-h2);
+  }
+  .pn-herr-acc {
+    margin-left: 0;
+  }
+}
+
+.pn-lista--rejilla {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+}

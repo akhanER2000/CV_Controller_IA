@@ -10,7 +10,7 @@ body{background:var(--bg)}
 /* En estrecho manda LA SALIDA: cae el rótulo de paso y su separador; el botón
    volver no cae nunca. */
 @media (max-width:768px){.stg-hd-step,.stg-hd-sep--step{display:none}}
-.stg-sub{position:sticky;top:var(--header-h);z-index:9;background:color-mix(in srgb,var(--bg) 86%,transparent);
+.stg-sub{position:sticky;top:0;z-index:9;background:color-mix(in srgb,var(--bg) 86%,transparent);
   backdrop-filter:blur(8px);border-bottom:1px solid var(--border)}
 .stg-sub .c-container{display:flex;align-items:center;gap:20px;padding-block:12px;flex-wrap:wrap}
 .stg-title{font:500 var(--fs-h3)/1 var(--font-display);letter-spacing:0}
@@ -30,7 +30,7 @@ body{background:var(--bg)}
 .stg-lead p{color:var(--text-muted);font-size:var(--fs-ui);max-width:62ch}
 .stg-lead p b{color:var(--text);font-weight:500}
 /* grupos */
-.stg-g{margin-top:44px}
+.stg-g{margin-top:var(--sp-5)}
 .stg-gh{display:flex;align-items:baseline;gap:14px;padding-bottom:10px}
 .stg-gh .cnt{font:400 var(--fs-micro)/1 var(--font-mono);color:var(--text-subtle)}
 .stg-gh .accd{font:400 var(--fs-micro)/1 var(--font-mono);color:var(--ver-ok);cursor:pointer}
@@ -260,3 +260,11 @@ body{background:var(--bg)}
   .stg-mhead,.stg-mrow{grid-template-columns:1fr;gap:0}
   .stg-mhead>div:first-child,.stg-mrow>.k{border-top:1px solid var(--border)}
 }
+/* ── Forja v2 (panel-datos) ──────────────────────────────────────────────────
+   Sin cabecera de pantalla: la miga y el paso abren la página bajo la barra
+   superior del shell; luego la fila KPI y la barra de filtros + búsqueda. Los
+   grupos son tarjetas plegables (SeccionPlegable). */
+.stg-crumb--v2{padding-top:var(--sp-3)}
+.stg-kpis{margin-top:var(--sp-4);margin-bottom:var(--sp-4)}
+.stg-buscar{flex:0 1 280px}
+.stg-g .stg-card{margin-top:var(--sp-3)}

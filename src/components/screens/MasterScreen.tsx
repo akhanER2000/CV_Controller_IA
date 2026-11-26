@@ -8,6 +8,9 @@ import { supabaseEnabled } from "@/lib/supabase/config";
 import { normalizeDateRange, type DateRange } from "@/lib/extract/dates";
 import { AuroraTune, AURORA_HOJEO, AURORA_TRABAJO } from "@/components/Aurora";
 import { useUndoToast } from "@/components/UndoToast";
+import { Card, KpiCard } from "@/components/ui";
+import { SeccionPlegable } from "@/components/panel/SeccionPlegable";
+import "@/components/panel/panel.css";
 import {
   looksLikeSkillTag,
   splitChipInput,
@@ -3108,17 +3111,20 @@ export function MasterScreen() {
   const groupSection = (id: string, title: string, cnt: string, body: ReactNode): ReactNode => {
     const isFolded = folded.has(id);
     return (
-      <section className={`ms-g${isFolded ? " folded" : ""}`} id={id} key={id}>
-        <div className="ms-gh">
-          <span className="t-overline">{title}</span>
-          <span className="cnt">{cnt}</span>
-          <button type="button" className="fold" data-fold aria-expanded={!isFolded} onClick={() => toggleFold(id)}>
-            {isFolded ? t("master.fold.expand") : t("master.fold.collapse")}
-          </button>
-        </div>
-        <hr className="c-divider" />
-        <div className="ms-body">{body}</div>
-      </section>
+      <SeccionPlegable
+        key={id}
+        id={id}
+        className="ms-g"
+        claseCuerpo="ms-body"
+        titulo={title}
+        meta={cnt}
+        plegada={isFolded}
+        onPlegar={() => toggleFold(id)}
+        etiquetaPlegar={t("master.fold.collapse")}
+        etiquetaDesplegar={t("master.fold.expand")}
+      >
+        {body}
+      </SeccionPlegable>
     );
   };
 
@@ -3676,11 +3682,11 @@ export function MasterScreen() {
 
   const contactBlock = (): ReactNode => (
     <section id="contacto" key="contacto">
-      <div className="ms-gh">
-        <span className="t-overline">{t("master.contact.overline")}</span>
-        <span className="cnt">{t("master.contact.cnt")}</span>
-      </div>
-      <hr className="c-divider" />
+      <Card grande className="pn-sec">
+      <header className="pn-sec-h">
+        <h2 className="pn-sec-t">{t("master.contact.overline")}</h2>
+        <span className="pn-sec-meta cnt">{t("master.contact.cnt")}</span>
+      </header>
       <div className="ms-body">
         {v && v.basics ? (
           contactCard(v.basics)
@@ -3690,41 +3696,26 @@ export function MasterScreen() {
           </button>
         )}
       </div>
+      </Card>
     </section>
   );
 
   return (
-    <div className="c-page">
+    <div className="c-page ms-page">
       {/* El registro poblado es trabajo denso; vacío es una sala de puertas. */}
       <AuroraTune strength={isEmpty ? AURORA_HOJEO : AURORA_TRABAJO} />
 
-      <header className="c-header">
-        <div className="c-container">
-          <Link className="c-logo" href="/app">
-            Corpus
-          </Link>
-          <nav className="hd-nav">
-            <Link href="/app">{t("nav.panel")}</Link>
-            <Link href="/app/master" aria-current="page">
-              {t("nav.master")}
-            </Link>
-            <Link href="/app/variantes">{t("nav.variantes")}</Link>
-            <Link href="/app/fuentes">{t("nav.fuentes")}</Link>
-          </nav>
-          <div className="hd-right">
-            <Link href="/app/ajustes" className="hd-nav" style={{ display: "inline-flex" }}>
-              <span style={{ font: "500 var(--fs-ui)/1 var(--font-sans)", color: "var(--text-muted)", padding: "9px 12px" }}>
-                {t("nav.ajustes")}
-              </span>
-            </Link>
-            <div className="hd-lang">
-              <span data-on>ES</span>
-              <span>EN</span>
-            </div>
-            <div className="hd-av">DG</div>
-          </div>
-        </div>
-      </header>
+
+      {/* Fila KPI (Forja v2). Cada cifra sale del registro cargado de
+          GET /api/master (getMasterItems): la misma vista `v` que pinta la página. */}
+      {!loading && v && !isEmpty ? (
+        <section className="pn-kpis ms-kpis" aria-label={t("master.v2.kpiAria")}>
+          <KpiCard etiqueta={t("master.v2.kpi.items")} valor={total} fuente={t("master.v2.fuente.master")} icono="master" material="brasa" />
+          <KpiCard etiqueta={t("master.v2.kpi.roles")} valor={v.roles.length} fuente={t("master.v2.fuente.experience")} icono="doc" />
+          <KpiCard etiqueta={t("master.v2.kpi.skills")} valor={v.skills.length} fuente={t("master.v2.fuente.skills")} icono="ajustes" />
+          <KpiCard etiqueta={t("master.v2.kpi.projects")} valor={v.projects.length} fuente={t("master.v2.fuente.projects")} icono="variantes" />
+        </section>
+      ) : null}
 
       <div className="ms-sub" data-screen-label="master-toolbar">
         <div className="c-container">
@@ -3777,7 +3768,7 @@ export function MasterScreen() {
                   ChatGPT) y lo subes por la puerta 3 de Importar. Ancla plana
                   con `download`: el Content-Disposition lo pone el servidor,
                   igual que la descarga de datos de Ajustes. */}
-              <a className="c-btn" id="btnMasterMd" href="/api/master/plantilla" download title={t("master.plantilla.title")}>
+              <a className="u-btn u-btn--grafito" id="btnMasterMd" href="/api/master/plantilla" download title={t("master.plantilla.title")}>
                 {t("master.plantilla.descargar")}
               </a>
               {/* Las otras dos versiones del MISMO fichero: el esqueleto en
@@ -3806,7 +3797,7 @@ export function MasterScreen() {
               {!loading && !isEmpty ? (
                 <button
                   type="button"
-                  className="c-btn c-btn--patina ms-barrido-cta"
+                  className="u-btn u-btn--brasa ms-barrido-cta"
                   aria-expanded={barOpen}
                   disabled={barBusy}
                   onClick={runBarrido}
@@ -3822,7 +3813,7 @@ export function MasterScreen() {
               {!loading && !isEmpty && trEstado && trEstado.items > 0 ? (
                 <button
                   type="button"
-                  className="c-btn c-btn--patina ms-barrido-cta"
+                  className="u-btn u-btn--brasa ms-barrido-cta"
                   aria-expanded={trOpen}
                   disabled={trBusy}
                   title={t("master.tr.ctaTitle")
@@ -3837,7 +3828,7 @@ export function MasterScreen() {
               <div className="ms-addwrap">
               <button
                 type="button"
-                className="c-btn"
+                className="u-btn u-btn--grafito"
                 id="btnAdd"
                 aria-haspopup="menu"
                 aria-expanded={addMenu}
@@ -4141,10 +4132,10 @@ export function MasterScreen() {
             <h2 style={{ marginTop: "14px" }}>{t("master.empty.title")}</h2>
             <p>{t("master.empty.body")}</p>
             <div style={{ display: "flex", gap: "10px", justifyContent: "center", marginTop: "24px", flexWrap: "wrap" }}>
-              <Link className="c-btn c-btn--patina" href="/app/importar">
+              <Link className="u-btn u-btn--brasa" href="/app/importar">
                 {t("master.empty.dump")}
               </Link>
-              <Link className="c-btn" href="/app/onboarding">
+              <Link className="u-btn u-btn--grafito" href="/app/onboarding">
                 {t("master.empty.scratch")}
               </Link>
             </div>
@@ -4156,7 +4147,7 @@ export function MasterScreen() {
             <div className="ms-empty__pl">
               <p>{t("master.empty.plantillaNote")}</p>
               <div className="ms-empty__plrow">
-                <a className="c-btn" href="/api/master/plantilla" download>
+                <a className="u-btn u-btn--grafito" href="/api/master/plantilla" download>
                   {t("master.empty.plantilla")}
                 </a>
                 {/* ★ Con el master vacío, el ejemplo relleno vale MÁS que el
