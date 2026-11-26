@@ -9,7 +9,18 @@ import { AuroraTune, AURORA_HOJEO } from "@/components/Aurora";
 import { useUndoToast } from "@/components/UndoToast";
 import { Breadcrumb, ORIGIN_PARAM, isInternalAppPath } from "@/components/Breadcrumb";
 import { Button, Card, Chip, EmptyState, Icono, PageHeader, StatusChip, Tabs } from "@/components/ui";
+import { AnchoFijo, Progreso } from "@/components/ui/Progreso";
 import { filtrarVariantes, type EstadoVariante } from "@/components/panel/datos";
+import {
+  CLAVE_ORDEN,
+  ORDEN_POR_DEFECTO,
+  esOrden,
+  fechaCompleta,
+  fechaCorta,
+  fechaRelativaDia,
+  ordenarIndices,
+  type OrdenVariantes,
+} from "./variantes-fechas";
 import "@/components/panel/panel.css";
 import "./variantes.css";
 
@@ -49,7 +60,11 @@ type Variant = {
   /** target_title crudo (null/"" = candidato a «borrador»). */
   rawObj?: string | null;
   pg: string;
+  /** Texto relativo de la maqueta local. Con datos reales manda createdAt/updatedAt. */
   touch: string;
+  /** Fechas REALES de cv_variants (ISO). Solo en modo Supabase; la maqueta no tiene. */
+  createdAt?: string;
+  updatedAt?: string;
   old: boolean;
 };
 
@@ -186,6 +201,8 @@ export function VariantesScreen() {
   const [paginas, setPaginas] = useState<Record<string, number>>({});
   const [busqueda, setBusqueda] = useState("");
   const [estado, setEstado] = useState<EstadoVariante>("todas");
+  // Orden de la lista, recordado en este navegador (preferencia de vista, no dato).
+  const [orden, setOrden] = useState<OrdenVariantes>(ORDEN_POR_DEFECTO);
   const undo = useUndoToast();
 
   // Creación de variantes. El tercer modo ("tailor") es la TERCERA PUERTA: crear un
@@ -196,6 +213,10 @@ export function VariantesScreen() {
   const [creating, setCreating] = useState<"manual" | "ai" | "tailor" | null>(null);
   const [createErr, setCreateErr] = useState("");
   const [aiResult, setAiResult] = useState<{ id: string; name: string; notes: string | null } | null>(null);
+  // Progreso por PASOS REALES de lo que está en vuelo (crear, analizar, duplicar):
+  // el paso lo marca cada función cuando de verdad lo alcanza. Flotante: no
+  // desplaza ningún botón. Al navegar al editor la pantalla se desmonta con él.
+  const [prog, setProg] = useState<{ pasos: string[]; paso: number } | null>(null);
 
   // Tercera puerta: el aviso pegado (o su enlace) y la PROPUESTA a revisar antes de crear.
   const [offerDraft, setOfferDraft] = useState("");
@@ -222,13 +243,15 @@ export function VariantesScreen() {
         const res = await fetch("/api/variants");
         const data = await res.json();
         if (!active) return;
-        const list = ((data.variants ?? []) as { id: string; name: string; targetTitle: string | null; updatedAt: string; outdated: boolean }[]).map((x) => ({
+        const list = ((data.variants ?? []) as { id: string; name: string; targetTitle: string | null; createdAt?: string; updatedAt: string; outdated: boolean }[]).map((x) => ({
           id: x.id,
           nm: x.name,
           obj: x.targetTitle || t("variantes.noObjective"),
           rawObj: x.targetTitle,
           pg: "",
           touch: t("dashboard.variant.touched").replace("{rel}", rel(x.updatedAt, t)),
+          createdAt: x.createdAt,
+          updatedAt: x.updatedAt,
           old: x.outdated,
         }));
         setVariants(list);
@@ -360,11 +383,12 @@ export function VariantesScreen() {
     if (!supabaseEnabled || !v.id || busyId) return;
     setBusyId(v.id);
     setCreateErr("");
+    setProg({ pasos: [t("variantes.prog.duplicando")], paso: 0 });
     try {
       const res = await fetch(`/api/variants/${v.id}/duplicate`, { method: "POST" });
       if (!res.ok) throw new Error();
       const { variant } = (await res.json()) as {
-        variant: { id: string; name: string; target_title: string | null; master_seen_at: string | null; updated_at: string };
+        variant: { id: string; name: string; target_title: string | null; master_seen_at: string | null; created_at?: string; updated_at: string };
       };
       const row: Variant = {
         id: variant.id,
@@ -373,6 +397,8 @@ export function VariantesScreen() {
         rawObj: variant.target_title,
         pg: "",
         touch: t("dashboard.variant.touched").replace("{rel}", rel(variant.updated_at, t)),
+        createdAt: variant.created_at,
+        updatedAt: variant.updated_at,
         old: false,
       };
       setVariants((prev) => {
@@ -385,6 +411,7 @@ export function VariantesScreen() {
       setCreateErr(t("variantes.errDuplicate"));
     } finally {
       setBusyId(null);
+      setProg(null);
     }
   }
 
@@ -460,6 +487,8 @@ export function VariantesScreen() {
       return;
     }
     setCreating("manual");
+    const pasosManual = [t("variantes.prog.creando"), t("variantes.prog.abriendo")];
+    setProg({ pasos: pasosManual, paso: 0 });
     try {
       const res = await fetch("/api/variants", {
         method: "POST",
@@ -468,9 +497,11 @@ export function VariantesScreen() {
       });
       if (!res.ok) throw new Error();
       const { variant } = (await res.json()) as { variant: { id: string } };
+      setProg({ pasos: pasosManual, paso: 1 });
       router.push(`/app/variantes/${variant.id}`);
     } catch {
       setCreating(null);
+      setProg(null);
       setCreateErr(t("variantes.errManual"));
     }
   }
@@ -489,6 +520,8 @@ export function VariantesScreen() {
       return;
     }
     setCreating("ai");
+    const pasosIA = [t("variantes.prog.aiArmando"), t("variantes.prog.abriendo")];
+    setProg({ pasos: pasosIA, paso: 0 });
     try {
       const res = await fetch("/api/variants", {
         method: "POST",
@@ -498,11 +531,14 @@ export function VariantesScreen() {
       if (!res.ok) throw new Error();
       const { variant, notes } = (await res.json()) as { variant: { id: string; name: string }; notes?: string };
       setAnnounce(t("variantes.announceAiCreated").replace("{nm}", variant.name));
+      // Paso 2 real: la variante existe y se navega a su editor. `creating` se
+      // queda puesto para que nada se pueda pulsar mientras se va.
+      setProg({ pasos: pasosIA, paso: 1 });
       abrirRecienCreada(variant.id, notes);
     } catch {
       setCreateErr(t("variantes.errAi"));
-    } finally {
       setCreating(null);
+      setProg(null);
     }
   }
 
@@ -528,6 +564,7 @@ export function VariantesScreen() {
       return;
     }
     setCreating("tailor");
+    setProg({ pasos: [t("variantes.prog.analizando")], paso: 0 });
     try {
       const res = await fetch("/api/tailor/analizar", {
         method: "POST",
@@ -558,6 +595,7 @@ export function VariantesScreen() {
       setCreateErr(t("variantes.tailorErr"));
     } finally {
       setCreating(null);
+      setProg(null);
     }
   }
 
@@ -565,6 +603,8 @@ export function VariantesScreen() {
     if (creating || !tailorProposal || tailorProposal.includeIds.length === 0) return;
     setCreateErr("");
     setCreating("tailor");
+    const pasosOferta = [t("variantes.prog.creando"), t("variantes.prog.abriendo")];
+    setProg({ pasos: pasosOferta, paso: 0 });
     try {
       const res = await fetch("/api/variants", {
         method: "POST",
@@ -584,11 +624,12 @@ export function VariantesScreen() {
       setTailorProposal(null);
       setOfferDraft("");
       setAnnounce(t("variantes.announceAiCreated").replace("{nm}", variant.name));
+      setProg({ pasos: pasosOferta, paso: 1 });
       abrirRecienCreada(variant.id, notes);
     } catch {
       setCreateErr(t("variantes.tailorErr"));
-    } finally {
       setCreating(null);
+      setProg(null);
     }
   }
 
@@ -647,14 +688,35 @@ export function VariantesScreen() {
     setPaginas(out);
   }, [variants]);
 
+  // El orden recordado se lee ya montado (leerlo al renderizar haría discrepar
+  // servidor y cliente); en modo privado puede lanzar y se queda el de siempre.
+  useEffect(() => {
+    try {
+      const guardado = window.localStorage.getItem(CLAVE_ORDEN);
+      if (esOrden(guardado)) setOrden(guardado);
+    } catch {
+      /* sin almacenamiento: orden por defecto */
+    }
+  }, []);
+  function cambiarOrden(o: OrdenVariantes) {
+    setOrden(o);
+    try {
+      window.localStorage.setItem(CLAVE_ORDEN, o);
+    } catch {
+      /* sin almacenamiento: vale para esta visita */
+    }
+  }
+
   // Panel de creación (se muestra en el lead y, con master, también en el vacío).
   const createPanel = (
     <div className="vr-create">
       <div
         className="c-card"
-        style={{ padding: "18px 20px", display: "grid", gap: "16px", textAlign: "left", maxWidth: "760px", margin: "0 auto" }}
+        style={{ padding: "18px 20px", display: "grid", gap: "16px", textAlign: "left" }}
       >
-        <div>
+        {/* Las tres puertas llevan clase propia: en el hero de escritorio se
+            reparten en dos columnas (variantes.css); en el vacío, apiladas. */}
+        <div className="vr-puerta vr-puerta--ia">
           <label htmlFor="aiPrompt" className="t-overline" style={{ display: "block", marginBottom: "8px" }}>
             {t("variantes.aiLabel")}
           </label>
@@ -674,7 +736,7 @@ export function VariantesScreen() {
               disabled={creating !== null || !aiPrompt.trim()}
               onClick={() => void createAI()}
             >
-              {creating === "ai" ? t("variantes.aiCreating") : t("variantes.aiCreate")}
+              <AnchoFijo ocupado={creating === "ai"} reposo={t("variantes.aiCreate")} carga={t("variantes.aiCreating")} />
             </button>
             <span style={{ font: "400 var(--fs-micro)/1.5 var(--font-mono)", color: "var(--text-subtle)", maxWidth: "52ch" }}>
               {t("variantes.aiHint")}
@@ -682,16 +744,7 @@ export function VariantesScreen() {
           </div>
         </div>
 
-        <div
-          style={{
-            borderTop: "1px solid var(--border)",
-            paddingTop: "14px",
-            display: "flex",
-            alignItems: "center",
-            gap: "10px",
-            flexWrap: "wrap",
-          }}
-        >
+        <div className="vr-puerta vr-puerta--manual">
           <input
             className="c-input"
             aria-label={t("variantes.nameAria")}
@@ -701,7 +754,7 @@ export function VariantesScreen() {
             style={{ maxWidth: "280px" }}
           />
           <button type="button" className="c-btn" disabled={creating !== null} onClick={() => void createManual()}>
-            {creating === "manual" ? t("variantes.manualCreating") : t("variantes.manualCreate")}
+            <AnchoFijo ocupado={creating === "manual"} reposo={t("variantes.manualCreate")} carga={t("variantes.manualCreating")} />
           </button>
           <span style={{ font: "400 var(--fs-micro)/1.5 var(--font-mono)", color: "var(--text-subtle)" }}>
             {t("variantes.manualHint")}
@@ -712,7 +765,7 @@ export function VariantesScreen() {
             Mismo separador borderTop que las dos puertas de arriba. Analiza el
             aviso (o su enlace) contra tu master y propone selección + título; tú
             revisas antes de crear. Nunca inventa, nunca un score. */}
-        <div style={{ borderTop: "1px solid var(--border)", paddingTop: "14px" }}>
+        <div className="vr-puerta vr-puerta--oferta">
           <label htmlFor="offerDraft" className="t-overline" style={{ display: "block", marginBottom: "8px" }}>
             {t("variantes.tailorLabel")}
           </label>
@@ -732,7 +785,11 @@ export function VariantesScreen() {
               disabled={creating !== null || offerDraft.trim().length < 4}
               onClick={() => void analizarOferta()}
             >
-              {creating === "tailor" && !tailorProposal ? t("variantes.tailorAnalyzing") : t("variantes.tailorAnalyze")}
+              <AnchoFijo
+                ocupado={creating === "tailor" && !tailorProposal}
+                reposo={t("variantes.tailorAnalyze")}
+                carga={t("variantes.tailorAnalyzing")}
+              />
             </button>
             <span style={{ font: "400 var(--fs-micro)/1.5 var(--font-mono)", color: "var(--text-subtle)", maxWidth: "52ch" }}>
               {t("variantes.tailorHint")}
@@ -741,7 +798,7 @@ export function VariantesScreen() {
         </div>
 
         {createErr ? (
-          <p style={{ font: "400 var(--fs-micro)/1.6 var(--font-mono)", color: "var(--danger)", margin: 0 }} role="alert">
+          <p className="vr-create-err" style={{ font: "400 var(--fs-micro)/1.6 var(--font-mono)", color: "var(--danger)", margin: 0 }} role="alert">
             {createErr}
           </p>
         ) : null}
@@ -786,7 +843,7 @@ export function VariantesScreen() {
               disabled={creating !== null || tailorProposal.selectionCount === 0}
               onClick={() => void crearDesdeOferta()}
             >
-              {creating === "tailor" ? t("variantes.tailorCreating") : t("variantes.tailorCreate")}
+              <AnchoFijo ocupado={creating === "tailor"} reposo={t("variantes.tailorCreate")} carga={t("variantes.tailorCreating")} />
             </button>
             <button
               type="button"
@@ -846,6 +903,10 @@ export function VariantesScreen() {
   // las acciones de fila (renombrar, duplicar, eliminar, desplegar) trabajan con el
   // índice de `variants`, así que las ocultas devuelven null en su sitio.
   const visibles = new Set(filtrarVariantes(variants, busqueda, estado));
+  // El orden también va por ÍNDICE: se pinta en otro orden, pero cada fila
+  // conserva el índice de `variants` con el que trabajan sus acciones.
+  const enOrden = ordenarIndices(variants, orden, lang);
+  const textosDia = { hoy: t("variantes.v2.today"), ayer: t("variantes.v2.yesterday") };
   const nAlDia = variants.filter((v) => !v.old).length;
   const nViejas = variants.length - nAlDia;
 
@@ -906,7 +967,20 @@ export function VariantesScreen() {
                 />
               </label>
             </div>
+            {/* Filtro (pestañas) y orden en la misma fila: el wrapper es una rejilla
+                y .vr-tabs se disuelve en ella (display:contents, ver variantes.css). */}
+            <div className="vr-filtros">
+            <label className="vr-orden">
+              <span>{t("variantes.v2.sortLabel")}</span>
+              <select value={orden} onChange={(e) => cambiarOrden(e.target.value as OrdenVariantes)} data-testid="vr-orden">
+                <option value="recientes">{t("variantes.v2.sortRecent")}</option>
+                <option value="antiguas">{t("variantes.v2.sortOldest")}</option>
+                <option value="editadas">{t("variantes.v2.sortEdited")}</option>
+                <option value="nombre">{t("variantes.v2.sortName")}</option>
+              </select>
+            </label>
             <Tabs
+              className="vr-tabs"
               etiqueta={t("variantes.v2.filterAria")}
               valor={estado}
               onCambio={(id) => setEstado(id as EstadoVariante)}
@@ -920,7 +994,8 @@ export function VariantesScreen() {
                 <EmptyState titulo={t("variantes.v2.noMatchT")} texto={t("variantes.v2.noMatchB")} icono="buscar" />
               ) : null}
               <div className="vr-list" id="list">
-                {variants.map((v, i) => {
+                {enOrden.map((i) => {
+                  const v = variants[i]!;
                   if (!visibles.has(v)) return null;
                   const open = openRows.has(i);
                   const diffId = `vr-diff-${i}`;
@@ -1029,7 +1104,23 @@ export function VariantesScreen() {
                           ) : null}
                         </span>
                         <span className="meta">
-                          {v.touch}
+                          {v.createdAt || v.updatedAt ? (
+                            <>
+                              {v.createdAt ? (
+                                <time dateTime={v.createdAt} title={fechaCompleta(v.createdAt, lang)}>
+                                  {t("variantes.v2.created").replace("{f}", fechaCorta(v.createdAt, lang))}
+                                </time>
+                              ) : null}
+                              {v.createdAt && v.updatedAt ? " · " : null}
+                              {v.updatedAt ? (
+                                <time dateTime={v.updatedAt} title={fechaCompleta(v.updatedAt, lang)}>
+                                  {t("variantes.v2.edited").replace("{f}", fechaRelativaDia(v.updatedAt, lang, textosDia))}
+                                </time>
+                              ) : null}
+                            </>
+                          ) : (
+                            v.touch
+                          )}
                           {v.pg ? ` · ${v.pg}` : ""}
                         </span>
                       </div>
@@ -1103,6 +1194,7 @@ export function VariantesScreen() {
                 })}
               </div>
             </Tabs>
+            </div>
           </section>
         )}
 
@@ -1140,6 +1232,7 @@ export function VariantesScreen() {
         )}
       </main>
       {undo.node}
+      <Progreso activo={prog !== null} pasos={prog?.pasos} paso={prog?.paso} id="vr-progreso" />
     </>
   );
 }

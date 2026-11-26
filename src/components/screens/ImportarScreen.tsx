@@ -8,6 +8,7 @@ import { DropZone } from "@/components/DropZone";
 import { BloqueCopiable } from "@/components/BloqueCopiable";
 import { Breadcrumb, readOrigin, withOrigin } from "@/components/Breadcrumb";
 import { Button, Card, Chip, Icono, PageHeader, PanelHeader, StatusChip } from "@/components/ui";
+import { AnchoFijo, Progreso } from "@/components/ui/Progreso";
 import { Pasos } from "@/components/cuenta/Pasos";
 import { createClient } from "@/lib/supabase/client";
 import { fileKindFromName, FILE_ACCEPT, type FileKind } from "@/lib/db/sources";
@@ -371,6 +372,9 @@ export function ImportarScreen() {
   const [plTexto, setPlTexto] = useState("");
   const [plBusy, setPlBusy] = useState(false);
   const [plConfBusy, setPlConfBusy] = useState(false);
+  // Paso REAL en curso de la plantilla (variantes-fechas · Progreso):
+  // leer → 0 leyendo el archivo, 1 analizándolo; confirmar → 0 guardando, 1 abriendo.
+  const [plFase, setPlFase] = useState(0);
   const [plErr, setPlErr] = useState<string | null>(null);
   const [plInf, setPlInf] = useState<Informe | null>(null);
   /* La respuesta que NO supimos leer, tal cual. Se enseña en vez de fingir un
@@ -646,6 +650,7 @@ export function ImportarScreen() {
     }
 
     setPlBusy(true);
+    setPlFase(0);
     try {
       const texto = await file.text();
       if (!texto.trim()) {
@@ -653,6 +658,7 @@ export function ImportarScreen() {
         return;
       }
       setPlTexto(texto);
+      setPlFase(1);
       const res = await fetch("/api/import/corpus-md", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -690,6 +696,7 @@ export function ImportarScreen() {
   async function confirmarPlantilla() {
     if (!plInf || plConfBusy) return;
     setPlConfBusy(true);
+    setPlFase(0);
     setPlErr(null);
     try {
       const res = await fetch("/api/import/corpus-md", {
@@ -714,6 +721,7 @@ export function ImportarScreen() {
       }
       // A staging, arrastrando el origen: "volver" desde la revisión tiene que
       // devolverte al sitio del que saliste, no a esta pantalla.
+      setPlFase(1);
       router.push(withOrigin("/app/staging", origen));
     } catch (e) {
       setPlErr(e instanceof Error ? e.message : t("importar.pl.failed"));
@@ -859,6 +867,22 @@ export function ImportarScreen() {
   }
 
   const filas: LineaFuente[] = progreso?.fuentes ?? [];
+
+  // Un solo indicador flotante (no desplaza nada) con lo que está en vuelo de
+  // verdad: confirmar la plantilla, leerla, o subir archivos del volcado.
+  const nSubiendo = files.filter((f) => f.status === "uploading").length;
+  const progImp: { pasos?: string[]; paso?: number; etiqueta?: string } | null = plConfBusy
+    ? { pasos: [t("importar.prog.guardando"), t("importar.prog.abriendo")], paso: plFase }
+    : plBusy
+      ? { pasos: [t("importar.prog.leyendo"), t("importar.prog.analizando")], paso: plFase }
+      : nSubiendo > 0
+        ? {
+            etiqueta: (nSubiendo === 1 ? t("importar.prog.subiendoUno") : t("importar.prog.subiendo")).replace(
+              "{n}",
+              String(nSubiendo),
+            ),
+          }
+        : null;
 
   return (
     <div className="c-page">
@@ -1370,7 +1394,11 @@ export function ImportarScreen() {
                             disabled={plConfBusy}
                             onClick={() => void confirmarPlantilla()}
                           >
-                            {plConfBusy ? t("importar.pl.inf.confirmando") : t("importar.pl.inf.confirmar")}
+                            <AnchoFijo
+                              ocupado={plConfBusy}
+                              reposo={t("importar.pl.inf.confirmar")}
+                              carga={t("importar.pl.inf.confirmando")}
+                            />
                           </Button>
                           <Button variante="fantasma" className="imp-pl__cancel" onClick={resetPlantilla}>
                             {t("importar.pl.inf.cancelar")}
@@ -1656,6 +1684,13 @@ export function ImportarScreen() {
           </div>
         </main>
       </div>
+      <Progreso
+        activo={progImp !== null}
+        pasos={progImp?.pasos}
+        paso={progImp?.paso}
+        etiqueta={progImp?.etiqueta}
+        id="imp-progreso"
+      />
     </div>
   );
 }

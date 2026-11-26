@@ -420,7 +420,7 @@ export async function duplicateVariant(
   sb: SB,
   userId: string,
   variantId: string,
-): Promise<{ id: string; name: string; target_title: string | null; lang: string; master_seen_at: string | null; updated_at: string }> {
+): Promise<{ id: string; name: string; target_title: string | null; lang: string; master_seen_at: string | null; created_at: string; updated_at: string }> {
   const { data: src, error: srcErr } = await sb
     .from("cv_variants")
     .select("id,name,target_title,lang,profile_id")
@@ -442,7 +442,7 @@ export async function duplicateVariant(
       archived: false,
       master_seen_at: now,
     })
-    .select("id,name,target_title,lang,master_seen_at,updated_at")
+    .select("id,name,target_title,lang,master_seen_at,created_at,updated_at")
     .single();
   if (dupErr) throw new Error(`No se pudo duplicar la variante: ${dupErr.message}`);
 
@@ -476,6 +476,7 @@ export async function duplicateVariant(
     target_title: (dup.target_title as string | null) ?? null,
     lang: (dup.lang as string) ?? "es",
     master_seen_at: (dup.master_seen_at as string | null) ?? null,
+    created_at: dup.created_at as string,
     updated_at: dup.updated_at as string,
   };
 }

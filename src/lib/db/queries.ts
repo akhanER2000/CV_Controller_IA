@@ -536,6 +536,8 @@ export interface VariantSummary {
   name: string;
   targetTitle: string | null;
   lang: string;
+  /** created_at real de cv_variants (fecha de creación en la tarjeta). */
+  createdAt: string;
   updatedAt: string;
   masterSeenAt: string;
   /** el master cambió después de la última vez que esta variante lo "vio" */
@@ -547,7 +549,7 @@ export async function listVariants(sb: SB, userId: string): Promise<VariantSumma
   const [{ data, error }, mUpdated] = await Promise.all([
     sb
       .from("cv_variants")
-      .select("id,name,target_title,lang,updated_at,master_seen_at")
+      .select("id,name,target_title,lang,created_at,updated_at,master_seen_at")
       .eq("user_id", userId)
       .eq("archived", false)
       .order("updated_at", { ascending: false }),
@@ -562,6 +564,7 @@ export async function listVariants(sb: SB, userId: string): Promise<VariantSumma
       name: (r.name as string) ?? "Variante",
       targetTitle: (r.target_title as string | null) ?? null,
       lang: (r.lang as string) ?? "es",
+      createdAt: r.created_at as string,
       updatedAt: r.updated_at as string,
       masterSeenAt,
       outdated,

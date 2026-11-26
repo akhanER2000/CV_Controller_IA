@@ -7,7 +7,10 @@
    acciones siempre a la vista (antes aparecían al pasar el ratón). El hero es
    una tarjeta brasa con las tres puertas de creación dentro. */
 .vr-main{flex:1}
-.vr-hero{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.25fr);gap:var(--sp-5);align-items:start}
+/* variantes-fechas: antes era texto | panel en dos columnas; el texto es corto y
+   dejaba un hueco grande a la izquierda. Ahora el texto encabeza y el panel ocupa
+   el ancho entero, con sus puertas repartidas en dos columnas (más abajo). */
+.vr-hero{display:grid;grid-template-columns:minmax(0,1fr);gap:var(--sp-5);align-items:start}
 .vr-hero-txt{display:flex;flex-direction:column;gap:var(--sp-3);min-width:0}
 /* El panel de creación es grafito DENTRO de la brasa: recupera la tinta del tema
    (sobre brasa los hijos heredan la tinta oscura). */
@@ -61,5 +64,40 @@
 .vr-empty{max-width:560px;margin:90px auto 0;text-align:center;display:none}
 .vr-empty.show{display:block}
 .vr-empty p{margin-top:14px;color:var(--text-muted);line-height:1.7}
-@media (max-width:1100px){.vr-hero{grid-template-columns:minmax(0,1fr)}}
+/* Ancho del panel de creación: 760 px centrado (estado vacío); en el hero, el
+   ancho entero (regla .vr-hero .vr-create .c-card de arriba, max-width:none). */
+:where(.vr-create>.c-card:first-child){max-width:760px;margin-inline:auto}
+/* Puertas de creación. Apiladas por defecto (estado vacío, móvil), separadas
+   por un filete; las dos con caja de texto miden igual. */
+.vr-puerta--manual,.vr-puerta--oferta{border-top:1px solid var(--border);padding-top:14px}
+.vr-puerta--manual{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+/* Hero de escritorio: IA | oferta lado a lado y «nueva variante» a lo ancho
+   debajo. Ninguna acción se pierde; solo se reparte el espacio. */
+@media (min-width:1101px){
+  .vr-hero .vr-create .c-card{grid-template-columns:minmax(0,1fr) minmax(0,1fr);column-gap:var(--sp-5)}
+  .vr-hero .vr-puerta--ia{grid-column:1;grid-row:1}
+  .vr-hero .vr-puerta--oferta{grid-column:2;grid-row:1;border-top:0;padding-top:0;border-left:1px solid var(--border);padding-left:var(--sp-5)}
+  .vr-hero .vr-puerta--manual,.vr-hero .vr-create-err{grid-column:1/-1}
+}
 @media (max-width:768px){.vr-list{grid-template-columns:minmax(0,1fr)}.vr-acts{margin-left:0}}
+/* ── variantes-fechas · orden junto al filtro ─────────────────────────────────
+   Las pestañas y el selector de orden comparten fila; el panel de la pestaña
+   ocupa la fila de abajo entera. .vr-tabs se disuelve (display:contents) para
+   que su lista y su panel sean celdas de esta rejilla. */
+.vr-filtros{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;column-gap:var(--sp-3)}
+.vr-filtros .vr-tabs{display:contents}
+.vr-filtros .u-tabs-lista{grid-column:1;grid-row:1;justify-self:start}
+.vr-filtros .vr-orden{grid-column:2;grid-row:1}
+.vr-filtros .u-tabs-panel{grid-column:1/-1;grid-row:2}
+.vr-orden{display:flex;align-items:center;gap:var(--sp-2);font:400 var(--fs-micro)/1 var(--font-mono);color:var(--text-subtle)}
+.vr-orden select{height:42px;padding:0 var(--sp-4);border:1px solid var(--border);border-radius:var(--radius-pill);background:var(--surface-elevated);color:var(--text);font:500 var(--fs-ui)/1 var(--font-sans);cursor:pointer}
+.vr-orden select:focus-visible{outline:2px solid var(--focus-ring);outline-offset:2px}
+/* Fechas de la tarjeta: el title lleva la hora completa; el subrayado punteado
+   avisa de que hay más al pasar el ratón. */
+.vr-top .meta time{text-decoration:underline dotted var(--border-strong);text-underline-offset:3px;cursor:help}
+@media (max-width:768px){
+  .vr-filtros{grid-template-columns:minmax(0,1fr);row-gap:var(--sp-3)}
+  .vr-filtros .vr-orden{grid-column:1;grid-row:1}
+  .vr-filtros .u-tabs-lista{grid-row:2}
+  .vr-filtros .u-tabs-panel{grid-row:3}
+}
