@@ -61,3 +61,6 @@
 .edx-nav-b .n{font:400 10px/1 var(--font-mono);color:var(--text-subtle)}
 .edx-nav-b .h{display:inline-grid;place-items:center;min-width:17px;height:17px;padding:0 4px;border-radius:var(--radius-pill);
   font:600 10px/1 var(--font-mono);color:var(--accent-text);border:1px solid var(--border-brasa)}
+
+/* ── Foto de Presentación: la miniatura con la proporción del CV (35 × 45) ── */
+.var-pres .photo-row .photo-thumb{height:auto;aspect-ratio:35/45}

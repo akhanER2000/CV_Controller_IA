@@ -59,7 +59,7 @@ function guardar(variantId: string, modo: ModoTexto, textos: TextoAfinado[]) {
 }
 
 export function useAfinar(ed: Editor) {
-  const { variantId, t, setItems, flash, aviso } = ed;
+  const { variantId, t, setItems, flash, aviso, seguirVistaPrevia } = ed;
   const [busy, setBusy] = useState<AlcanceUI | "modo" | "revertir" | "respaldo" | null>(null);
   // «Sin respaldo» pendiente de UNA confirmación (DA-M5): añadir/ocultar cambia la forma del CV.
   const [respaldo, setRespaldo] = useState<ResumenRespaldo | null>(null);
@@ -115,10 +115,14 @@ export function useAfinar(ed: Editor) {
         respaldo?: ResumenRespaldo | null;
         items?: unknown[];
       };
-      if (Array.isArray(json.items)) setItems(json.items.map(normalizeIncoming));
+      if (Array.isArray(json.items)) {
+        setItems(json.items.map(normalizeIncoming));
+        // Paso 2 del Progreso: la vista previa rehace y mide el documento nuevo.
+        seguirVistaPrevia("afinar");
+      }
       return json;
     },
-    [variantId, setItems],
+    [variantId, setItems, seguirVistaPrevia],
   );
 
   const afinar = useCallback(

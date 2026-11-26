@@ -98,3 +98,11 @@
 .u-fijo > span[data-visible] {
   visibility: visible;
 }
+
+/* Móvil: abajo vive la hoja de los paneles; el progreso va arriba. */
+@media (max-width: 640px) {
+  .u-prog[data-colocacion="flotante"] {
+    top: var(--sp-3);
+    bottom: auto;
+  }
+}

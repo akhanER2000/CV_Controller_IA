@@ -1,21 +1,36 @@
-/* «Afinar con IA» en la barra del editor (AfinarIA.tsx). Reusa .ed-menu y .ed-obj. */
-.ed-af{display:inline-flex;align-items:center;flex-wrap:wrap;gap:var(--sp-2)}
-.ed-af-btn{white-space:nowrap}
+/* «Afinar con IA» en la barra del editor (AfinarIA.tsx). Reusa .ed-menu y .ed-obj.
+   En la barra, UN botón de ancho fijo; lo demás va en el panel anclado bajo él. */
+.ed-af{display:inline-flex;align-items:center;flex-wrap:nowrap}
+.ed-af-btn{display:inline-flex;align-items:center;gap:6px;white-space:nowrap}
+/* El punto de «hay algo pendiente»: su hueco existe siempre (no empuja nada). */
+.ed-af-punto{width:6px;height:6px;border-radius:50%;background:transparent;flex:none}
+.ed-af-punto[data-on]{background:var(--accent)}
+.ed-af-panel{display:flex;flex-direction:column;gap:var(--sp-3)}
 .ed-af-nota{margin:0 0 6px;padding:4px 6px;font-size:var(--fs-micro);line-height:1.45;color:var(--text-subtle)}
 .ed-af-err{margin:6px 0 0;padding:4px 6px;font-size:var(--fs-micro);color:var(--danger)}
 .ed-menu>button:disabled{opacity:.5;cursor:default}
-.ed-af-res{display:inline-flex;align-items:center;gap:var(--sp-2)}
+.ed-af-res{display:flex;flex-direction:column;gap:var(--sp-2)}
+.ed-af-res .fila{display:flex;align-items:center;flex-wrap:wrap;gap:var(--sp-2)}
 .ed-af-chip{height:28px;padding:0 var(--sp-3);border:1px solid var(--border-strong);border-radius:var(--radius-pill);
   font:500 11px/1 var(--font-mono);color:var(--text);background:var(--surface);white-space:nowrap}
 .ed-af-chip:hover{border-color:var(--patina-500)}
 .ed-af-rev{height:28px;padding:0 var(--sp-3);font-size:var(--fs-micro)}
+.ed-af-modo{align-self:flex-start}
 .ed-af-modo button:disabled{opacity:.6;cursor:default}
-.ed-af-det{display:flex;flex-direction:column;gap:6px;max-height:min(60vh,520px);overflow:auto}
+.ed-af-det{display:flex;flex-direction:column;gap:6px;max-height:min(50vh,420px);overflow:auto}
 .ed-af-det ul{margin:0;padding:0 0 0 16px;display:flex;flex-direction:column;gap:6px}
 .ed-af-det li{font-size:var(--fs-micro);line-height:1.45;color:var(--text)}
 .ed-af-det li .mot{display:block;color:var(--text-subtle)}
 .ed-af-det li.desc .prop{display:block;text-decoration:line-through;text-decoration-color:var(--danger);color:var(--text-subtle)}
 .ed-af-uso{margin:4px 0 0;font:500 10px/1.4 var(--font-mono);color:var(--text-subtle)}
-.ed-af-conf{display:inline-flex;align-items:center;flex-wrap:wrap;gap:var(--sp-2);padding:2px 2px 2px var(--sp-3);
-  border:1px solid var(--border-strong);border-radius:var(--radius-pill);background:var(--surface)}
-.ed-af-conf .txt{font-size:var(--fs-micro);line-height:1.4;color:var(--text)}
+.ed-af-conf{display:flex;flex-direction:column;gap:var(--sp-2);padding:var(--sp-3);
+  border:1px solid var(--border-brasa);border-radius:var(--radius-md);background:var(--surface)}
+.ed-af-conf .txt{margin:0;font-size:var(--fs-micro);line-height:1.45;color:var(--text)}
+.ed-af-conf .acts{display:flex;justify-content:flex-end;gap:var(--sp-2)}
+/* Móvil: el panel no cabe anclado al botón sin salirse por la derecha; va como
+   hoja fija abajo, a todo el ancho (sigue siendo el mismo panel, no modal). */
+@media (max-width:767px){
+  /* encima de la barra inferior del shell (--sh-barra-movil, UserMenu.css) */
+  .ed-af .edx-desp-panel{position:fixed;left:12px;right:12px;top:auto;bottom:var(--sh-barra-movil,12px);width:auto!important;
+    max-width:none;max-height:min(70vh,calc(100vh - var(--sh-barra-movil,12px) - 72px));overflow:auto}
+}

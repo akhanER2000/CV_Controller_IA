@@ -4,6 +4,7 @@ import { referenceLine, type ReferenceFields } from "@/lib/cv/resume";
 import { PINNED_LAST_SECTION, SECTION_ORDER_PRESETS } from "@/lib/cv/templates";
 import { TemplateGallery, TemplateThumb } from "@/components/TemplateGallery";
 import { Tabs } from "@/components/ui/Tabs";
+import { EncuadreFoto } from "./EncuadreFoto";
 import { LIB_TITLE_KEY, PALETTES, S, TEMPLATES, TYPOGRAPHIES, isPhotoDataUrl } from "./modelo";
 import type { Editor } from "./useEditorVariante";
 
@@ -381,6 +382,9 @@ function Presentacion({ ed }: { ed: Editor }) {
                 <img className="photo-thumb" alt={t("editor.photoAlt")} src={ed.photoUrl} />
               ) : null}
               <div className="photo-acts">
+                <button type="button" className="c-btn c-btn--quiet" id="edFotoEncuadrar" onClick={ed.abrirEncuadre}>
+                  {t("editor.encAbrir")}
+                </button>
                 <button
                   type="button"
                   className="c-btn c-btn--quiet"
@@ -395,6 +399,16 @@ function Presentacion({ ed }: { ed: Editor }) {
               </div>
             </div>
           </div>
+        )}
+        {ed.fotoEncuadre && (
+          <EncuadreFoto
+            key={ed.fotoEncuadre.src.length + ":" + ed.fotoEncuadre.src.slice(-24)}
+            src={ed.fotoEncuadre.src}
+            inicial={ed.fotoEncuadre.encuadre}
+            t={t}
+            onGuardar={ed.guardarEncuadre}
+            onCancelar={() => ed.setFotoEncuadre(null)}
+          />
         )}
         <p className="note">{t("editor.photoNote")}</p>
         {/* Lo que se sabe y lo que dice la ley chilena, separado y sin

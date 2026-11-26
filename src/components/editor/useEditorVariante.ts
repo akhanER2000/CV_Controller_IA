@@ -41,6 +41,7 @@ import {
 } from "@/components/flujo-cv";
 import type { SeccionNav } from "./NavSecciones";
 import { accionDeTecla } from "./atajos";
+import { archivoAOriginal, leerEncuadre, type Encuadre } from "./encuadre";
 import { PV_ANCHO_DEF, alternarCompleto, alternarOculto, limitarAncho, useVistaPrevia } from "./vista-previa";
 import {
   TEMPLATES,
@@ -51,7 +52,6 @@ import {
   buildEditorResumeData,
   buildFallback,
   editableField,
-  fileToPhotoDataUrl,
   libSectionOfKind,
   libTextOf,
   normalizeIncoming,
@@ -81,6 +81,21 @@ import {
    MISMOS de antes del rediseño (movidos, no reescritos): tests/e2e/flujo-cv.spec
    compara sus variant_items y la huella del PDF con la línea base.
    ============================================================================ */
+
+/** El patch de presentación + el encuadre de la foto (original y parámetros), que
+ *  guarda la ruta de la variante junto al resto del override de basics. */
+export type PatchPresentacion = PresentationPatch & { photoEncuadre?: ({ src: string } & Encuadre) | null };
+
+/** El mismo merge que el servidor para el encuadre: quitar la foto quita también su original. */
+function conEncuadre(ov: Record<string, unknown>, patch: PatchPresentacion): Record<string, unknown> {
+  const next = { ...ov };
+  if (patch.photo === "" || patch.photoEncuadre === null) delete next.photoEncuadre;
+  else if (patch.photoEncuadre) next.photoEncuadre = patch.photoEncuadre;
+  return next;
+}
+
+/** Lo que la vista previa está rehaciendo y por qué (para el Progreso de la barra). */
+export type MotivoPv = "afinar" | "diseno";
 
 export function useEditorVariante(variantId: string) {
   const t = useT();
@@ -133,6 +148,9 @@ export function useEditorVariante(variantId: string) {
   const [galleryOpen, setGalleryOpen] = useState(false);
   const [busyPhoto, setBusyPhoto] = useState(false);
   const photoInputRef = useRef<HTMLInputElement>(null);
+  // Encuadre de la foto abierto: el ORIGINAL (recién subido o el guardado) y sus
+  // parámetros. Nada se guarda hasta «Guardar encuadre».
+  const [fotoEncuadre, setFotoEncuadre] = useState<{ src: string; encuadre: Encuadre | null } | null>(null);
   // Eliminar variante: confirmación INLINE (no window.confirm) porque tras archivar se
   // navega a /app/variantes; el toast diferido de deshacer no encaja al desmontar aquí.
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -389,13 +407,13 @@ export function useEditorVariante(variantId: string) {
   // Persiste foto/QR/contacto: optimista en items (para que el preview cambie ya) +
   // PATCH. El merge optimista usa el MISMO helper puro que el servidor.
   const savePresentation = useCallback(
-    (patch: PresentationPatch) => {
+    (patch: PatchPresentacion) => {
       setItems((prev) => {
         const basicsMaster = master.find((m) => m.kind === "basics");
         const existing = prev.find((i) => i.kind === "basics");
         const base = basicsMaster?.data ?? existing?.data ?? {};
         const curOv = (existing?.override_data as Record<string, unknown> | null) ?? {};
-        const nextOv = mergePresentationOverride(curOv, patch);
+        const nextOv = conEncuadre(mergePresentationOverride(curOv, patch), patch);
         const nextData = { ...base, ...nextOv };
         if (existing) return prev.map((i) => (i.id === existing.id ? { ...i, override_data: nextOv, data: nextData } : i));
         const tmp: VItem = {
@@ -490,12 +508,8 @@ export function useEditorVariante(variantId: string) {
       if (!file) return;
       setBusyPhoto(true);
       try {
-        const dataUrl = await fileToPhotoDataUrl(file);
-        if (dataUrl.length > 900_000) {
-          flash(t("editor.stPhotoBig"));
-          return;
-        }
-        savePresentation({ photo: dataUrl });
+        // Subir NO guarda: abre el encuadre con el original (reducido a 1280 px).
+        setFotoEncuadre({ src: await archivoAOriginal(file), encuadre: null });
       } catch (e) {
         // Archivo corrupto, formato que el navegador no decodifica, canvas sin
         // contexto… el motivo va a la barra: el usuario sabe qué reintentar.
@@ -505,7 +519,29 @@ export function useEditorVariante(variantId: string) {
         if (photoInputRef.current) photoInputRef.current.value = "";
       }
     },
-    [savePresentation, flash, t, fail],
+    [fail],
+  );
+
+  /** «Encuadrar» la foto que ya está: desde el original guardado, o desde la foto si no lo hay. */
+  const abrirEncuadre = useCallback(() => {
+    const guardado = leerEncuadre(basicsData.photoEncuadre);
+    if (guardado) setFotoEncuadre(guardado);
+    else if (photoUrl) setFotoEncuadre({ src: photoUrl, encuadre: null });
+  }, [basicsData.photoEncuadre, photoUrl]);
+
+  /** «Guardar encuadre»: la foto recortada para el PDF + el original y los parámetros. */
+  const guardarEncuadre = useCallback(
+    (foto: string, encuadre: Encuadre) => {
+      const src = fotoEncuadre?.src;
+      setFotoEncuadre(null);
+      if (!src) return;
+      if (foto.length > 900_000) {
+        flash(t("editor.stPhotoBig"));
+        return;
+      }
+      savePresentation({ photo: foto, photoEncuadre: { src, ...encuadre } });
+    },
+    [fotoEncuadre, savePresentation, flash, t],
   );
 
   // Foto ON abre el selector (el guardado ocurre al elegir archivo); OFF la quita.
@@ -777,6 +813,32 @@ export function useEditorVariante(variantId: string) {
       clearTimeout(timer);
     };
   }, [docSig, loading, pvRetry, flash, objetivo]);
+
+  /* ── SEGUIR UNA RE-RENDERIZACIÓN de la vista previa (afinar, plantilla, paleta) ──
+     Pasos REALES, vistos desde aquí: «esperando» (el cambio llegó; el preview aún
+     no arrancó) → «midiendo» (el PDF nuevo se está generando y midiendo) → nada.
+     Si el preview no arranca en 1,5 s (el cambio no tocó el documento), se suelta. */
+  const [pvSigue, setPvSigue] = useState<{ motivo: MotivoPv; fase: "esperando" | "midiendo" } | null>(null);
+  const seguirVistaPrevia = useCallback((motivo: MotivoPv) => setPvSigue({ motivo, fase: "esperando" }), []);
+  useEffect(() => {
+    if (!pvSigue) return;
+    if (pvSigue.fase === "esperando" && pvBusy) setPvSigue({ ...pvSigue, fase: "midiendo" });
+    else if (pvSigue.fase === "midiendo" && !pvBusy) setPvSigue(null);
+  }, [pvBusy, pvSigue]);
+  useEffect(() => {
+    if (pvSigue?.fase !== "esperando") return;
+    const tm = setTimeout(() => setPvSigue((v) => (v?.fase === "esperando" ? null : v)), 1500);
+    return () => clearTimeout(tm);
+  }, [pvSigue]);
+  // Cambiar plantilla, paleta o tipografía rehace la vista previa: se sigue. La
+  // primera firma (la de la carga) no cuenta: abrir el editor no es «cambiar».
+  const disenoSig = `${designTemplateId}|${designPaletteId}|${designTypographyId}`;
+  const disenoPrev = useRef<string | null>(null);
+  useEffect(() => {
+    if (loading) return;
+    if (disenoPrev.current !== null && disenoPrev.current !== disenoSig) seguirVistaPrevia("diseno");
+    disenoPrev.current = disenoSig;
+  }, [disenoSig, loading, seguirVistaPrevia]);
 
   // ── El master, CONTADO — la entrada de la recomendación ────────────────────
   /**
@@ -1590,8 +1652,10 @@ export function useEditorVariante(variantId: string) {
   // MISMO endpoint y MISMO body que el preview (solo cambia `download`): el PDF
   // que se descarga es, byte a byte, el que estás viendo. Funciona igual sin
   // Supabase, porque el documento viaja en `data`, no en un id de la base.
+  const [pdfBusy, setPdfBusy] = useState(false);
   const downloadPdf = useCallback(async () => {
     flash(t("editor.stPdfGen"));
+    setPdfBusy(true);
     try {
       const res = await fetch("/api/cv", {
         method: "POST",
@@ -1611,6 +1675,8 @@ export function useEditorVariante(variantId: string) {
       flash(t("editor.stPdfDone"));
     } catch (e) {
       fail("descarga del PDF", e, "editor.stPdfErr");
+    } finally {
+      setPdfBusy(false);
     }
   }, [flash, t, fail]);
 
@@ -1766,6 +1832,8 @@ export function useEditorVariante(variantId: string) {
     // vista previa
     pageRef, bootRef, pvModo, pvAncho, pvCambiar, pvFijar, disponiblePv, arrastrarDivisor, teclaDivisor,
     mode, setMode, pvBusy, pvError, setPvRetry, pdfUrl, xrayText, pvScrollRef,
+    // progreso (ui/Progreso) y encuadre de la foto
+    pdfBusy, pvSigue, seguirVistaPrevia, fotoEncuadre, setFotoEncuadre, abrirEncuadre, guardarEncuadre,
   };
 }
 

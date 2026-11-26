@@ -11,6 +11,7 @@ import {
   paginasValidas,
 } from "@/lib/db/variants";
 import type { PresentationPatch } from "@/lib/cv/resume";
+import { encuadreValido, leerEncuadre } from "@/components/editor/encuadre";
 
 export const runtime = "nodejs";
 
@@ -57,7 +58,8 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   let body: {
     name?: string;
     target_title?: string | null;
-    presentation?: PresentationPatch;
+    /** + photoEncuadre: el ORIGINAL de la foto y sus parámetros, para volver a encuadrar. */
+    presentation?: PresentationPatch & { photoEncuadre?: unknown };
     paginas_objetivo?: unknown;
   };
   try {
@@ -67,7 +69,33 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   }
   try {
     if (body.presentation) {
-      const presentation = await setVariantPresentation(sb, user.id, id, body.presentation);
+      const { photoEncuadre, ...patch } = body.presentation;
+      if (photoEncuadre != null) {
+        const motivo = encuadreValido(photoEncuadre);
+        if (motivo) return NextResponse.json({ error: motivo }, { status: 400 });
+      }
+      const presentation = await setVariantPresentation(sb, user.id, id, patch);
+      // El encuadre vive junto a la foto en el override de basics (la foto recortada
+      // es la que lee el PDF; esto solo permite re-encuadrar). Quitar la foto lo quita.
+      const ov = { ...presentation.override };
+      let cambia = false;
+      if (patch.photo === "" || photoEncuadre === null) {
+        cambia = "photoEncuadre" in ov;
+        delete ov.photoEncuadre;
+      } else if (photoEncuadre !== undefined) {
+        const e = leerEncuadre(photoEncuadre)!;
+        ov.photoEncuadre = { src: e.src, zoom: e.encuadre.zoom, cx: e.encuadre.cx, cy: e.encuadre.cy };
+        cambia = true;
+      }
+      if (cambia) {
+        const { error } = await sb
+          .from("variant_items")
+          .update({ override_data: ov })
+          .eq("id", presentation.basicsItemId)
+          .eq("user_id", user.id);
+        if (error) throw new Error(error.message);
+        presentation.override = ov;
+      }
       return NextResponse.json({ ok: true, presentation });
     }
     if (body.paginas_objetivo !== undefined) {

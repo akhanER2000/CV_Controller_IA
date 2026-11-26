@@ -1,7 +1,10 @@
 // Sin "use client": solo lo importa la pantalla del editor (ya cliente).
 import Link from "next/link";
+import { useLayoutEffect, useRef, type RefObject } from "react";
 import { GuiaAjuste } from "@/components/FlujoCv";
+import { Progreso, type ProgresoProps } from "@/components/ui/Progreso";
 import { AfinarIA } from "./AfinarIA";
+import { useAfinar } from "./useAfinar";
 import { Desplegable, Kbd } from "./Desplegable";
 import { ATAJOS, TECLA } from "./atajos";
 import { alternarOculto } from "./vista-previa";
@@ -18,17 +21,26 @@ import type { Editor } from "./useEditorVariante";
          desplegable, «Ajustar páginas», el hueco reservado para las acciones de
          IA (lo llena el lote siguiente) y las vistas (biblioteca · vista previa).
    Los avisos de páginas viven en el detalle del chip, no sobre la vista previa.
+
+   LA BARRA NO SE MUEVE: lo que cambia de texto mientras algo carga (el chip de
+   estado, «Ajustar páginas») nunca encoge (useSinEncoger), «Afinar con IA» es un
+   botón de ancho fijo con su panel anclado, y el progreso va en UN indicador
+   flotante (ui/Progreso) que no ocupa sitio en la barra.
    ============================================================================ */
 
 export function BarraEditor({ ed }: { ed: Editor }) {
   const { t, meta, variantId, objetivo, pageCount } = ed;
+  const af = useAfinar(ed);
+  const barra = useRef<HTMLDivElement>(null);
+  useSinEncoger(barra, ["#edEstado", ".flu-ajustar"], t);
+  const progreso = useProgresoBarra(ed, af);
   // Lo que antes se pintaba en rojo sobre el PDF: aquí, dentro del detalle.
   const avisos: string[] = [];
   if (pageCount >= 3 && objetivo < 3) avisos.push(t("editor.pagesWarn").replace("{n}", String(pageCount)));
   if (objetivo === 3) avisos.push(t("editor.obj3Note"));
 
   return (
-    <div className="ed-bar" data-screen-label="editor-toolbar">
+    <div className="ed-bar" data-screen-label="editor-toolbar" ref={barra}>
       <div className="ed-bar-a">
         <Link className="bk" href="/app/variantes">
           {t("editor.backToVariants")}
@@ -53,7 +65,14 @@ export function BarraEditor({ ed }: { ed: Editor }) {
           <Link className="c-btn c-btn--quiet" href={`/app/variantes/${variantId}/tailor`}>
             {t("common.tailor")}
           </Link>
-          <button type="button" className="c-btn c-btn--patina" id="btnPdf" onClick={() => void ed.downloadPdf()}>
+          <button
+            type="button"
+            className="c-btn c-btn--patina"
+            id="btnPdf"
+            disabled={ed.pdfBusy}
+            aria-busy={ed.pdfBusy}
+            onClick={() => void ed.downloadPdf()}
+          >
             <IconoEd nombre="descargar" /> {t("common.downloadPdf")}
           </button>
           <Desplegable
@@ -130,7 +149,7 @@ export function BarraEditor({ ed }: { ed: Editor }) {
             ed.runFit();
           }}
           onSiguiente={ed.irASiguiente}
-          ia={<AfinarIA ed={ed} />}
+          ia={<AfinarIA ed={ed} af={af} />}
         />
         <span className="ed-bar-sp" />
         <button
@@ -154,8 +173,60 @@ export function BarraEditor({ ed }: { ed: Editor }) {
           <IconoEd nombre="documento" /> {t("editor.edPv")} <Kbd>{TECLA.preview}</Kbd>
         </button>
       </div>
+      <Progreso id="edProgreso" {...progreso} />
     </div>
   );
+}
+
+/**
+ * Lo que está cargando AHORA en el editor, en pasos reales (DA-A2). Uno a la vez,
+ * por prioridad: descarga del PDF · afinar (llamada → la vista previa mide el
+ * resultado) · ajustar páginas · plantilla/paleta (la vista previa se rehace).
+ * Ningún porcentaje: ninguna de estas llamadas informa cuánto lleva.
+ */
+function useProgresoBarra(ed: Editor, af: ReturnType<typeof useAfinar>): ProgresoProps {
+  const { t } = ed;
+  // El primer paso de afinar se recuerda para el segundo (la vista previa midiendo).
+  const paso1 = useRef("");
+  if (af.busy === "skills") paso1.current = t("editor.progRespaldo");
+  else if (af.busy === "respaldo" || af.busy === "revertir" || af.busy === "modo") paso1.current = t("editor.progAplicar");
+  else if (af.busy) paso1.current = t("editor.progAfinar");
+  const medir = t("editor.progMedir");
+
+  if (ed.pdfBusy) return { activo: true, etiqueta: t("editor.progPdf") };
+  if (af.busy) return { activo: true, pasos: [paso1.current, medir], paso: 0 };
+  if (ed.pvSigue?.motivo === "afinar") return { activo: true, pasos: [paso1.current || t("editor.progAfinar"), medir], paso: 1 };
+  if (ed.fitBusy) return { activo: true, etiqueta: t("editor.progAjustar") };
+  if (ed.pvSigue?.motivo === "diseno") return { activo: true, etiqueta: t("editor.progDiseno") };
+  return { activo: false };
+}
+
+/**
+ * Lo que cambia de texto mientras algo carga NO encoge: cada elemento recuerda su
+ * ancho mayor y lo fija como min-width, así lo que va detrás no se corre. Se
+ * reinicia al cambiar el idioma (otro texto, otro ancho).
+ */
+function useSinEncoger(raiz: RefObject<HTMLElement | null>, selectores: readonly string[], reinicio: unknown) {
+  const sel = selectores.join(",");
+  useLayoutEffect(() => {
+    const el = raiz.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    const objetivos = Array.from(el.querySelectorAll<HTMLElement>(sel));
+    const max = new Map<HTMLElement, number>();
+    for (const o of objetivos) o.style.minWidth = "";
+    const ro = new ResizeObserver((entradas) => {
+      for (const e of entradas) {
+        const o = e.target as HTMLElement;
+        const w = o.getBoundingClientRect().width;
+        if (w > (max.get(o) ?? 0) + 0.5) {
+          max.set(o, w);
+          o.style.minWidth = `${Math.ceil(w)}px`;
+        }
+      }
+    });
+    for (const o of objetivos) ro.observe(o);
+    return () => ro.disconnect();
+  }, [raiz, sel, reinicio]);
 }
 
 /** La ayuda de atajos: «?» la abre (también la tecla ?), Esc la cierra. */
