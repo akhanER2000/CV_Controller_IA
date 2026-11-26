@@ -23,7 +23,7 @@ import {
   validarParams,
   type ResultadoMedida,
 } from "../src/lib/cv/plantilla-medida";
-import { cascada, preseleccionar, simularRecortes } from "../src/lib/cv/cascada";
+import { candidatas, resolverAjuste, simularRecortes, sinProtegidos } from "../src/lib/cv/cascada";
 import { uuidDe } from "../src/lib/cv/plantillas-usuario";
 import { ajusteCascada } from "../src/lib/i18n/dict/ajuste-cascada";
 
@@ -172,15 +172,27 @@ describe("plantilla a medida · sobre el PDF real", () => {
   });
 });
 
-describe("la cascada", () => {
-  it("preseleccionar: determinista, sin la actual, solo con más capacidad, como mucho 5", () => {
+describe("ajustar de un clic (DA-A4): plantillas → a medida → recortes", () => {
+  it("candidatas: deterministas, sin la actual, sin las de foto si no hay foto, con las propias, y la cuenta cuadra", () => {
     const a = getTemplate("ats-notaria");
-    const l1 = preseleccionar(a, 1.2).map((t) => t.id);
-    const l2 = preseleccionar(a, 1.2).map((t) => t.id);
-    expect(l1).toEqual(l2);
-    expect(l1).not.toContain(a.id);
-    expect(l1.length).toBeLessThanOrEqual(5);
-    expect(l1.length).toBeGreaterThan(0);
+    const propia = { ...getTemplate("ats-compacta"), id: "u:propia-candidata", name: "Mía" };
+    const c1 = candidatas(a, [propia], false);
+    const c2 = candidatas(a, [propia], false);
+    expect(c1.lista.map((t) => t.id)).toEqual(c2.lista.map((t) => t.id));
+    expect(c1.lista.map((t) => t.id)).not.toContain(a.id);
+    expect(c1.lista.some((t) => t.layout.photo)).toBe(false);
+    expect(c1.porFoto).toBe(listTemplates().filter((t) => t.layout.photo).length);
+    expect(c1.consideradas).toBe(listTemplates().length); // 65 − la actual + 1 propia
+    expect(c1.lista.length + c1.porCapacidad + c1.porFoto).toBe(c1.consideradas);
+    expect(c1.lista.map((t) => t.id)).toContain("u:propia-candidata");
+    // Si hace falta ×4 la capacidad (8 páginas → 2), ninguna se renderiza.
+    expect(candidatas(a, [propia], false, 4).lista).toHaveLength(0);
+    expect(candidatas(a, [propia], false, 1).lista.length).toBe(c1.lista.length);
+    // Con foto, entran también las de foto.
+    expect(candidatas(a, [], true).porFoto).toBe(0);
+    // Orden por parecido: la primera comparte gama con la actual si alguna la comparte.
+    const misma = c1.lista.filter((t) => t.gama === a.gama);
+    if (misma.length) expect(c1.lista[0]!.gama).toBe(a.gama);
   });
 
   it("simularRecortes quita la viñeta y acorta el texto que se propone", () => {
@@ -201,32 +213,85 @@ describe("la cascada", () => {
     expect(data.work[0]!.bullets[0]!.es).toBe(vin.es); // no muta la entrada
   });
 
-  it("si con la plantilla actual ya cabe, la resuelve el paso 1 y no mide nada más", async () => {
+  it("★ sinProtegidos: un recorte jamás quita un item de «incluir siempre» ni el rol de una viñeta protegida", () => {
+    const it = (id: string, itemId: string, kind: string, parentId: string | null = null) => ({
+      id, itemId, kind, visible: true, sortOrder: 0, parentId, datos: {}, texto: id, campo: null, original: "", origen: null, verificado: false,
+    });
+    const items = [it("vw", "mw", "work"), it("vb", "mb", "bullet", "mw"), it("vx", "mx", "bullet", "mw"), it("vp", "mp", "project")];
+    const q = (id: string, kind: string) => ({ id, kind, texto: id, motivo: "" });
+    const r = sinProtegidos(items, { quitar: [q("vw", "work"), q("vb", "bullet"), q("vp", "project")], acortar: [] }, new Set(["mb"]));
+    expect(r.quitar.map((x) => x.id)).toEqual(["vp"]);
+    expect(r.protegidos).toBe(2);
+    expect(sinProtegidos(items, { quitar: [q("vx", "bullet")], acortar: [] }, new Set()).quitar).toHaveLength(1);
+  });
+
+  it("si con la plantilla actual ya cabe, no mide nada ni pide recortes", async () => {
     const d = { ...data, templateId: "ats-clasica" };
     const a = await autofit(d, plantillaDe(d), 2);
-    const c = await cascada({ data: d, objetivo: 2, actual: a, items: [], propuesta: { quitar: [], acortar: [] } });
-    expect(c.resueltoPor).toBe(1);
-    expect(c.pasos).toHaveLength(1);
+    let pedidos = 0;
+    const r = await resolverAjuste({ data: d, objetivo: 2, actual: a, recortes: async () => (pedidos++, { items: [], propuesta: { quitar: [], acortar: [] } }) });
+    expect(r.resueltoPor).toBe("ya-cabe");
+    expect(r.medicion.medidas).toBe(0);
+    expect(pedidos).toBe(0);
   }, 120000);
 
-  it("★ cuando no cabe, ofrece solo lo que de verdad deja el CV en el objetivo (páginas reales)", async () => {
+  it("★ cuando no cabe, cambia de plantilla SIN tocar el contenido: medida real ≤ objetivo y sin pedir recortes", async () => {
     const d = { ...conEmpleos(6), templateId: "ats-notaria" };
     const a = await autofit(d, plantillaDe(d), 2);
     expect(a.noCabe, "el caso tiene que desbordar con la plantilla actual").toBe(true);
-    const c = await cascada({ data: d, objetivo: 2, actual: a, items: [], propuesta: { quitar: [], acortar: [] } });
-    expect(c.pasos[0]!.paso).toBe(1);
-    expect(c.pasos[0]!.resuelve).toBe(false);
-    const p2 = c.pasos.find((p) => p.paso === 2);
-    expect(p2).toBeDefined();
-    if (p2 && p2.paso === 2) {
-      for (const cand of p2.candidatas) expect(cand.paginas).toBeLessThanOrEqual(2);
-      if (p2.candidatas.length) expect(c.resueltoPor).toBe(2);
-    }
-    const p3 = c.pasos.find((p) => p.paso === 3);
-    if (p3 && p3.paso === 3 && p3.resuelve) {
-      expect(p3.paginas).toBeLessThanOrEqual(2);
-      expect(p3.cuerpo!).toBeGreaterThanOrEqual(CUERPO_MIN_PT);
-    }
+    let pedidos = 0;
+    const pasos: number[] = [];
+    const r = await resolverAjuste({
+      data: d,
+      objetivo: 2,
+      actual: a,
+      recortes: async () => (pedidos++, { items: [], propuesta: { quitar: [], acortar: [] } }),
+      onProgreso: (p) => pasos.push(p.paso),
+    });
+    expect(r.resueltoPor).toBe("plantilla");
+    expect(pedidos, "con plantilla que cabe no se recorta nada").toBe(0);
+    expect(r.recortes).toBeNull();
+    expect(r.plantilla!.paginas).toBeLessThanOrEqual(2);
+    expect(r.plantilla!.cuerpo).toBeGreaterThanOrEqual(CUERPO_MIN_PT);
+    expect(r.plantilla!.templateId).not.toBe("ats-notaria");
+    for (const o of r.alternativas) expect(o.paginas).toBeLessThanOrEqual(2);
+    expect(r.alternativas.map((o) => o.templateId)).not.toContain(r.plantilla!.templateId);
+    expect(r.medicion.medidas).toBeGreaterThan(0);
+    expect(r.medicion.caben).toBeGreaterThanOrEqual(1 + r.alternativas.length);
+    expect(pasos.every((p) => p === 1)).toBe(true);
+    // La primera que cabe EN ORDEN de parecido es la aplicada.
+    const orden = candidatas(plantillaDe(d), [], false).lista.map((t) => t.id);
+    const iAplicada = orden.indexOf(r.plantilla!.templateId);
+    for (const o of r.alternativas) expect(orden.indexOf(o.templateId)).toBeGreaterThan(iAplicada);
+  }, 600000);
+
+  it("★ solo si ni plantillas ni a medida alcanzan, recorta — y nunca lo protegido", async () => {
+    const d = { ...conEmpleos(20), templateId: "ats-clasica" };
+    const a = await autofit(d, plantillaDe(d), 2);
+    expect(a.noCabe).toBe(true);
+    const extra = d.work.filter((w) => /^Empresa Extra/.test(w.company));
+    const items = extra.map((w, i) => ({
+      id: `v${i}`, itemId: `m${i}`, kind: "work", visible: true, sortOrder: i, parentId: null,
+      datos: { company: w.company, title: w.title.es }, texto: w.company, campo: null, original: "", origen: null, verificado: false,
+    }));
+    const pasos: number[] = [];
+    const r = await resolverAjuste({
+      data: d,
+      objetivo: 2,
+      actual: a,
+      protegidos: new Set(["m0"]),
+      recortes: async () => ({ items, propuesta: { quitar: items.map((x) => ({ id: x.id, kind: "work", texto: x.texto, motivo: "" })), acortar: [] } }),
+      onProgreso: (p) => pasos.push(p.paso),
+    });
+    expect(r.medicion.caben, "ninguna plantilla cabe con 20 empleos más").toBe(0);
+    expect(r.medida).toBeNull();
+    expect(pasos).toContain(2);
+    expect(pasos[pasos.length - 1]).toBe(3);
+    expect(r.recortes).not.toBeNull();
+    expect(r.recortes!.quitar.map((q) => q.id)).not.toContain("v0");
+    expect(r.recortes!.protegidos).toBe(1);
+    expect(r.resueltoPor).toBe("recortes");
+    expect(r.recortes!.paginas).toBeLessThanOrEqual(2);
   }, 600000);
 });
 

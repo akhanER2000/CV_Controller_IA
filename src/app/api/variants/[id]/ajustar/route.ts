@@ -2,16 +2,30 @@ import { NextResponse } from "next/server";
 import { generateObject } from "ai";
 import { hayClaveIA, modeloPara } from "@/lib/ai/modelos";
 import { createClient } from "@/lib/supabase/server";
-import { getVariant, getVariantItem, setAiOverride, buildVariantResumeData } from "@/lib/db/variants";
+import {
+  getVariant,
+  getVariantItem,
+  setAiOverride,
+  buildVariantResumeData,
+  setVariantPresentation,
+  updateItem,
+} from "@/lib/db/variants";
 import { geminiApiKey } from "@/lib/extract/llm";
 import { getUserLlmKey, getUserLlmKey3 } from "@/lib/account/byok";
 import { contextoMemoria, mensajesConMemoria, type ContextoMemoria } from "@/lib/ai/memoria";
 // Cuántas páginas quiere el usuario: 1, 2 o 3 (objetivoDe vive en autofit.ts, con
 // su test; un route.ts de Next no puede exportar nada que no sea del contrato).
 import { autofit, objetivoDe, plantillaDe } from "@/lib/cv/autofit";
-import { cascada } from "@/lib/cv/cascada";
+import { resolverAjuste, sinProtegidos, type ProgresoAjuste, type ResultadoAjuste } from "@/lib/cv/cascada";
 import { comprobar, plantillaDeParams, validarParams, type ParamsMedida } from "@/lib/cv/plantilla-medida";
-import { guardarPlantillaUsuario, resolverPlantillaDelDocumento } from "@/lib/cv/plantillas-usuario";
+import {
+  guardarPlantillaUsuario,
+  listarPlantillasUsuario,
+  resolverPlantillaDelDocumento,
+  type PlantillaUsuario,
+} from "@/lib/cv/plantillas-usuario";
+import { getTemplate } from "@/lib/cv/templates";
+import { obtenerReglas, type Reglas } from "@/lib/cv/reglas-ajuste";
 import { renderResumeToBuffer } from "@/lib/cv/ResumePDF";
 import {
   construirAjuste,
@@ -29,22 +43,24 @@ export const runtime = "nodejs";
 export const maxDuration = 300;
 
 /**
- * «AJUSTAR A N PÁGINAS» (1, 2 o 3) — la ruta. Tres acciones, todas MANUALES:
+ * «AJUSTAR A N PÁGINAS» (1, 2 o 3) — la ruta.
  *
- *   POST { accion:'analizar' }                    → una PROPUESTA revisable + la CASCADA.
+ *   POST { accion:'ajustar' }   → DE UN CLIC (DA-A4): prueba TODAS las plantillas
+ *        (catálogo + personalizadas) con el contenido tal cual, luego la plantilla a
+ *        medida (que guarda en Personalizadas) y solo al final los recortes, todos de
+ *        una vez; APLICA la primera que deja el CV en las páginas pedidas y guarda una
+ *        instantánea. Responde en NDJSON con el progreso real (cascada.ts).
+ *   POST { accion:'deshacer' }  → repone plantilla, items y textos de la instantánea.
+ *   POST { accion:'opciones' }  → solo mide: las plantillas donde cabe tal cual.
+ *   POST { accion:'analizar' }  → «Revisar uno por uno»: la PROPUESTA revisable de
+ *        recortes, item a item; quitar y reordenar siguen por DELETE/PATCH items.
  *   POST { accion:'acortar', id, propuesto }      → aplica UN acortado, ya aceptado.
- *   POST { accion:'guardar-medida', params, nombre? } → guarda la plantilla a medida
- *        (paso 3) como plantilla del usuario, tras volver a comprobarla aquí.
+ *   POST { accion:'guardar-medida', params, nombre? } → guarda una plantilla a
+ *        medida como plantilla del usuario, tras volver a comprobarla aquí.
  *
- * LA CASCADA (DA-A1, cascada.ts): 1 · autofit y recortes en la plantilla actual;
- * 2 · plantillas del catálogo donde el mismo contenido cabe; 3 · plantilla a medida.
- * Viaja dentro de `ajuste.cascada`; cada paso dice si deja el CV en las páginas
- * pedidas, MEDIDAS en el PDF real.
- *
- * No existe un «aplicar todo», y no es un olvido: es la regla. Quitar y reordenar
- * viajan por el contrato que ya existe (DELETE/PATCH /api/variants/[id]/items), uno
- * a uno, porque el usuario los acepta uno a uno. Lo único que necesita ruta propia
- * es el acortado, y solo porque tiene que volver a pasar el candado en el servidor.
+ * Las REGLAS de la variante (DA-R1) mandan: paginasMax obligatoria acota el
+ * objetivo, sinFoto deja fuera las plantillas de foto y un recorte JAMÁS quita un
+ * item de «incluir siempre».
  *
  * ★ EL NÚMERO SALE DE MEDIR, NO DE ESTIMAR. `sobran` se calcula renderizando el PDF
  * REAL de la variante (el mismo motor que /api/cv: el preview ES el PDF) y contando
@@ -185,65 +201,156 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     }
   }
 
-  // ── ANALIZAR ───────────────────────────────────────────────────────────────
-  const paginasObjetivo = objetivoDe(body.paginas);
+  const paginasPedidas = objetivoDe(body.paginas);
 
-  // Sin clave de IA el paso 1 se queda sin recortes propuestos, pero la cascada
-  // (autofit, catálogo y plantilla a medida) es del motor y corre igual.
+  // ── DESHACER EL AJUSTE ─────────────────────────────────────────────────────
+  // La instantánea vive EN EL SERVIDOR (override de basics, clave `ajustePrevio`):
+  // el cliente no manda qué reponer, así que no puede colar un texto sin candado.
+  if (body.accion === "deshacer") {
+    try {
+      const detalle = await getVariant(sb, user.id, variantId);
+      if (!detalle) return fallo("Variante no encontrada.", 404);
+      const ok = await deshacerAjuste(sb, user.id, variantId, detalle.items);
+      if (!ok) return fallo("No hay ningún ajuste que deshacer.", 409);
+      return NextResponse.json({ ok: true, items: (await getVariant(sb, user.id, variantId))?.items ?? [] });
+    } catch (e) {
+      console.error("[api/ajustar] no se pudo deshacer el ajuste", variantId, e);
+      return fallo(motivo(e), 500);
+    }
+  }
+
+  // Sin clave de IA no hay recortes propuestos, pero buscar plantilla (catálogo,
+  // personalizadas, a medida) es del motor y corre igual.
   const byok = (await getUserLlmKey(sb, user.id)) ?? undefined;
   const byok3 = (await getUserLlmKey3(sb, user.id)) ?? undefined;
   const conIA = hayClaveIA(byok, byok3);
 
-  try {
+  /** Lo común a analizar, ajustar y opciones: medir el documento y saber proponer recortes. */
+  const preparar = async (paginasObjetivo: number) => {
     const detalle = await getVariant(sb, user.id, variantId);
-    if (!detalle) return fallo("Variante no encontrada.", 404);
-
-    // 1 · MEDIR. El mismo motor que el preview, el mismo buffer, la misma métrica
-    //     de la plantilla que el usuario eligió. Si esto fallara, no hay número —
-    //     y sin número no hay propuesta, porque «sobran N líneas» ES la propuesta.
-    //     Se mide DESPUÉS del autofit: si bajando el cuerpo (hasta 10 pt) ya cabe,
-    //     no sobra nada; si no, «sobran» se cuenta a 10 pt, que es el documento que
-    //     el usuario está viendo en el preview.
+    if (!detalle) return null;
+    const reglas = await leerReglasVariante(sb, user.id, variantId);
+    // paginasMax obligatoria: el objetivo nunca la pasa (DA-R1).
+    const objetivo = objetivoDe(
+      reglas.paginasMax && reglas.fuerza.paginasMax === "obligatoria" ? Math.min(paginasObjetivo, reglas.paginasMax) : paginasObjetivo,
+    );
+    // MEDIR. El mismo motor que el preview, el mismo buffer, la misma métrica de la
+    // plantilla que el usuario eligió. Se mide DESPUÉS del autofit: si bajando el
+    // cuerpo (hasta 10 pt) ya cabe, no sobra nada; si no, «sobran» se cuenta a 10 pt.
     const { data: resume } = await resolverPlantillaDelDocumento(
       sb,
       user.id,
       await buildVariantResumeData(sb, user.id, variantId),
     );
-    const actual = await autofit(resume, plantillaDe(resume), paginasObjetivo);
-    const { medida, sobran } = actual;
-
-    // 2 · PROPONER. Solo los VISIBLES: lo oculto no ocupa líneas y proponer quitarlo
-    //     sería teatro.
+    const actual = await autofit(resume, plantillaDe(resume), objetivo);
+    // Solo los VISIBLES cuentan: lo oculto no ocupa líneas.
     const items: AjusteItem[] = detalle.items.map(itemDeAjuste);
-    const targetTitle = detalle.variant.target_title ?? "";
-
-    // Si ya cabe, no se gasta una llamada al modelo: no hay nada que recortar. Y si el
-    // modelo falla, la cascada (que es del motor) sigue sin recortes y lo dice.
+    const entrada = {
+      targetTitle: detalle.variant.target_title ?? "",
+      items,
+      paginas: actual.medida.porPagina.length,
+      paginasObjetivo: objetivo,
+      sobran: actual.sobran,
+    };
     const sinPlan =
       (notas: string): AjusteLLM =>
       async () => ({ quitar: [], orden: [], acortar: [], notas });
-    const entrada = { targetTitle, items, paginas: medida.porPagina.length, paginasObjetivo, sobran };
-    let propuesta;
-    if (conIA && actual.noCabe) {
-      try {
-        propuesta = await construirAjuste(entrada, {
-          llm: geminiAjusteLLM(byok, byok3, await contextoMemoria(sb, user.id, "ajustar")),
-        });
-      } catch (e) {
-        console.error("[api/ajustar] el modelo no respondió; la cascada sigue sin recortes", variantId, e);
-        propuesta = await construirAjuste(entrada, {
-          llm: sinPlan(`La IA no respondió (${motivo(e)}): no hay recortes propuestos; la cascada sigue con el motor.`),
-        });
+    /**
+     * La propuesta de recortes: una llamada al modelo, solo si de verdad no cabe.
+     * `estricto` (ajuste de un clic): sin clave o si el modelo falla, es un motivo
+     * que se dice, no una propuesta vacía que se aplica.
+     */
+    const proponer = async (estricto: boolean) => {
+      if (conIA && actual.noCabe) {
+        try {
+          return await construirAjuste(entrada, {
+            llm: geminiAjusteLLM(byok, byok3, await contextoMemoria(sb, user.id, "ajustar")),
+          });
+        } catch (e) {
+          if (estricto) throw new Error(`la IA no respondió (${motivo(e)}): no hay recortes propuestos`);
+          console.error("[api/ajustar] el modelo no respondió; sin recortes", variantId, e);
+          return construirAjuste(entrada, {
+            llm: sinPlan(`La IA no respondió (${motivo(e)}): no hay recortes propuestos.`),
+          });
+        }
       }
-    } else {
-      propuesta = await construirAjuste(entrada, {
-        llm: sinPlan(conIA ? "" : "Sin clave de IA: no hay recortes propuestos; la cascada sigue con el motor."),
+      if (estricto && actual.noCabe) throw new Error("sin clave de IA no hay recortes propuestos");
+      return construirAjuste(entrada, {
+        llm: sinPlan(conIA ? "" : "Sin clave de IA: no hay recortes propuestos."),
       });
-    }
+    };
+    return { detalle, reglas, objetivo, resume, actual, items, proponer };
+  };
 
-    // 3 · LA CASCADA: ¿alcanza con lo de arriba? Si no, catálogo y plantilla a medida.
-    const informe = await cascada({ data: resume, objetivo: paginasObjetivo, actual, items, propuesta });
+  // ── AJUSTAR DE UN CLIC (DA-A4) · OPCIONES ──────────────────────────────────
+  // «ajustar» resuelve y APLICA la primera salida que deja el CV en las páginas
+  // pedidas, con instantánea para «Deshacer ajuste». «opciones» solo mide: las
+  // plantillas donde el contenido cabe tal cual, con miniatura. Las dos responden
+  // en NDJSON: una línea por paso real ({tipo:'progreso'}) y al final
+  // {tipo:'resultado'} o {tipo:'error'}.
+  if (body.accion === "ajustar" || body.accion === "opciones") {
+    const soloOpciones = body.accion === "opciones";
+    const enc = new TextEncoder();
+    const stream = new ReadableStream<Uint8Array>({
+      async start(ctrl) {
+        const enviar = (o: unknown) => ctrl.enqueue(enc.encode(JSON.stringify(o) + "\n"));
+        try {
+          enviar({ tipo: "progreso", paso: 0 });
+          const prep = await preparar(paginasPedidas);
+          if (!prep) throw new Error("Variante no encontrada.");
+          const propiasLista = await listarPlantillasUsuario(sb, user.id);
+          // listarPlantillasUsuario ya las registró en templates.ts.
+          const propias = propiasLista.map((p) => getTemplate(p.id)).filter((t) => t.id.startsWith("u:"));
+          const resultado = await resolverAjuste({
+            data: prep.resume,
+            objetivo: prep.objetivo,
+            actual: prep.actual,
+            propias,
+            sinFoto: prep.reglas.sinFoto && prep.reglas.fuerza.sinFoto === "obligatoria",
+            // Un recorte JAMÁS quita un item de «incluir siempre», sea cual sea su fuerza.
+            protegidos: new Set(prep.reglas.incluirSiempre),
+            soloPlantillas: soloOpciones,
+            maxAlternativas: soloOpciones ? 6 : 4,
+            recortes: async () => ({ items: prep.items, propuesta: await prep.proponer(true) }),
+            onProgreso: (p: ProgresoAjuste) => enviar({ tipo: "progreso", ...p }),
+          });
+          if (soloOpciones) {
+            enviar({ tipo: "resultado", resultado });
+            return;
+          }
+          const aplicado = await aplicarAjuste(sb, user.id, variantId, prep.detalle.items, resultado, propiasLista);
+          console.log("[api/ajustar] ajuste de un clic", {
+            variantId,
+            resueltoPor: resultado.resueltoPor,
+            medidas: resultado.medicion.medidas,
+            caben: resultado.medicion.caben,
+            ms: resultado.medicion.ms,
+          });
+          enviar({
+            tipo: "resultado",
+            resultado: aplicado.resultado,
+            aplicado: aplicado.aplicado,
+            items: aplicado.aplicado ? ((await getVariant(sb, user.id, variantId))?.items ?? []) : undefined,
+          });
+        } catch (e) {
+          console.error("[api/ajustar] no se pudo ajustar", variantId, e);
+          enviar({ tipo: "error", error: motivo(e) });
+        } finally {
+          ctrl.close();
+        }
+      },
+    });
+    return new Response(stream, {
+      headers: { "Content-Type": "application/x-ndjson; charset=utf-8", "Cache-Control": "no-store, no-transform" },
+    });
+  }
 
+  // ── ANALIZAR (Revisar uno por uno) ─────────────────────────────────────────
+  // La propuesta REVISABLE de recortes, item a item, como antes: no aplica nada.
+  try {
+    const prep = await preparar(paginasPedidas);
+    if (!prep) return fallo("Variante no encontrada.", 404);
+    const propuesta = await prep.proponer(false);
     // Los descartes se registran EN EL SERVIDOR además de viajar al cliente: si un
     // día el modelo empieza a comerse cifras en masa, tiene que verse en los logs y
     // no solo en la pantalla de quien lo sufrió.
@@ -252,10 +359,152 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         console.warn("[api/ajustar] acortado RECHAZADO por el candado", { variantId, item: d.id, razon: d.razon });
       }
     }
-
-    return NextResponse.json({ ajuste: { ...propuesta, cascada: { ...informe, variantId } } });
+    // Lo que toca un item de «incluir siempre» ni se propone (DA-R1).
+    const prot = sinProtegidos(prep.items, propuesta, new Set(prep.reglas.incluirSiempre));
+    return NextResponse.json({ ajuste: { ...propuesta, quitar: prot.quitar } });
   } catch (e) {
     console.error("[api/ajustar] no se pudo armar la propuesta", variantId, e);
     return fallo(motivo(e), 500);
   }
+}
+
+// ── Reglas, instantánea, aplicar y deshacer ─────────────────────────────────
+type SBx = Awaited<ReturnType<typeof createClient>>;
+type ItemVariante = NonNullable<Awaited<ReturnType<typeof getVariant>>>["items"][number];
+
+/** Las reglas de la variante; sin la 0012 (o sin la columna) salen las de por defecto. */
+async function leerReglasVariante(sb: SBx, userId: string, variantId: string): Promise<Reglas> {
+  const { data, error } = await sb.from("cv_variants").select("*").eq("id", variantId).eq("user_id", userId).maybeSingle();
+  if (error) console.warn("[api/ajustar] no se pudieron leer las reglas; sin reglas", error.message);
+  return obtenerReglas((data as { reglas?: unknown } | null) ?? null);
+}
+
+/** La clave de la instantánea dentro del override de basics (el PDF no la lee). */
+const CLAVE_PREVIO = "ajustePrevio";
+const CLAVES_DISENO = ["templateId", "paletteId", "typographyId"] as const;
+const COLS = "id,visible,override_data,override_origin,override_verified,override_source_item,override_reason";
+interface FilaPrevia {
+  id: string;
+  visible: boolean;
+  override_data: Record<string, unknown> | null;
+  override_origin: string | null;
+  override_verified: boolean;
+  override_source_item: string | null;
+  override_reason: string | null;
+}
+interface Instantanea {
+  v: 1;
+  cuando: string;
+  resueltoPor: string;
+  /** el diseño de antes; null = la clave no estaba */
+  diseno: Record<(typeof CLAVES_DISENO)[number], string | null>;
+  /** las filas que el ajuste toca, tal como estaban (todas sus columnas de override) */
+  filas: FilaPrevia[];
+}
+
+const basicsDe = (items: ItemVariante[]) => items.find((i) => i.kind === "basics") ?? null;
+
+/**
+ * Aplica lo que resolvió el motor y guarda la instantánea. Si no se resolvió (o ya
+ * cabía) no toca nada. Devuelve el resultado para el cliente (con el id y el nombre
+ * de la plantilla a medida, si se creó).
+ */
+async function aplicarAjuste(
+  sb: SBx,
+  userId: string,
+  variantId: string,
+  items: ItemVariante[],
+  resultado: ResultadoAjuste,
+  propias: PlantillaUsuario[],
+): Promise<{ aplicado: boolean; resultado: ResultadoAjuste & { medidaId?: string; medidaNombre?: string } }> {
+  const r = resultado.resueltoPor;
+  if (!r || r === "ya-cabe") return { aplicado: false, resultado };
+
+  const ovBasics = (basicsDe(items)?.override_data ?? {}) as Record<string, unknown>;
+  const diseno = Object.fromEntries(
+    CLAVES_DISENO.map((k) => [k, typeof ovBasics[k] === "string" && ovBasics[k] ? (ovBasics[k] as string) : null]),
+  ) as Instantanea["diseno"];
+  const rec = resultado.recortes;
+  const ids = r === "recortes" && rec ? [...new Set([...rec.quitar.map((q) => q.id), ...rec.acortar.map((a) => a.id)])] : [];
+  let filas: FilaPrevia[] = [];
+  if (ids.length) {
+    const { data, error } = await sb.from("variant_items").select(COLS).eq("variant_id", variantId).eq("user_id", userId).in("id", ids);
+    if (error) throw new Error(error.message);
+    filas = (data ?? []) as FilaPrevia[];
+  }
+  const previo: Instantanea = { v: 1, cuando: new Date().toISOString(), resueltoPor: r, diseno, filas };
+
+  const extra: { medidaId?: string; medidaNombre?: string } = {};
+  if (r === "plantilla" && resultado.plantilla) {
+    const p = resultado.plantilla;
+    // Una propia lleva su paleta y su pareja dentro: las del usuario se sueltan.
+    await setVariantPresentation(
+      sb,
+      userId,
+      variantId,
+      p.propia ? { templateId: p.templateId, paletteId: null, typographyId: null } : { templateId: p.templateId },
+    );
+  } else if (r === "medida" && resultado.medida) {
+    const params = resultado.medida.params;
+    // Si ya hay una personalizada con estos mismos parámetros, se reusa.
+    const igual = propias.find((x) => JSON.stringify(x.params) === JSON.stringify(params));
+    const p = igual ?? (await guardarPlantillaUsuario(sb, userId, params, `A medida · ${resultado.antes.nombre}`));
+    extra.medidaId = p.id;
+    extra.medidaNombre = p.nombre;
+    await setVariantPresentation(sb, userId, variantId, { templateId: p.id, paletteId: null, typographyId: null });
+  } else if (r === "recortes" && rec) {
+    // Quitar = OCULTAR (reversible). Acortar = override, con el candado corriendo
+    // otra vez aquí sobre el texto de la base.
+    const porId = new Map(items.map((i) => [i.id, i]));
+    for (const q of rec.quitar) await updateItem(sb, userId, q.id, { visible: false });
+    for (const a of rec.acortar) {
+      const it = porId.get(a.id);
+      const campo = it ? campoDe(it.kind) : null;
+      const original = it && campo ? String(it.data[campo] ?? "") : "";
+      if (!it || !campo || !original.trim() || !verificarAcortado(original, a.propuesto).ok) continue;
+      await setAiOverride(sb, userId, a.id, {
+        data: { ...(it.override_data ?? {}), [campo]: a.propuesto },
+        sourceItem: it.item_id,
+        reason: "Acortado por IA al ajustar páginas; cifras y entidades del original preservadas (verify.ts).",
+      });
+    }
+  }
+  // La instantánea va junto al diseño (override de basics): sin migración.
+  const pres = await setVariantPresentation(sb, userId, variantId, {});
+  const { error } = await sb
+    .from("variant_items")
+    .update({ override_data: { ...(pres.override ?? {}), [CLAVE_PREVIO]: previo } })
+    .eq("id", pres.basicsItemId)
+    .eq("user_id", userId);
+  if (error) throw new Error(error.message);
+  return { aplicado: true, resultado: { ...resultado, ...extra } };
+}
+
+/** Repone el diseño y las filas de la instantánea y la retira. false si no había ninguna. */
+async function deshacerAjuste(sb: SBx, userId: string, variantId: string, items: ItemVariante[]): Promise<boolean> {
+  const basics = basicsDe(items);
+  const ov = (basics?.override_data ?? null) as Record<string, unknown> | null;
+  const previo = ov?.[CLAVE_PREVIO] as Instantanea | undefined;
+  if (!basics || !ov || !previo || previo.v !== 1) return false;
+  const propios = new Set(items.map((i) => i.id));
+  for (const f of previo.filas ?? []) {
+    if (!propios.has(f.id)) continue; // solo filas de ESTA variante
+    const { id, ...cols } = f;
+    const { error } = await sb.from("variant_items").update(cols).eq("id", id).eq("variant_id", variantId).eq("user_id", userId);
+    if (error) throw new Error(error.message);
+  }
+  const next: Record<string, unknown> = { ...ov };
+  delete next[CLAVE_PREVIO];
+  for (const k of CLAVES_DISENO) {
+    const v = previo.diseno?.[k];
+    if (v) next[k] = v;
+    else delete next[k];
+  }
+  const { error } = await sb
+    .from("variant_items")
+    .update({ override_data: Object.keys(next).length ? next : null })
+    .eq("id", basics.id)
+    .eq("user_id", userId);
+  if (error) throw new Error(error.message);
+  return true;
 }

@@ -1,22 +1,26 @@
 import { test, expect, type Page, type APIRequestContext } from "@playwright/test";
 import { readFileSync, mkdirSync } from "node:fs";
+import { createHash } from "node:crypto";
 import path from "node:path";
 
 /**
- * «AJUSTAR PÁGINAS» EN CASCADA, en vivo (DA-A1) — solo contra el Supabase LOCAL.
+ * «AJUSTAR PÁGINAS» DE UN CLIC, en vivo (DA-A4) — solo contra el Supabase LOCAL.
  *
  * Con la cuenta de prueba local (supabase/cuenta-prueba.json):
  *   1 · el master lleva la plantilla v2 y el complemento del 26-11 (Importar → .md,
  *       sin IA; se importa solo si falta, para no duplicar en cada corrida);
- *   2 · se arma una variante GRANDE con objetivo 2 páginas que ni a 10 pt cabe;
- *   3 · se pulsa «Ajustar páginas»: el panel enseña los tres pasos EN ORDEN y cuál
- *       lo resuelve; se aplica ese paso (recortes · otra plantilla · a medida);
- *   4 · el PDF real de la variante, medido por /api/cv, queda en 2 páginas.
- * Capturas en prompts/lotes-fable5/_diseno/ajuste/.
+ *   2 · una variante con casi todo (sin referencias), foto y QR, objetivo 2, que ni
+ *       a 10 pt cabe; «incluir siempre» sobre una viñeta (DA-R1) si la 0012 está;
+ *   3 · UN clic en «Ajustar páginas»: progreso por pasos reales, la barra no se
+ *       mueve, y queda aplicada una plantilla (o la a medida) SIN quitar nada;
+ *   4 · el PDF real, medido por /api/cv, mide 2 páginas y conserva todos los items;
+ *   5 · «Ver otras opciones» y 6 · «Deshacer ajuste» reponen items, plantilla y huella.
+ * Capturas en prompts/lotes-fable5/_diseno/ajuste-un-clic/.
  */
 
 const RAIZ = process.cwd();
-const DISENO = path.join(RAIZ, "prompts/lotes-fable5/_diseno/ajuste");
+const DISENO = path.join(RAIZ, "prompts/lotes-fable5/_diseno/ajuste-un-clic");
+const DISENO_MEDIDA = path.join(RAIZ, "prompts/lotes-fable5/_diseno/ajuste");
 const CUENTA = JSON.parse(readFileSync(path.join(RAIZ, "supabase/cuenta-prueba.json"), "utf8")) as {
   email: string;
   password: string;
@@ -75,8 +79,89 @@ async function medir(req: APIRequestContext, variantId: string, paginas = 2) {
   return (await r.json()) as { pages: number; autofit: { noCabe: boolean; bodySize: number; sobran: number } };
 }
 
-test("ajustar páginas en cascada · la variante grande queda en 2 páginas reales", async ({ page }) => {
-  test.setTimeout(600_000);
+/** Huella del documento (DA-C8): sha256 del texto RE-PARSEADO del PDF + páginas. */
+async function huella(req: APIRequestContext, variantId: string) {
+  const r = await req.post("/api/cv", { data: { variantId, as: "text", paginas: 2 } });
+  expect(r.ok(), await r.text()).toBeTruthy();
+  const j = (await r.json()) as { text: string; pages: number };
+  return `${createHash("sha256").update(j.text).digest("hex").slice(0, 16)}·${j.pages}p`;
+}
+
+interface VItem {
+  id: string;
+  item_id: string;
+  kind: string;
+  visible: boolean;
+  override_data: Record<string, unknown> | null;
+  override_origin: string | null;
+}
+/** La forma de la variante: qué items hay, cuáles se ven, qué override y la plantilla. */
+async function forma(req: APIRequestContext, id: string) {
+  const j = (await (await req.get(`/api/variants/${id}`)).json()) as { items: VItem[] };
+  const basics = j.items.find((i) => i.kind === "basics");
+  const ov = { ...(basics?.override_data ?? {}) } as Record<string, unknown>;
+  delete ov.ajustePrevio;
+  const items = j.items
+    .filter((i) => i.kind !== "basics")
+    .map((i) => ({ item: i.item_id, visible: i.visible, ov: i.override_data ? JSON.stringify(i.override_data) : null, origen: i.override_origin }))
+    .sort((a, b) => a.item.localeCompare(b.item));
+  return {
+    items,
+    visibles: items.filter((i) => i.visible).map((i) => i.item),
+    basics: JSON.stringify(Object.keys(ov).sort().map((k) => [k, ov[k]])),
+    templateId: String(ov.templateId ?? ""),
+    previo: !!basics?.override_data?.ajustePrevio,
+  };
+}
+
+/** Las cajas de la barra del editor: si algo se corre, cambia una x o un ancho. */
+async function cajasBarra(page: Page) {
+  return page.evaluate(() =>
+    ["#pvObjetivo", "#edEstado", ".flu-ajustar", "#edAccionesIA", ".ed-tog", ".ed-tog--pv"].map((s) => {
+      const r = document.querySelector(s)?.getBoundingClientRect();
+      return r ? [s, Math.round(r.x), Math.round(r.y), Math.round(r.width), Math.round(r.height)].join(":") : `${s}:—`;
+    }),
+  );
+}
+
+// Una foto mínima (PNG 1×1) y un QR: la variante «con casi todo, foto y QR».
+const FOTO =
+  "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFBQIAX8jx0gAAAABJRU5ErkJggg==";
+
+/** Crea una variante con esos items, foto, QR y objetivo 2. */
+async function crearVariante(req: APIRequestContext, includeIds: string[], name: string) {
+  const cr = await req.post("/api/variants", { data: { mode: "tailor", includeIds, targetTitle: "AI Engineer", name } });
+  expect(cr.ok(), await cr.text()).toBeTruthy();
+  const id = ((await cr.json()) as { variant: { id: string } }).variant.id;
+  const pres = await req.patch(`/api/variants/${id}`, {
+    data: { presentation: { photo: FOTO, qrUrl: "https://example.com/portafolio", qrMode: "url" } },
+  });
+  expect(pres.ok(), await pres.text()).toBeTruthy();
+  await req.patch(`/api/variants/${id}`, { data: { paginas_objetivo: 2 } });
+  return id;
+}
+
+/** Los bloques del master SIN repetidos (un rol importado dos veces cuenta una). */
+function bloquesDelMaster(items: MItem[]) {
+  const clave = (i: MItem) => `${i.kind}|${String(i.data.company ?? i.data.name ?? "")}|${String(i.data.title ?? "")}`;
+  const vistos = new Set<string>();
+  const unicos = (l: MItem[]) => l.filter((i) => (vistos.has(clave(i)) ? false : (vistos.add(clave(i)), true)));
+  const primero = (k: string) => items.filter((i) => i.kind === k).slice(0, 1).map((i) => i.id);
+  const fijos = [...primero("basics"), ...primero("summary"), ...items.filter((i) => ["education", "language"].includes(i.kind)).map((i) => i.id)];
+  const roles = unicos(items.filter((i) => i.kind === "work"));
+  const vinetas = (rol: string) => items.filter((i) => i.kind === "bullet" && i.parentId === rol).map((i) => i.id);
+  const aptitudes = unicos(items.filter((i) => i.kind === "skill"));
+  const proyectos = unicos(items.filter((i) => i.kind === "project"));
+  return {
+    fijos,
+    roles: roles.map((r) => [r.id, ...vinetas(r.id)]),
+    aptitudes: aptitudes.map((a) => a.id),
+    bloques: [...roles.map((r) => [r.id, ...vinetas(r.id)]), ...aptitudes.map((a) => [a.id]), ...proyectos.map((p) => [p.id])],
+  };
+}
+
+test("ajustar de un clic · la variante grande con foto y QR queda en 2 páginas reales sin quitar nada, y se deshace", async ({ page }) => {
+  test.setTimeout(900_000);
   mkdirSync(DISENO, { recursive: true });
   const supabaseVisto = new Set<string>();
   page.on("request", (r) => {
@@ -95,130 +180,239 @@ test("ajustar páginas en cascada · la variante grande queda en 2 páginas real
     await importarMd(page, MD_V2);
     items = await master(req);
   }
-  const tieneComplemento = items.some((i) => i.kind === "project" && /Tamiz/.test(String(i.data.name ?? "")));
-  if (!tieneComplemento) {
+  if (!items.some((i) => i.kind === "project" && /Tamiz/.test(String(i.data.name ?? "")))) {
     await importarMd(page, MD_COMPLEMENTO);
     items = await master(req);
   }
   expect(items.some((i) => i.kind === "project" && /Tamiz/.test(String(i.data.name ?? ""))), "el complemento está en el master").toBe(true);
 
-  // ── 2 · Una variante GRANDE: la mínima que ni a 10 pt cabe en 2 páginas ─────
-  // Base: datos, resumen, aptitudes y formación; luego roles con sus viñetas, de a
-  // uno, hasta que el autofit diga «no cabe» (medido en el PDF real).
-  const fijos = items.filter((i) => ["basics", "summary", "skill", "education", "language"].includes(i.kind)).map((i) => i.id);
-  const roles = items.filter((i) => i.kind === "work");
-  const vinetasDe = (rol: string) => items.filter((i) => i.kind === "bullet" && i.parentId === rol).map((i) => i.id);
-  const proyectos = items.filter((i) => i.kind === "project").map((i) => i.id);
-  const bloques: string[][] = [...roles.map((r) => [r.id, ...vinetasDe(r.id)]), ...proyectos.map((p) => [p])];
+  // ── 2 · La variante GRANDE del master real, con foto y QR, objetivo 2 ──────
+  // «Casi todo» mide 8 páginas a 10 pt en local (el master tiene roles repetidos):
+  // ese caso va en otra prueba. Aquí, sin repetidos, se suman bloques (roles con sus
+  // viñetas, aptitudes, proyectos) hasta que ni a 10 pt cabe en 2 páginas.
+  const { fijos, bloques } = bloquesDelMaster(items);
   let variantId = "";
-  let antes: Awaited<ReturnType<typeof medir>> | null = null;
-  for (let n = 1; n <= bloques.length; n += 1) {
-    const includeIds = [...fijos, ...bloques.slice(0, n).flat()];
-    const cr = await req.post("/api/variants", {
-      data: { mode: "tailor", includeIds, targetTitle: "AI Engineer", name: `ajuste-cascada · ${n} bloques` },
-    });
-    expect(cr.ok(), await cr.text()).toBeTruthy();
-    const id = ((await cr.json()) as { variant: { id: string } }).variant.id;
-    const m = await medir(req, id);
-    if (m.autofit.noCabe) {
-      variantId = id;
-      antes = m;
-      break;
-    }
-    await req.delete(`/api/variants/${id}`);
+  for (let n = 1; n <= bloques.length && !variantId; n += 1) {
+    const id = await crearVariante(req, [...fijos, ...bloques.slice(0, n).flat()], `ajuste-un-clic · ${n} bloques`);
+    if ((await medir(req, id)).autofit.noCabe) variantId = id;
+    else await req.delete(`/api/variants/${id}`);
   }
   expect(variantId, "ninguna selección desborda las 2 páginas").not.toBe("");
-  expect(antes!.pages, "la variante grande no cabe en 2 ni a 10 pt").toBeGreaterThan(2);
-  await req.patch(`/api/variants/${variantId}`, { data: { paginas_objetivo: 2 } });
 
-  // ── 3 · «Ajustar páginas» → la cascada ──────────────────────────────────────
+  // «Incluir siempre» (DA-R1) sobre la viñeta del rol más antiguo, la primera que se
+  // recortaría. Si la 0012 no está en local, la regla no se guarda y se dice.
+  const vinetaProtegida = bloques.flat().filter((id) => items.find((i) => i.id === id)?.kind === "bullet").pop() ?? "";
+  const reg = await req.patch(`/api/variants/${variantId}`, { data: { reglas: { incluirSiempre: [vinetaProtegida] } } });
+  const reglasGuardadas = reg.ok() && ((await reg.json()) as { persistido?: boolean }).persistido !== false;
+  console.log(`[ajuste-un-clic] incluirSiempre ${reglasGuardadas ? "guardada" : "NO guardada (¿0012?)"}: ${vinetaProtegida}`);
+
+  const antes = await medir(req, variantId);
+  expect(antes.autofit.noCabe, "la variante grande no cabe en 2 páginas ni a 10 pt").toBe(true);
+  const formaAntes = await forma(req, variantId);
+  const huellaAntes = await huella(req, variantId);
+
+  // ── 3 · Un clic en «Ajustar páginas» ─────────────────────────────────────────
   await page.goto(`/app/variantes/${variantId}`);
   const ajustar = page.locator(".flu-ajustar");
   await expect(ajustar).toBeVisible({ timeout: 120_000 });
-  const analisis = page.waitForResponse(
+  await page.waitForTimeout(4_000); // la vista previa termina de medir
+  const barraAntes = await cajasBarra(page);
+  await page.screenshot({ path: path.join(DISENO, "01-antes.png") });
+
+  const respuesta = page.waitForResponse(
     (r) => r.url().includes(`/api/variants/${variantId}/ajustar`) && r.request().method() === "POST",
-    { timeout: 300_000 },
+    { timeout: 600_000 },
   );
+  const t0 = Date.now();
   await ajustar.click();
-  const resp = await analisis;
-  expect(resp.ok(), await resp.text()).toBeTruthy();
-  const { ajuste } = (await resp.json()) as {
-    ajuste: { sobran: number; quitar: { id: string }[]; cascada: { resueltoPor: 1 | 2 | 3 | null; pasos: { paso: number; resuelve: boolean }[] } };
+  // Mientras trabaja: el progreso por pasos reales y la barra quieta.
+  const progreso = page.locator("#edProgreso");
+  await expect(progreso).toContainText(/Probando las plantillas|Midiendo el documento/, { timeout: 60_000 });
+  const barraDurante = await cajasBarra(page);
+  await page.screenshot({ path: path.join(DISENO, "02-progreso.png") });
+  // La respuesta es NDJSON en streaming (el navegador no deja leer su cuerpo): el
+  // resultado se lee del panel, que lleva la medida en data-*.
+  expect((await respuesta).ok()).toBeTruthy();
+  const panel = page.locator("#edAjuste");
+  await expect(panel).toBeVisible({ timeout: 600_000 });
+  await expect(page.locator(".flu-ajustar")).toBeEnabled({ timeout: 600_000 });
+  const dato = async (k: string) => (await panel.getAttribute(`data-${k}`)) ?? "";
+  const r = {
+    resueltoPor: await dato("resuelto-por"),
+    plantilla: await dato("plantilla"),
+    medidas: Number(await dato("medidas")),
+    consideradas: Number(await dato("consideradas")),
+    caben: Number(await dato("caben")),
+    ms: Number(await dato("ms")),
+    tope: (await dato("tope")) === "1",
+    recortes: Number(await dato("recortes")),
   };
-  // «sobran» ya no es la cuenta teórica: al menos las líneas de las páginas de más.
-  expect(ajuste.sobran).toBeGreaterThan(0);
-  const panel = page.locator("#edCascada");
-  await expect(panel).toBeVisible({ timeout: 60_000 });
-  // Los pasos EN ORDEN, cada uno con su estado, y cuál lo resolvió.
-  await expect(panel.locator("li[data-paso]")).toHaveCount(3);
-  expect(await panel.locator("li[data-paso]").evaluateAll((els) => els.map((e) => e.getAttribute("data-paso")))).toEqual(["1", "2", "3"]);
-  const r = ajuste.cascada.resueltoPor;
-  await expect(panel.locator(".flu-cas-res")).toHaveAttribute("data-resuelto", String(r ?? "ninguno"));
-  if (r) await expect(panel.locator(".flu-cas-res")).toContainText(`paso ${r}`);
-  // Los pasos posteriores al que resuelve no se calculan: «no hizo falta».
-  for (const n of [1, 2, 3]) {
-    const p = ajuste.cascada.pasos.find((x) => x.paso === n);
-    await expect(panel.locator(`li[data-paso="${n}"]`)).toHaveAttribute(
-      "data-estado",
-      !p ? "noHizoFalta" : p.resuelve ? "resuelve" : "noAlcanza",
-    );
-  }
-  await page.waitForTimeout(1_500); // las miniaturas se rasterizan en el cliente
-  await panel.screenshot({ path: path.join(DISENO, "ajuste-01-cascada.png") });
-  await page.screenshot({ path: path.join(DISENO, "ajuste-02-editor-cascada.png") });
-  expect(r, "la cascada tiene que resolver la variante grande").not.toBeNull();
+  console.log(`[ajuste-un-clic] ${JSON.stringify({ ...r, msCliente: Date.now() - t0 })}`);
+  await expect(panel.locator(".flu-cas-res")).not.toHaveAttribute("data-resuelto", "error");
+  // Paso 1 o 2: una plantilla (catálogo o personalizada) o la plantilla a medida, SIN recortar.
+  expect(["plantilla", "medida"], `lo resolvió: ${r.resueltoPor} · ${await panel.locator(".flu-cas-res").textContent()}`).toContain(r.resueltoPor);
+  expect(r.recortes).toBe(0);
+  expect(r.medidas).toBeGreaterThan(0);
 
-  // ── 4 · Aplicar el paso que resuelve ────────────────────────────────────────
-  if (r === 1) {
-    // Los recortes son manuales: se aceptan uno a uno, como el usuario.
-    await panel.locator(".flu-cas-x").click();
-    for (const q of ajuste.quitar) {
-      const b = page.locator(`.flu-prop[data-prop="q"][data-for="${q.id}"] button`).last();
-      if (await b.count()) await b.click();
-    }
-    await page.waitForTimeout(3_000);
-  } else {
-    // «Usar esta» guarda la plantilla con savePresentation, sin recargar (DA-AC4):
-    // se espera el PATCH de la variante y se recarga para leerla de la base.
-    const boton = r === 2 ? panel.locator(".flu-cas-cands li button").first() : panel.locator(".flu-cas-medida button");
-    const guardado = page.waitForResponse(
-      (res) => res.request().method() === "PATCH" && res.url().includes(`/api/variants/${variantId}`),
-      { timeout: 120_000 },
-    );
-    await boton.click();
-    expect((await guardado).ok(), "«Usar esta» guarda la plantilla en la variante").toBeTruthy();
-    await page.reload();
-  }
-  await expect(page.locator(".flu-ajustar")).toBeVisible({ timeout: 120_000 });
-  await page.waitForTimeout(4_000);
-  await page.screenshot({ path: path.join(DISENO, `ajuste-03-aplicado-paso-${r}.png`) });
+  await expect(panel.locator(".flu-cas-res")).toContainText("cabe en 2 páginas sin quitar nada");
+  await expect(panel.locator("#edAjusteDeshacer")).toBeVisible();
+  await expect(panel.locator("#edAjusteRevisar")).toBeVisible();
+  await page.waitForTimeout(5_000); // la vista previa rehace el PDF con la plantilla nueva
+  const barraDespues = await cajasBarra(page);
+  await panel.screenshot({ path: path.join(DISENO, "03-panel-aplicado.png") });
+  await page.screenshot({ path: path.join(DISENO, "04-editor-aplicado.png") });
 
-  // ── 5 · El PDF REAL de la variante: 2 páginas ───────────────────────────────
+  // La barra no se mueve: antes, durante y después, las mismas cajas.
+  expect(barraDurante, "la barra no se mueve mientras ajusta").toEqual(barraAntes);
+  expect(barraDespues, "la barra no se mueve tras ajustar").toEqual(barraAntes);
+
+  // ── 4 · El PDF REAL: 2 páginas, con TODO el contenido ───────────────────────
   const despues = await medir(req, variantId);
-  expect(despues.pages, "tras la cascada el PDF real mide 2 páginas").toBeLessThanOrEqual(2);
+  expect(despues.pages, "tras el ajuste el PDF real mide 2 páginas").toBeLessThanOrEqual(2);
   expect(despues.autofit.noCabe).toBe(false);
   expect(despues.autofit.bodySize).toBeGreaterThanOrEqual(10);
+  const formaDespues = await forma(req, variantId);
+  expect(formaDespues.visibles, "no se quitó ni ocultó ningún item").toEqual(formaAntes.visibles);
+  expect(formaDespues.items, "ningún texto cambió").toEqual(formaAntes.items);
+  expect(formaDespues.templateId).not.toBe(formaAntes.templateId);
+  expect(formaDespues.previo, "la instantánea queda guardada").toBe(true);
+  if (vinetaProtegida) expect(formaDespues.visibles).toContain(vinetaProtegida);
 
-  // ── 6 · Galería · «Personalizadas» (la plantilla a medida, si se creó) ──────
-  const lista = (await (await req.get("/api/plantillas")).json()) as { plantillas: { id: string; nombre: string }[] };
-  if (r === 3) expect(lista.plantillas.length).toBeGreaterThan(0);
-  const abrirGaleria = page.locator(".tplopen").first();
-  if (await abrirGaleria.isVisible().catch(() => false)) {
-    await abrirGaleria.click();
-    await page.locator("#tgTab-propias").click();
-    await expect(page.locator('[data-pestana="propias"]')).toBeVisible({ timeout: 30_000 });
-    await page.waitForTimeout(2_500);
-    await page.screenshot({ path: path.join(DISENO, "ajuste-04-galeria-personalizadas.png") });
-  }
+  // ── 5 · Ver otras opciones ───────────────────────────────────────────────────
+  await panel.locator("#edAjusteOpciones").click();
+  const lista = panel.locator("#edAjusteLista li, .flu-cas-hint");
+  await expect(lista.first()).toBeVisible({ timeout: 300_000 });
+  await page.waitForTimeout(2_000); // las miniaturas se rasterizan en el cliente
+  await panel.screenshot({ path: path.join(DISENO, "05-otras-opciones.png") });
+
+  // ── 6 · Deshacer ajuste: plantilla, items y huella como antes ───────────────
+  const deshacer = page.waitForResponse(
+    (res) => res.url().includes(`/api/variants/${variantId}/ajustar`) && res.request().method() === "POST",
+    { timeout: 120_000 },
+  );
+  await panel.locator("#edAjusteDeshacer").click();
+  expect((await deshacer).ok()).toBeTruthy();
+  await expect(panel.locator(".flu-cas-res")).toContainText("Ajuste deshecho", { timeout: 30_000 });
+  await page.waitForTimeout(4_000);
+  await panel.screenshot({ path: path.join(DISENO, "06-deshecho.png") });
+  expect(await cajasBarra(page), "la barra no se mueve al deshacer").toEqual(barraAntes);
+  const formaDeshecha = await forma(req, variantId);
+  expect(formaDeshecha.items, "Deshacer repone los variant_items").toEqual(formaAntes.items);
+  expect(formaDeshecha.basics, "Deshacer repone la plantilla y el diseño").toEqual(formaAntes.basics);
+  expect(formaDeshecha.previo, "la instantánea se retira").toBe(false);
+  expect(await huella(req, variantId), "Deshacer repone la huella del PDF").toBe(huellaAntes);
 
   // Nunca el remoto (DA-V3).
   for (const h of supabaseVisto) expect(h, "solo el Supabase local").toMatch(/^(127\.0\.0\.1|localhost):/);
-  console.log(JSON.stringify({ variantId, antes: antes!.pages, sobran: ajuste.sobran, resueltoPor: r, despues: despues.pages, cuerpo: despues.autofit.bodySize }));
+  console.log(JSON.stringify({ variantId, antes: antes.pages, resueltoPor: r.resueltoPor, despues: despues.pages, cuerpo: despues.autofit.bodySize }));
+});
+
+test("ajustar de un clic · «casi todo» (8 páginas) no cabe en 2 sin recortar: lo dice y no toca nada", async ({ page }) => {
+  test.setTimeout(600_000);
+  mkdirSync(DISENO, { recursive: true });
+  await page.setViewportSize({ width: 1440, height: 960 });
+  await login(page);
+  const req = page.request;
+  const items = await master(req);
+  const variantId = await crearVariante(req, items.filter((i) => i.kind !== "reference").map((i) => i.id), "ajuste-un-clic · casi todo");
+  const antes = await medir(req, variantId);
+  expect(antes.autofit.noCabe).toBe(true);
+  const formaAntes = await forma(req, variantId);
+  const huellaAntes = await huella(req, variantId);
+
+  await page.goto(`/app/variantes/${variantId}`);
+  const ajustar = page.locator(".flu-ajustar");
+  await expect(ajustar).toBeVisible({ timeout: 120_000 });
+  await page.waitForTimeout(4_000);
+  const barraAntes = await cajasBarra(page);
+  const t0 = Date.now();
+  await ajustar.click();
+  const panel = page.locator("#edAjuste");
+  await expect(panel).toBeVisible({ timeout: 600_000 });
+  await expect(ajustar).toBeEnabled({ timeout: 600_000 });
+  const dato = async (k: string) => (await panel.getAttribute(`data-${k}`)) ?? "";
+  const r = {
+    paginasAntes: antes.pages,
+    resueltoPor: await dato("resuelto-por"),
+    medidas: Number(await dato("medidas")),
+    consideradas: Number(await dato("consideradas")),
+    caben: Number(await dato("caben")),
+    ms: Number(await dato("ms")),
+    recortes: Number(await dato("recortes")),
+    msCliente: Date.now() - t0,
+  };
+  console.log(`[ajuste-un-clic] casi todo ${JSON.stringify(r)} · ${await panel.locator(".flu-cas-res").textContent()}`);
+  await page.waitForTimeout(2_000);
+  await panel.screenshot({ path: path.join(DISENO, "07-casi-todo-no-cabe.png") });
+  expect(await cajasBarra(page), "la barra no se mueve").toEqual(barraAntes);
+
+  if (r.resueltoPor === "ninguno") {
+    // Honesto: lo dice, no ofrece deshacer y el documento queda EXACTAMENTE igual.
+    await expect(panel.locator(".flu-cas-res")).toContainText("No pude dejarlo en 2 páginas");
+    await expect(panel.locator("#edAjusteDeshacer")).toHaveCount(0);
+    await expect(panel.locator("#edAjusteRevisar")).toBeVisible();
+    const formaDespues = await forma(req, variantId);
+    expect(formaDespues.items).toEqual(formaAntes.items);
+    expect(formaDespues.basics).toEqual(formaAntes.basics);
+    expect(formaDespues.previo).toBe(false);
+    expect(await huella(req, variantId)).toBe(huellaAntes);
+  } else {
+    // Si un día cabe (p. ej. con recortes), cabe de verdad.
+    const despues = await medir(req, variantId);
+    expect(despues.pages).toBeLessThanOrEqual(2);
+  }
+});
+
+test("ajustar de un clic · si solo recortando cabe, recorta todo de una vez y nunca quita lo de «incluir siempre»", async ({ page }) => {
+  test.setTimeout(600_000);
+  mkdirSync(DISENO, { recursive: true });
+  await page.setViewportSize({ width: 1440, height: 960 });
+  await login(page);
+  const req = page.request;
+  const items = await master(req);
+  const { fijos, roles } = bloquesDelMaster(items);
+  // TODAS las aptitudes del master (32 grupos, repetidos incluidos) y un rol: 3
+  // páginas que ninguna plantilla ni la plantilla a medida salvan.
+  const aptitudes = items.filter((i) => i.kind === "skill").map((i) => i.id);
+  const variantId = await crearVariante(req, [...fijos, ...aptitudes, ...roles[0]!], "ajuste-un-clic · recortes");
+  const protegido = aptitudes[aptitudes.length - 1]!;
+  const reg = await req.patch(`/api/variants/${variantId}`, { data: { reglas: { incluirSiempre: [protegido] } } });
+  test.skip(!reg.ok() || ((await reg.json()) as { persistido?: boolean }).persistido === false, "sin la 0012 en local no hay reglas");
+  const formaAntes = await forma(req, variantId);
+  const huellaAntes = await huella(req, variantId);
+  expect(formaAntes.visibles).toContain(protegido);
+
+  await page.goto(`/app/variantes/${variantId}`);
+  const ajustar = page.locator(".flu-ajustar");
+  await expect(ajustar).toBeVisible({ timeout: 120_000 });
+  await page.waitForTimeout(3_000);
+  await ajustar.click();
+  const panel = page.locator("#edAjuste");
+  await expect(panel).toBeVisible({ timeout: 600_000 });
+  await expect(ajustar).toBeEnabled({ timeout: 600_000 });
+  const resuelto = (await panel.getAttribute("data-resuelto-por")) ?? "";
+  console.log(`[ajuste-un-clic] recortes · ${resuelto} · ${await panel.locator(".flu-cas-res").textContent()} · ${await panel.locator(".flu-cas-hint").first().textContent().catch(() => "")}`);
+  await page.waitForTimeout(2_000);
+  await panel.screenshot({ path: path.join(DISENO, "08-recortes-aplicados.png") });
+
+  expect(["recortes", "ninguno"], "solo recortando podía caber").toContain(resuelto);
+  const despues = await forma(req, variantId);
+  expect(despues.visibles, "«incluir siempre» sobrevive al ajuste").toContain(protegido);
+  if (resuelto === "recortes") {
+    expect((await medir(req, variantId)).pages).toBeLessThanOrEqual(2);
+    expect(despues.visibles.length).toBeLessThan(formaAntes.visibles.length);
+    // Deshacer repone los items ocultados y los textos acortados.
+    await panel.locator("#edAjusteDeshacer").click();
+    await expect(panel.locator(".flu-cas-res")).toContainText("Ajuste deshecho", { timeout: 60_000 });
+    const deshecha = await forma(req, variantId);
+    expect(deshecha.items).toEqual(formaAntes.items);
+    expect(await huella(req, variantId)).toBe(huellaAntes);
+  }
 });
 
 test("plantilla a medida en vivo · se guarda con candado, el PDF la resuelve y la galería la gestiona", async ({ page }) => {
   test.setTimeout(300_000);
-  mkdirSync(DISENO, { recursive: true });
+  mkdirSync(DISENO_MEDIDA, { recursive: true });
   await page.setViewportSize({ width: 1440, height: 960 });
   await login(page);
   const req = page.request;
@@ -271,7 +465,7 @@ test("plantilla a medida en vivo · se guarda con candado, el PDF la resuelve y 
   await expect(tarjeta).toBeVisible({ timeout: 30_000 });
   await expect(tarjeta).toContainText("A medida · e2e");
   await page.waitForTimeout(3_000); // la miniatura sale del PDF real
-  await page.screenshot({ path: path.join(DISENO, "ajuste-04-galeria-personalizadas.png") });
+  await page.screenshot({ path: path.join(DISENO_MEDIDA, "ajuste-04-galeria-personalizadas.png") });
 
   await tarjeta.getByRole("button", { name: "Renombrar" }).click();
   await tarjeta.getByLabel("Nombre de la plantilla").fill("Mi plantilla compacta");
@@ -280,7 +474,7 @@ test("plantilla a medida en vivo · se guarda con candado, el PDF la resuelve y 
 
   await tarjeta.getByRole("button", { name: "Eliminar" }).click();
   await expect(tarjeta).toContainText("vuelven a la plantilla por defecto");
-  await page.screenshot({ path: path.join(DISENO, "ajuste-05-eliminar-confirma.png") });
+  await page.screenshot({ path: path.join(DISENO_MEDIDA, "ajuste-05-eliminar-confirma.png") });
   await tarjeta.getByRole("button", { name: "Sí, eliminar" }).click();
   await expect(tarjeta).toBeHidden({ timeout: 30_000 });
   const lista = (await (await req.get("/api/plantillas")).json()) as { plantillas: { id: string }[] };

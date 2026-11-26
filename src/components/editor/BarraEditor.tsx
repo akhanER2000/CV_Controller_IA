@@ -1,10 +1,11 @@
 // Sin "use client": solo lo importa la pantalla del editor (ya cliente).
 import Link from "next/link";
 import { useLayoutEffect, useRef, type RefObject } from "react";
-import { GuiaAjuste } from "@/components/FlujoCv";
+import { GuiaAjuste, PanelAjuste } from "@/components/FlujoCv";
 import { Progreso, type ProgresoProps } from "@/components/ui/Progreso";
 import { AfinarIA } from "./AfinarIA";
 import { useAfinar } from "./useAfinar";
+import { useAjusteUnClic, type AjusteUnClic } from "./useAjusteUnClic";
 import { Desplegable, Kbd } from "./Desplegable";
 import { ATAJOS, TECLA } from "./atajos";
 import { alternarOculto } from "./vista-previa";
@@ -31,10 +32,13 @@ import type { Editor } from "./useEditorVariante";
 export function BarraEditor({ ed }: { ed: Editor }) {
   const { t, meta, variantId, objetivo, pageCount } = ed;
   const af = useAfinar(ed);
+  const aj = useAjusteUnClic(ed);
   const barra = useRef<HTMLDivElement>(null);
   // «.flu-ajustar» ya no hace falta: su etiqueta va en <AnchoFijo> (DA-EE3, DA-AC4).
-  useSinEncoger(barra, ["#edEstado"], t);
-  const progreso = useProgresoBarra(ed, af);
+  // «#edState» tampoco encoge: un aviso largo que caduca («presentación guardada…»)
+  // dejaba la fila 1 más baja en móvil y corría la barra entera.
+  useSinEncoger(barra, ["#edEstado", "#edState"], t);
+  const progreso = useProgresoBarra(ed, af, aj);
   // Lo que antes se pintaba en rojo sobre el PDF: aquí, dentro del detalle.
   const avisos: string[] = [];
   if (pageCount >= 3 && objetivo < 3) avisos.push(t("editor.pagesWarn").replace("{n}", String(pageCount)));
@@ -139,20 +143,29 @@ export function BarraEditor({ ed }: { ed: Editor }) {
           huecosTipo={ed.huecosTipo}
           pendientes={ed.pendientes}
           fit={ed.fit}
-          busy={ed.fitBusy}
+          busy={ed.fitBusy || aj.busy}
           err={ed.fitErr}
           notasIA={ed.notasIA}
           avisos={avisos}
-          onProponer={() => {
-            // Pedir la propuesta ES pulsar aquí: una llamada al modelo con la clave
-            // del usuario, nunca sola. Las decisiones aparecen bajo cada item.
-            ed.setView("mid");
-            ed.runFit();
-          }}
+          // UN CLIC (DA-A4): el servidor prueba todas las plantillas, la plantilla a
+          // medida y por último los recortes, y APLICA la primera que cabe.
+          onProponer={aj.ajustar}
           onSiguiente={ed.irASiguiente}
-          // «Usar esta» de la cascada guarda la plantilla sin recargar (DA-AC4).
-          onUsarPlantilla={(id) => ed.savePresentation({ templateId: id })}
           ia={<AfinarIA ed={ed} af={af} />}
+          panel={
+            <PanelAjuste
+              aj={aj}
+              objetivo={objetivo}
+              paginasTxt={ed.paginasTxt}
+              onRevisar={() => {
+                // «Revisar uno por uno»: la propuesta item a item de siempre (una
+                // llamada al modelo); las decisiones aparecen bajo cada item.
+                aj.cerrar();
+                ed.setView("mid");
+                ed.runFit();
+              }}
+            />
+          }
         />
         <span className="ed-bar-sp" />
         <button
@@ -185,9 +198,10 @@ export function BarraEditor({ ed }: { ed: Editor }) {
  * Lo que está cargando AHORA en el editor, en pasos reales (DA-A2). Uno a la vez,
  * por prioridad: descarga del PDF · afinar (llamada → la vista previa mide el
  * resultado) · ajustar páginas · plantilla/paleta (la vista previa se rehace).
- * Ningún porcentaje: ninguna de estas llamadas informa cuánto lleva.
+ * El único porcentaje es el de «Probando las plantillas» del ajuste: plantillas
+ * medidas / plantillas a medir, que el servidor cuenta de verdad.
  */
-function useProgresoBarra(ed: Editor, af: ReturnType<typeof useAfinar>): ProgresoProps {
+function useProgresoBarra(ed: Editor, af: ReturnType<typeof useAfinar>, aj: AjusteUnClic): ProgresoProps {
   const { t } = ed;
   // El primer paso de afinar se recuerda para el segundo (la vista previa midiendo).
   const paso1 = useRef("");
@@ -199,6 +213,12 @@ function useProgresoBarra(ed: Editor, af: ReturnType<typeof useAfinar>): Progres
   if (ed.pdfBusy) return { activo: true, etiqueta: t("editor.progPdf") };
   if (af.busy) return { activo: true, pasos: [paso1.current, medir], paso: 0 };
   if (ed.pvSigue?.motivo === "afinar") return { activo: true, pasos: [paso1.current || t("editor.progAfinar"), medir], paso: 1 };
+  if (aj.busy) {
+    const p = aj.progreso ?? { paso: 0 };
+    const pasos = [t("ajuste.progMedir"), t("ajuste.progPlantillas"), t("ajuste.progMedida"), t("ajuste.progRecortes")];
+    const pc = p.paso === 1 && p.total ? Math.round(((p.hechas ?? 0) / p.total) * 100) : null;
+    return { activo: true, pasos, paso: p.paso, porcentaje: pc };
+  }
   if (ed.fitBusy) return { activo: true, etiqueta: t("editor.progAjustar") };
   if (ed.pvSigue?.motivo === "diseno") return { activo: true, etiqueta: t("editor.progDiseno") };
   return { activo: false };

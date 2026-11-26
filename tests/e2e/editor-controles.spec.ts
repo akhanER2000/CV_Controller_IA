@@ -20,6 +20,22 @@ import path from "node:path";
  *   npx playwright test tests/e2e/editor-controles.spec.ts   (contra el dev:local del 3000)
  */
 
+/** La respuesta fijada del ajuste de un clic (NDJSON, DA-A4): no resuelve ni aplica nada. */
+const AJUSTE_FIJADO =
+  JSON.stringify({ tipo: "progreso", paso: 0 }) +
+  "\n" +
+  JSON.stringify({
+    tipo: "resultado",
+    aplicado: false,
+    resultado: {
+      objetivo: 2, resueltoPor: null, antes: { templateId: "ats-clasica", nombre: "Clásica", paginas: 3, cuerpo: 10 },
+      plantilla: null, medida: null, recortes: null, alternativas: [],
+      medicion: { consideradas: 0, propias: 0, porCapacidad: 0, porFoto: 0, medidas: 0, caben: 0, tope: false, ms: 0 },
+      razon: "fijado en la prueba",
+    },
+  }) +
+  "\n";
+
 const RAIZ = process.cwd();
 const CAPS = path.join(RAIZ, "prompts/lotes-fable5/_diseno/forja-v2/editor-v2");
 /** Un usuario desechable del Supabase LOCAL (service role del entorno, como flujo-cv). */
@@ -499,20 +515,25 @@ test("editor integral · cada control hace lo que dice", async ({ page }) => {
   // se rechaza una sin tocar el documento.
   const items = (await leer(req, id)).items;
   const vQuitar = items.find((i) => i.item_id === vinetas[0]!.id)!;
+  // «Ajustar páginas» es de un clic (DA-A4); la propuesta item a item es «Revisar
+  // uno por uno», en su panel. Las dos respuestas se fijan: no se aplica nada.
   await page.route(`**/api/variants/${id}/ajustar`, (route) =>
-    route.fulfill({
-      status: 200,
-      contentType: "application/json",
-      body: JSON.stringify({
-        ajuste: {
-          paginas: 2, paginasObjetivo: 1, sobran: 4,
-          quitar: [{ id: vQuitar.id, kind: "bullet", texto: "x", motivo: "La menos ligada al rol." }],
-          reordenar: [], acortar: [], falta: [], descartados: [], notas: "",
-        },
-      }),
-    }),
+    (route.request().postDataJSON() as { accion?: string })?.accion === "ajustar"
+      ? route.fulfill({ status: 200, contentType: "application/x-ndjson", body: AJUSTE_FIJADO })
+      : route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({
+            ajuste: {
+              paginas: 2, paginasObjetivo: 1, sobran: 4,
+              quitar: [{ id: vQuitar.id, kind: "bullet", texto: "x", motivo: "La menos ligada al rol." }],
+              reordenar: [], acortar: [], falta: [], descartados: [], notas: "",
+            },
+          }),
+        }),
   );
   await page.locator("#edGuia").getByRole("button", { name: "Ajustar páginas", exact: true }).click();
+  await page.locator("#edAjusteRevisar").click();
   const prop = page.locator(`.flu-prop[data-for="${vQuitar.id}"]`);
   await expect(prop).toBeVisible();
   await prop.scrollIntoViewIfNeeded();

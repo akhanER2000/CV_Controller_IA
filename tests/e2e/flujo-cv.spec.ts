@@ -23,6 +23,22 @@ import path from "node:path";
  *   npx playwright test tests/e2e/flujo-cv.spec.ts
  */
 
+/** La respuesta fijada del ajuste de un clic (NDJSON, DA-A4): no resuelve ni aplica nada. */
+const AJUSTE_FIJADO =
+  JSON.stringify({ tipo: "progreso", paso: 0 }) +
+  "\n" +
+  JSON.stringify({
+    tipo: "resultado",
+    aplicado: false,
+    resultado: {
+      objetivo: 2, resueltoPor: null, antes: { templateId: "ats-clasica", nombre: "Clásica", paginas: 3, cuerpo: 10 },
+      plantilla: null, medida: null, recortes: null, alternativas: [],
+      medicion: { consideradas: 0, propias: 0, porCapacidad: 0, porFoto: 0, medidas: 0, caben: 0, tope: false, ms: 0 },
+      razon: "fijado en la prueba",
+    },
+  }) +
+  "\n";
+
 const DISENO = path.resolve(process.cwd(), "prompts/lotes-fable5/_diseno");
 
 interface Foto {
@@ -154,6 +170,9 @@ async function fijarPropuesta(page: Page, varId: string, m: Record<string, strin
     const body = route.request().postDataJSON() as { accion?: string };
     if (body?.accion === "analizar") {
       await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ ajuste }) });
+    } else if (body?.accion === "ajustar") {
+      // El ajuste de un clic (DA-A4) se fija: no aplica nada; se sigue por «Revisar uno por uno».
+      await route.fulfill({ status: 200, contentType: "application/x-ndjson", body: AJUSTE_FIJADO });
     } else {
       await route.continue(); // aceptar un acortado: servidor REAL, candado real
     }
@@ -320,6 +339,7 @@ async function flujoNuevo(page: Page, capturas: boolean) {
   await expect(page.locator("#edLib")).toHaveCount(0);
 
   await guia.getByRole("button", { name: "Ajustar páginas", exact: true }).click();
+  await page.locator("#edAjusteRevisar").click();
   await expect(page.locator(".flu-prop").first()).toBeVisible();
   if (capturas) await capDoble(page, "04-propuestas");
   // LAS MISMAS decisiones. La primera, con el teclado: J marca la próxima bajo

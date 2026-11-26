@@ -4,7 +4,7 @@ import { buildResumeData } from "@/lib/db/queries";
 import { buildVariantResumeData } from "@/lib/db/variants";
 import { autofit, plantillaDe } from "@/lib/cv/autofit";
 import { getTemplate } from "@/lib/cv/templates";
-import { cascada } from "@/lib/cv/cascada";
+import { resolverAjuste } from "@/lib/cv/cascada";
 import { paramsDeEscalon, plantillaDeParams, p90DeLinea, baseParaMedida } from "@/lib/cv/plantilla-medida";
 import { renderResumeToBuffer } from "@/lib/cv/ResumePDF";
 import { medirPdf } from "@/lib/cv/medir";
@@ -60,7 +60,7 @@ describe.skipIf(!local || !KEY || !USER)("sonda del ajuste (Supabase local)", ()
       }
       if (process.env.SONDA_CASCADA) {
         const t0 = Date.now();
-        const c = await cascada({ data: d, objetivo: 2, actual: r, items: [], propuesta: { quitar: [], acortar: [] } });
+        const c = await resolverAjuste({ data: d, objetivo: 2, actual: r });
         const sinPdf = JSON.parse(JSON.stringify(c, (k, v) => (k === "pdf" && v ? `<${String(v).length} b64>` : v)));
         console.log(JSON.stringify({ ms: Date.now() - t0, ...sinPdf }));
       }

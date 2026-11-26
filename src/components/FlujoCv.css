@@ -118,6 +118,11 @@
 .flu-cas-nom{display:flex;flex-direction:column;gap:2px;min-width:0;font-size:var(--fs-micro)}
 .flu-cas-nom span{color:var(--text-muted)}
 .flu-cas-msg{margin:0;font-size:var(--fs-micro)}
+/* Ajustar de un clic (DA-A4): las salidas del panel anclado. «Revisar uno por uno» es un enlace secundario. */
+.flu-un-acts{display:flex;flex-wrap:wrap;align-items:center;gap:8px}
+.flu-un-revisar{border:0;background:none;padding:4px 2px;color:var(--text-muted);font:inherit;font-size:var(--fs-micro);text-decoration:underline;text-underline-offset:3px;cursor:pointer;margin-left:auto}
+.flu-un-revisar:hover{color:var(--text)}
+.flu-un-revisar:focus-visible{outline:2px solid var(--focus-ring, currentColor);outline-offset:2px;border-radius:4px}
 @media (max-width:767px){
   .flu-cascada{position:fixed;left:16px;right:16px;top:auto;bottom:96px;width:auto}
   .flu-cas-cands>li,.flu-cas-medida{grid-template-columns:56px 1fr}
