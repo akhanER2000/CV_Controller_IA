@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { resolve } from "node:path";
 import {
   contarPendientes,
@@ -23,6 +23,14 @@ import { editor } from "../src/lib/i18n/dict/editor";
  */
 
 const lee = (p: string) => readFileSync(resolve(__dirname, p), "utf8");
+// El editor de variante quedó dividido (editor-integral): la pantalla compone y el
+// estado y los manejadores viven en src/components/editor/. Se lee TODO el editor.
+const leeEditor = () =>
+  ["../src/components/screens/EditorVarianteScreen.tsx", ...readdirSync(resolve(__dirname, "../src/components/editor"))
+    .filter((f) => /\.tsx?$/.test(f))
+    .map((f) => `../src/components/editor/${f}`)]
+    .map(lee)
+    .join("\n");
 const sinComentarios = (s: string) => s.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|[^:])\/\/.*$/gm, "$1");
 
 const fit = (over: Partial<Fit> = {}): Fit => ({
@@ -111,14 +119,14 @@ describe("flujo-cv · «qué falta» es la MISMA función del servidor, aplicada
   });
 
   it("el editor no reimplementa calcularFaltas: la importa de ajuste.ts", () => {
-    const src = sinComentarios(lee("../src/components/screens/EditorVarianteScreen.tsx"));
+    const src = sinComentarios(leeEditor());
     expect(src).toContain('import("@/lib/cv/ajuste")');
     expect(src).not.toMatch(/function\s+calcularFaltas/);
   });
 });
 
 describe("flujo-cv · las garantías del flujo anterior siguen en pie", () => {
-  const src = sinComentarios(lee("../src/components/screens/EditorVarianteScreen.tsx"));
+  const src = sinComentarios(leeEditor());
   const comp = sinComentarios(lee("../src/components/FlujoCv.tsx"));
 
   it("aceptar un acortado sigue yendo al servidor (accion 'acortar' → verificarAcortado) y solo cambia el texto si dice que sí", () => {

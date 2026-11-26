@@ -11,23 +11,21 @@
    UN indicador (cabe / no cabe · huecos) que abre el detalle, «Ajustar páginas»
    y lo que queda por decidir. Envuelve antes que cortar. */
 .flu-guia{display:flex;align-items:center;flex-wrap:wrap;gap:var(--sp-2) var(--sp-3);min-width:0}
-.flu-estado{display:inline-flex;align-items:center;gap:var(--sp-2);height:32px;padding:0 var(--sp-3);white-space:nowrap;
-  border:1px solid var(--border-strong);border-radius:var(--radius-pill);background:var(--surface-sunken);
+.flu-estado{display:inline-flex;align-items:center;gap:var(--sp-2);height:34px;padding:0 var(--sp-2) 0 3px;white-space:nowrap;
+  border:1px solid transparent;border-radius:var(--radius-pill);background:transparent;
   transition:border-color .14s,background-color .14s}
 .flu-estado:hover,.flu-estado[aria-expanded="true"]{border-color:var(--border-patina);background:var(--surface-elevated)}
-.flu-estado:has(.flu-doc[data-estado="no-cabe"]),.flu-estado:has(.flu-doc[data-estado="excede"]){border-color:var(--border-brasa)}
 .flu-estado .chev{font-size:9px;color:var(--text-subtle)}
-.flu-doc{display:inline-flex;align-items:center;gap:var(--sp-2);font:600 var(--fs-micro)/1 var(--font-sans);color:var(--text)}
-.flu-doc::before{content:"";flex:none;width:8px;height:8px;border-radius:50%;background:var(--text-subtle)}
-.flu-doc[data-estado="cabe"]::before{background:var(--ver-ok)}
-.flu-doc[data-estado="no-cabe"],.flu-doc[data-estado="excede"],.flu-doc[data-estado="error"]{color:var(--accent-text)}
-.flu-doc[data-estado="no-cabe"]::before,.flu-doc[data-estado="excede"]::before,.flu-doc[data-estado="error"]::before{background:var(--accent)}
+/* El indicador ES el StatusChip del sistema (ui.css · .u-status): punto + texto. */
+.flu-doc{display:inline-flex;align-items:center}
 .flu-cuenta{font:400 var(--fs-micro)/1 var(--font-mono);color:var(--text-muted)}
 .flu-ajustar{height:32px;padding:0 var(--sp-4);font-size:var(--fs-micro)}
 .flu-pend{display:inline-flex;align-items:center;gap:var(--sp-2);white-space:nowrap;
   font:400 var(--fs-micro)/1 var(--font-mono);color:var(--text-subtle)}
 .flu-pend b{font-weight:500;color:var(--accent-text)}
 .flu-sig{height:30px;padding:0 var(--sp-3);font-size:var(--fs-micro)}
+.flu-ia{display:inline-flex;align-items:center;gap:var(--sp-2)}
+.flu-ia:empty{display:none}
 .flu-err{font:400 var(--fs-micro)/1.4 var(--font-mono);color:var(--danger);overflow-wrap:anywhere}
 
 /* El detalle: las MEDIDAS, a un clic (vive en el desplegable del indicador). */
@@ -35,6 +33,7 @@
 .flu-det p,.flu-det li{font:400 var(--fs-micro)/1.6 var(--font-mono);color:var(--text-muted)}
 .flu-det .flu-det-t{font:600 var(--fs-ui)/1.4 var(--font-sans);color:var(--text)}
 .flu-det .flu-det-t[data-estado="no-cabe"],.flu-det .flu-det-t[data-estado="excede"]{color:var(--accent-text)}
+.flu-det .flu-det-aviso{color:var(--accent-text);font-family:var(--font-sans);font-size:var(--fs-ui)}
 .flu-det .flu-det-huecos{color:var(--accent-text);white-space:pre-wrap}
 .flu-det .t-overline{font-size:10px}
 .flu-det ul{padding-left:var(--sp-4);display:flex;flex-direction:column;gap:var(--sp-1)}

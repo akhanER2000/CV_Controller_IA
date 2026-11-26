@@ -1,0 +1,399 @@
+/* ── editor-variante.html — la pantalla más importante. ──
+   PORTE LITERAL del 2º <style> de corpus-design/04-pantallas/editor-variante.html
+   (fuera de data-corpus-system, líneas 488–606). Clases SIN renombrar: son el
+   contrato diseño↔código. Sin @keyframes propios (el movimiento vive en motion.css).
+
+   ÚNICA desviación del porte: las tres columnas pasaron de fondo OPACO a
+   translúcido (--bg-glass / --surface-sunken al 86%). El editor ya no es un
+   «muro» que apaga la atmósfera —esa regla venía de una landing con scroll y está
+   derogada (globals.css §3)—: la aurora sigue detrás a 0.22 y se intuye en el
+   fondo de las columnas. El desenfoque lo pone UNA vez .c-wall en .ed-grid; las
+   columnas y sus filas solo llevan color, así que una biblioteca de cientos de
+   viñetas no añade ni una capa de composición. */
+/* ── EDITOR FLUIDO (lote pantallas-forja-v2) ───────────────────────────────────
+   La pantalla es una columna de alto fijo: barra (dos filas compactas que
+   pueden envolver sin cortar nada) + rejilla que ocupa el resto. La rejilla
+   tiene cuatro pistas con nombre: biblioteca (cajón, 0 si está cerrada) ·
+   centro · divisor · vista previa (ancho ajustable, --pv-w lo escribe el JS). */
+.ed-page{--ed-top:84px;height:calc(100vh - var(--ed-top));min-height:560px}
+.ed-bar{position:relative;z-index:9;flex:none;background:var(--bg-glass);border-bottom:1px solid var(--border)}
+.ed-bar-a,.ed-bar-b{display:flex;align-items:center;flex-wrap:wrap;gap:var(--sp-2) var(--sp-3);padding:var(--sp-2) 18px}
+.ed-bar-a{min-height:52px}
+.ed-bar-b{min-height:46px;border-top:1px solid var(--border)}
+.ed-bar .bk{font:500 var(--fs-ui)/1 var(--font-sans);color:var(--text-muted)}
+.ed-bar .nm{font:600 16px/1.3 var(--font-sans);min-width:0;overflow-wrap:anywhere;border-radius:var(--radius-xs);padding:2px 4px;margin:-2px -4px}
+.ed-bar .nm:hover{box-shadow:inset 0 -1px 0 var(--border-strong)}
+.ed-bar .nm:focus{outline:none;box-shadow:inset 0 0 0 1px var(--border-patina);background:var(--surface-sunken)}
+.ed-bar .st{font:400 var(--fs-micro)/1 var(--font-mono);color:var(--text-subtle)}
+.ed-bar .acts{margin-left:auto;display:flex;gap:var(--sp-2);align-items:center}
+.ed-bar .acts .c-btn{height:34px;padding:0 var(--sp-4)}
+.ed-bar-sp{flex:1 1 0;min-width:0}
+/* Páginas objetivo: segmentado COMPLETO, cada opción entera (antes «1 pág p»). */
+.ed-obj{display:inline-flex;align-items:center;gap:0;border:1px solid var(--border-strong);border-radius:var(--radius-pill);
+  padding:2px;background:var(--surface-sunken)}
+.ed-obj .lbl{padding:0 var(--sp-2) 0 var(--sp-3);font:500 10px/1 var(--font-mono);letter-spacing:.1em;text-transform:uppercase;color:var(--text-subtle)}
+.ed-obj button{height:28px;padding:0 var(--sp-3);border-radius:var(--radius-pill);white-space:nowrap;
+  font:500 var(--fs-micro)/1 var(--font-sans);color:var(--text-muted);transition:color .14s,background-color .14s}
+.ed-obj button:hover:not([aria-pressed="true"]){color:var(--text)}
+.ed-obj button[aria-pressed="true"]{background:var(--patina-500);color:var(--ink-on-patina)}
+@media (max-width:1500px){.ed-obj .lbl{display:none}}
+/* Las tres columnas. El hairline que las separa lo dibujaba el FONDO de la
+   rejilla asomando por un gap de 1px; ese fondo era opaco y tapaba la aurora
+   entera por debajo de unas columnas que ahora son translúcidas. Mismo píxel de
+   separación, dibujado por las columnas: gap:0 + border-left. Así la rejilla no
+   pinta nada y el vidrio de .c-wall llega hasta el fondo de las columnas. */
+.ed-grid{--lib-w:0px;--pv-w:500px;display:grid;flex:1 1 auto;min-height:0;gap:0;background:transparent;
+  grid-template-columns:var(--lib-w) minmax(0,1fr) 8px min(var(--pv-w),max(340px,calc(100% - 420px - var(--lib-w))));
+  grid-template-rows:minmax(0,1fr)}
+.ed-grid[data-lib="abierta"]{--lib-w:320px}
+.ed-grid[data-pv="oculto"],.ed-grid[data-pv="completo"]{grid-template-columns:var(--lib-w) minmax(0,1fr) 0 0}
+.ed-grid>.ed-col--lib{grid-column:1}
+.ed-grid>.ed-col--mid{grid-column:2}
+.ed-grid>.ed-split{grid-column:3}
+.ed-grid>.pv-col{grid-column:4}
+.ed-grid[data-pv="oculto"]>.pv-col{display:none}
+.ed-col{background:var(--bg-glass);overflow-y:auto;overscroll-behavior:contain;min-height:0}
+.ed-col--lib{border-right:1px solid var(--border)}
+/* Divisor: 8 px de zona pulsable, 1 px de línea; brasa al pasar o con el foco. */
+.ed-split{position:relative;cursor:col-resize;touch-action:none;background:transparent;outline:none}
+.ed-split::before{content:"";position:absolute;inset:0 auto 0 50%;width:1px;background:var(--border)}
+.ed-split::after{content:"";position:absolute;top:50%;left:50%;width:4px;height:36px;margin:-18px 0 0 -2px;
+  border-radius:var(--radius-pill);background:var(--border-strong)}
+.ed-split:hover::before,.ed-split:focus-visible::before,.ed-grid[data-arrastrando] .ed-split::before{width:2px;background:var(--accent)}
+.ed-split:hover::after,.ed-split:focus-visible::after{background:var(--accent)}
+.ed-grid[data-arrastrando]{cursor:col-resize;user-select:none}
+.ed-grid[data-arrastrando] .pv-frame{pointer-events:none}
+/* Pantalla completa: la vista previa tapa la rejilla (no la barra del navegador). */
+.ed-grid[data-pv="completo"]>.pv-col{position:fixed;inset:0;z-index:60;background:var(--surface-sunken)}
+/* …y para tapar también el lateral y la barra del shell, la PANTALLA sube de capa
+   mientras dura (su z-index crea el contexto en el que vive la vista previa). */
+.ed-page:has(>.ed-grid[data-pv="completo"]){z-index:70}
+.ed-col--lib{background:color-mix(in srgb,var(--surface-sunken) 86%,transparent)}
+/* La cabecera pegada NO puede heredar el color translúcido de su columna: es lo
+   único que tiene que OCLUIR lo que pasa por debajo al hacer scroll. Opaca. */
+.ed-colh{position:sticky;top:0;z-index:2;display:flex;align-items:baseline;gap:10px;padding:14px 18px 10px;
+  background:var(--bg);border-bottom:1px solid var(--border)}
+.ed-col--lib .ed-colh{background:var(--surface-sunken);align-items:center}
+.ed-lib-x{margin-left:auto;width:28px;height:28px;border-radius:var(--radius-sm);color:var(--text-subtle);font:400 12px/1 var(--font-mono)}
+.ed-lib-x:hover{color:var(--text);background:var(--surface-elevated)}
+.ed-colh .t-overline{font-size:10px}
+.ed-colh .n{font:400 10px/1 var(--font-mono);color:var(--text-subtle)}
+/* ── librería (master) ── */
+.lib-search{margin:12px 14px 4px;display:flex;flex-direction:column;gap:8px}
+.lib-search input{height:34px;font-size:var(--fs-data)}
+.lib-g{margin-top:14px}
+.lib-g .t-overline{display:block;padding:0 18px 8px;font-size:10px}
+.lib-row{display:flex;align-items:baseline;gap:8px;padding:8px 12px 8px 18px;font-size:12.5px;line-height:1.45;color:var(--text-muted)}
+.lib-row:hover{background:var(--surface)}
+.lib-row .tx{flex:1;min-width:0}
+.lib-row.in .tx{color:var(--text-subtle)}
+.lib-row .add{flex:none;width:24px;height:24px;border-radius:5px;border:1px solid var(--border-strong);
+  font:500 13px/1 var(--font-mono);color:var(--text-muted);display:grid;place-items:center}
+.lib-row .add:hover{color:var(--ink-on-patina);background:var(--patina-500);border-color:transparent}
+.lib-row.in .add{border-color:transparent;color:var(--ver-ok)}
+.lib-row .c-ver{font-size:9px}
+/* ── composición (la variante) ── */
+.ed-navwrap{position:sticky;top:0;z-index:4;display:flex;align-items:center;flex-wrap:wrap;gap:var(--sp-1) var(--sp-3);padding:var(--sp-2) 18px;
+  background:var(--bg);border-bottom:1px solid var(--border)}
+.var-objh{display:flex;align-items:baseline;flex-wrap:wrap;gap:4px 12px}
+.var-objh>.n{margin-left:auto;font:400 10px/1.4 var(--font-mono);color:var(--text-subtle)}
+[data-sec]{scroll-margin-top:60px}
+.var-obj{margin:16px 18px 6px;padding:16px 18px;border-radius:var(--radius-xl)}
+.var-obj label{display:flex;align-items:baseline;gap:10px;font:500 10px/1 var(--font-mono);letter-spacing:.12em;text-transform:uppercase;color:var(--text-subtle)}
+.var-obj input{margin-top:10px;font:600 16px/1.2 var(--font-sans);height:42px;background:var(--surface-sunken)}
+.var-obj .hint{margin-top:8px;font:400 var(--fs-micro)/1.6 var(--font-mono);color:var(--text-subtle)}
+.var-obj .hint b{color:var(--text-muted);font-weight:500}
+/* ── Presentación opt-in (foto / QR) — misma caja que var-obj ── */
+.var-pres{margin:6px 18px 6px;padding:16px 18px}
+.var-pres .presh{display:flex;align-items:baseline;gap:10px}
+.var-pres .presh .t-overline{font-size:10px}
+.var-pres .presh .n{font:400 10px/1 var(--font-mono);color:var(--text-subtle)}
+.var-pres .prow{margin-top:14px}
+.var-pres .prow+.prow{margin-top:16px;padding-top:16px;border-top:1px solid var(--border)}
+/* fila de toggle: checkbox nativo (patrón de Fuentes) + etiqueta */
+.var-pres .ptog{display:flex;align-items:center;gap:9px;cursor:pointer;font:600 13px/1.2 var(--font-sans);color:var(--text)}
+.var-pres .ptog input{width:15px;height:15px;accent-color:var(--accent);cursor:pointer;flex:none}
+.var-pres .note{margin-top:7px;font:400 var(--fs-micro)/1.6 var(--font-mono);color:var(--text-subtle)}
+.var-pres .note.warn{color:var(--accent-text)}
+.var-pres .pbody{margin-top:10px;display:flex;flex-direction:column;gap:8px}
+.var-pres label.f{font:500 9.5px/1 var(--font-mono);letter-spacing:.1em;text-transform:uppercase;color:var(--text-subtle)}
+.var-pres select.c-input,.var-pres input.c-input{height:38px;background:var(--surface-sunken)}
+.var-pres .photo-row{display:flex;align-items:center;gap:12px}
+.var-pres .photo-thumb{width:56px;height:56px;border-radius:4px;object-fit:cover;border:1px solid var(--border);flex:none;background:var(--surface-sunken)}
+.var-pres .photo-acts{display:flex;gap:8px;flex-wrap:wrap}
+/* ── Diseño del documento (plantilla · paleta · tipografía) — misma caja ── */
+.var-design{margin:6px 18px 6px;padding:16px 18px}
+.var-design .presh{display:flex;align-items:baseline;gap:10px}
+.var-design .presh .t-overline{font-size:10px}
+.var-design .presh .n{font:400 10px/1 var(--font-mono);color:var(--text-subtle)}
+.var-design .cfield{margin-top:12px}
+.var-design label.f{display:block;font:500 9.5px/1 var(--font-mono);letter-spacing:.1em;text-transform:uppercase;color:var(--text-subtle);margin-bottom:6px}
+.var-design select.c-input{height:36px;background:var(--surface-sunken);width:100%}
+.var-design .note{margin-top:7px;font:400 var(--fs-micro)/1.6 var(--font-mono);color:var(--text-subtle)}
+.var-design .note.warn{color:var(--accent-text)}
+/* Plantilla activa: su MINIATURA (página 1 del PDF real) + nombre + acceso a la
+   galería. Un <select> con treinta nombres no dice nada; una hoja sí. */
+.var-design .tplrow{display:flex;align-items:flex-start;gap:12px}
+.var-design .tplinfo{flex:1;min-width:0;display:flex;flex-direction:column;gap:3px;align-items:flex-start}
+.var-design .tplname{font:600 13px/1.3 var(--font-sans);color:var(--text)}
+.var-design .tpldesc{font:400 11px/1.5 var(--font-sans);color:var(--text-muted)}
+.var-design .tplopen{margin-top:5px;height:30px;padding:0 12px;font-size:var(--fs-micro);
+  border-color:var(--border);color:var(--text-muted)}
+.var-design .tplopen:hover{color:var(--accent-text);border-color:var(--border-patina)}
+/* Paleta y tipografía: chips. La paleta enseña su acento — el nombre solo no basta. */
+.var-design .dchips{display:flex;flex-wrap:wrap;gap:5px}
+.var-design .dchip{display:inline-flex;align-items:center;gap:6px;height:27px;padding:0 10px;
+  border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--surface-sunken);
+  font:400 var(--fs-micro)/1 var(--font-mono);color:var(--text-muted)}
+.var-design .dchip:hover{color:var(--text);border-color:var(--border-strong)}
+.var-design .dchip[aria-pressed="true"]{color:var(--accent-text);border-color:var(--border-patina);
+  background:var(--surface-elevated)}
+/* El aro de la muestra de color usa --border-strong (negro al 16% en claro,
+   blanco al 16% en oscuro): un rgba(0,0,0,.25) fijo desaparece sobre grafito y
+   deja las muestras oscuras sin borde. */
+.var-design .ddot{width:9px;height:9px;border-radius:2px;flex:none;border:1px solid var(--border-strong)}
+/* ── Orden de las secciones (por variante) — misma caja que var-design ──────
+   Subir/bajar con BOTONES, no con arrastre: un <button> ya es accesible por
+   teclado sin escribir una segunda implementación, y aquí la alternativa de
+   teclado es requisito, no un extra. Los botones ↑↓ tienen 28×26 px de área
+   pulsable (el mínimo cómodo en esta densidad) y su etiqueta accesible dice
+   qué sección mueven — el glifo solo no se lee en un lector de pantalla. */
+.var-order{margin:6px 18px 6px;padding:16px 18px}
+.var-order .presh{display:flex;align-items:baseline;gap:10px}
+.var-order .presh .t-overline{font-size:10px}
+.var-order .presh .n{font:400 10px/1 var(--font-mono);color:var(--text-subtle)}
+.var-order .cfield{margin-top:12px}
+.var-order label.f{display:block;font:500 9.5px/1 var(--font-mono);letter-spacing:.1em;text-transform:uppercase;color:var(--text-subtle);margin-bottom:6px}
+.var-order .note{margin-top:7px;font:400 var(--fs-micro)/1.6 var(--font-mono);color:var(--text-subtle)}
+.var-order .dchips{display:flex;flex-wrap:wrap;gap:5px}
+.var-order .dchip{display:inline-flex;align-items:center;gap:6px;height:27px;padding:0 10px;
+  border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--surface-sunken);
+  font:400 var(--fs-micro)/1 var(--font-mono);color:var(--text-muted)}
+.var-order .dchip:hover{color:var(--text);border-color:var(--border-strong)}
+.ordlist{list-style:none;margin:12px 0 0;padding:0;display:flex;flex-direction:column}
+.ordrow{display:flex;align-items:center;gap:10px;padding:6px 0;border-top:1px solid var(--border)}
+.ordrow:first-child{border-top:0}
+.ordrow .num{flex:none;width:16px;text-align:right;font:400 10px/1 var(--font-mono);color:var(--text-subtle)}
+.ordrow .tx{flex:1;min-width:0;display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;
+  font:500 12.5px/1.4 var(--font-sans);color:var(--text)}
+/* Una sección sin contenido NO se esconde: se dice por qué no saldrá. */
+.ordrow .ordempty,.ordrow .ordpin{font:400 10px/1.3 var(--font-mono);font-style:normal;color:var(--text-subtle)}
+.ordrow.pinned .tx{color:var(--text-muted)}
+.ordacts{flex:none;display:flex;gap:2px}
+.ordacts button{width:28px;height:26px;border:1px solid var(--border);border-radius:var(--radius-sm);
+  background:var(--surface-sunken);color:var(--text-muted);font:400 12px/1 var(--font-mono)}
+.ordacts button:hover:not(:disabled){color:var(--accent-text);border-color:var(--border-patina)}
+/* El token, no un .35 inventado: un control apagado tiene que apagarse IGUAL en
+   toda la app o el usuario no aprende a leerlo. Lo vigila tests/pulido-visual. */
+.ordacts button:disabled{opacity:var(--opacity-disabled)}
+/* ── Contacto por variante — misma caja que var-obj/var-pres ── */
+.ed-sech{display:flex;align-items:baseline;flex-wrap:wrap;gap:4px 10px;margin:28px 18px 4px;padding-top:16px;border-top:1px dashed var(--border-strong)}
+.ed-sech .t-overline{font-size:10px}
+.ed-sech .n{font:400 10px/1 var(--font-mono);color:var(--text-subtle)}
+.var-contact{margin:6px 18px 6px;padding:16px 18px}
+.var-contact .presh{display:flex;align-items:baseline;gap:10px}
+.var-contact .presh .t-overline{font-size:10px}
+.var-contact .presh .n{font:400 10px/1 var(--font-mono);color:var(--text-subtle)}
+.var-contact .cfield{margin-top:12px}
+.var-contact label.f{display:flex;align-items:baseline;gap:8px;font:500 9.5px/1 var(--font-mono);letter-spacing:.1em;text-transform:uppercase;color:var(--text-subtle);margin-bottom:6px}
+.var-contact .c-input{height:36px;background:var(--surface-sunken)}
+/* Override visible (mismo lenguaje que .var-b.ovr): filete patina a la izquierda. */
+.var-contact .c-input.ovr{box-shadow:inset 2px 0 0 var(--patina-500)}
+.var-contact .crev{margin-left:auto;flex:none;font:500 9px/1 var(--font-mono);letter-spacing:.06em;text-transform:uppercase;color:var(--accent-text)}
+.var-contact .crev:hover{text-decoration:underline}
+.var-contact .clinks{display:flex;flex-direction:column;gap:8px}
+.var-contact .clink{display:flex;gap:8px;align-items:center}
+.var-contact .clink .lbl{flex:0 0 34%;min-width:0}
+.var-contact .clink .url{flex:1;min-width:0}
+.var-contact .clink-rm{flex:none;width:28px;height:28px;border-radius:5px;border:1px solid var(--border);color:var(--text-subtle);font:400 14px/1 var(--font-mono);display:grid;place-items:center}
+.var-contact .clink-rm:hover{color:var(--danger);border-color:var(--border-strong)}
+.var-contact .caddlink{align-self:flex-start;font:500 var(--fs-micro)/1 var(--font-mono);color:var(--text-muted);border:1px dashed var(--border-strong);border-radius:6px;padding:8px 11px}
+.var-contact .caddlink:hover{color:var(--accent-text);border-color:var(--border-patina)}
+.var-contact .note{margin-top:10px;font:400 var(--fs-micro)/1.6 var(--font-mono);color:var(--text-subtle)}
+/* ── Eliminar variante: confirmación inline en la barra ── */
+.ed-delconfirm{display:flex;align-items:center;gap:8px}
+.ed-delconfirm .q{font:500 var(--fs-micro)/1 var(--font-mono);color:var(--text-muted)}
+.ed-del-yes{color:var(--danger);border-color:color-mix(in srgb,var(--danger) 45%,transparent)}
+/* --text-on-danger, no --ink-on-patina: sobre el ladrillo del peligro en claro la
+   tinta da 3.26:1 y FALLA. El token nuevo vale tinta en grafito (5.46:1) y blanco
+   en porcelana (5.89:1) — ver la nota larga en globals.css sobre por qué invierte. */
+.ed-del-yes:hover{color:var(--text-on-danger);background:var(--danger);border-color:transparent}
+.ed-del-btn{color:var(--text-subtle)}
+.ed-del-btn:hover{color:var(--danger)}
+.var-g{margin:12px 18px 0;padding:14px 16px 16px;border:1px solid var(--border);border-radius:var(--radius-xl);
+  background:var(--surface-glass);box-shadow:var(--elev-1)}
+.var-g>.gh{display:flex;align-items:baseline;flex-wrap:wrap;gap:4px 10px;padding-bottom:4px}
+.var-g>.gh .t-overline{font-size:10px}
+.var-g>.gh .n{font:400 10px/1 var(--font-mono);color:var(--text-subtle)}
+.var-exp{margin-top:10px;border:1px solid var(--border);border-radius:var(--radius-lg);background:var(--surface);overflow:hidden}
+.var-eh{display:flex;align-items:baseline;gap:10px;padding:12px 14px 10px}
+.var-eh .tt{font:600 13.5px/1.3 var(--font-sans)}
+.var-eh .org{font:400 10.5px/1.3 var(--font-mono);color:var(--text-subtle)}
+.var-b{position:relative;display:flex;gap:8px;align-items:baseline;padding:8px 14px 8px 10px;border-top:1px solid var(--border);font-size:12.5px;line-height:1.5}
+.var-b .grip{flex:none;cursor:grab;color:var(--text-subtle);font-size:11px;padding:2px 2px 0;user-select:none}
+.var-b.dragging{opacity:.35}
+.var-b .tx{flex:1;min-width:0;color:var(--text-muted)}
+.var-b .tx[data-editable]{cursor:text;border-radius:4px}
+.var-b .tx[data-editable]:hover{color:var(--text);box-shadow:0 0 0 4px var(--surface-elevated);background:var(--surface-elevated)}
+.var-b .tx[contenteditable="true"]{outline:none;color:var(--text);background:var(--surface-sunken);border-radius:4px;padding:2px 6px;margin:-2px -6px}
+.var-b.hid .tx{opacity:.38;text-decoration:line-through;text-decoration-color:var(--border-strong)}
+.var-b.ovr{box-shadow:inset 2px 0 0 var(--patina-500)}
+.var-b .bacts{flex:none;display:flex;gap:1px;opacity:0}
+.var-b:hover .bacts{opacity:1}
+.var-b .bacts button{font:400 11px/1 var(--font-mono);color:var(--text-subtle);padding:4px 6px;border-radius:4px}
+.var-b .bacts button:hover{color:var(--text);background:var(--surface-elevated)}
+.var-orig{display:none;gap:8px;align-items:baseline;padding:7px 14px 9px 24px;border-top:1px dashed var(--border);
+  font:400 11px/1.55 var(--font-mono);color:var(--text-subtle);background:var(--surface-sunken)}
+.var-b.ovr+.var-orig{display:flex}
+.var-orig .rv{margin-left:auto;flex:none;font:500 10px/1 var(--font-mono);color:var(--accent-text);text-transform:uppercase;letter-spacing:.08em}
+.var-orig .rv:hover{text-decoration:underline}
+.var-chips{display:flex;flex-wrap:wrap;gap:6px;padding:4px 0 0}
+.var-chips .c-chip button{color:var(--text-subtle);font-size:12px;line-height:1;padding:0 0 0 2px}
+.var-chips .c-chip button:hover{color:var(--danger)}
+.var-empty{margin:60px 24px;text-align:center;color:var(--text-muted);font-size:13px;line-height:1.7}
+.var-empty .t-overline{display:block;margin-bottom:12px}
+/* ── preview (porcelana dentro de grafito) ── */
+.pv-col{display:flex;flex-direction:column;background:color-mix(in srgb,var(--surface-sunken) 86%,transparent)}
+.pv-tools{position:sticky;top:0;z-index:2;display:flex;align-items:center;flex-wrap:wrap;gap:var(--sp-2) var(--sp-3);padding:10px 14px;
+  background:var(--surface-sunken);border-bottom:1px solid var(--border)}
+.pv-acts{margin-left:auto;display:flex;gap:var(--sp-1)}
+.pv-seg{display:flex;border:1px solid var(--border-strong);border-radius:6px;overflow:hidden}
+.pv-seg button{font:500 var(--fs-micro)/1 var(--font-mono);letter-spacing:.04em;padding:8px 11px;color:var(--text-muted);
+  transition:color .14s}
+/* Gemelo de .aj-seg y .tg-seg: el segmento sin pulsar no acusaba el puntero.
+   Los tres controles segmentados del producto son el MISMO gesto y ahora los
+   tres se comportan igual (bloque C · consistencia de estados). */
+.pv-seg button:hover:not([aria-pressed="true"]){color:var(--text)}
+.pv-seg button[aria-pressed="true"]{color:var(--text);background:var(--surface-elevated);box-shadow:inset 0 0 0 1px var(--border-patina)}
+.pv-pages{font:500 var(--fs-micro)/1.4 var(--font-mono);color:var(--text-muted);min-width:0}
+.pv-pages .warn{color:var(--danger)}
+.pv-busy{color:var(--text-subtle)}
+/* El preview ES el PDF: la columna deja de dibujar el documento (ya no hay .pv-page
+   ni tipografía .cvd-*: eso era un SEGUNDO renderizador que podía mentir) y embebe
+   los bytes reales que devuelve /api/cv. El visor del navegador pagina y hace su
+   propio scroll, así que la caja se estira a la altura disponible. */
+.pv-scroll{flex:1;overflow-y:auto;padding:18px;display:flex;min-height:0}
+.pv-fit{position:relative;margin:0 auto;flex:1;min-width:0;min-height:0;display:flex}
+.pv-doc{position:relative;flex:1;min-height:0;display:flex}
+/* El #FFFFFF NO se toca: es el PAPEL del CV, blanco en los dos temas por diseño
+   (mismo caso que .ls-paper en landing.css). Lo que sí es de grafito es la
+   sombra: negro al 50% sobre porcelana ensucia el papel en vez de levantarlo. */
+.pv-frame{flex:1;width:100%;min-height:520px;border:0;border-radius:var(--radius-md);
+  background:#FFFFFF;box-shadow:0 2px 24px rgba(0,0,0,.5)}
+[data-theme="light"] .pv-frame{box-shadow:0 2px 18px rgba(20,24,26,.14)}
+/* Estado honesto cuando no hay PDF que mostrar (generando o error CON motivo). */
+.pv-fail{flex:1;display:flex;flex-direction:column;align-items:flex-start;gap:10px;
+  padding:26px 24px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-md)}
+.pv-fail .why{font:400 11.5px/1.7 var(--font-mono);color:var(--danger);word-break:break-word}
+/* rayos-X */
+.pv-xray{position:relative}
+.pv-raw{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-md);
+  padding:26px 28px;font:400 11.5px/1.75 var(--font-mono);color:var(--text-muted);white-space:pre-wrap;overflow:auto;
+  height:100%;max-height:100%}
+.pv-raw .cap{display:block;margin-bottom:16px;font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--text-subtle)}
+.pv-foot{padding:10px 16px;border-top:1px solid var(--border);font:400 10px/1.6 var(--font-mono);color:var(--text-subtle)}
+@media (max-width:1240px){.ed-grid[data-lib="abierta"]{--lib-w:280px}}
+/* Estrecho: una columna; las pestañas eligen centro o vista previa y la
+   biblioteca es un cajón que se superpone (no cabe empujando). */
+@media (max-width:1024px){
+  .ed-page{height:auto}
+  .ed-grid,.ed-grid[data-pv]{grid-template-columns:minmax(0,1fr);grid-template-rows:auto}
+  .ed-grid>.ed-col--mid,.ed-grid>.pv-col{grid-column:1;grid-row:1}
+  .ed-col{max-height:none}
+  .ed-split{display:none}
+  .ed-grid>.pv-col{display:none}
+  .ed-grid[data-view="preview"]>.pv-col{display:flex;min-height:80vh}
+  .ed-grid[data-view="preview"]>.ed-col--mid{display:none}
+  .ed-grid>.ed-col--lib{position:fixed;z-index:60;top:0;bottom:0;left:0;width:min(360px,92vw);box-shadow:var(--elev-3)}
+  .ed-tabs{display:flex!important}
+}
+.ed-tabs{display:none;position:sticky;top:var(--header-h);z-index:8;background:var(--bg);border-bottom:1px solid var(--border);padding:8px var(--container-pad);gap:6px}
+.ed-tabs button{font:500 var(--fs-micro)/1 var(--font-mono);padding:8px 12px;border:1px solid var(--border);border-radius:6px;color:var(--text-muted)}
+.ed-tabs button[aria-pressed="true"]{color:var(--accent-text);border-color:var(--border-patina);background:var(--surface)}
+
+/* ── Augmentación de accesibilidad (spec §8) — NO cambia ninguna clase ────────
+   Las acciones de viñeta (ocultar/afinar/quitar) están en opacity:0 hasta hover;
+   sin esto son inalcanzables al tabular con teclado. Revelarlas también con
+   :focus-within cierra el hueco sin tocar el aspecto en reposo. */
+.var-b:focus-within .bacts{opacity:1}
+
+/* ── Ajustar: la guía y las marcas en línea viven en src/components/FlujoCv.css.
+   El panel de cuatro listas que estaba aquí se apartó a _to_delete/flujo-cv/. ── */
+
+/* ══ B · REFERENCIAS ════════════════════════════════════════════════════════
+   El aviso de la biblioteca: añadirlas a la variante NO las imprime. Se lee antes
+   de pulsar «+», que es cuando importa. */
+.lib-g .lib-note{margin:0 18px 8px;font:400 var(--fs-micro)/1.55 var(--font-sans);
+  color:var(--text-subtle)}
+
+/* La SUGERENCIA. No es un ajuste ni una acción hecha: es una propuesta con su
+   motivo delante y un botón que hay que pulsar. Contorno de acento, nunca relleno:
+   no debe parecer que ya está aplicada. */
+.var-refsug{margin:6px 18px;padding:14px 16px;border-color:var(--border-patina)}
+.var-refsug .t-overline{display:block;font-size:10px;margin-bottom:4px}
+.refsug-row{display:flex;align-items:center;gap:12px;padding:9px 0;flex-wrap:wrap}
+.refsug-row+.refsug-row{border-top:1px solid var(--border)}
+.refsug-row .tx{flex:1 1 240px;display:flex;flex-direction:column;gap:3px;min-width:0}
+.refsug-row .tx b{font:500 var(--fs-ui)/1.45 var(--font-sans);color:var(--text);overflow-wrap:anywhere}
+.refsug-row .tx em{font:400 var(--fs-micro)/1.5 var(--font-sans);font-style:normal;color:var(--text-subtle)}
+
+/* ══ PUNTO 5 · ACORDEÓN DE LA BIBLIOTECA ════════════════════════════════════
+   La columna izquierda pasa de lista de corrido a secciones plegables. .lib-g ya
+   era el contenedor de grupo; ahora su cabecera es un BOTÓN que pliega, con su
+   contador (el que cuenta lo que SE PINTA tras el buscador) y su estado recordado
+   entre sesiones. Prefijo lib- propio: no se importa ni se toca ninguna clase ms-
+   del master (eso es contrato con diseño). */
+.lib-gh{width:100%;display:flex;align-items:baseline;gap:9px;padding:10px 18px 8px;
+  background:transparent;text-align:left;cursor:pointer}
+.lib-gh:hover{background:var(--surface)}
+.lib-gh .chev{flex:none;font-size:9px;color:var(--text-subtle);line-height:1;transform:translateY(-1px)}
+/* La cabecera-botón redefine el overline del grupo: en línea, sin el padding de la
+   versión de-corrido (esta regla va después que .lib-g .t-overline y la gana). */
+.lib-gh .t-overline{display:inline;padding:0;font-size:10px}
+.lib-gh .cnt{margin-left:auto;font:400 10px/1 var(--font-mono);color:var(--text-subtle)}
+/* Sección resaltada = la del item que se edita en el centro. Filete pátina, el
+   mismo lenguaje visual que un override: «esto es lo que estás tocando ahora». */
+.lib-g.lib-editing{box-shadow:inset 2px 0 0 var(--patina-500)}
+.lib-g.lib-editing .lib-gh .t-overline{color:var(--accent-text)}
+.lib-body{padding-bottom:6px}
+/* Viñeta bajo su rol: sangrada para leerse como hija, no como hermana suelta. */
+.lib-row.lib-bullet{padding-left:30px}
+/* Plegar/desplegar todo, y el vacío honesto de una búsqueda sin coincidencias. */
+.lib-foldall{align-self:flex-start;font:500 var(--fs-micro)/1 var(--font-mono);color:var(--text-muted);
+  border:1px solid var(--border);border-radius:6px;padding:6px 10px}
+.lib-foldall:hover{color:var(--accent-text);border-color:var(--border-patina)}
+.lib-empty{margin:18px;font:400 var(--fs-micro)/1.6 var(--font-mono);color:var(--text-subtle)}
+
+/* ══ PUNTO 6 · REFERENCIAS DESDE EL EDITOR ══════════════════════════════════
+   Elegir cuáles imprime la variante y CREAR nuevas sin salir del editor. Vive
+   dentro del cuerpo del interruptor de referencias (.var-refbody), en la tarjeta
+   de presentación. */
+.var-refbody{gap:12px}
+.var-refbody .refchooser{display:flex;flex-direction:column;gap:0}
+.var-refbody .refchooser .t-overline{font-size:10px;margin-bottom:4px}
+.refchoice{display:flex;align-items:center;gap:10px;padding:8px 0;border-top:1px solid var(--border)}
+.refchoice:first-of-type{border-top:0}
+.refchoice .tx{flex:1;min-width:0;font:400 12.5px/1.45 var(--font-sans);color:var(--text-muted);overflow-wrap:anywhere}
+.refchoice.in .tx{color:var(--text)}
+.refchoice .c-btn{flex:none;height:28px;padding:0 10px;font-size:var(--fs-micro)}
+/* Botón para desplegar el formulario cuando el master YA tiene referencias. */
+.refform-open{align-self:flex-start;height:30px;padding:0 12px;font-size:var(--fs-micro);
+  border:1px dashed var(--border-strong);color:var(--text-muted)}
+.refform-open:hover{color:var(--accent-text);border-color:var(--border-patina)}
+/* El formulario. Datos de terceros: el aviso de permiso va DENTRO, no solo bajo
+   el interruptor. */
+.refform{padding:14px;border:1px solid var(--border);border-radius:var(--radius-md);
+  background:var(--surface-sunken);display:flex;flex-direction:column}
+.refform>.t-overline{font-size:10px}
+.refform label.f{margin-top:12px;font:500 9.5px/1 var(--font-mono);letter-spacing:.1em;
+  text-transform:uppercase;color:var(--text-subtle)}
+.refform .c-input{margin-top:6px;height:36px;background:var(--surface)}
+.refform .refferr{color:var(--danger)}
+.refform .reffacts{margin-top:14px;display:flex;gap:8px;justify-content:flex-end}
+.refform .reffacts .c-btn{height:32px;padding:0 14px;font-size:var(--fs-micro)}
+/* Aquí había un `.refform .reffacts .c-btn[disabled]{opacity:.5;cursor:default}`
+   que el sistema ya cubre —`.c-btn[disabled]{opacity:.42;pointer-events:none}`—
+   y que además le GANABA por especificidad (0,3,1 contra 0,2,0): el mismo botón
+   se apagaba al .5 dentro de este formulario y al .42 en el resto del producto.
+   Con pointer-events:none el puntero ni siquiera llega, así que `cursor` sobraba.
+   Se borra en vez de retocarse: la regla no aportaba nada, solo desviaba. */

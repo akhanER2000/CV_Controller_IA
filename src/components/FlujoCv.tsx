@@ -1,6 +1,7 @@
 // Sin "use client": solo lo importa el editor (que ya es cliente), y así sus
 // props pueden ser funciones sin el aviso de props serializables.
 import { useState } from "react";
+import { StatusChip, type EstadoChip } from "@/components/ui/StatusChip";
 import { useT } from "@/lib/i18n";
 import type { AutofitInfo, EstadoDoc, Fit, FitFalta, FitTipoFalta, PropEnLinea } from "@/components/flujo-cv";
 import { Desplegable, Kbd } from "@/components/editor/Desplegable";
@@ -44,6 +45,8 @@ export function GuiaAjuste(props: {
   busy: boolean;
   err: string;
   notasIA: string | null;
+  /** avisos de páginas que antes iban en rojo sobre la vista previa: viven en el detalle */
+  avisos?: readonly string[];
   onProponer: () => void;
   onSiguiente: () => void;
 }) {
@@ -84,6 +87,10 @@ export function GuiaAjuste(props: {
 
   const descartados = fit ? fit.descartados.filter((d) => d.tipo === "acortar") : [];
   const urgente = estado === "no-cabe" || estado === "excede";
+  const avisos = props.avisos ?? [];
+  // UN chip de estado (DA-V5): el color nunca va solo, el texto dice lo mismo.
+  const chip: EstadoChip =
+    estado === "cabe" ? "ok" : estado === "error" ? "error" : urgente || avisos.length ? "aviso" : "neutro";
 
   return (
     <div className="flu-guia" id="edGuia" role="group" aria-label={t("editor.fluAria")}>
@@ -97,7 +104,7 @@ export function GuiaAjuste(props: {
         boton={
           <>
             <span className="flu-doc" data-estado={estado} role="status">
-              {corto}
+              <StatusChip estado={chip}>{corto}</StatusChip>
             </span>
             {huecosTxt && <span className="flu-cuenta">· {huecosTxt}</span>}
             <span className="chev" aria-hidden="true">
@@ -111,6 +118,11 @@ export function GuiaAjuste(props: {
             {doc}
             {estado === "cabe" && encogido && <> · {t("editor.autofitSize").replace("{s}", coma(autofit!.bodySize))}</>}
           </p>
+          {avisos.map((a) => (
+            <p className="flu-det-aviso" key={a}>
+              {a}
+            </p>
+          ))}
           {/* LAS MEDIDAS. Todo sale del PDF real o del autofit de ese PDF. */}
           {paginas > 0 && (
             <p>
@@ -183,6 +195,9 @@ export function GuiaAjuste(props: {
       >
         {busy ? t("editor.edAjustando") : t("editor.fitOpen")}
       </button>
+      {/* HUECO RESERVADO para las acciones de IA (lo llena el lote siguiente).
+          Sin lógica: vacío no ocupa sitio (:empty en FlujoCv.css). */}
+      <span className="flu-ia" id="edAccionesIA" data-ranura="acciones-ia" aria-label={t("editor.edAccionesIA")} />
       {fit && (
         <span className="flu-pend">
           {pendientes > 0 ? (

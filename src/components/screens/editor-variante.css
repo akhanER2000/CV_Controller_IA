@@ -24,7 +24,9 @@
 .ed-bar .nm{font:600 16px/1.3 var(--font-sans);min-width:0;overflow-wrap:anywhere;border-radius:var(--radius-xs);padding:2px 4px;margin:-2px -4px}
 .ed-bar .nm:hover{box-shadow:inset 0 -1px 0 var(--border-strong)}
 .ed-bar .nm:focus{outline:none;box-shadow:inset 0 0 0 1px var(--border-patina);background:var(--surface-sunken)}
-.ed-bar .st{font:400 var(--fs-micro)/1 var(--font-mono);color:var(--text-subtle)}
+.ed-bar .st{font:400 var(--fs-micro)/1 var(--font-mono);color:var(--text-subtle);transition:color .2s}
+.ed-bar .st[data-flash]{color:var(--accent-text)}
+.ed-bar .acts .c-btn .edx-ico{margin-right:2px}
 .ed-bar .acts{margin-left:auto;display:flex;gap:var(--sp-2);align-items:center}
 .ed-bar .acts .c-btn{height:34px;padding:0 var(--sp-4)}
 .ed-bar-sp{flex:1 1 0;min-width:0}
@@ -78,20 +80,63 @@
 .ed-lib-x:hover{color:var(--text);background:var(--surface-elevated)}
 .ed-colh .t-overline{font-size:10px}
 .ed-colh .n{font:400 10px/1 var(--font-mono);color:var(--text-subtle)}
-/* ── librería (master) ── */
-.lib-search{margin:12px 14px 4px;display:flex;flex-direction:column;gap:8px}
-.lib-search input{height:34px;font-size:var(--fs-data)}
-.lib-g{margin-top:14px}
-.lib-g .t-overline{display:block;padding:0 18px 8px;font-size:10px}
-.lib-row{display:flex;align-items:baseline;gap:8px;padding:8px 12px 8px 18px;font-size:12.5px;line-height:1.45;color:var(--text-muted)}
-.lib-row:hover{background:var(--surface)}
-.lib-row .tx{flex:1;min-width:0}
-.lib-row.in .tx{color:var(--text-subtle)}
-.lib-row .add{flex:none;width:24px;height:24px;border-radius:5px;border:1px solid var(--border-strong);
-  font:500 13px/1 var(--font-mono);color:var(--text-muted);display:grid;place-items:center}
-.lib-row .add:hover{color:var(--ink-on-patina);background:var(--patina-500);border-color:transparent}
-.lib-row.in .add{border-color:transparent;color:var(--ver-ok)}
-.lib-row .c-ver{font-size:9px}
+/* ── biblioteca (master) en pestañas ─────────────────────────────────────────
+   Cabecera opaca y pegada (título · buscador · filtro · pestañas) y debajo las
+   tarjetas. El acento (brasa) marca la pestaña activa y el botón Añadir; el oro
+   (--ver-ok) dice «ya está en la variante». Nunca solo color: cada estado lleva
+   palabra. */
+.ed-col--lib .ed-colh.lib-h{flex-direction:column;align-items:stretch;gap:var(--sp-2);padding:12px 14px 10px}
+.lib-h-a{display:flex;align-items:center;gap:8px;color:var(--text-muted)}
+.lib-h-t{font:600 var(--fs-ui)/1.2 var(--font-sans);color:var(--text)}
+.lib-search input{width:100%;height:34px;font-size:var(--fs-data);background:var(--surface)}
+.lib-filtro{display:flex;gap:0;padding:2px;border:1px solid var(--border-strong);border-radius:var(--radius-pill);background:var(--surface)}
+.lib-filtro button{flex:1 1 auto;height:26px;padding:0 10px;border-radius:var(--radius-pill);font:500 var(--fs-micro)/1 var(--font-sans);color:var(--text-muted);white-space:nowrap}
+.lib-filtro button:hover:not([aria-pressed="true"]){color:var(--text)}
+.lib-filtro button[aria-pressed="true"]{background:var(--surface-elevated);color:var(--text);box-shadow:inset 0 0 0 1px var(--border-patina)}
+.lib-tabs{display:flex;flex-wrap:wrap;gap:4px}
+.lib-tab{display:inline-flex;align-items:center;gap:5px;height:28px;padding:0 9px;border-radius:var(--radius-pill);
+  border:1px solid var(--border);font:500 var(--fs-micro)/1 var(--font-sans);color:var(--text-muted);white-space:nowrap;
+  transition:color .14s,border-color .14s,background-color .14s}
+.lib-tab:hover{color:var(--text);border-color:var(--border-strong)}
+.lib-tab[aria-selected="true"]{color:var(--text);border-color:var(--border-patina);background:var(--surface-elevated)}
+.lib-tab[aria-selected="true"] .edx-ico{color:var(--accent-text)}
+.lib-tab .lib-tab-n{font:400 10px/1 var(--font-mono);color:var(--text-subtle)}
+.lib-tab[data-vacia]{opacity:var(--opacity-disabled)}
+.lib-tab.lib-editing{box-shadow:inset 0 -2px 0 var(--patina-500)}
+.lib-g{padding:12px 14px 0}
+.lib-gt{display:flex;align-items:center;gap:6px;margin:4px 2px 8px;font:500 10px/1 var(--font-mono);letter-spacing:.1em;text-transform:uppercase;color:var(--text-subtle)}
+.lib-gt .n{margin-left:auto;letter-spacing:0}
+.lib-cards{display:flex;flex-direction:column;gap:6px}
+.lib-card{border:1px solid var(--border);border-radius:var(--radius-lg);background:var(--surface);transition:border-color .14s}
+.lib-card:hover{border-color:var(--border-strong)}
+.lib-card.in{box-shadow:inset 2px 0 0 var(--oro-500)}
+.lib-card-a{display:flex;align-items:flex-start;gap:10px;padding:10px 10px 4px 12px}
+.lib-card-tx{flex:1;min-width:0;display:flex;flex-direction:column;gap:3px}
+.lib-card-t{font:600 12.5px/1.35 var(--font-sans);color:var(--text);overflow-wrap:anywhere}
+.lib-card[data-kind="summary"] .lib-card-t,.lib-card[data-kind="bullet"] .lib-card-t{font-weight:400;color:var(--text-muted)}
+.lib-card-s{font:400 10.5px/1.45 var(--font-mono);color:var(--text-subtle);overflow-wrap:anywhere}
+.lib-card-b{display:flex;align-items:center;gap:8px;padding:2px 12px 9px}
+.lib-estado{display:inline-flex;align-items:center;gap:5px;font:500 10px/1 var(--font-mono);color:var(--text-subtle)}
+.lib-estado::before{content:"";width:6px;height:6px;border-radius:50%;box-shadow:inset 0 0 0 1.5px currentColor}
+.lib-estado[data-dentro]{color:var(--ver-ok)}
+.lib-estado[data-dentro]::before{background:currentColor}
+.lib-add{flex:none;height:26px;padding:0 10px;border-radius:var(--radius-sm);border:1px solid var(--border-patina);
+  font:500 var(--fs-micro)/1 var(--font-sans);color:var(--accent-text);background:transparent;transition:color .14s,background-color .14s,border-color .14s}
+.lib-add:hover{background:var(--patina-500);color:var(--ink-on-patina);border-color:transparent}
+.lib-add[aria-pressed="true"]{border-color:var(--border);color:var(--text-muted)}
+.lib-add[aria-pressed="true"]:hover{background:var(--surface-elevated);color:var(--danger);border-color:var(--border-strong)}
+.lib-add--s{height:22px;padding:0 8px;font-size:10.5px}
+.lib-vin-b{margin-left:auto;display:inline-flex;align-items:center;gap:5px;font:500 10.5px/1 var(--font-mono);color:var(--text-muted)}
+.lib-vin-b:hover{color:var(--text)}
+.lib-vin-b .chev{font-size:9px;color:var(--text-subtle)}
+.lib-vin{list-style:none;margin:0;padding:0 0 4px;border-top:1px dashed var(--border)}
+.lib-vin-r{display:flex;align-items:flex-start;gap:8px;padding:7px 10px 7px 22px;font:400 12px/1.45 var(--font-sans);color:var(--text-muted)}
+.lib-vin-r+.lib-vin-r{border-top:1px solid var(--border)}
+.lib-vin-r.in{color:var(--text);box-shadow:inset 2px 0 0 var(--oro-500)}
+.lib-vin-r .tx{flex:1;min-width:0;overflow-wrap:anywhere}
+.lib-vin-vacio{padding:8px 22px;font:400 var(--fs-micro)/1.4 var(--font-mono);color:var(--text-subtle)}
+.lib-foot{margin:18px 16px 28px;font:400 10px/1.7 var(--font-mono);color:var(--text-subtle)}
+.lib-foot b{color:var(--text-muted);font-weight:500}
 /* ── composición (la variante) ── */
 .ed-navwrap{position:sticky;top:0;z-index:4;display:flex;align-items:center;flex-wrap:wrap;gap:var(--sp-1) var(--sp-3);padding:var(--sp-2) 18px;
   background:var(--bg);border-bottom:1px solid var(--border)}
@@ -248,8 +293,11 @@
 .var-orig .rv{margin-left:auto;flex:none;font:500 10px/1 var(--font-mono);color:var(--accent-text);text-transform:uppercase;letter-spacing:.08em}
 .var-orig .rv:hover{text-decoration:underline}
 .var-chips{display:flex;flex-wrap:wrap;gap:6px;padding:4px 0 0}
-.var-chips .c-chip button{color:var(--text-subtle);font-size:12px;line-height:1;padding:0 0 0 2px}
-.var-chips .c-chip button:hover{color:var(--danger)}
+.var-chip{display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 4px 0 10px;border:1px solid var(--border);
+  border-radius:var(--radius-pill);background:var(--surface);font:400 12px/1 var(--font-sans);color:var(--text-muted)}
+.var-chip b{font-weight:600;color:var(--text)}
+.var-chip button{width:20px;height:20px;border-radius:50%;color:var(--text-subtle);font-size:13px;line-height:1}
+.var-chip button:hover{color:var(--danger);background:var(--surface-elevated)}
 .var-empty{margin:60px 24px;text-align:center;color:var(--text-muted);font-size:13px;line-height:1.7}
 .var-empty .t-overline{display:block;margin-bottom:12px}
 /* ── preview (porcelana dentro de grafito) ── */
@@ -273,8 +321,9 @@
    los bytes reales que devuelve /api/cv. El visor del navegador pagina y hace su
    propio scroll, así que la caja se estira a la altura disponible. */
 .pv-scroll{flex:1;overflow-y:auto;padding:18px;display:flex;min-height:0}
-.pv-fit{position:relative;margin:0 auto;flex:1;min-width:0;min-height:0;display:flex}
-.pv-doc{position:relative;flex:1;min-height:0;display:flex}
+/* Documento y ATS se REEMPLAZAN (hidden), nunca se superponen. */
+.pv-doc{position:relative;flex:1;min-width:0;min-height:0;display:flex}
+.pv-doc[hidden],.pv-raw[hidden]{display:none}
 /* El #FFFFFF NO se toca: es el PAPEL del CV, blanco en los dos temas por diseño
    (mismo caso que .ls-paper en landing.css). Lo que sí es de grafito es la
    sombra: negro al 50% sobre porcelana ensucia el papel en vez de levantarlo. */
@@ -289,7 +338,7 @@
 .pv-xray{position:relative}
 .pv-raw{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-md);
   padding:26px 28px;font:400 11.5px/1.75 var(--font-mono);color:var(--text-muted);white-space:pre-wrap;overflow:auto;
-  height:100%;max-height:100%}
+  flex:1;min-width:0}
 .pv-raw .cap{display:block;margin-bottom:16px;font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--text-subtle)}
 .pv-foot{padding:10px 16px;border-top:1px solid var(--border);font:400 10px/1.6 var(--font-mono);color:var(--text-subtle)}
 @media (max-width:1240px){.ed-grid[data-lib="abierta"]{--lib-w:280px}}
@@ -304,7 +353,10 @@
   .ed-grid>.pv-col{display:none}
   .ed-grid[data-view="preview"]>.pv-col{display:flex;min-height:80vh}
   .ed-grid[data-view="preview"]>.ed-col--mid{display:none}
-  .ed-grid>.ed-col--lib{position:fixed;z-index:60;top:0;bottom:0;left:0;width:min(360px,92vw);box-shadow:var(--elev-3)}
+  /* Biblioteca en pantallas angostas: ocupa la columna EN EL FLUJO (no un cajón
+     fijo, que quedaba bajo la barra del shell y tapaba su cierre). */
+  .ed-grid>.ed-col--lib{grid-column:1;grid-row:1;border-right:0}
+  .ed-grid[data-lib="abierta"]>.ed-col--mid,.ed-grid[data-lib="abierta"]>.pv-col{display:none!important}
   .ed-tabs{display:flex!important}
 }
 .ed-tabs{display:none;position:sticky;top:var(--header-h);z-index:8;background:var(--bg);border-bottom:1px solid var(--border);padding:8px var(--container-pad);gap:6px}
@@ -323,7 +375,7 @@
 /* ══ B · REFERENCIAS ════════════════════════════════════════════════════════
    El aviso de la biblioteca: añadirlas a la variante NO las imprime. Se lee antes
    de pulsar «+», que es cuando importa. */
-.lib-g .lib-note{margin:0 18px 8px;font:400 var(--fs-micro)/1.55 var(--font-sans);
+.lib-g .lib-note{margin:0 2px 8px;font:400 var(--fs-micro)/1.55 var(--font-sans);
   color:var(--text-subtle)}
 
 /* La SUGERENCIA. No es un ajuste ni una acción hecha: es una propuesta con su
@@ -337,31 +389,6 @@
 .refsug-row .tx b{font:500 var(--fs-ui)/1.45 var(--font-sans);color:var(--text);overflow-wrap:anywhere}
 .refsug-row .tx em{font:400 var(--fs-micro)/1.5 var(--font-sans);font-style:normal;color:var(--text-subtle)}
 
-/* ══ PUNTO 5 · ACORDEÓN DE LA BIBLIOTECA ════════════════════════════════════
-   La columna izquierda pasa de lista de corrido a secciones plegables. .lib-g ya
-   era el contenedor de grupo; ahora su cabecera es un BOTÓN que pliega, con su
-   contador (el que cuenta lo que SE PINTA tras el buscador) y su estado recordado
-   entre sesiones. Prefijo lib- propio: no se importa ni se toca ninguna clase ms-
-   del master (eso es contrato con diseño). */
-.lib-gh{width:100%;display:flex;align-items:baseline;gap:9px;padding:10px 18px 8px;
-  background:transparent;text-align:left;cursor:pointer}
-.lib-gh:hover{background:var(--surface)}
-.lib-gh .chev{flex:none;font-size:9px;color:var(--text-subtle);line-height:1;transform:translateY(-1px)}
-/* La cabecera-botón redefine el overline del grupo: en línea, sin el padding de la
-   versión de-corrido (esta regla va después que .lib-g .t-overline y la gana). */
-.lib-gh .t-overline{display:inline;padding:0;font-size:10px}
-.lib-gh .cnt{margin-left:auto;font:400 10px/1 var(--font-mono);color:var(--text-subtle)}
-/* Sección resaltada = la del item que se edita en el centro. Filete pátina, el
-   mismo lenguaje visual que un override: «esto es lo que estás tocando ahora». */
-.lib-g.lib-editing{box-shadow:inset 2px 0 0 var(--patina-500)}
-.lib-g.lib-editing .lib-gh .t-overline{color:var(--accent-text)}
-.lib-body{padding-bottom:6px}
-/* Viñeta bajo su rol: sangrada para leerse como hija, no como hermana suelta. */
-.lib-row.lib-bullet{padding-left:30px}
-/* Plegar/desplegar todo, y el vacío honesto de una búsqueda sin coincidencias. */
-.lib-foldall{align-self:flex-start;font:500 var(--fs-micro)/1 var(--font-mono);color:var(--text-muted);
-  border:1px solid var(--border);border-radius:6px;padding:6px 10px}
-.lib-foldall:hover{color:var(--accent-text);border-color:var(--border-patina)}
 .lib-empty{margin:18px;font:400 var(--fs-micro)/1.6 var(--font-mono);color:var(--text-subtle)}
 
 /* ══ PUNTO 6 · REFERENCIAS DESDE EL EDITOR ══════════════════════════════════
@@ -397,3 +424,41 @@
    se apagaba al .5 dentro de este formulario y al .42 en el resto del producto.
    Con pointer-events:none el puntero ni siquiera llega, así que `cursor` sobraba.
    Se borra en vez de retocarse: la regla no aportaba nada, solo desviaba. */
+
+/* ══ EDITOR INTEGRAL (Forja v2) ═════════════════════════════════════════════
+   El centro en tarjetas con cabecera propia (ícono · título · cuántos), el
+   panel «Documento» en pestañas (ui/Tabs) y las piezas que antes iban con
+   estilos en línea. Solo tokens. */
+.ed-mid-in{padding-bottom:48px}
+.var-card{border:1px solid var(--border);border-radius:var(--radius-xl);background:var(--surface-glass);box-shadow:var(--elev-1)}
+.var-objh-h{letter-spacing:0;text-transform:none;color:var(--text-subtle)}
+.var-card>.gh{display:flex;align-items:center;flex-wrap:wrap;gap:6px 9px;padding-bottom:2px}
+.var-card>.gh .edx-ico{color:var(--accent-text)}
+.var-card .gh-t{margin:0;font:600 14px/1.25 var(--font-sans);color:var(--text)}
+.var-card .gh-n{display:inline-grid;place-items:center;min-width:20px;height:20px;padding:0 6px;border-radius:var(--radius-pill);
+  border:1px solid var(--border);font:500 10px/1 var(--font-mono);color:var(--text-muted)}
+.var-card>.gh>.n{margin-left:auto;font:400 10px/1.4 var(--font-mono);color:var(--text-subtle)}
+.var-eh{flex-wrap:wrap}
+.var-eh .bacts--rol{margin-left:auto;display:flex}
+.var-eh .bacts--rol button{font:400 14px/1 var(--font-mono);color:var(--text-subtle);padding:3px 8px;border-radius:var(--radius-xs)}
+.var-eh .bacts--rol button:hover{color:var(--danger);background:var(--surface-elevated)}
+.var-b--fija .grip{cursor:default}
+/* Documento: una tarjeta, cuatro pestañas; lo de dentro deja de ser tarjeta. */
+.var-doc{margin:22px 18px 6px;padding:16px 18px 18px}
+.doc-tabs{margin-top:12px}
+.doc-tabs .u-tabs-panel{padding-top:14px;outline-offset:4px}
+.doc-hint{margin:0 0 4px;font:400 var(--fs-micro)/1.6 var(--font-mono);color:var(--text-subtle)}
+.var-doc .var-contact,.var-doc .var-design,.var-doc .var-order,.var-doc .var-pres{margin:0;padding:0;border:0;background:none;box-shadow:none}
+.var-doc .var-pres .prow:first-of-type{margin-top:10px}
+@media (max-width:640px){
+  .var-obj,.var-g,.var-doc,.var-refsug{margin-left:10px;margin-right:10px}
+  .var-doc .var-contact .clink{flex-wrap:wrap}
+  .var-doc .var-contact .clink .lbl{flex-basis:100%}
+  .ed-bar-a,.ed-bar-b{padding-left:12px;padding-right:12px}
+  .ed-bar .acts{margin-left:0;flex-wrap:wrap}
+  /* Las cuatro pestañas del Documento caben sin cortarse: se reparten el ancho. */
+  .doc-tabs .u-tabs-lista{display:flex;width:100%}
+  .doc-tabs .u-tab{flex:1 1 0;min-width:0;padding-left:6px;padding-right:6px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  /* En móvil la barra del shell no queda fija: las pestañas se pegan arriba del todo. */
+  .ed-tabs{top:0}
+}

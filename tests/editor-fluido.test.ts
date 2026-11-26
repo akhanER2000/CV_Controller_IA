@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { resolve } from "node:path";
 import { ATAJOS, accionDeTecla, escribeTexto } from "../src/components/editor/atajos";
 import {
@@ -20,6 +20,14 @@ import { editor } from "../src/lib/i18n/dict/editor";
  */
 
 const lee = (p: string) => readFileSync(resolve(__dirname, p), "utf8");
+// El editor de variante quedó dividido (editor-integral): la pantalla compone y el
+// estado y los manejadores viven en src/components/editor/. Se lee TODO el editor.
+const leeEditor = () =>
+  ["../src/components/screens/EditorVarianteScreen.tsx", ...readdirSync(resolve(__dirname, "../src/components/editor"))
+    .filter((f) => /\.tsx?$/.test(f))
+    .map((f) => `../src/components/editor/${f}`)]
+    .map(lee)
+    .join("\n");
 const sinComentarios = (s: string) => s.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|[^:])\/\/.*$/gm, "$1");
 
 describe("editor fluido · atajos", () => {
@@ -64,7 +72,7 @@ describe("editor fluido · atajos", () => {
   });
 
   it("A acepta UNA decisión: la marcada; sin marca, primero la enseña", () => {
-    const src = sinComentarios(lee("../src/components/screens/EditorVarianteScreen.tsx"));
+    const src = sinComentarios(leeEditor());
     const i = src.indexOf("const aceptarActual");
     const cuerpo = src.slice(i, src.indexOf("});", src.indexOf("}, [actual", i)));
     expect(cuerpo).toContain(".find(");
@@ -75,7 +83,7 @@ describe("editor fluido · atajos", () => {
   });
 
   it("los atajos no piden la propuesta: «Ajustar páginas» sigue siendo un clic", () => {
-    const src = sinComentarios(lee("../src/components/screens/EditorVarianteScreen.tsx"));
+    const src = sinComentarios(leeEditor());
     const i = src.indexOf("// ── Atajos de teclado");
     const efecto = src.slice(i, src.indexOf("}, [pvModo", i));
     expect(efecto).not.toContain("runFit");
@@ -101,7 +109,7 @@ describe("editor fluido · vista previa", () => {
   });
 
   it("la vista previa sigue siendo el PDF de /api/cv (el mismo body que la descarga)", () => {
-    const src = sinComentarios(lee("../src/components/screens/EditorVarianteScreen.tsx"));
+    const src = sinComentarios(leeEditor());
     expect(src).toContain('<iframe className="pv-frame" src={pdfUrl}');
     expect(src).toContain('body: JSON.stringify({ data: resumeRef.current, as: "preview", paginas: objetivoRef.current })');
     expect(src).toContain('body: JSON.stringify({ data: resumeRef.current, download: true, paginas: objetivoRef.current })');
@@ -109,11 +117,12 @@ describe("editor fluido · vista previa", () => {
 });
 
 describe("editor fluido · presentación", () => {
-  const src = sinComentarios(lee("../src/components/screens/EditorVarianteScreen.tsx"));
+  const src = sinComentarios(leeEditor());
 
   it("la biblioteca es un cajón cerrado por defecto", () => {
     expect(src).toContain("const [libAbierta, setLibAbierta] = useState(false);");
-    expect(src).toMatch(/\{libAbierta && \(\s*<aside className="ed-col ed-col--lib" id="edLib"/);
+    expect(src).toMatch(/\{ed\.libAbierta && <Biblioteca ed=\{ed\} \/>\}/);
+    expect(src).toContain('<aside className="ed-col ed-col--lib" id="edLib"');
   });
 
   it("«sin respaldo» va contado por sección, no un chip por grupo", () => {

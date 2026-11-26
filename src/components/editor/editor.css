@@ -7,6 +7,9 @@
 /* Texto solo para lector de pantalla. */
 .edx-sr{position:absolute;width:1px;height:1px;margin:-1px;padding:0;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0}
 
+/* Ícono del editor (iconos.tsx): alineado con el texto que acompaña. */
+.edx-ico{flex:none;display:inline-block;vertical-align:-3px}
+
 /* ── Tecla ─────────────────────────────────────────────────────────────────── */
 .edx-kbd{display:inline-grid;place-items:center;min-width:18px;height:18px;padding:0 4px;border-radius:var(--radius-xs);
   border:1px solid var(--border-strong);border-bottom-width:2px;background:var(--surface-sunken);
@@ -37,6 +40,7 @@
 .ed-menu>.ed-del-btn:hover{color:var(--danger)}
 .ed-menu .ed-delconfirm{flex-wrap:wrap;padding:6px 4px}
 .ed-menu .ed-delconfirm .q{flex-basis:100%;margin-bottom:4px;line-height:1.4}
+.ed-menu-sep{display:block;height:1px;margin:4px 6px;background:var(--border)}
 .ed-menu .ed-delconfirm .c-btn{height:30px;padding:0 var(--sp-3);font-size:var(--fs-micro)}
 
 /* ── Ayuda de atajos ───────────────────────────────────────────────────────── */

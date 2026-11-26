@@ -126,7 +126,10 @@ describe("Páginas objetivo en la base (0009)", () => {
 
   it("el editor ya no guarda el objetivo en localStorage", () => {
     const raiz = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
-    const src = readFileSync(path.join(raiz, "src/components/screens/EditorVarianteScreen.tsx"), "utf8");
+    // El editor quedó dividido (editor-integral): el objetivo lo guarda el hook.
+    const src = ["src/components/screens/EditorVarianteScreen.tsx", "src/components/editor/useEditorVariante.ts"]
+      .map((r) => readFileSync(path.join(raiz, r), "utf8"))
+      .join("\n");
     expect(src).not.toMatch(/corpus\.paginas\./);
     expect(src).toMatch(/paginas_objetivo: n/);
   });
