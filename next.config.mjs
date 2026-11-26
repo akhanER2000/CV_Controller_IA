@@ -1,6 +1,9 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
+  // Carpeta de salida configurable (NEXT_DIST_DIR) para que un build o un servidor
+  // secundario no pisen el .next del dev:local de AKHAN (DA-C8). Por defecto, .next.
+  distDir: process.env.NEXT_DIST_DIR || ".next",
   // react-pdf usa APIs de Node (fontkit, etc.): no lo empaquetes, cárgalo externo
   // en el runtime del servidor (la ruta /api/cv lo usa para renderizar el PDF).
   serverExternalPackages: ["@react-pdf/renderer"],

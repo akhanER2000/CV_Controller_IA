@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { leerAvisoDeVariante } from "@/lib/db/aviso";
 import {
   getVariant,
   updateVariant,
@@ -40,7 +41,8 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
     }
     const detail = await getVariant(sb, user.id, id);
     if (!detail) return NextResponse.json({ error: "Variante no encontrada." }, { status: 404 });
-    return NextResponse.json(detail);
+    // El aviso con el que nació (o se adaptó) la variante, para «Afinar con IA» (DA-AV3).
+    return NextResponse.json({ ...detail, aviso: await leerAvisoDeVariante(sb, user.id, id) });
   } catch (e) {
     return NextResponse.json({ error: e instanceof Error ? e.message : "Error" }, { status: 500 });
   }

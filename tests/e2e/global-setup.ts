@@ -35,14 +35,33 @@ function loadEnvLocal(): void {
   }
 }
 
+/** ¿La URL es la de un Supabase LOCAL (127.0.0.1 / localhost)? Cualquier otra cosa,
+ *  incluida una URL ilegible, es «no». */
+export function esSupabaseLocal(url: string | undefined): boolean {
+  if (!url) return false;
+  try {
+    const h = new URL(url).hostname;
+    return h === "127.0.0.1" || h === "localhost";
+  } catch {
+    return false;
+  }
+}
+
 export default async function globalSetup(): Promise<void> {
   loadEnvLocal();
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  // ★ DA-M6: ANTES de crear nada. Dos corridas dejaron usuarios de prueba en el
+  //   remoto (DA-V3, DA-C8); .env.local apunta al remoto, así que sin las claves de
+  //   `supabase status` en el entorno (npm run test:e2e:local) esto se detiene aquí.
+  if (!esSupabaseLocal(url)) {
+    throw new Error(
+      "e2e solo contra el Supabase local: NEXT_PUBLIC_SUPABASE_URL no es 127.0.0.1/localhost. " +
+        "Corre npm run test:e2e:local (lee las claves de supabase status) con dev:local en el 3000.",
+    );
+  }
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!url || !key) {
-    throw new Error(
-      "e2e: faltan NEXT_PUBLIC_SUPABASE_URL y/o SUPABASE_SERVICE_ROLE_KEY (ponlos en .env.local o en el entorno).",
-    );
+    throw new Error("e2e: falta SUPABASE_SERVICE_ROLE_KEY (npm run test:e2e:local la lee de supabase status).");
   }
 
   const admin = createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } });

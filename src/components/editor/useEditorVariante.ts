@@ -92,6 +92,8 @@ export function useEditorVariante(variantId: string) {
   const [items, setItems] = useState<VItem[]>(() => fb?.items ?? []);
   const [meta, setMeta] = useState<VMeta | null>(() => fb?.meta ?? null);
   const [targetTitle, setTargetTitle] = useState<string>(() => fb?.meta.target_title ?? "");
+  // El aviso con el que nació la variante («Adaptar a un aviso»); afinar lo envía (DA-AV3).
+  const [aviso, setAviso] = useState<string>("");
   const [loading, setLoading] = useState<boolean>(supabaseEnabled);
 
   const [libQ, setLibQ] = useState("");
@@ -199,6 +201,7 @@ export function useEditorVariante(variantId: string) {
         const m = data.variant as VMeta | undefined;
         setMeta(m ?? null);
         setTargetTitle(m?.target_title ?? "");
+        setAviso(typeof data.aviso === "string" ? data.aviso : "");
       } catch (e) {
         if (active) {
           setMaster([]);
@@ -1736,7 +1739,7 @@ export function useEditorVariante(variantId: string) {
   return {
     variantId, t, paginasTxt, loading, meta, master, items, masterById, vItemByMaster, bulletsForWork,
     // afinar con IA (useAfinar): pinta la variante que devuelve el servidor y avisa
-    setItems, flash,
+    setItems, flash, aviso,
     // barra
     onNameBlur, stMsg, stAccent, objetivo, elegirObjetivo, downloadPdf, doDeleteVariant,
     confirmDelete, setConfirmDelete, masAbierto, setMasAbierto, atajosAbierto, setAtajosAbierto,

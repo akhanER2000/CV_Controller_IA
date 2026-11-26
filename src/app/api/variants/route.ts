@@ -4,6 +4,7 @@ import { hayClaveIA, modeloPara } from "@/lib/ai/modelos";
 import { createClient } from "@/lib/supabase/server";
 import { listVariants, countMasterItems, getMasterItems, type MasterItem } from "@/lib/db/queries";
 import { createVariant, updateVariant, addItem, setAiOverride } from "@/lib/db/variants";
+import { guardarAvisoDeVariante } from "@/lib/db/aviso";
 import { preservesFacts } from "@/lib/verify";
 import { geminiApiKey } from "@/lib/extract/llm";
 import { getUserLlmKey, getUserLlmKey3 } from "@/lib/account/byok";
@@ -93,7 +94,7 @@ function geminiVariantLLM(apiKey?: string, apiKey3?: string, mem?: ContextoMemor
  *   { mode:'manual', name? }            → variante VACÍA. → { variant }
  *   { mode:'ai', prompt, name? }        → variante armada desde el master con IA.
  *                                         → { variant, notes }
- *   { mode:'tailor', includeIds, targetTitle?, summary?, name? }
+ *   { mode:'tailor', includeIds, targetTitle?, summary?, name?, aviso? }
  *                                       → variante YA ADAPTADA a un aviso, a partir de
  *                                         una SELECCIÓN que el usuario acaba de revisar
  *                                         (la propone /api/tailor/analizar). → { variant, notes }
@@ -113,6 +114,7 @@ export async function POST(req: Request) {
     targetTitle?: string;
     summary?: string;
     notes?: string;
+    aviso?: string;
   };
   try {
     body = await req.json();
@@ -166,6 +168,8 @@ export async function POST(req: Request) {
       if (targetTitle) {
         await updateVariant(sb, user.id, variant.id, { target_title: targetTitle });
       }
+      // El aviso queda con la variante para que «Afinar con IA» lo use (DA-AV3).
+      if (typeof body.aviso === "string") await guardarAvisoDeVariante(sb, user.id, variant.id, body.aviso, targetTitle);
 
       // El summary reformulado para el aviso vuelve a validarse aquí: llegó del cliente,
       // y un cliente es cualquiera. Si introduce una cifra o entidad ausente, se ignora.

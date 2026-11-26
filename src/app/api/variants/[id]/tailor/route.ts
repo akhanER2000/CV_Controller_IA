@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { generateObject } from "ai";
 import { createClient } from "@/lib/supabase/server";
 import { getVariant, getVariantItem, setAiOverride } from "@/lib/db/variants";
+import { guardarAvisoDeVariante } from "@/lib/db/aviso";
 import { hayClaveIA, modeloPara } from "@/lib/ai/modelos";
 import { getUserLlmKey, getUserLlmKey3 } from "@/lib/account/byok";
 import { contextoMemoria, mensajesConMemoria, type ContextoMemoria } from "@/lib/ai/memoria";
@@ -214,6 +215,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
 
     const oferta = await resolverOferta(sb, user.id, body, byok);
     if ("error" in oferta) return fallo(oferta.error, oferta.status);
+    // La variante queda adaptada a ESTE aviso: «Afinar con IA» lo usa (DA-AV3).
+    await guardarAvisoDeVariante(sb, user.id, variantId, oferta.text, detalle.variant.target_title);
 
     // Los tres grupos necesitan ver LO DE DENTRO y LO DE FUERA de la variante:
     //  · items de la variante → enVariante:true (candidatos a HAVE / a reformular).

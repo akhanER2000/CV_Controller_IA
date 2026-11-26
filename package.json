@@ -14,7 +14,8 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "test:e2e:local": "node scripts/e2e-local.mjs"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^4.0.15",

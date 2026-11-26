@@ -1,18 +1,20 @@
 import { defineConfig, devices } from "@playwright/test";
 
 /**
- * E2E de Corpus — prueba la CADENA REAL, a propósito lenta y costosa:
- * cuenta nueva → estados vacíos → volcado (Gemini REAL) → staging con evidencia →
- * aceptar → master poblado → PDF por /api/cv (round-trip ATS con unpdf).
+ * E2E de Corpus — prueba la CADENA REAL contra el dev:local de AKHAN.
  *
- * Usa Supabase + Gemini REALES. Requiere en .env.local (o el entorno):
- *   NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY,
- *   SUPABASE_SERVICE_ROLE_KEY (para crear el usuario de prueba en global-setup),
- *   GEMINI_API_KEY (para la extracción).
+ * ★ NO levanta servidor propio (DA-M6, DA-C8): un `next dev` aparte compartía el
+ *   `.next` del 3000 y apuntaba al Supabase REMOTO; dos veces dejó usuarios de prueba
+ *   allí. Usa el servidor que YA corre en el 3000 (`npm run dev:local`, Supabase
+ *   local). Si no responde, el «comando» de webServer solo explica qué falta y falla.
+ * ★ El global-setup ABORTA si NEXT_PUBLIC_SUPABASE_URL no es 127.0.0.1/localhost,
+ *   antes de crear ningún usuario.
  *
- * Servidor dedicado en el puerto 3100 (PORT/-p) para no chocar con el dev normal.
- * Correr con:  npm run test:e2e
+ * Correr con:  npm run test:e2e:local -- tests/e2e/flujo-cv.spec.ts
+ *   (lee las claves de `supabase status -o env` y las pasa por el entorno, sin archivos).
  */
+const BASE = process.env.E2E_BASE_URL || "http://localhost:3000";
+
 export default defineConfig({
   testDir: "./tests/e2e",
   fullyParallel: false,
@@ -24,17 +26,19 @@ export default defineConfig({
   globalSetup: "./tests/e2e/global-setup.ts",
   reporter: [["list"]],
   use: {
-    baseURL: "http://localhost:3100",
+    baseURL: BASE,
     trace: "on-first-retry",
     actionTimeout: 30_000,
     navigationTimeout: 30_000,
   },
   projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
   webServer: {
-    command: "npm run dev -- --port 3100",
-    url: "http://localhost:3100",
-    reuseExistingServer: !process.env.CI,
-    timeout: 120_000,
-    env: { PORT: "3100" },
+    // Nunca arranca nada: si el 3000 responde se reutiliza; si no, esto sale con 1
+    // y un mensaje claro (no hay `next dev` de reserva).
+    command: "node tests/e2e/sin-servidor.mjs",
+    url: BASE,
+    reuseExistingServer: true,
+    timeout: 15_000,
+    env: { E2E_BASE_URL: BASE },
   },
 });

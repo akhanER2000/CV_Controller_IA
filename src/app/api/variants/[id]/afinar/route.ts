@@ -25,6 +25,8 @@ import {
   type DescartadoAfinar,
   type MaestroRef,
 } from "@/lib/cv/afinar";
+import { mismoResumen, resumenRespaldo } from "@/lib/cv/afinar-confirmar";
+import { leerAvisoDeVariante } from "@/lib/db/aviso";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -35,7 +37,13 @@ export const maxDuration = 300;
  *   POST { alcance: 'todo'|'summary'|'work'|'projects'|'skills'|{itemId}, aviso? }
  *        → la IA reescribe (con la memoria cacheada), el candado corre OTRA VEZ
  *          aquí y lo que pasa se APLICA de un clic como override ai_rephrased.
- *          Las aptitudes «sin respaldo» se resuelven sin IA (mostrar / ocultar).
+ *          Las aptitudes «sin respaldo» NO se aplican aquí: se devuelve `respaldo`
+ *          (cuántas viñetas se añaden y cuántas aptitudes se ocultan) para que el
+ *          editor pida UNA confirmación (DA-M5). Sin `aviso` en el cuerpo, se usa el
+ *          guardado en la variante si nació de «Adaptar a un aviso» (DA-AV3).
+ *   POST { accion:'respaldo', esperado:{anadir, ocultar} }
+ *        → aplica las «sin respaldo» (sin IA), recalculadas sobre la base; si ya no
+ *          coinciden con lo que el usuario confirmó, 409 y no toca nada.
  *   POST { accion:'aplicar', propuestas:[{id, propuesto}] }
  *        → vuelve a poner un afinado (selector «Texto: afinado»), re-verificado.
  *   POST { accion:'revertir', aplicados }  → deshace lo aplicado: el texto vuelve
@@ -121,6 +129,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     aviso?: string;
     propuestas?: { id?: string; propuesto?: string }[];
     aplicados?: AplicadoAfinar[];
+    esperado?: unknown;
   };
   try {
     body = await req.json();
@@ -195,6 +204,36 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       return NextResponse.json({ revertidos, items: await frescos() });
     }
 
+    // ── RESPALDO (confirmado): sin IA. Nunca escribe una viñeta: muestra, añade o quita.
+    if (body.accion === "respaldo") {
+      const acciones = resolverSinRespaldo(items, master);
+      if (!mismoResumen(resumenRespaldo(acciones), body.esperado)) {
+        return fallo("La variante cambió desde el resumen: vuelve a afinar para ver lo que se aplicaría.", 409);
+      }
+      const aplicados: AplicadoAfinar[] = [];
+      for (const a of acciones) {
+        if (a.tipo === "mostrar") {
+          await updateItem(sb, user.id, a.id, { visible: true });
+          aplicados.push(a);
+        } else if (a.tipo === "anadir") {
+          const nuevo = await addItem(sb, user.id, variantId, a.itemId);
+          aplicados.push({ ...a, id: String(nuevo.id) });
+        } else if (a.tipo === "ocultar-grupo") {
+          await updateItem(sb, user.id, a.id, { visible: false });
+          aplicados.push({ ...a, kind: "skill" });
+        } else {
+          const antes = porId.get(a.id)?.override_data ?? null;
+          await setAiOverride(sb, user.id, a.id, {
+            data: { ...(antes ?? {}), items: a.propuesto },
+            sourceItem: a.itemId,
+            reason: REASON_APTITUD,
+          });
+          aplicados.push({ ...a, kind: "skill", antes });
+        }
+      }
+      return NextResponse.json({ aplicado: aplicados, descartado: [], items: await frescos() });
+    }
+
     // ── APLICAR (volver al afinado desde el selector) ────────────────────────
     if (body.accion === "aplicar") {
       const aplicados: AplicadoAfinar[] = [];
@@ -208,7 +247,10 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     // ── AFINAR ───────────────────────────────────────────────────────────────
     const alcance = alcanceDe(body.alcance);
     if (!alcance) return fallo("Alcance inválido.", 400);
-    const aviso = String(body.aviso ?? "").trim().slice(0, MAX_AVISO);
+    const aviso = (String(body.aviso ?? "").trim() || (await leerAvisoDeVariante(sb, user.id, variantId)) || "").slice(
+      0,
+      MAX_AVISO,
+    );
     const targetTitle = detalle.variant.target_title ?? "";
 
     const aplicados: AplicadoAfinar[] = [];
@@ -236,31 +278,18 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       for (const p of r.propuestas) await escribirTexto(p.id, p.propuesto, p.motivo, aplicados, descartados);
     }
 
-    // 2 · «Sin respaldo», sin IA. Nunca escribe una viñeta: muestra, añade o quita.
-    if (incluyeAptitudes(alcance)) {
-      for (const a of resolverSinRespaldo(items, master)) {
-        if (a.tipo === "mostrar") {
-          await updateItem(sb, user.id, a.id, { visible: true });
-          aplicados.push(a);
-        } else if (a.tipo === "anadir") {
-          const nuevo = await addItem(sb, user.id, variantId, a.itemId);
-          aplicados.push({ ...a, id: String(nuevo.id) });
-        } else if (a.tipo === "ocultar-grupo") {
-          await updateItem(sb, user.id, a.id, { visible: false });
-          aplicados.push({ ...a, kind: "skill" });
-        } else {
-          const antes = porId.get(a.id)?.override_data ?? null;
-          await setAiOverride(sb, user.id, a.id, {
-            data: { ...(antes ?? {}), items: a.propuesto },
-            sourceItem: a.itemId,
-            reason: REASON_APTITUD,
-          });
-          aplicados.push({ ...a, kind: "skill", antes });
-        }
-      }
-    }
+    // 2 · «Sin respaldo»: solo se CUENTA. Se aplica con accion:'respaldo' tras la
+    //     confirmación del editor (DA-M5).
+    const respaldo = incluyeAptitudes(alcance) ? resumenRespaldo(resolverSinRespaldo(items, master)) : null;
 
-    return NextResponse.json({ aplicado: aplicados, descartado: descartados, notas, uso: uso.v, items: await frescos() });
+    return NextResponse.json({
+      aplicado: aplicados,
+      descartado: descartados,
+      notas,
+      uso: uso.v,
+      respaldo: respaldo && respaldo.anadir + respaldo.ocultar > 0 ? respaldo : null,
+      items: await frescos(),
+    });
   } catch (e) {
     console.error("[api/afinar] no se pudo afinar", variantId, e);
     return fallo(motivo(e), 500);

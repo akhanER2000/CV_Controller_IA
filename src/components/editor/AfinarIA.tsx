@@ -9,6 +9,8 @@ import "./afinar.css";
 /* ============================================================================
    «AFINAR CON IA» en la barra, junto a «Ajustar páginas» (el hueco reservado).
      · el botón abre el alcance: todo el CV o una sección;
+     · si hay aptitudes «sin respaldo», UNA confirmación con el resumen (añade N,
+       oculta M, puede sumar páginas) antes de aplicar — DA-M5;
      · al terminar, el resumen (afinados · resueltos · descartados), su detalle y
        «Revertir afinado»;
      · el selector «Texto: del master / afinado» alterna la versión de verdad.
@@ -37,13 +39,18 @@ export function AfinarIA({ ed }: { ed: Editor }) {
         botonEtiqueta={t("editor.afAria")}
         boton={
           <>
-            {af.busy && af.busy !== "modo" && af.busy !== "revertir" ? t("editor.afBusy") : t("editor.afBtn")}{" "}
+            {af.busy && af.busy !== "modo" && af.busy !== "revertir" && af.busy !== "respaldo" ? t("editor.afBusy") : t("editor.afBtn")}{" "}
             <span aria-hidden="true">▾</span>
           </>
         }
       >
         <div className="ed-menu">
           <p className="ed-af-nota">{t("editor.afNota")}</p>
+          {af.conAviso && (
+            <p className="ed-af-nota" id="edAfinarAviso">
+              {t("editor.afAviso")}
+            </p>
+          )}
           {ALCANCES.map((a) => (
             <button
               key={a}
@@ -89,6 +96,34 @@ export function AfinarIA({ ed }: { ed: Editor }) {
               {t("editor.afRevertir")}
             </button>
           )}
+        </span>
+      )}
+
+      {af.respaldo && (
+        <span className="ed-af-conf" role="group" aria-live="polite" id="edAfinarRespaldo">
+          <span className="txt">
+            {t("editor.afRespPregunta")
+              .replace("{n}", String(af.respaldo.anadir))
+              .replace("{m}", String(af.respaldo.ocultar))}
+          </span>
+          <button
+            type="button"
+            className="c-btn c-btn--quiet ed-af-rev"
+            id="edAfinarRespAplicar"
+            disabled={af.busy !== null}
+            onClick={af.aplicarRespaldo}
+          >
+            {t("editor.afRespAplicar")}
+          </button>
+          <button
+            type="button"
+            className="c-btn c-btn--quiet ed-af-rev"
+            id="edAfinarRespCancelar"
+            disabled={af.busy !== null}
+            onClick={af.cancelarRespaldo}
+          >
+            {t("editor.afRespCancelar")}
+          </button>
         </span>
       )}
 

@@ -16,3 +16,6 @@
 .ed-af-det li .mot{display:block;color:var(--text-subtle)}
 .ed-af-det li.desc .prop{display:block;text-decoration:line-through;text-decoration-color:var(--danger);color:var(--text-subtle)}
 .ed-af-uso{margin:4px 0 0;font:500 10px/1.4 var(--font-mono);color:var(--text-subtle)}
+.ed-af-conf{display:inline-flex;align-items:center;flex-wrap:wrap;gap:var(--sp-2);padding:2px 2px 2px var(--sp-3);
+  border:1px solid var(--border-strong);border-radius:var(--radius-pill);background:var(--surface)}
+.ed-af-conf .txt{font-size:var(--fs-micro);line-height:1.4;color:var(--text)}

@@ -575,6 +575,8 @@ export function VariantesScreen() {
           targetTitle: tailorProposal.title,
           summary: tailorProposal.summary ?? undefined,
           notes: tailorProposal.notes ?? undefined,
+          // El aviso viaja con la variante: «Afinar con IA» lo usa luego (DA-AV3).
+          aviso: offerDraft.trim() || undefined,
         }),
       });
       if (!res.ok) throw new Error();

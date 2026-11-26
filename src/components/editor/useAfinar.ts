@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { supabaseEnabled } from "@/lib/supabase/config";
 import type { AplicadoAfinar, DescartadoAfinar, SeccionAfinar } from "@/lib/cv/afinar";
 import type { UsoLlamada } from "@/lib/ai/memoria";
+import type { ResumenRespaldo } from "@/lib/cv/afinar-confirmar";
 import { JSON_HEADERS, editableField, normalizeIncoming, readApiError, reason } from "./modelo";
 import type { Editor } from "./useEditorVariante";
 
@@ -58,8 +59,10 @@ function guardar(variantId: string, modo: ModoTexto, textos: TextoAfinado[]) {
 }
 
 export function useAfinar(ed: Editor) {
-  const { variantId, t, setItems, flash } = ed;
-  const [busy, setBusy] = useState<AlcanceUI | "modo" | "revertir" | null>(null);
+  const { variantId, t, setItems, flash, aviso } = ed;
+  const [busy, setBusy] = useState<AlcanceUI | "modo" | "revertir" | "respaldo" | null>(null);
+  // «Sin respaldo» pendiente de UNA confirmación (DA-M5): añadir/ocultar cambia la forma del CV.
+  const [respaldo, setRespaldo] = useState<ResumenRespaldo | null>(null);
   const [err, setErr] = useState("");
   const [ultimo, setUltimo] = useState<UltimoAfinado | null>(null);
   const [textos, setTextos] = useState<TextoAfinado[]>([]);
@@ -109,6 +112,7 @@ export function useAfinar(ed: Editor) {
         descartado?: DescartadoAfinar[];
         notas?: string;
         uso?: UsoLlamada | null;
+        respaldo?: ResumenRespaldo | null;
         items?: unknown[];
       };
       if (Array.isArray(json.items)) setItems(json.items.map(normalizeIncoming));
@@ -125,9 +129,11 @@ export function useAfinar(ed: Editor) {
       }
       setBusy(alcance);
       setErr("");
+      setRespaldo(null);
       void (async () => {
         try {
-          const r = await llamar({ alcance });
+          // El aviso guardado en la variante orienta (no autoriza hechos) — DA-AV3.
+          const r = await llamar({ alcance, aviso: aviso || undefined });
           const aplicado = r.aplicado ?? [];
           const descartado = r.descartado ?? [];
           setUltimo({ aplicado, descartado, notas: r.notas ?? "", uso: r.uso ?? null });
@@ -137,11 +143,15 @@ export function useAfinar(ed: Editor) {
           );
           const ids = new Set(nuevos.map((n) => n.id));
           if (nuevos.length) fijar("afinado", [...textos.filter((x) => !ids.has(x.id)), ...nuevos]);
-          flash(
-            aplicado.length || descartado.length
-              ? t("editor.afHecho").replace("{a}", String(aplicado.length)).replace("{d}", String(descartado.length))
-              : t("editor.afNada"),
-          );
+          const pend = r.respaldo && r.respaldo.anadir + r.respaldo.ocultar > 0 ? r.respaldo : null;
+          setRespaldo(pend);
+          if (aplicado.length || descartado.length || !pend) {
+            flash(
+              aplicado.length || descartado.length
+                ? t("editor.afHecho").replace("{a}", String(aplicado.length)).replace("{d}", String(descartado.length))
+                : t("editor.afNada"),
+            );
+          }
           if (!aplicado.length && r.notas) setErr(r.notas);
         } catch (e) {
           console.error("[editor] no se pudo afinar", e);
@@ -152,8 +162,41 @@ export function useAfinar(ed: Editor) {
         }
       })();
     },
-    [llamar, fijar, textos, flash, t],
+    [llamar, fijar, textos, flash, t, aviso],
   );
+
+  /** «Aplicar» del resumen de sin respaldo: el servidor lo recalcula y, si cambió, no toca nada. */
+  const aplicarRespaldo = useCallback(() => {
+    if (!respaldo) return;
+    setBusy("respaldo");
+    void (async () => {
+      try {
+        const r = await llamar({ accion: "respaldo", esperado: respaldo });
+        const nuevos = r.aplicado ?? [];
+        // Se suma al último afinado: «Revertir afinado» deshace también esto.
+        setUltimo((u) => ({
+          aplicado: [...(u?.aplicado ?? []), ...nuevos],
+          descartado: u?.descartado ?? [],
+          notas: u?.notas ?? "",
+          uso: u?.uso ?? null,
+        }));
+        setRespaldo(null);
+        flash(t("editor.afRespHecho").replace("{n}", String(nuevos.length)));
+      } catch (e) {
+        console.error("[editor] no se pudo aplicar el sin respaldo", e);
+        setRespaldo(null);
+        setErr(reason(e));
+        flash(t("editor.afErr").replace("{r}", reason(e)));
+      } finally {
+        setBusy(null);
+      }
+    })();
+  }, [respaldo, llamar, flash, t]);
+
+  const cancelarRespaldo = useCallback(() => {
+    setRespaldo(null);
+    flash(t("editor.afRespCancelado"));
+  }, [flash, t]);
 
   /** Deshace el ÚLTIMO afinado entero: texto al master, lo mostrado oculto, lo añadido fuera. */
   const revertir = useCallback(() => {
@@ -222,5 +265,8 @@ export function useAfinar(ed: Editor) {
     [modoReal, textos, llamar, fijar, flash, t],
   );
 
-  return { busy, err, ultimo, textos, modo: modoReal, afinar, revertir, cambiarModo, cerrarResumen: () => setUltimo(null) };
+  return {
+    busy, err, ultimo, textos, modo: modoReal, afinar, revertir, cambiarModo, cerrarResumen: () => setUltimo(null),
+    respaldo, aplicarRespaldo, cancelarRespaldo, conAviso: Boolean(aviso),
+  };
 }
