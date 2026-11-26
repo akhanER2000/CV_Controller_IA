@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useBoot } from "@/lib/corpus/runtime";
@@ -60,11 +60,24 @@ import {
   type FitFalta,
   type FitMark,
   type FitQuitar,
+  type FitTipoFalta,
   type FitReordenar,
   type PropEnLinea,
 } from "@/components/flujo-cv";
-import { GuiaAjuste, Huecos, HuecosAptitud, PropuestaEnLinea, SelloVerificado } from "@/components/FlujoCv";
+import { GuiaAjuste, Huecos, HuecosSeccion, PropuestaEnLinea, SelloVerificado } from "@/components/FlujoCv";
+import { Desplegable, Kbd } from "@/components/editor/Desplegable";
+import { NavSecciones, type SeccionNav } from "@/components/editor/NavSecciones";
+import { ATAJOS, TECLA, accionDeTecla } from "@/components/editor/atajos";
+import {
+  PV_ANCHO_DEF,
+  PV_ANCHO_MIN,
+  alternarCompleto,
+  alternarOculto,
+  limitarAncho,
+  useVistaPrevia,
+} from "@/components/editor/vista-previa";
 import "./editor-variante.css";
+import "@/components/editor/editor.css";
 
 // Listas estables (el catálogo no cambia en runtime): fuera del componente.
 const TEMPLATES = listTemplates();
@@ -2094,12 +2107,17 @@ export function EditorVarianteScreen({ variantId = "editor" }: { variantId?: str
     [fitAcceptDrop, fitAcceptMove, fitAcceptShorten],
   );
 
+  /* La decisión MARCADA: la que trajo «Siguiente» (J). Es la única que acepta la
+     tecla A; sin marca, A primero la busca (nunca acepta algo que no se ha visto). */
+  const [actual, setActual] = useState<string | null>(null);
+
   /** Las propuestas abiertas de un item, bajo él. */
   const propsDe = (id: string) =>
     (enLinea.get(id) ?? []).map((pr) => (
       <PropuestaEnLinea
         key={pr.clave}
         prop={pr}
+        actual={pr.clave === actual}
         revertida={fitDone[pr.clave] === "undo"}
         onAceptar={() => aceptarProp(pr)}
         onRechazar={() => mark(pr.clave, "no")}
@@ -2120,7 +2138,7 @@ export function EditorVarianteScreen({ variantId = "editor" }: { variantId?: str
     const ult = ultimaDecision.current && document.contains(ultimaDecision.current) ? ultimaDecision.current : null;
     const desde = ult
       ? ult.getBoundingClientRect().top
-      : document.getElementById("edGuia")?.getBoundingClientRect().bottom ?? 0;
+      : document.getElementById("edNav")?.getBoundingClientRect().bottom ?? 0;
     const i = siguienteIndice(
       els.map((e) => e.getBoundingClientRect().top),
       desde,
@@ -2128,12 +2146,159 @@ export function EditorVarianteScreen({ variantId = "editor" }: { variantId?: str
     if (i < 0) return;
     const el = els[i]!;
     ultimaDecision.current = el;
+    setActual(el.dataset.clave ?? null);
     const suave = !window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     el.scrollIntoView({ block: "center", behavior: suave ? "smooth" : "auto" });
     // El foco va al botón PRUDENTE (mantener / no): Intro nunca aplica un cambio
     // que el usuario no ha leído.
     el.querySelector<HTMLButtonElement>(".fl-acts button")?.focus({ preventScroll: true });
   }, []);
+
+  /** Tecla A: acepta UNA decisión, la marcada (o la que tiene el foco). */
+  const aceptarActual = useCallback(() => {
+    const activo = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const clave = activo?.closest<HTMLElement>("[data-clave]")?.dataset.clave ?? actual;
+    const pr = clave ? Array.from(enLinea.values()).flat().find((x) => x.clave === clave) : undefined;
+    if (!pr) {
+      irASiguiente(); // primero se ve; aceptar es la siguiente pulsación
+      return;
+    }
+    setActual(null);
+    aceptarProp(pr);
+  }, [actual, enLinea, aceptarProp, irASiguiente]);
+
+  // ── Layout: biblioteca (cajón) y vista previa (al lado · oculta · completa) ──
+  const [libAbierta, setLibAbierta] = useState(false);
+  const pageRef = useRef<HTMLDivElement>(null);
+  // La pantalla ocupa EXACTAMENTE lo que queda de ventana bajo la barra del shell
+  // (que va en el flujo y cambia de alto): se mide, no se adivina.
+  useLayoutEffect(() => {
+    const el = pageRef.current;
+    if (!el) return;
+    const medir = () => el.style.setProperty("--ed-top", `${Math.max(0, Math.round(el.getBoundingClientRect().top + window.scrollY))}px`);
+    medir();
+    window.addEventListener("resize", medir);
+    return () => window.removeEventListener("resize", medir);
+  }, []);
+  const libQRef = useRef<HTMLInputElement>(null);
+  const midRef = useRef<HTMLElement>(null);
+  const [masAbierto, setMasAbierto] = useState(false);
+  const [atajosAbierto, setAtajosAbierto] = useState(false);
+  const {
+    modo: pvModo,
+    ancho: pvAncho,
+    anchoRef: pvAnchoRef,
+    cambiarModo: pvCambiar,
+    fijarAncho: pvFijar,
+  } = useVistaPrevia();
+
+  /** Ancho disponible para centro + vista previa (sin la biblioteca). */
+  const disponiblePv = useCallback(() => {
+    const grid = bootRef.current;
+    if (!grid) return 0;
+    const lib = grid.querySelector<HTMLElement>(".ed-col--lib");
+    return grid.getBoundingClientRect().width - (lib?.offsetWidth ?? 0) - 8;
+  }, [bootRef]);
+
+  const arrastrarDivisor = useCallback(
+    (e: React.PointerEvent<HTMLDivElement>) => {
+      const grid = bootRef.current;
+      if (!grid || e.button !== 0) return;
+      e.preventDefault();
+      const handle = e.currentTarget;
+      handle.setPointerCapture(e.pointerId);
+      const derecha = grid.getBoundingClientRect().right;
+      const disp = disponiblePv();
+      let ultimo = pvAnchoRef.current;
+      grid.setAttribute("data-arrastrando", "");
+      const mover = (ev: PointerEvent) => {
+        ultimo = limitarAncho(derecha - ev.clientX, disp);
+        pvFijar(ultimo, false);
+      };
+      const soltar = () => {
+        handle.removeEventListener("pointermove", mover);
+        handle.removeEventListener("pointerup", soltar);
+        handle.removeEventListener("pointercancel", soltar);
+        grid.removeAttribute("data-arrastrando");
+        pvFijar(ultimo, true);
+      };
+      handle.addEventListener("pointermove", mover);
+      handle.addEventListener("pointerup", soltar);
+      handle.addEventListener("pointercancel", soltar);
+    },
+    [bootRef, disponiblePv, pvAnchoRef, pvFijar],
+  );
+
+  const teclaDivisor = useCallback(
+    (e: React.KeyboardEvent<HTMLDivElement>) => {
+      const paso = e.shiftKey ? 96 : 24;
+      const d = e.key === "ArrowLeft" ? paso : e.key === "ArrowRight" ? -paso : 0;
+      if (e.key === "Home") pvFijar(limitarAncho(PV_ANCHO_DEF, disponiblePv()), true);
+      if (!d) return;
+      e.preventDefault();
+      pvFijar(limitarAncho(pvAnchoRef.current + d, disponiblePv()), true);
+    },
+    [disponiblePv, pvAnchoRef, pvFijar],
+  );
+
+  // ── Atajos de teclado (ver src/components/editor/atajos.ts) ──
+  useEffect(() => {
+    const estrecho = () => window.matchMedia("(max-width: 1024px)").matches;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.defaultPrevented) return;
+      const a = accionDeTecla({
+        key: e.key,
+        ctrlKey: e.ctrlKey,
+        metaKey: e.metaKey,
+        altKey: e.altKey,
+        target: e.target instanceof HTMLElement ? e.target : null,
+      });
+      if (!a) return;
+      switch (a) {
+        case "siguiente":
+          e.preventDefault();
+          if (pvModo === "completo") pvCambiar("lado");
+          setView("mid");
+          irASiguiente();
+          break;
+        case "aceptar":
+          e.preventDefault();
+          aceptarActual();
+          break;
+        case "preview":
+          e.preventDefault();
+          if (estrecho()) setView((v) => (v === "preview" ? "mid" : "preview"));
+          else pvCambiar(alternarOculto(pvModo));
+          break;
+        case "completa":
+          e.preventDefault();
+          pvCambiar(alternarCompleto(pvModo));
+          break;
+        case "biblioteca":
+          e.preventDefault();
+          setLibAbierta((v) => !v);
+          break;
+        case "buscar":
+          e.preventDefault();
+          setLibAbierta(true);
+          requestAnimationFrame(() => libQRef.current?.focus());
+          break;
+        case "ayuda":
+          e.preventDefault();
+          setAtajosAbierto((v) => !v);
+          break;
+        case "escape":
+          if (pvModo === "completo") {
+            pvCambiar("lado");
+          } else if (libAbierta && document.activeElement?.closest("#edLib")) {
+            setLibAbierta(false);
+          }
+          break;
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [pvModo, pvCambiar, irASiguiente, aceptarActual, libAbierta]);
 
   // Las notas de la IA al crear la variante (VariantesScreen las deja aquí al
   // saltar directo al editor). Se hidrata ya montado; sin almacenamiento, no hay.
@@ -2272,6 +2437,9 @@ export function EditorVarianteScreen({ variantId = "editor" }: { variantId?: str
           <span
             className="tx"
             data-edit=""
+            data-editable={field && !editing ? "" : undefined}
+            title={field && !editing ? t("editor.edEditarHint") : undefined}
+            onClick={field && !editing ? () => startEdit(b.id) : undefined}
             contentEditable={editing}
             suppressContentEditableWarning
             ref={editing ? editRef : undefined}
@@ -2449,9 +2617,9 @@ export function EditorVarianteScreen({ variantId = "editor" }: { variantId?: str
    * compuesto (el que se imprimirá) y el botón de quitar. Lo comparten las tres
    * secciones nuevas; vacío no pinta nada, como el resto de grupos.
    */
-  const simpleGroup = (titleKey: string, list: VItem[]) =>
+  const simpleGroup = (titleKey: string, list: VItem[], sec: string) =>
     list.length > 0 ? (
-      <div className="var-g" key={titleKey}>
+      <div className="var-g" key={titleKey} data-sec={sec}>
         <div className="gh">
           <span className="t-overline">{t(titleKey)}</span>
         </div>
@@ -2487,10 +2655,42 @@ export function EditorVarianteScreen({ variantId = "editor" }: { variantId?: str
     .replace("{m}", String(overrideCount));
   const isEmpty = !loading && contentItems.length === 0;
 
+  /* Los huecos por sección (para la navegación fija y el detalle del estado).
+     Una viñeta cuenta en la sección de su rol: es donde se ve. */
+  const huecosTipo = useMemo(() => {
+    const r: Record<FitTipoFalta, number> = { "sin-cifra": 0, "sin-fecha": 0, "sin-respaldo": 0 };
+    for (const f of faltas) r[f.tipo] += 1;
+    return r;
+  }, [faltas]);
+  const huecosDe = (list: readonly VItem[], conVinetas = false) =>
+    list.reduce(
+      (n, it) =>
+        n +
+        (huecos.get(it.id)?.length ?? 0) +
+        (conVinetas ? bulletsForWork(it).reduce((m, b) => m + (huecos.get(b.id)?.length ?? 0), 0) : 0),
+      0,
+    );
+  const huecosTexto = (n: number) =>
+    t(n === 1 ? "editor.edHuecosSec1" : "editor.edHuecosSecN").replace("{n}", String(n));
+  const secciones: SeccionNav[] = [{ id: "titulo", titulo: t("editor.edSecTitulo") }];
+  const pushSec = (id: string, titleKey: string, list: readonly VItem[], h = 0) => {
+    if (list.length) secciones.push({ id, titulo: t(titleKey), n: list.length, huecos: h, huecosTexto: huecosTexto(h) });
+  };
+  pushSec("summary", "editor.groupSummary", summaryItems, huecosDe(summaryItems));
+  pushSec("work", "editor.groupExperience", workItems, huecosDe(workItems, true));
+  pushSec("skills", "editor.groupSkillsFull", skillItems, huecosDe(skillItems));
+  pushSec("projects", "editor.groupProjects", projectItems, huecosDe(projectItems));
+  pushSec("education", "editor.groupEducation", eduItems);
+  pushSec("certifications", "editor.groupCertifications", certItems);
+  pushSec("languages", "editor.groupLanguages", langItems);
+  pushSec("publications", "editor.groupPublications", pubItems);
+  pushSec("references", "editor.groupReferences", refItems);
+  secciones.push({ id: "doc", titulo: t("editor.edSecDocumento") });
+
   const setTab = (v: View) => setView(v);
 
   return (
-    <div className="c-page">
+    <div className="c-page ed-page" ref={pageRef}>
       {/* La pantalla más densa del producto: el humo al mínimo perceptible. */}
       <AuroraTune strength={AURORA_TRABAJO} />
       <header className="c-header">
@@ -2524,11 +2724,11 @@ export function EditorVarianteScreen({ variantId = "editor" }: { variantId?: str
       </header>
 
       <div className="ed-bar" data-screen-label="editor-toolbar">
-        <div className="c-container">
+        {/* Fila 1: qué variante es y lo que se hace con ella. */}
+        <div className="ed-bar-a">
           <Link className="bk" href="/app/variantes">
             {t("editor.backToVariants")}
           </Link>
-          <span style={{ width: "1px", height: "16px", background: "var(--border-strong)" }} />
           <span
             key={meta?.id ?? "nm"}
             className="nm"
@@ -2549,56 +2749,133 @@ export function EditorVarianteScreen({ variantId = "editor" }: { variantId?: str
             {stMsg || t("editor.stIdle")}
           </span>
           <span className="acts">
-            {confirmDelete ? (
-              <span className="ed-delconfirm" role="group" aria-label={t("editor.deleteConfirm")}>
-                <span className="q">{t("editor.deleteConfirm")}</span>
-                <button type="button" className="c-btn c-btn--quiet" onClick={() => setConfirmDelete(false)}>
-                  {t("editor.deleteCancel")}
-                </button>
-                <button type="button" className="c-btn ed-del-yes" onClick={() => void doDeleteVariant()}>
-                  {t("editor.deleteYes")}
-                </button>
-              </span>
-            ) : (
-              <button
-                type="button"
-                className="c-btn c-btn--quiet ed-del-btn"
-                onClick={() => setConfirmDelete(true)}
-              >
-                {t("editor.deleteVariant")}
-              </button>
-            )}
-            <button
-              type="button"
-              className="c-btn c-btn--quiet ed-fit-open"
-              aria-controls="edGuia"
-              disabled={fitBusy}
-              onClick={() => {
-                // Pedir la propuesta ES pulsar aquí (o en la guía): una llamada al
-                // modelo con la clave del usuario, nunca sola. Las decisiones
-                // aparecen después sobre cada item de la composición.
-                setTab("mid");
-                document.getElementById("edGuia")?.scrollIntoView({ block: "nearest" });
-                runFit();
-              }}
+            <Desplegable
+              abierto={atajosAbierto}
+              onCambiar={setAtajosAbierto}
+              lado="der"
+              ancho={300}
+              botonClase="ed-tog ed-tog--ico"
+              botonEtiqueta={t("editor.edAtajosAria")}
+              botonTitulo={t("editor.edAtajosAria")}
+              boton={<Kbd>?</Kbd>}
             >
-              {t("editor.fitOpen")}
-            </button>
+              <div className="ed-atajos">
+                <span className="t-overline">{t("editor.edAtajosAria")}</span>
+                <dl>
+                  {ATAJOS.map((a) => (
+                    <div key={a.accion}>
+                      <dt>
+                        <Kbd>{a.tecla}</Kbd>
+                      </dt>
+                      <dd>{t(a.clave)}</dd>
+                    </div>
+                  ))}
+                </dl>
+                <p className="hint">{t("editor.edAtajosNota")}</p>
+              </div>
+            </Desplegable>
             <Link className="c-btn c-btn--quiet" href={`/app/variantes/${variantId}/tailor`}>
               {t("common.tailor")}
-            </Link>
-            <Link className="c-btn c-btn--quiet" href={`/app/variantes/${variantId}/salud`}>
-              {t("common.health")}
             </Link>
             <button type="button" className="c-btn c-btn--patina" id="btnPdf" onClick={() => void downloadPdf()}>
               {t("common.downloadPdf")}
             </button>
+            <Desplegable
+              abierto={masAbierto}
+              onCambiar={(v) => {
+                setMasAbierto(v);
+                if (!v) setConfirmDelete(false);
+              }}
+              lado="der"
+              ancho={260}
+              botonClase="c-btn c-btn--quiet ed-mas"
+              botonEtiqueta={t("editor.edMasAria")}
+              boton={<>{t("editor.edMas")} ▾</>}
+            >
+              <div className="ed-menu">
+                <Link href={`/app/variantes/${variantId}/salud`}>{t("common.health")}</Link>
+                {confirmDelete ? (
+                  <span className="ed-delconfirm" role="group" aria-label={t("editor.deleteConfirm")}>
+                    <span className="q">{t("editor.deleteConfirm")}</span>
+                    <button type="button" className="c-btn c-btn--quiet" onClick={() => setConfirmDelete(false)}>
+                      {t("editor.deleteCancel")}
+                    </button>
+                    <button type="button" className="c-btn ed-del-yes" onClick={() => void doDeleteVariant()}>
+                      {t("editor.deleteYes")}
+                    </button>
+                  </span>
+                ) : (
+                  <button type="button" className="ed-del-btn" onClick={() => setConfirmDelete(true)}>
+                    {t("editor.deleteVariant")}
+                  </button>
+                )}
+              </div>
+            </Desplegable>
           </span>
+        </div>
+        {/* Fila 2: el documento — páginas objetivo, UN estado, ajustar y la vista. */}
+        <div className="ed-bar-b">
+          {/* Páginas objetivo. El documento se autoajusta (cuerpo ≥ 10 pt) a ESTE
+              número; si no cabe ni así, el estado lo dice y «Ajustar páginas» propone. */}
+          <div className="ed-obj" role="group" aria-label={t("editor.objAria")} id="pvObjetivo">
+            <span className="lbl" aria-hidden="true">
+              {t("editor.edPaginas")}
+            </span>
+            {OBJETIVOS.map((n) => (
+              <button key={n} type="button" aria-pressed={objetivo === n} onClick={() => elegirObjetivo(n)}>
+                {n === 1 ? t("editor.edSeg1") : t("editor.edSegN").replace("{n}", String(n))}
+              </button>
+            ))}
+          </div>
+          {/* La GUÍA: un indicador (abre el detalle), «Ajustar páginas» y lo que
+              queda por decidir. Las decisiones viven bajo cada item. */}
+          <GuiaAjuste
+            estado={estadoDoc({ busy: pvBusy, error: pvError, paginas: pageCount, objetivo, autofit: autofitInfo })}
+            paginas={pageCount}
+            objetivo={objetivo}
+            autofit={autofitInfo}
+            paginasTxt={paginasTxt}
+            huecos={faltas.length}
+            huecosTipo={huecosTipo}
+            pendientes={pendientes}
+            fit={fit}
+            busy={fitBusy}
+            err={fitErr}
+            notasIA={notasIA}
+            onProponer={() => {
+              // Pedir la propuesta ES pulsar aquí: una llamada al modelo con la
+              // clave del usuario, nunca sola. Las decisiones aparecen después
+              // sobre cada item de la composición.
+              setView("mid");
+              runFit();
+            }}
+            onSiguiente={irASiguiente}
+          />
+          <span className="ed-bar-sp" />
+          <button
+            type="button"
+            className="ed-tog"
+            aria-pressed={libAbierta}
+            aria-controls="edLib"
+            title={t("editor.edBibliotecaAria")}
+            onClick={() => setLibAbierta((v) => !v)}
+          >
+            {t("editor.edBiblioteca")} <span className="n">{libCount}</span> <Kbd>{TECLA.biblioteca}</Kbd>
+          </button>
+          <button
+            type="button"
+            className="ed-tog ed-tog--pv"
+            aria-pressed={pvModo !== "oculto"}
+            title={pvModo === "oculto" ? t("editor.edPvMostrar") : t("editor.edPvOcultar")}
+            onClick={() => pvCambiar(alternarOculto(pvModo))}
+          >
+            {t("editor.edPv")} <Kbd>{TECLA.preview}</Kbd>
+          </button>
         </div>
       </div>
 
       <div className="ed-tabs" role="group" aria-label={t("editor.tabsAria")}>
-        <button type="button" data-view="master" aria-pressed={view === "master"} onClick={() => setTab("master")}>
+        <button type="button" data-view="master" aria-pressed={libAbierta} onClick={() => setLibAbierta((v) => !v)}>
           {t("editor.tabMaster")}
         </button>
         <button type="button" data-view="mid" aria-pressed={view === "mid"} onClick={() => setTab("mid")}>
@@ -2609,15 +2886,36 @@ export function EditorVarianteScreen({ variantId = "editor" }: { variantId?: str
         </button>
       </div>
 
-      <div className="ed-grid c-wall" id="edGrid" data-view={view} data-screen-label="editor-3-paneles" ref={bootRef}>
-        {/* ── MASTER (biblioteca) ── */}
-        <aside className="ed-col ed-col--lib" data-screen-label="editor-master">
+      <div
+        className="ed-grid c-wall"
+        id="edGrid"
+        data-view={view}
+        data-lib={libAbierta ? "abierta" : "cerrada"}
+        data-pv={pvModo}
+        data-screen-label="editor-paneles"
+        ref={bootRef}
+        style={{ ["--pv-w" as string]: `${pvAncho}px` }}
+      >
+        {/* ── MASTER (biblioteca): cajón plegable, cerrado por defecto. No modal:
+            se añade desde aquí y el cambio se ve en el centro y en el PDF. ── */}
+        {libAbierta && (
+        <aside className="ed-col ed-col--lib" id="edLib" data-screen-label="editor-master" aria-label={t("editor.edBiblioteca")}>
           <div className="ed-colh">
             <span className="t-overline">{t("editor.libOverline")}</span>
             <span className="n">{t("editor.libCount").replace("{n}", String(libCount))}</span>
+            <button
+              type="button"
+              className="ed-lib-x"
+              aria-label={t("editor.edCerrar")}
+              title={`${t("editor.edCerrar")} (${TECLA.biblioteca})`}
+              onClick={() => setLibAbierta(false)}
+            >
+              ✕
+            </button>
           </div>
           <div className="lib-search">
             <input
+              ref={libQRef}
               className="c-input"
               id="libQ"
               placeholder={t("editor.libSearchPlaceholder")}
@@ -2687,40 +2985,26 @@ export function EditorVarianteScreen({ variantId = "editor" }: { variantId?: str
             {t("editor.libFootB")}
           </p>
         </aside>
+        )}
 
-        {/* ── ESTA VARIANTE (composición) ── */}
-        <section className="ed-col ed-col--mid" data-screen-label="editor-composicion">
-          <div className="ed-colh">
-            <span className="t-overline">{t("editor.midOverline")}</span>
-            <span className="n" id="midN">
-              {loading ? t("editor.reading") : midN}
-            </span>
+        {/* ── ESTA VARIANTE (composición): navegación fija por sección + tarjetas ── */}
+        <section className="ed-col ed-col--mid" data-screen-label="editor-composicion" ref={midRef}>
+          <div className="ed-navwrap" id="edNav">
+            <NavSecciones secciones={secciones} raiz={midRef} etiqueta={t("editor.edNavAria")} />
           </div>
 
-          {/* ── La GUÍA: cómo está el documento y qué queda por decidir. Las
-              decisiones no viven aquí: viven bajo cada item, más abajo. ── */}
-          <GuiaAjuste
-            estado={estadoDoc({ busy: pvBusy, error: pvError, paginas: pageCount, objetivo, autofit: autofitInfo })}
-            paginas={pageCount}
-            objetivo={objetivo}
-            autofit={autofitInfo}
-            paginasTxt={paginasTxt}
-            huecos={faltas.length}
-            pendientes={pendientes}
-            fit={fit}
-            busy={fitBusy}
-            err={fitErr}
-            notasIA={notasIA}
-            onProponer={runFit}
-            onSiguiente={irASiguiente}
-          />
-          <div className="c-card var-obj">
-            <label htmlFor="objInput">
-              {t("editor.objLabel")}{" "}
-              <span style={{ letterSpacing: 0, textTransform: "none", color: "var(--text-subtle)" }}>
-                {t("editor.objLabelHint")}
+          <div className="c-card var-obj" data-sec="titulo">
+            <div className="var-objh">
+              <label htmlFor="objInput">
+                {t("editor.objLabel")}{" "}
+                <span style={{ letterSpacing: 0, textTransform: "none", color: "var(--text-subtle)" }}>
+                  {t("editor.objLabelHint")}
+                </span>
+              </label>
+              <span className="n" id="midN">
+                {loading ? t("editor.reading") : midN}
               </span>
-            </label>
+            </div>
             <input
               className="c-input"
               id="objInput"
@@ -2740,7 +3024,7 @@ export function EditorVarianteScreen({ variantId = "editor" }: { variantId?: str
           {!isEmpty && (
             <div id="mid">
               {summaryItems.length > 0 && (
-                <div className="var-g">
+                <div className="var-g" data-sec="summary">
                   <div className="gh">
                     <span className="t-overline">{t("editor.groupSummary")}</span>
                   </div>
@@ -2749,7 +3033,7 @@ export function EditorVarianteScreen({ variantId = "editor" }: { variantId?: str
               )}
 
               {workItems.length > 0 && (
-                <div className="var-g">
+                <div className="var-g" data-sec="work">
                   <div className="gh">
                     <span className="t-overline">{t("editor.groupExperience")}</span>
                     <span className="n">{t("editor.datesFromMaster")}</span>
@@ -2782,7 +3066,7 @@ export function EditorVarianteScreen({ variantId = "editor" }: { variantId?: str
               )}
 
               {skillItems.length > 0 && (
-                <div className="var-g">
+                <div className="var-g" data-sec="skills">
                   <div className="gh">
                     <span className="t-overline">{t("editor.groupSkillsFull")}</span>
                   </div>
@@ -2800,7 +3084,7 @@ export function EditorVarianteScreen({ variantId = "editor" }: { variantId?: str
                       </span>
                     ))}
                   </div>
-                  <HuecosAptitud
+                  <HuecosSeccion
                     faltas={skillItems.flatMap((s) => huecos.get(s.id) ?? [])}
                     grupo={(id) => S(items.find((i) => i.id === id)?.data, "group")}
                   />
@@ -2809,7 +3093,7 @@ export function EditorVarianteScreen({ variantId = "editor" }: { variantId?: str
               )}
 
               {projectItems.length > 0 && (
-                <div className="var-g">
+                <div className="var-g" data-sec="projects">
                   <div className="gh">
                     <span className="t-overline">{t("editor.groupProjects")}</span>
                   </div>
@@ -2818,7 +3102,7 @@ export function EditorVarianteScreen({ variantId = "editor" }: { variantId?: str
               )}
 
               {eduItems.length > 0 && (
-                <div className="var-g">
+                <div className="var-g" data-sec="education">
                   <div className="gh">
                     <span className="t-overline">{t("editor.groupEducation")}</span>
                   </div>
@@ -2854,16 +3138,16 @@ export function EditorVarianteScreen({ variantId = "editor" }: { variantId?: str
                   + quitar) y triplicar el JSX solo crea tres sitios donde arreglar
                   el mismo bug. El texto es el MISMO que se imprimirá (libTextOf usa
                   los helpers del documento). */}
-              {simpleGroup("editor.groupCertifications", certItems)}
-              {simpleGroup("editor.groupLanguages", langItems)}
-              {simpleGroup("editor.groupPublications", pubItems)}
+              {simpleGroup("editor.groupCertifications", certItems, "certifications")}
+              {simpleGroup("editor.groupLanguages", langItems, "languages")}
+              {simpleGroup("editor.groupPublications", pubItems, "publications")}
 
               {/* Referencias AÑADIDAS a esta variante. Estar aquí no basta para que
                   se impriman: el interruptor de la tarjeta de presentación manda, y
                   si está apagado se dice aquí mismo en vez de dejar al usuario
                   creyendo que el PDF las lleva. */}
               {refItems.length > 0 && (
-                <div className="var-g">
+                <div className="var-g" data-sec="references">
                   <div className="gh">
                     <span className="t-overline">{t("editor.groupReferences")}</span>
                     <span className="n">{refsOn ? t("editor.refsWhenOn") : t("editor.refsWhyOff")}</span>
@@ -2898,6 +3182,12 @@ export function EditorVarianteScreen({ variantId = "editor" }: { variantId?: str
             {t("editor.emptyLine1")}
             <br />
             {t("editor.emptyLine2A")} <b>+</b> {t("editor.emptyLine2B")}
+          </div>
+          {/* ── DOCUMENTO: contacto · diseño · orden · presentación. Configuración,
+              debajo de lo que se decide; la navegación fija salta aquí. ── */}
+          <div className="ed-sech" data-sec="doc">
+            <span className="t-overline">{t("editor.edSecDocumento")}</span>
+            <span className="n">{t("editor.edSecDocumentoHint")}</span>
           </div>
           {/* ── Contacto por variante — se imprime en el CUERPO; hereda del master ── */}
           <div className="c-card var-contact" data-screen-label="editor-contacto">
@@ -3494,8 +3784,25 @@ export function EditorVarianteScreen({ variantId = "editor" }: { variantId?: str
           <div style={{ height: "40px" }} />
         </section>
 
+        {/* Divisor: arrastrar (o flechas con el foco) ajusta el ancho de la vista previa. */}
+        {pvModo === "lado" && (
+          <div
+            className="ed-split"
+            role="separator"
+            aria-orientation="vertical"
+            aria-label={t("editor.edPvAncho")}
+            aria-controls="edPv"
+            aria-valuenow={pvAncho}
+            aria-valuemin={PV_ANCHO_MIN}
+            tabIndex={0}
+            onPointerDown={arrastrarDivisor}
+            onKeyDown={teclaDivisor}
+            onDoubleClick={() => pvFijar(limitarAncho(PV_ANCHO_DEF, disponiblePv()), true)}
+          />
+        )}
+
         {/* ── PREVIEW: el preview ES el PDF ── */}
-        <section className="ed-col pv-col" data-screen-label="editor-preview">
+        <section className="ed-col pv-col" id="edPv" data-screen-label="editor-preview" aria-label={t("editor.edPv")}>
           <div className="pv-tools">
             <div className="pv-seg" role="group" aria-label={t("editor.segAria")}>
               <button type="button" id="segDoc" aria-pressed={mode === "doc"} onClick={() => setMode("doc")}>
@@ -3504,15 +3811,6 @@ export function EditorVarianteScreen({ variantId = "editor" }: { variantId?: str
               <button type="button" id="segRaw" aria-pressed={mode === "raw"} onClick={() => setMode("raw")}>
                 {t("editor.viewRaw")}
               </button>
-            </div>
-            {/* Páginas objetivo. El documento se autoajusta (cuerpo ≥ 10 pt) a ESTE
-                número; si no cabe ni así, se abre el panel de recorte. */}
-            <div className="pv-seg" role="group" aria-label={t("editor.objAria")} id="pvObjetivo">
-              {OBJETIVOS.map((n) => (
-                <button key={n} type="button" aria-pressed={objetivo === n} onClick={() => elegirObjetivo(n)}>
-                  {t("editor.objShort").replace("{n}", String(n))}
-                </button>
-              ))}
             </div>
             {/* Estado HONESTO del preview: actualizando · error · páginas reales
                 (numPages del PDF que estás viendo, no una estimación del DOM). */}
@@ -3539,6 +3837,29 @@ export function EditorVarianteScreen({ variantId = "editor" }: { variantId?: str
                     : t("editor.pagesOver").replace("{n}", String(pageCount)).replace("{o}", String(objetivo))}
                   {noCabe && <> · {t("editor.autofitNoFit").replace("{o}", paginasTxt(objetivo))}</>}
                 </span>
+              )}
+            </span>
+            <span className="pv-acts">
+              <button
+                type="button"
+                className="ed-tog ed-tog--ico"
+                aria-pressed={pvModo === "completo"}
+                aria-label={pvModo === "completo" ? t("editor.edPvSalir") : t("editor.edPvCompleta")}
+                title={`${pvModo === "completo" ? t("editor.edPvSalir") : t("editor.edPvCompleta")} (${TECLA.completa})`}
+                onClick={() => pvCambiar(alternarCompleto(pvModo))}
+              >
+                {pvModo === "completo" ? "⤡" : "⤢"} <Kbd>{TECLA.completa}</Kbd>
+              </button>
+              {pvModo !== "completo" && (
+                <button
+                  type="button"
+                  className="ed-tog ed-tog--ico"
+                  aria-label={t("editor.edPvOcultar")}
+                  title={`${t("editor.edPvOcultar")} (${TECLA.preview})`}
+                  onClick={() => pvCambiar("oculto")}
+                >
+                  ✕
+                </button>
               )}
             </span>
           </div>

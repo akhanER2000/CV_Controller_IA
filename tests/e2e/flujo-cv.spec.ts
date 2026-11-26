@@ -3,43 +3,28 @@ import { createClient } from "@supabase/supabase-js";
 import { getDocumentProxy } from "unpdf";
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import os from "node:os";
 import path from "node:path";
 
 /**
- * FLUJO DEL CV — equivalencia REAL entre el flujo anterior (panel «Ajustar
- * páginas» con cuatro listas) y el nuevo (las decisiones viven en el documento).
+ * EDITOR FLUIDO — equivalencia REAL: la UI nueva del editor (barra compacta,
+ * biblioteca en cajón, secciones en tarjetas, vista previa ajustable, atajos)
+ * deja EXACTAMENTE el mismo documento que las llamadas de sus manejadores.
  *
- * Mismo usuario, mismo master y DOS variantes gemelas (B = duplicado de A). Se
- * toman EXACTAMENTE las mismas decisiones —quitar una viñeta, reordenar otra,
- * aceptar un acortado (que el servidor vuelve a pasar por verificarAcortado)—, A
- * por el flujo anterior y B por el nuevo, y se comparan sus variant_items y el
- * PDF de /api/cv. La propuesta de /ajustar `analizar` se FIJA (page.route) para
- * que las dos corridas reciban la misma; aceptar un acortado NO se intercepta:
- * va al servidor de verdad.
+ * Mismo usuario, mismo master y DOS variantes gemelas (B = duplicado de A). Las
+ * mismas decisiones —quitar una viñeta, reordenar otra, aceptar un acortado (que
+ * el servidor vuelve a pasar por verificarAcortado)—: en A por la línea base
+ * (las llamadas de removeItem · reorder · fitAcceptShorten), en B por el editor.
+ * Se comparan sus variant_items, el texto y la huella del PDF de /api/cv. La
+ * propuesta de /ajustar `analizar` se FIJA (page.route); aceptar un acortado NO
+ * se intercepta: va al servidor de verdad. Persona INVENTADA.
  *
- * Dos fases, porque el flujo anterior deja de existir al implementar el nuevo:
- *   FLUJO_FASE=antes   → crea usuario + master + A y B; recorre el flujo VIEJO en A.
- *   FLUJO_FASE=despues → recorre el flujo NUEVO en B y compara con la foto de A.
- *   (sin FLUJO_FASE)   → recorrido del flujo nuevo con capturas, usuario propio.
- * El estado entre fases vive en el temp del SO (fuera del repo). Persona INVENTADA.
+ * Capturas en prompts/lotes-fable5/_diseno/forja-v2/editor/ (escritorio y 1366 px).
  *
  *   npx playwright test tests/e2e/flujo-cv.spec.ts
  */
 
-const FASE = process.env.FLUJO_FASE ?? "recorrido";
-const STATE = path.join(os.tmpdir(), "corpus-flujo-cv.json");
 const DISENO = path.resolve(process.cwd(), "prompts/lotes-fable5/_diseno");
 
-interface Estado {
-  email: string;
-  password: string;
-  /** clave lógica → id del profile_item */
-  m: Record<string, string>;
-  A: string;
-  B: string;
-  fotoA?: Foto;
-}
 interface Foto {
   items: unknown[];
   pdfSha: string;
@@ -73,11 +58,22 @@ async function crearUsuario(): Promise<{ email: string; password: string }> {
 }
 
 async function login(page: Page, email: string, password: string) {
-  await page.goto("/login");
-  await page.getByLabel("Email").fill(email);
-  await page.getByLabel("Contraseña", { exact: true }).fill(password);
-  await page.getByRole("button", { name: "Entrar", exact: true }).click();
-  await page.waitForURL(/\/app/, { timeout: 30_000 });
+  // En un `next dev` compartido el formulario puede enviarse antes de hidratar
+  // (GET /login?) o recargarse por Fast Refresh: se espera a la red y se reintenta.
+  for (let i = 0; i < 4; i += 1) {
+    await page.goto("/login");
+    await page.waitForLoadState("networkidle");
+    await page.getByLabel("Email").fill(email);
+    await page.getByLabel("Contraseña", { exact: true }).fill(password);
+    await page.getByRole("button", { name: "Entrar", exact: true }).click();
+    try {
+      await page.waitForURL(/\/app/, { timeout: 30_000 });
+      return;
+    } catch {
+      /* reintento */
+    }
+  }
+  throw new Error("no se pudo entrar tras 4 intentos");
 }
 
 // ── El master de prueba: huecos conocidos a propósito ─────────────────────────
@@ -177,12 +173,21 @@ async function esperarPreview(page: Page) {
  * cargado) y se vuelve a abrir. En producción no hay recarga.
  */
 async function abrirEditorNuevo(page: Page, varId: string) {
-  for (let i = 0; i < 2; i += 1) {
-    await page.goto(`/app/variantes/${varId}`);
-    await esperarPreview(page);
-    await expect(page.locator(".flu-hueco").first()).toBeVisible({ timeout: 60_000 });
-    await page.waitForLoadState("networkidle");
+  // Dos aperturas buenas seguidas. En un `next dev` compartido con otras sesiones
+  // que editan, Fast Refresh puede recargar a mitad: se reintenta (hasta 6).
+  let buenas = 0;
+  for (let i = 0; i < 6 && buenas < 2; i += 1) {
+    try {
+      await page.goto(`/app/variantes/${varId}`);
+      await esperarPreview(page);
+      await expect(page.locator(".flu-hueco").first()).toBeVisible({ timeout: 60_000 });
+      await page.waitForLoadState("networkidle");
+      buenas += 1;
+    } catch {
+      buenas = 0;
+    }
   }
+  expect(buenas, "el editor no llegó a abrir estable").toBe(2);
 }
 
 /**
@@ -242,186 +247,212 @@ async function foto(req: APIRequestContext, varId: string): Promise<Foto> {
   };
 }
 
+const EDITOR = path.join(DISENO, "forja-v2", "editor");
 const cap = async (page: Page, nombre: string) => {
-  mkdirSync(DISENO, { recursive: true });
-  await page.screenshot({ path: path.join(DISENO, nombre), fullPage: false });
+  mkdirSync(EDITOR, { recursive: true });
+  await page.screenshot({ path: path.join(EDITOR, nombre), fullPage: false });
+};
+/** La misma vista en escritorio (1440×900) y portátil (1366×768). */
+const capDoble = async (page: Page, nombre: string) => {
+  await cap(page, `${nombre}-escritorio.png`);
+  await page.setViewportSize({ width: 1366, height: 768 });
+  await page.waitForTimeout(250);
+  await cap(page, `${nombre}-portatil.png`);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.waitForTimeout(250);
 };
 
-// ── FLUJO ANTERIOR: el panel con cuatro listas, fila por fila ─────────────────
-async function flujoAnterior(page: Page) {
-  await page.getByRole("button", { name: "Ajustar páginas" }).click();
-  const panel = page.locator("#edFit");
-  await expect(panel).toBeVisible();
-  await cap(page, "flujo-cv-antes-01-panel.png");
-  await panel.getByRole("button", { name: "Analizar" }).click();
-  await expect(panel.getByText("Qué quitar")).toBeVisible();
-  await cap(page, "flujo-cv-antes-02-listas.png");
-  await panel.locator(".fitrow").last().scrollIntoViewIfNeeded();
-  await cap(page, "flujo-cv-antes-03-que-falta.png");
-  // Fila por fila, en el orden del panel: quitar → reordenar ×2 → acortar.
-  for (let i = 0; i < 4; i += 1) {
-    const btn = panel.locator(".fitacts").getByRole("button", { name: "Aceptar", exact: true }).first();
-    const esAcortar = (await btn.locator("xpath=ancestor::div[contains(@class,'fitrow')][1]").getAttribute("class"))?.includes("fitcut");
-    if (esAcortar) {
-      const resp = page.waitForResponse((r) => r.url().includes("/ajustar") && r.request().method() === "POST");
-      await btn.click();
-      expect((await resp).ok()).toBeTruthy();
-    } else {
-      await btn.click();
-    }
+// ── LÍNEA BASE: las MISMAS llamadas que hacen los manejadores del editor ──────
+/**
+ * Lo que el editor ejecuta al aceptar cada decisión, llamado directo:
+ *   quitar  → removeItem    → DELETE /api/variants/:id/items?id=…
+ *   mover   → reorder       → computeReorder (permuta los sort_order del grupo) + PATCH …/items
+ *   acortar → fitAcceptShorten → POST …/ajustar { accion:"acortar" } (candado real del servidor)
+ * La UI nueva cambia la presentación, no estas llamadas: si su resultado coincide
+ * con el de esta línea base, el documento es el mismo.
+ */
+async function decisionesPorApi(req: APIRequestContext, varId: string, m: Record<string, string>) {
+  const r = await req.get(`/api/variants/${varId}`);
+  const { items } = (await r.json()) as { items: VItemApi[] };
+  const v = (k: string) => items.find((i) => i.item_id === m[k])!;
+  const del = await req.delete(`/api/variants/${varId}/items?id=${encodeURIComponent(v("b3").id)}`);
+  expect(del.ok(), `DELETE b3: ${await del.text()}`).toBeTruthy();
+  // b5 sube al puesto 0 de su rol: los sort_order del grupo se permutan.
+  const grupo = [v("b4"), v("b5")].sort((a, b) => a.sort_order - b.sort_order);
+  const valores = grupo.map((g) => g.sort_order).sort((a, b) => a - b);
+  const nuevo = [v("b5"), ...grupo.filter((g) => g.id !== v("b5").id)];
+  for (const [i, g] of nuevo.entries()) {
+    if (g.sort_order === valores[i]) continue;
+    const p = await req.patch(`/api/variants/${varId}/items`, { data: { id: g.id, sort_order: valores[i] } });
+    expect(p.ok(), `PATCH sort_order: ${await p.text()}`).toBeTruthy();
   }
-  await expect(panel.locator(".fitacts").getByRole("button", { name: "Aceptar", exact: true })).toHaveCount(0);
+  const a = await req.post(`/api/variants/${varId}/ajustar`, { data: { accion: "acortar", id: v("b2").id, propuesto: CORTA } });
+  expect(a.ok(), `acortar b2: ${await a.text()}`).toBeTruthy();
 }
 
-// ── FLUJO NUEVO: las decisiones viven en el documento ─────────────────────────
+// ── FLUJO NUEVO: las decisiones viven en el documento; la barra es compacta ───
 async function flujoNuevo(page: Page, capturas: boolean) {
   const guia = page.locator("#edGuia");
   await expect(guia).toBeVisible();
-  // «Qué falta» ya está, sin análisis ni IA: sobre la viñeta, el rol y la aptitud.
-  await expect(page.locator(".flu-hueco").first()).toBeVisible();
-  if (capturas) await cap(page, "flujo-cv-despues-01-documento.png");
-  await guia.getByRole("button", { name: /Proponer recortes/ }).click();
-  await expect(page.locator(".flu-prop").first()).toBeVisible();
-  if (capturas) await cap(page, "flujo-cv-despues-02-propuestas.png");
-  // Las MISMAS decisiones, una a una, en el sitio donde ocurren.
-  await page.locator('.flu-prop[data-prop="q"]').getByRole("button", { name: "Quitar", exact: true }).click();
-  // Mover b5 arriba deja a b4 en su puesto propuesto: esa segunda decisión ya
-  // se cumple y no se pide (en el panel viejo, aceptarla era un no-op).
-  await page.locator('.flu-prop[data-prop="r"]').first().getByRole("button", { name: "Mover", exact: true }).click();
-  await expect(page.locator('.flu-prop[data-prop="r"]')).toHaveCount(0);
-  const resp = page.waitForResponse((r) => r.url().includes("/ajustar") && r.request().method() === "POST");
-  const corta = page.locator('.flu-prop[data-prop="a"]');
-  if (capturas) {
-    await corta.scrollIntoViewIfNeeded();
-    await cap(page, "flujo-cv-despues-03-acortar.png");
+  // El objetivo de páginas se ve ENTERO (antes se cortaba en «1 pág p»).
+  for (const n of ["1 pág", "2 págs", "3 págs"]) {
+    await expect(page.locator("#pvObjetivo").getByRole("button", { name: n, exact: true })).toBeVisible();
   }
-  await corta.getByRole("button", { name: "Usar", exact: true }).click();
-  expect((await resp).ok()).toBeTruthy();
+  // «Qué falta» ya está, sin análisis ni IA; «sin respaldo» va CONTADO por sección.
+  await expect(page.locator(".flu-hueco").first()).toBeVisible();
+  await expect(page.locator(".flu-sr-b")).toHaveCount(1);
+  await expect(page.locator(".flu-sr-l")).toHaveCount(0);
+  if (capturas) await capDoble(page, "01-documento");
+  await page.locator(".flu-sr-b").click();
+  await expect(page.locator(".flu-sr-l li")).toHaveCount(1);
+  if (capturas) {
+    await page.locator('[data-sec="skills"]').scrollIntoViewIfNeeded();
+    await capDoble(page, "02-sin-respaldo");
+  }
+  // La biblioteca: cajón cerrado por defecto; se abre, se busca, se cierra.
+  await expect(page.locator("#edLib")).toHaveCount(0);
+  await page.keyboard.press("b");
+  await expect(page.locator("#edLib")).toBeVisible();
+  await page.locator("#libQ").fill("Kafka");
+  if (capturas) await capDoble(page, "03-biblioteca");
+  await page.locator("#libQ").fill("");
+  await page.locator(".ed-lib-x").click();
+  await expect(page.locator("#edLib")).toHaveCount(0);
+
+  await guia.getByRole("button", { name: "Ajustar páginas", exact: true }).click();
+  await expect(page.locator(".flu-prop").first()).toBeVisible();
+  if (capturas) await capDoble(page, "04-propuestas");
+  // LAS MISMAS decisiones. La primera, con el teclado: J marca la próxima bajo
+  // la vista y A acepta SOLO la marcada (nunca una que no se ha visto).
+  await expect(page.locator(".flu-prop[data-actual]")).toHaveCount(0);
+  await page.locator("#midN").click(); // foco fuera de cualquier campo
+  await page.keyboard.press("j");
+  const marcada = page.locator(".flu-prop[data-actual]");
+  await expect(marcada).toHaveCount(1);
+  const tipo = (await marcada.getAttribute("data-prop"))!;
+  const clave = (await marcada.getAttribute("data-clave"))!;
+  if (capturas) await capDoble(page, "05-decision-marcada");
+  const respTecla = tipo === "a" ? page.waitForResponse((r) => r.url().includes("/ajustar") && r.request().method() === "POST") : null;
+  await page.keyboard.press("a");
+  if (respTecla) expect((await respTecla).ok()).toBeTruthy();
+  await expect(page.locator(`.flu-prop[data-clave="${clave}"]`)).toHaveCount(0);
+  // El resto, con el ratón, en su sitio.
+  if ((await page.locator('.flu-prop[data-prop="q"]').count()) > 0) {
+    await page.locator('.flu-prop[data-prop="q"]').getByRole("button", { name: "Quitar", exact: true }).click();
+  }
+  // Mover b5 arriba deja a b4 en su puesto propuesto (y al revés): la segunda
+  // decisión de reordenado ya se cumple y no se pide.
+  if ((await page.locator('.flu-prop[data-prop="r"]').count()) > 0) {
+    await page.locator('.flu-prop[data-prop="r"]').first().getByRole("button", { name: "Mover", exact: true }).click();
+  }
+  await expect(page.locator('.flu-prop[data-prop="r"]')).toHaveCount(0);
+  if ((await page.locator('.flu-prop[data-prop="a"]').count()) > 0) {
+    const resp = page.waitForResponse((r) => r.url().includes("/ajustar") && r.request().method() === "POST");
+    await page.locator('.flu-prop[data-prop="a"]').getByRole("button", { name: /^Usar/ }).click();
+    expect((await resp).ok()).toBeTruthy();
+  }
   await expect(page.locator(".flu-prop")).toHaveCount(0);
   // Lo verificado queda sellado: no pide otra revisión.
   await expect(page.locator(".flu-sello").first()).toBeVisible();
   if (capturas) {
-    await page.locator(".flu-sello").first().scrollIntoViewIfNeeded();
-    await cap(page, "flujo-cv-despues-04-verificado.png");
-    await guia.getByRole("button", { name: /Detalle/ }).click();
-    await cap(page, "flujo-cv-despues-05-detalle.png");
+    await page.locator("#edEstado").click();
+    await expect(page.locator("#edGuiaDet")).toBeVisible();
+    await capDoble(page, "06-detalle-estado");
+    await page.keyboard.press("Escape");
+    await expect(page.locator("#edGuiaDet")).toHaveCount(0);
   }
+  // Vista previa: oculta (P), de vuelta, y a pantalla completa (F / Esc).
+  await page.keyboard.press("p");
+  await expect(page.locator("#edPv")).toBeHidden();
+  if (capturas) await capDoble(page, "07-sin-vista-previa");
+  await page.keyboard.press("p");
+  await expect(page.locator("#edPv")).toBeVisible();
+  await page.keyboard.press("f");
+  await expect(page.locator("#edGrid")).toHaveAttribute("data-pv", "completo");
+  if (capturas) await capDoble(page, "08-vista-previa-completa");
+  await page.keyboard.press("Escape");
+  await expect(page.locator("#edGrid")).toHaveAttribute("data-pv", "lado");
+  // El divisor ajusta el ancho (y nunca se come el centro).
+  const pv = page.locator("#edPv");
+  const antes = (await pv.boundingBox())!.width;
+  const div = page.locator(".ed-split");
+  const caja = (await div.boundingBox())!;
+  await page.mouse.move(caja.x + caja.width / 2, caja.y + caja.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(caja.x - 160, caja.y + caja.height / 2, { steps: 6 });
+  await page.mouse.up();
+  await expect.poll(async () => (await pv.boundingBox())!.width).toBeGreaterThan(antes + 100);
+  if (capturas) await capDoble(page, "09-vista-previa-ancha");
+  await div.focus();
+  await page.keyboard.press("Home"); // vuelve al ancho por defecto
 }
 
 test.describe.configure({ mode: "serial" });
 
-test(`flujo del CV · fase ${FASE}`, async ({ page }) => {
-  test.setTimeout(300_000);
+/**
+ * Una corrida, dos gemelas (B = duplicado de A con el mismo nombre). A recibe las
+ * decisiones por la línea base (las llamadas de los manejadores); B, por la UI
+ * nueva. Se compara lo que dejan: variant_items, texto y huella del PDF. Además,
+ * ABRIR el editor nuevo no puede cambiar el documento (B antes = B tras abrir).
+ */
+test("editor fluido · mismas decisiones, mismo documento", async ({ page }) => {
+  test.setTimeout(420_000);
   await page.setViewportSize({ width: 1440, height: 900 });
   if (process.env.FLUJO_DEBUG) {
     page.on("framenavigated", (f) => f === page.mainFrame() && console.log("[nav]", f.url()));
     page.on("console", (m) => console.log("[console]", m.type(), m.text().slice(0, 300)));
   }
 
-  if (FASE === "antes") {
-    const u = await crearUsuario();
-    await login(page, u.email, u.password);
-    const m = await sembrar(page.request);
-    const A = await variante(page.request, m);
-    const dup = await page.request.post(`/api/variants/${A}/duplicate`);
-    expect(dup.ok()).toBeTruthy();
-    const B = ((await dup.json()) as { variant: { id: string } }).variant.id;
-    // El duplicado se llama «… (copia)», y el nombre viaja a los metadatos del PDF:
-    // se le devuelve el mismo nombre para que sean gemelas de verdad.
-    const ren = await page.request.patch(`/api/variants/${B}`, { data: { name: "Backend — Fintech" } });
-    expect(ren.ok()).toBeTruthy();
-    const st: Estado = { ...u, m, A, B };
-    // Gemelas de verdad: antes de tocar nada, A y B dejan el mismo documento.
-    const a0 = await foto(page.request, A);
-    const b0 = await foto(page.request, B);
-    expect(b0.items).toEqual(a0.items);
-    expect(b0.pdfSha).toBe(a0.pdfSha);
-    writeFileSync(STATE, JSON.stringify(st), "utf8");
-
-    await fijarPropuesta(page, A, m);
-    await page.goto(`/app/variantes/${A}`);
-    await esperarPreview(page);
-    await cap(page, "flujo-cv-antes-00-editor.png");
-    await flujoAnterior(page);
-    await page.waitForTimeout(2500); // PATCH/DELETE optimistas en vuelo
-    st.fotoA = await foto(page.request, A);
-    writeFileSync(STATE, JSON.stringify(st), "utf8");
-    return;
-  }
-
-  if (FASE === "inspeccion") {
-    const st = JSON.parse(readFileSync(STATE, "utf8")) as Estado;
-    await login(page, st.email, st.password);
-    const a = await foto(page.request, st.A);
-    for (const n of [2, 3, 1]) await page.request.post("/api/cv", { data: { variantId: st.B, paginas: n, as: "preview" } });
-    await page.goto(`/app/variantes/${st.B}`);
-    await esperarPreview(page);
-    const a2 = await foto(page.request, st.A);
-    writeFileSync(
-      path.join(os.tmpdir(), "corpus-flujo-inspeccion.json"),
-      JSON.stringify({ guardada: st.fotoA, ahora: a, otraVez: a2, huella: await huellaPdf(Buffer.from(await (await page.request.post("/api/cv", { data: { variantId: st.A, paginas: 1 } })).body())) }, null, 1),
-    );
-    return;
-  }
-
-  if (FASE === "despues") {
-    const st = JSON.parse(readFileSync(STATE, "utf8")) as Estado;
-    expect(st.fotoA, "falta la foto de A: corre antes FLUJO_FASE=antes").toBeTruthy();
-    await login(page, st.email, st.password);
-    // A, re-renderizado en ESTE servidor antes de tocar B: debe coincidir con la
-    // foto de la fase anterior (si no, el PDF no es estable entre procesos).
-    const fotoAPre = await foto(page.request, st.A);
-    await fijarPropuesta(page, st.B, st.m);
-    await abrirEditorNuevo(page, st.B);
-    await flujoNuevo(page, true);
-    await page.waitForTimeout(2500);
-    const fotoAPost = await foto(page.request, st.A);
-    const fotoB = await foto(page.request, st.B);
-    const informe = {
-      fecha: new Date().toISOString(),
-      comparacion:
-        "A = flujo anterior (panel de cuatro listas), B = flujo nuevo (decisiones en el documento); " +
-        "gemelas (B = duplicado de A con el mismo nombre, huella idéntica antes de tocarlas); " +
-        "mismas decisiones: quitar b3, subir b5, acortar b2 (candado real del servidor)",
-      itemsIguales: JSON.stringify(fotoB.items) === JSON.stringify(st.fotoA!.items),
-      textoPdfIgual: fotoB.text === st.fotoA!.text,
-      huellaPdfIgual: fotoB.pdfSha === fotoAPost.pdfSha,
-      huellaAEstable: { faseAntes: st.fotoA!.pdfSha, antesDeB: fotoAPre.pdfSha, despuesDeB: fotoAPost.pdfSha },
-      huellaB: fotoB.pdfSha,
-      paginas: { A: st.fotoA!.pages, B: fotoB.pages },
-      variantItems: fotoB.items.length,
-    };
-    writeFileSync(path.join(DISENO, "flujo-cv-equivalencia.json"), JSON.stringify(informe, null, 2) + "\n", "utf8");
-    if (fotoB.pdfSha !== fotoAPost.pdfSha || fotoAPre.pdfSha !== st.fotoA!.pdfSha) {
-      const h = async (id: string) =>
-        huellaPdf(Buffer.from(await (await page.request.post("/api/cv", { data: { variantId: id, paginas: 1 } })).body()));
-      writeFileSync(path.join(os.tmpdir(), "corpus-flujo-huellas.json"), JSON.stringify({ A: await h(st.A), B: await h(st.B) }));
-    }
-    expect(fotoB.items).toEqual(st.fotoA!.items);
-    expect(fotoB.text).toBe(st.fotoA!.text);
-    expect(fotoB.pdfSha).toBe(fotoAPost.pdfSha);
-    return;
-  }
-
-  // RECORRIDO COMPLETO del flujo nuevo (usuario propio, sin comparación):
-  // Variantes → abrir la variante → decidir en el documento → descargar el PDF.
   const u = await crearUsuario();
   await login(page, u.email, u.password);
   const m = await sembrar(page.request);
-  const V = await variante(page.request, m);
-  await fijarPropuesta(page, V, m);
-  await abrirEditorNuevo(page, V); // calienta el chunk en dev (ver abrirEditorNuevo)
-  await page.goto("/app/variantes");
-  const tarjeta = page.locator(`a[href="/app/variantes/${V}"]`).first();
-  await expect(tarjeta).toBeVisible();
-  await cap(page, "flujo-cv-recorrido-01-variantes.png");
-  await tarjeta.click();
-  await page.waitForURL(new RegExp(`/app/variantes/${V}$`));
-  await esperarPreview(page);
-  await flujoNuevo(page, false);
-  await cap(page, "flujo-cv-recorrido-02-decidido.png");
+  const A = await variante(page.request, m);
+  const dup = await page.request.post(`/api/variants/${A}/duplicate`);
+  expect(dup.ok()).toBeTruthy();
+  const B = ((await dup.json()) as { variant: { id: string } }).variant.id;
+  // El duplicado se llama «… (copia)», y el nombre viaja a los metadatos del PDF.
+  const ren = await page.request.patch(`/api/variants/${B}`, { data: { name: "Backend — Fintech" } });
+  expect(ren.ok()).toBeTruthy();
+  const a0 = await foto(page.request, A);
+  const b0 = await foto(page.request, B);
+  expect(b0.items).toEqual(a0.items);
+  expect(b0.pdfSha).toBe(a0.pdfSha);
+
+  await decisionesPorApi(page.request, A, m);
+  const fotoA = await foto(page.request, A);
+
+  await fijarPropuesta(page, B, m);
+  await abrirEditorNuevo(page, B);
+  const bAbierta = await foto(page.request, B);
+  await flujoNuevo(page, !process.env.SIN_CAPTURAS);
+  await page.waitForTimeout(2500); // PATCH/DELETE optimistas en vuelo
+  const fotoB = await foto(page.request, B);
+  const fotoA2 = await foto(page.request, A);
+
+  const informe = {
+    fecha: new Date().toISOString(),
+    comparacion:
+      "A = decisiones por las llamadas de los manejadores (DELETE items · PATCH sort_order · POST ajustar acortar); " +
+      "B = mismas decisiones por el editor fluido (la primera con J + A; el resto con clic); gemelas con huella idéntica antes de tocarlas",
+    abrirNoCambia: { items: JSON.stringify(bAbierta.items) === JSON.stringify(b0.items), huella: bAbierta.pdfSha === b0.pdfSha },
+    itemsIguales: JSON.stringify(fotoB.items) === JSON.stringify(fotoA.items),
+    textoPdfIgual: fotoB.text === fotoA.text,
+    huellaPdfIgual: fotoB.pdfSha === fotoA2.pdfSha,
+    huellaAEstable: fotoA.pdfSha === fotoA2.pdfSha,
+    huellaB: fotoB.pdfSha,
+    paginas: { A: fotoA.pages, B: fotoB.pages },
+    variantItems: fotoB.items.length,
+  };
+  mkdirSync(EDITOR, { recursive: true });
+  writeFileSync(path.join(EDITOR, "equivalencia.json"), JSON.stringify(informe, null, 2) + "\n", "utf8");
+  expect(bAbierta.items).toEqual(b0.items);
+  expect(bAbierta.pdfSha).toBe(b0.pdfSha);
+  expect(fotoB.items).toEqual(fotoA.items);
+  expect(fotoB.text).toBe(fotoA.text);
+  expect(fotoB.pdfSha).toBe(fotoA2.pdfSha);
+
+  // Y el PDF se descarga desde la barra.
   const descarga = page.waitForEvent("download");
   await page.getByRole("button", { name: "Descargar PDF" }).click();
-  const pdf = await descarga;
-  expect(pdf.suggestedFilename()).toMatch(/\.pdf$/);
+  expect((await descarga).suggestedFilename()).toMatch(/\.pdf$/);
 });

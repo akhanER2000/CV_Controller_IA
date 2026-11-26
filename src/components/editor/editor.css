@@ -1,0 +1,59 @@
+/* ============================================================================
+   EDITOR FLUIDO — piezas propias del editor de variante (lote pantallas-forja-v2).
+   Solo tokens de globals.css (Forja v2). Prefijo edx- para no pisar a nadie;
+   los botones de vista (.ed-tog) y el menú viven aquí porque solo los usa el editor.
+   ============================================================================ */
+
+/* Texto solo para lector de pantalla. */
+.edx-sr{position:absolute;width:1px;height:1px;margin:-1px;padding:0;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0}
+
+/* ── Tecla ─────────────────────────────────────────────────────────────────── */
+.edx-kbd{display:inline-grid;place-items:center;min-width:18px;height:18px;padding:0 4px;border-radius:var(--radius-xs);
+  border:1px solid var(--border-strong);border-bottom-width:2px;background:var(--surface-sunken);
+  font:500 10px/1 var(--font-mono);color:var(--text-subtle);letter-spacing:0;text-transform:none}
+.c-btn--patina .edx-kbd{background:transparent;border-color:var(--ink-on-brasa-muted);color:var(--ink-on-patina)}
+
+/* ── Desplegable (popover no modal) ───────────────────────────────────────── */
+.edx-desp{position:relative;display:inline-flex}
+.edx-desp-panel{position:absolute;top:calc(100% + 6px);left:0;z-index:40;max-width:min(92vw,420px);
+  padding:var(--sp-3) var(--sp-4);border:1px solid var(--border-strong);border-radius:var(--radius-lg);
+  background:var(--surface-elevated);box-shadow:var(--elev-3)}
+.edx-desp-panel[data-lado="der"]{left:auto;right:0}
+
+/* ── Botones de vista de la barra (biblioteca · vista previa · atajos) ────── */
+.ed-tog{display:inline-flex;align-items:center;gap:6px;height:32px;padding:0 var(--sp-3);white-space:nowrap;
+  border:1px solid var(--border);border-radius:var(--radius-pill);background:transparent;
+  font:500 var(--fs-micro)/1 var(--font-sans);color:var(--text-muted);transition:color .14s,border-color .14s,background-color .14s}
+.ed-tog:hover{color:var(--text);border-color:var(--border-strong)}
+.ed-tog[aria-pressed="true"],.ed-tog[aria-expanded="true"]{color:var(--text);border-color:var(--border-patina);background:var(--surface-elevated)}
+.ed-tog .n{font:400 10px/1 var(--font-mono);color:var(--text-subtle)}
+.ed-tog--ico{padding:0 var(--sp-2);font-size:13px}
+
+/* ── Menú «Más» ────────────────────────────────────────────────────────────── */
+.ed-menu{display:flex;flex-direction:column;gap:2px}
+.ed-menu>a,.ed-menu>button{display:block;width:100%;text-align:left;padding:8px 10px;border-radius:var(--radius-sm);
+  font:500 var(--fs-ui)/1.3 var(--font-sans);color:var(--text-muted)}
+.ed-menu>a:hover,.ed-menu>button:hover{background:var(--surface);color:var(--text);text-decoration:none}
+.ed-menu>.ed-del-btn:hover{color:var(--danger)}
+.ed-menu .ed-delconfirm{flex-wrap:wrap;padding:6px 4px}
+.ed-menu .ed-delconfirm .q{flex-basis:100%;margin-bottom:4px;line-height:1.4}
+.ed-menu .ed-delconfirm .c-btn{height:30px;padding:0 var(--sp-3);font-size:var(--fs-micro)}
+
+/* ── Ayuda de atajos ───────────────────────────────────────────────────────── */
+.ed-atajos{display:flex;flex-direction:column;gap:var(--sp-2)}
+.ed-atajos .t-overline{font-size:10px}
+.ed-atajos dl{display:flex;flex-direction:column;gap:6px;margin:0}
+.ed-atajos dl>div{display:grid;grid-template-columns:44px 1fr;align-items:center;gap:var(--sp-2)}
+.ed-atajos dd{margin:0;font:400 var(--fs-ui)/1.35 var(--font-sans);color:var(--text)}
+.ed-atajos .hint{font:400 var(--fs-micro)/1.5 var(--font-mono);color:var(--text-subtle)}
+
+/* ── Navegación fija por sección ──────────────────────────────────────────── */
+.edx-nav{display:flex;flex-wrap:wrap;gap:2px;min-width:0;padding:2px 0}
+.edx-nav-b{flex:none;display:inline-flex;align-items:center;gap:5px;height:30px;padding:0 10px;white-space:nowrap;
+  border-radius:var(--radius-pill);font:500 var(--fs-micro)/1 var(--font-sans);color:var(--text-muted);
+  border:1px solid transparent;transition:color .14s,background-color .14s,border-color .14s}
+.edx-nav-b:hover{color:var(--text);background:var(--surface)}
+.edx-nav-b[aria-current="true"]{color:var(--text);background:var(--surface-elevated);border-color:var(--border-patina)}
+.edx-nav-b .n{font:400 10px/1 var(--font-mono);color:var(--text-subtle)}
+.edx-nav-b .h{display:inline-grid;place-items:center;min-width:17px;height:17px;padding:0 4px;border-radius:var(--radius-pill);
+  font:600 10px/1 var(--font-mono);color:var(--accent-text);border:1px solid var(--border-brasa)}

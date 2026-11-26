@@ -10,28 +10,72 @@
    fondo de las columnas. El desenfoque lo pone UNA vez .c-wall en .ed-grid; las
    columnas y sus filas solo llevan color, así que una biblioteca de cientos de
    viñetas no añade ni una capa de composición. */
-.ed-bar{position:sticky;top:var(--header-h);z-index:9;height:52px;background:color-mix(in srgb,var(--bg) 88%,transparent);
-  backdrop-filter:blur(8px);border-bottom:1px solid var(--border)}
-.ed-bar .c-container{max-width:none;height:100%;display:flex;align-items:center;gap:14px}
+/* ── EDITOR FLUIDO (lote pantallas-forja-v2) ───────────────────────────────────
+   La pantalla es una columna de alto fijo: barra (dos filas compactas que
+   pueden envolver sin cortar nada) + rejilla que ocupa el resto. La rejilla
+   tiene cuatro pistas con nombre: biblioteca (cajón, 0 si está cerrada) ·
+   centro · divisor · vista previa (ancho ajustable, --pv-w lo escribe el JS). */
+.ed-page{--ed-top:84px;height:calc(100vh - var(--ed-top));min-height:560px}
+.ed-bar{position:relative;z-index:9;flex:none;background:var(--bg-glass);border-bottom:1px solid var(--border)}
+.ed-bar-a,.ed-bar-b{display:flex;align-items:center;flex-wrap:wrap;gap:var(--sp-2) var(--sp-3);padding:var(--sp-2) 18px}
+.ed-bar-a{min-height:52px}
+.ed-bar-b{min-height:46px;border-top:1px solid var(--border)}
 .ed-bar .bk{font:500 var(--fs-ui)/1 var(--font-sans);color:var(--text-muted)}
-.ed-bar .nm{font:600 14px/1 var(--font-sans)}
+.ed-bar .nm{font:600 16px/1.3 var(--font-sans);min-width:0;overflow-wrap:anywhere;border-radius:var(--radius-xs);padding:2px 4px;margin:-2px -4px}
+.ed-bar .nm:hover{box-shadow:inset 0 -1px 0 var(--border-strong)}
+.ed-bar .nm:focus{outline:none;box-shadow:inset 0 0 0 1px var(--border-patina);background:var(--surface-sunken)}
 .ed-bar .st{font:400 var(--fs-micro)/1 var(--font-mono);color:var(--text-subtle)}
-.ed-bar .acts{margin-left:auto;display:flex;gap:8px;align-items:center}
+.ed-bar .acts{margin-left:auto;display:flex;gap:var(--sp-2);align-items:center}
+.ed-bar .acts .c-btn{height:34px;padding:0 var(--sp-4)}
+.ed-bar-sp{flex:1 1 0;min-width:0}
+/* Páginas objetivo: segmentado COMPLETO, cada opción entera (antes «1 pág p»). */
+.ed-obj{display:inline-flex;align-items:center;gap:0;border:1px solid var(--border-strong);border-radius:var(--radius-pill);
+  padding:2px;background:var(--surface-sunken)}
+.ed-obj .lbl{padding:0 var(--sp-2) 0 var(--sp-3);font:500 10px/1 var(--font-mono);letter-spacing:.1em;text-transform:uppercase;color:var(--text-subtle)}
+.ed-obj button{height:28px;padding:0 var(--sp-3);border-radius:var(--radius-pill);white-space:nowrap;
+  font:500 var(--fs-micro)/1 var(--font-sans);color:var(--text-muted);transition:color .14s,background-color .14s}
+.ed-obj button:hover:not([aria-pressed="true"]){color:var(--text)}
+.ed-obj button[aria-pressed="true"]{background:var(--patina-500);color:var(--ink-on-patina)}
+@media (max-width:1500px){.ed-obj .lbl{display:none}}
 /* Las tres columnas. El hairline que las separa lo dibujaba el FONDO de la
    rejilla asomando por un gap de 1px; ese fondo era opaco y tapaba la aurora
    entera por debajo de unas columnas que ahora son translúcidas. Mismo píxel de
    separación, dibujado por las columnas: gap:0 + border-left. Así la rejilla no
    pinta nada y el vidrio de .c-wall llega hasta el fondo de las columnas. */
-.ed-grid{display:grid;grid-template-columns:290px minmax(380px,1fr) 470px;gap:0;background:transparent;
-  height:calc(100vh - var(--header-h) - 52px);min-height:480px}
-.ed-col+.ed-col{border-left:1px solid var(--border)}
-.ed-col{background:var(--bg-glass);overflow-y:auto;overscroll-behavior:contain}
+.ed-grid{--lib-w:0px;--pv-w:500px;display:grid;flex:1 1 auto;min-height:0;gap:0;background:transparent;
+  grid-template-columns:var(--lib-w) minmax(0,1fr) 8px min(var(--pv-w),max(340px,calc(100% - 420px - var(--lib-w))));
+  grid-template-rows:minmax(0,1fr)}
+.ed-grid[data-lib="abierta"]{--lib-w:320px}
+.ed-grid[data-pv="oculto"],.ed-grid[data-pv="completo"]{grid-template-columns:var(--lib-w) minmax(0,1fr) 0 0}
+.ed-grid>.ed-col--lib{grid-column:1}
+.ed-grid>.ed-col--mid{grid-column:2}
+.ed-grid>.ed-split{grid-column:3}
+.ed-grid>.pv-col{grid-column:4}
+.ed-grid[data-pv="oculto"]>.pv-col{display:none}
+.ed-col{background:var(--bg-glass);overflow-y:auto;overscroll-behavior:contain;min-height:0}
+.ed-col--lib{border-right:1px solid var(--border)}
+/* Divisor: 8 px de zona pulsable, 1 px de línea; brasa al pasar o con el foco. */
+.ed-split{position:relative;cursor:col-resize;touch-action:none;background:transparent;outline:none}
+.ed-split::before{content:"";position:absolute;inset:0 auto 0 50%;width:1px;background:var(--border)}
+.ed-split::after{content:"";position:absolute;top:50%;left:50%;width:4px;height:36px;margin:-18px 0 0 -2px;
+  border-radius:var(--radius-pill);background:var(--border-strong)}
+.ed-split:hover::before,.ed-split:focus-visible::before,.ed-grid[data-arrastrando] .ed-split::before{width:2px;background:var(--accent)}
+.ed-split:hover::after,.ed-split:focus-visible::after{background:var(--accent)}
+.ed-grid[data-arrastrando]{cursor:col-resize;user-select:none}
+.ed-grid[data-arrastrando] .pv-frame{pointer-events:none}
+/* Pantalla completa: la vista previa tapa la rejilla (no la barra del navegador). */
+.ed-grid[data-pv="completo"]>.pv-col{position:fixed;inset:0;z-index:60;background:var(--surface-sunken)}
+/* …y para tapar también el lateral y la barra del shell, la PANTALLA sube de capa
+   mientras dura (su z-index crea el contexto en el que vive la vista previa). */
+.ed-page:has(>.ed-grid[data-pv="completo"]){z-index:70}
 .ed-col--lib{background:color-mix(in srgb,var(--surface-sunken) 86%,transparent)}
 /* La cabecera pegada NO puede heredar el color translúcido de su columna: es lo
    único que tiene que OCLUIR lo que pasa por debajo al hacer scroll. Opaca. */
 .ed-colh{position:sticky;top:0;z-index:2;display:flex;align-items:baseline;gap:10px;padding:14px 18px 10px;
   background:var(--bg);border-bottom:1px solid var(--border)}
-.ed-col--lib .ed-colh{background:var(--surface-sunken)}
+.ed-col--lib .ed-colh{background:var(--surface-sunken);align-items:center}
+.ed-lib-x{margin-left:auto;width:28px;height:28px;border-radius:var(--radius-sm);color:var(--text-subtle);font:400 12px/1 var(--font-mono)}
+.ed-lib-x:hover{color:var(--text);background:var(--surface-elevated)}
 .ed-colh .t-overline{font-size:10px}
 .ed-colh .n{font:400 10px/1 var(--font-mono);color:var(--text-subtle)}
 /* ── librería (master) ── */
@@ -49,7 +93,12 @@
 .lib-row.in .add{border-color:transparent;color:var(--ver-ok)}
 .lib-row .c-ver{font-size:9px}
 /* ── composición (la variante) ── */
-.var-obj{margin:16px 18px 6px;padding:16px 18px}
+.ed-navwrap{position:sticky;top:0;z-index:4;display:flex;align-items:center;flex-wrap:wrap;gap:var(--sp-1) var(--sp-3);padding:var(--sp-2) 18px;
+  background:var(--bg);border-bottom:1px solid var(--border)}
+.var-objh{display:flex;align-items:baseline;flex-wrap:wrap;gap:4px 12px}
+.var-objh>.n{margin-left:auto;font:400 10px/1.4 var(--font-mono);color:var(--text-subtle)}
+[data-sec]{scroll-margin-top:60px}
+.var-obj{margin:16px 18px 6px;padding:16px 18px;border-radius:var(--radius-xl)}
 .var-obj label{display:flex;align-items:baseline;gap:10px;font:500 10px/1 var(--font-mono);letter-spacing:.12em;text-transform:uppercase;color:var(--text-subtle)}
 .var-obj input{margin-top:10px;font:600 16px/1.2 var(--font-sans);height:42px;background:var(--surface-sunken)}
 .var-obj .hint{margin-top:8px;font:400 var(--fs-micro)/1.6 var(--font-mono);color:var(--text-subtle)}
@@ -138,6 +187,9 @@
    toda la app o el usuario no aprende a leerlo. Lo vigila tests/pulido-visual. */
 .ordacts button:disabled{opacity:var(--opacity-disabled)}
 /* ── Contacto por variante — misma caja que var-obj/var-pres ── */
+.ed-sech{display:flex;align-items:baseline;flex-wrap:wrap;gap:4px 10px;margin:28px 18px 4px;padding-top:16px;border-top:1px dashed var(--border-strong)}
+.ed-sech .t-overline{font-size:10px}
+.ed-sech .n{font:400 10px/1 var(--font-mono);color:var(--text-subtle)}
 .var-contact{margin:6px 18px 6px;padding:16px 18px}
 .var-contact .presh{display:flex;align-items:baseline;gap:10px}
 .var-contact .presh .t-overline{font-size:10px}
@@ -168,11 +220,12 @@
 .ed-del-yes:hover{color:var(--text-on-danger);background:var(--danger);border-color:transparent}
 .ed-del-btn{color:var(--text-subtle)}
 .ed-del-btn:hover{color:var(--danger)}
-.var-g{margin:18px 18px 0}
-.var-g>.gh{display:flex;align-items:baseline;gap:10px;padding-bottom:8px}
+.var-g{margin:12px 18px 0;padding:14px 16px 16px;border:1px solid var(--border);border-radius:var(--radius-xl);
+  background:var(--surface-glass);box-shadow:var(--elev-1)}
+.var-g>.gh{display:flex;align-items:baseline;flex-wrap:wrap;gap:4px 10px;padding-bottom:4px}
 .var-g>.gh .t-overline{font-size:10px}
 .var-g>.gh .n{font:400 10px/1 var(--font-mono);color:var(--text-subtle)}
-.var-exp{margin-top:10px;border:1px solid var(--border);border-radius:var(--radius-md);background:var(--surface);overflow:hidden}
+.var-exp{margin-top:10px;border:1px solid var(--border);border-radius:var(--radius-lg);background:var(--surface);overflow:hidden}
 .var-eh{display:flex;align-items:baseline;gap:10px;padding:12px 14px 10px}
 .var-eh .tt{font:600 13.5px/1.3 var(--font-sans)}
 .var-eh .org{font:400 10.5px/1.3 var(--font-mono);color:var(--text-subtle)}
@@ -180,6 +233,8 @@
 .var-b .grip{flex:none;cursor:grab;color:var(--text-subtle);font-size:11px;padding:2px 2px 0;user-select:none}
 .var-b.dragging{opacity:.35}
 .var-b .tx{flex:1;min-width:0;color:var(--text-muted)}
+.var-b .tx[data-editable]{cursor:text;border-radius:4px}
+.var-b .tx[data-editable]:hover{color:var(--text);box-shadow:0 0 0 4px var(--surface-elevated);background:var(--surface-elevated)}
 .var-b .tx[contenteditable="true"]{outline:none;color:var(--text);background:var(--surface-sunken);border-radius:4px;padding:2px 6px;margin:-2px -6px}
 .var-b.hid .tx{opacity:.38;text-decoration:line-through;text-decoration-color:var(--border-strong)}
 .var-b.ovr{box-shadow:inset 2px 0 0 var(--patina-500)}
@@ -199,8 +254,9 @@
 .var-empty .t-overline{display:block;margin-bottom:12px}
 /* ── preview (porcelana dentro de grafito) ── */
 .pv-col{display:flex;flex-direction:column;background:color-mix(in srgb,var(--surface-sunken) 86%,transparent)}
-.pv-tools{position:sticky;top:0;z-index:2;display:flex;align-items:center;gap:12px;padding:12px 16px;
+.pv-tools{position:sticky;top:0;z-index:2;display:flex;align-items:center;flex-wrap:wrap;gap:var(--sp-2) var(--sp-3);padding:10px 14px;
   background:var(--surface-sunken);border-bottom:1px solid var(--border)}
+.pv-acts{margin-left:auto;display:flex;gap:var(--sp-1)}
 .pv-seg{display:flex;border:1px solid var(--border-strong);border-radius:6px;overflow:hidden}
 .pv-seg button{font:500 var(--fs-micro)/1 var(--font-mono);letter-spacing:.04em;padding:8px 11px;color:var(--text-muted);
   transition:color .14s}
@@ -209,7 +265,7 @@
    tres se comportan igual (bloque C · consistencia de estados). */
 .pv-seg button:hover:not([aria-pressed="true"]){color:var(--text)}
 .pv-seg button[aria-pressed="true"]{color:var(--text);background:var(--surface-elevated);box-shadow:inset 0 0 0 1px var(--border-patina)}
-.pv-pages{margin-left:auto;font:500 var(--fs-micro)/1 var(--font-mono);color:var(--text-muted)}
+.pv-pages{font:500 var(--fs-micro)/1.4 var(--font-mono);color:var(--text-muted);min-width:0}
 .pv-pages .warn{color:var(--danger)}
 .pv-busy{color:var(--text-subtle)}
 /* El preview ES el PDF: la columna deja de dibujar el documento (ya no hay .pv-page
@@ -236,18 +292,22 @@
   height:100%;max-height:100%}
 .pv-raw .cap{display:block;margin-bottom:16px;font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--text-subtle)}
 .pv-foot{padding:10px 16px;border-top:1px solid var(--border);font:400 10px/1.6 var(--font-mono);color:var(--text-subtle)}
-@media (max-width:1240px){.ed-grid{grid-template-columns:250px 1fr 400px}}
+@media (max-width:1240px){.ed-grid[data-lib="abierta"]{--lib-w:280px}}
+/* Estrecho: una columna; las pestañas eligen centro o vista previa y la
+   biblioteca es un cajón que se superpone (no cabe empujando). */
 @media (max-width:1024px){
-  .ed-grid{grid-template-columns:1fr;height:auto}
+  .ed-page{height:auto}
+  .ed-grid,.ed-grid[data-pv]{grid-template-columns:minmax(0,1fr);grid-template-rows:auto}
+  .ed-grid>.ed-col--mid,.ed-grid>.pv-col{grid-column:1;grid-row:1}
   .ed-col{max-height:none}
-  .ed-col--lib,.pv-col{display:none}
-  .ed-grid[data-view="master"] .ed-col--lib{display:block}
-  .ed-grid[data-view="master"] .ed-col--mid{display:none}
-  .ed-grid[data-view="preview"] .pv-col{display:flex}
-  .ed-grid[data-view="preview"] .ed-col--mid{display:none}
+  .ed-split{display:none}
+  .ed-grid>.pv-col{display:none}
+  .ed-grid[data-view="preview"]>.pv-col{display:flex;min-height:80vh}
+  .ed-grid[data-view="preview"]>.ed-col--mid{display:none}
+  .ed-grid>.ed-col--lib{position:fixed;z-index:60;top:0;bottom:0;left:0;width:min(360px,92vw);box-shadow:var(--elev-3)}
   .ed-tabs{display:flex!important}
 }
-.ed-tabs{display:none;position:sticky;top:calc(var(--header-h) + 52px);z-index:8;background:var(--bg);border-bottom:1px solid var(--border);padding:8px var(--container-pad);gap:6px}
+.ed-tabs{display:none;position:sticky;top:var(--header-h);z-index:8;background:var(--bg);border-bottom:1px solid var(--border);padding:8px var(--container-pad);gap:6px}
 .ed-tabs button{font:500 var(--fs-micro)/1 var(--font-mono);padding:8px 12px;border:1px solid var(--border);border-radius:6px;color:var(--text-muted)}
 .ed-tabs button[aria-pressed="true"]{color:var(--accent-text);border-color:var(--border-patina);background:var(--surface)}
 

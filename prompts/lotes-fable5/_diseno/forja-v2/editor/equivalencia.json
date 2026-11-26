@@ -1,0 +1,18 @@
+{
+  "fecha": "2026-11-26T03:46:20.232Z",
+  "comparacion": "A = decisiones por las llamadas de los manejadores (DELETE items · PATCH sort_order · POST ajustar acortar); B = mismas decisiones por el editor fluido (la primera con J + A; el resto con clic); gemelas con huella idéntica antes de tocarlas",
+  "abrirNoCambia": {
+    "items": true,
+    "huella": true
+  },
+  "itemsIguales": true,
+  "textoPdfIgual": true,
+  "huellaPdfIgual": true,
+  "huellaAEstable": true,
+  "huellaB": "931255d7b5eccf8e1b8f5590d39a1dafa473ee9af19413968bece3cff7b0cbb1",
+  "paginas": {
+    "A": 1,
+    "B": 1
+  },
+  "variantItems": 10
+}
