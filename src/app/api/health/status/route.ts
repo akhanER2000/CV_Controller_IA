@@ -14,6 +14,7 @@ import {
   TAREAS,
 } from "@/lib/ai/modelos";
 import { encryptionAvailable } from "@/lib/crypto";
+import { obtenerMemoria } from "@/lib/ai/memoria";
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
@@ -350,6 +351,48 @@ async function checkStorage(sb: SupabaseClient, uid: string): Promise<Service> {
   };
 }
 
+/** «hace X» corto, para el detalle (el panel lo pinta tal cual). */
+function haceCuanto(iso: string | null): string {
+  if (!iso) return "sin guardar";
+  const s = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 1000));
+  if (s < 60) return "hace un momento";
+  if (s < 3600) return `hace ${Math.round(s / 60)} min`;
+  if (s < 86400) return `hace ${Math.round(s / 3600)} h`;
+  return `hace ${Math.round(s / 86400)} d`;
+}
+
+/** Memoria del perfil (DA-M2): sin IA ni coste. Dice su tamaño y si la caché paga. */
+async function checkMemoria(sb: SupabaseClient, uid: string): Promise<Service> {
+  const m = await obtenerMemoria(sb, uid);
+  const u = m.ultimaLlamada;
+  const ultima = u
+    ? `Última llamada (${u.tarea}): ${u.entrada ?? "?"} de entrada, ${u.cacheados} cacheados, ${u.salida ?? "?"} de salida.`
+    : "Todavía no hay llamadas de redacción registradas.";
+  const meta = {
+    items: m.items,
+    tokensAprox: m.tokensAprox,
+    actualizadaEn: m.actualizadaEn,
+    persistida: m.persistida,
+    ultimaLlamada: u,
+  };
+  if (!m.persistida) {
+    return {
+      id: "memoria",
+      ok: true,
+      status: "warn",
+      detail: `Memoria al vuelo (${m.items} items, ~${m.tokensAprox} tokens), sin guardar: falta aplicar 0010_memoria_ia.sql. La caché de Anthropic funciona igual. ${ultima}`,
+      meta,
+    };
+  }
+  return {
+    id: "memoria",
+    ok: true,
+    status: "ok",
+    detail: `Memoria: ${m.items} items, ~${m.tokensAprox} tokens, actualizada ${haceCuanto(m.actualizadaEn)}. ${ultima}`,
+    meta,
+  };
+}
+
 export async function GET() {
   const sb = await createClient();
   const { data: { user } } = await sb.auth.getUser();
@@ -363,6 +406,7 @@ export async function GET() {
     run("github", 8000, () => checkGithub()),
     run("supabase", 8000, () => checkSupabase(sb, uid)),
     run("storage", 8000, () => checkStorage(sb, uid)),
+    run("memoria", 8000, () => checkMemoria(sb, uid)),
   ]);
 
   return Response.json({ checkedAt: new Date().toISOString(), services });

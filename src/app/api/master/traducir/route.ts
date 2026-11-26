@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { hayClaveIA, modeloPara } from "@/lib/ai/modelos";
 import { geminiApiKey } from "@/lib/extract/llm";
 import { getUserLlmKey, getUserLlmKey3 } from "@/lib/account/byok";
+import { contextoMemoria, mensajesConMemoria, type ContextoMemoria } from "@/lib/ai/memoria";
 import { ensureMaster } from "@/lib/db/queries";
 import {
   ORIGEN_TRADUCCION,
@@ -157,21 +158,29 @@ function paraTraducir(originales: FilaItem[], espejos: FilaItem[], hacia: Idioma
  * la invención igual, pero un modelo débil traduce literal («I led a team of 6
  * people») y eso delata al candidato en la primera línea. Aquí pagar bien vale.
  */
-function geminiTraduccionLLM(apiKey?: string, apiKey3?: string): TraduccionLLM {
+function geminiTraduccionLLM(apiKey?: string, apiKey3?: string, mem?: ContextoMemoria): TraduccionLLM {
   const key = apiKey || geminiApiKey();
   if (!key) throw new Error("Falta GEMINI_API_KEY");
   // apiKey3 = la clave de Anthropic: con ella redacta Claude; sin ella, el fallback Gemini.
   const model = modeloPara("redaccion-preserva-hechos", key, undefined, undefined, apiKey3);
   return async (peticion) => {
-    const { object } = await generateObject({
+    // La memoria (DA-M2) va primero y cacheada: un lote tras otro, el mismo master
+    // se lee de caché. El lote a traducir (con sus instrucciones) va detrás.
+    const r = await generateObject({
       model,
       schema: LoteTraducidoSchema,
-      prompt: promptDeTraduccion(peticion),
+      ...mensajesConMemoria({
+        memoria: mem?.memoria,
+        modelo: model,
+        sistema: "",
+        usuario: promptDeTraduccion(peticion),
+      }),
       // Temperatura muy baja: traducir es una tarea con una respuesta correcta, no
       // un ejercicio de estilo. La creatividad aquí solo puede añadir lo que no hay.
       temperature: 0.1,
     });
-    return object.traducciones ?? [];
+    await mem?.alUsar(r);
+    return r.object.traducciones ?? [];
   };
 }
 
@@ -395,7 +404,7 @@ export async function POST(req: Request) {
 
     const resultado = await construirTraduccion(
       { items, hacia, desde },
-      { llm: geminiTraduccionLLM(byok, key3) },
+      { llm: geminiTraduccionLLM(byok, key3, await contextoMemoria(sb, user.id, "traducir")) },
     );
     for (const d of resultado.descartados) {
       console.warn("[api/traducir] propuesta RECHAZADA por el candado", {

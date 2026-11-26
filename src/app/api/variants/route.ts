@@ -7,6 +7,7 @@ import { createVariant, updateVariant, addItem, setAiOverride } from "@/lib/db/v
 import { preservesFacts } from "@/lib/verify";
 import { geminiApiKey } from "@/lib/extract/llm";
 import { getUserLlmKey, getUserLlmKey3 } from "@/lib/account/byok";
+import { contextoMemoria, mensajesConMemoria, type ContextoMemoria } from "@/lib/ai/memoria";
 import {
   buildAiVariant,
   VariantPlanSchema,
@@ -51,7 +52,7 @@ function masterItemText(m: MasterItem): string {
 
 /** El LLM real (Gemini) como función inyectable de buildAiVariant. La clave es la
  *  BYOK del usuario (ya descifrada) o, si no, la del servidor. */
-function geminiVariantLLM(apiKey?: string, apiKey3?: string): VariantLLM {
+function geminiVariantLLM(apiKey?: string, apiKey3?: string, mem?: ContextoMemoria): VariantLLM {
   const key = apiKey || geminiApiKey();
   if (!key) throw new Error("Falta GEMINI_API_KEY");
   // Armar la variante es redacción/selección que no puede inventar: pasa por el
@@ -66,14 +67,24 @@ function geminiVariantLLM(apiKey?: string, apiKey3?: string): VariantLLM {
     "(4) pon un target_title acorde; (5) redacta un summary de 2-3 frases A PARTIR de los hechos del master, " +
     "sin inventar cifras, tecnologías, empresas ni logros. Si el master es flaco para el rol, dilo en notes.";
   return async ({ items, prompt }) => {
-    const list = items.map((it) => `- [${it.id}] ${it.text}`).join("\n");
-    const { object } = await generateObject({
+    // Con memoria (DA-M2), los items del master ya viajan en ella —cacheados— con
+    // sus mismos ids: no se repiten aquí. Sin memoria, la lista de siempre.
+    const list = mem?.memoria
+      ? "(los de la MEMORIA DEL PERFIL, cada uno con su [id])"
+      : items.map((it) => `- [${it.id}] ${it.text}`).join("\n");
+    const r = await generateObject({
       model,
       schema: VariantPlanSchema,
-      prompt: `${SYS}\n\nROL/DESCRIPCIÓN OBJETIVO:\n${prompt}\n\nITEMS DEL MASTER:\n${list}`,
+      ...mensajesConMemoria({
+        memoria: mem?.memoria,
+        modelo: model,
+        sistema: SYS,
+        usuario: `ROL/DESCRIPCIÓN OBJETIVO:\n${prompt}\n\nITEMS DEL MASTER:\n${list}`,
+      }),
       temperature: 0.2,
     });
-    return object;
+    await mem?.alUsar(r);
+    return r.object;
   };
 }
 
@@ -198,7 +209,7 @@ export async function POST(req: Request) {
     }
 
     const aiItems: AiMasterItem[] = master.map((m) => ({ id: m.id, kind: m.kind, text: masterItemText(m) }));
-    const plan = await buildAiVariant({ master: aiItems, prompt }, { llm: geminiVariantLLM(byok, byok3) });
+    const plan = await buildAiVariant({ master: aiItems, prompt }, { llm: geminiVariantLLM(byok, byok3, await contextoMemoria(sb, user.id, "variantes")) });
 
     const variant = await createVariant(sb, user.id, body.name ?? plan.targetTitle);
 

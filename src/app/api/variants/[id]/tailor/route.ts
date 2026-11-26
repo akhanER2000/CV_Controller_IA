@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getVariant, getVariantItem, setAiOverride } from "@/lib/db/variants";
 import { hayClaveIA, modeloPara } from "@/lib/ai/modelos";
 import { getUserLlmKey, getUserLlmKey3 } from "@/lib/account/byok";
+import { contextoMemoria, mensajesConMemoria, type ContextoMemoria } from "@/lib/ai/memoria";
 import { fetchViaJina } from "@/lib/extract/web";
 import { extractFile, extractDepsFor, type FileKind } from "@/lib/extract/files";
 import { campoDe } from "@/lib/cv/ajuste";
@@ -44,7 +45,7 @@ const fallo = (msg: string, status: number) => NextResponse.json({ error: msg },
 const motivo = (e: unknown) => (e instanceof Error ? e.message : "Error");
 
 /** El LLM real (Gemini) como función inyectable de construirTailor. */
-function geminiOfertaLLM(apiKey?: string, apiKey3?: string): OfertaLLM {
+function geminiOfertaLLM(apiKey?: string, apiKey3?: string, mem?: ContextoMemoria): OfertaLLM {
   const SYS =
     "Eres un asistente que ADAPTA un CV a una OFERTA de empleo. Te doy el TEXTO DEL AVISO y los items del " +
     "candidato (id, tipo, texto, y si ya están en la variante o solo en el master). Tu tarea, y NINGUNA parte " +
@@ -57,13 +58,22 @@ function geminiOfertaLLM(apiKey?: string, apiKey3?: string): OfertaLLM {
     "ninguna cifra, sigla ni tecnología que no esté YA en el texto del item. El aviso NO autoriza hechos nuevos.\n" +
     "NUNCA inventes ids, cifras ni tecnologías. NUNCA des un porcentaje ni un score de encaje.";
   return async ({ offerText, items }) => {
-    const { object } = await generateObject({
-      model: modeloPara("redaccion-preserva-hechos", apiKey, undefined, undefined, apiKey3),
+    const model = modeloPara("redaccion-preserva-hechos", apiKey, undefined, undefined, apiKey3);
+    // La memoria (DA-M2) va primero y cacheada. La lista se queda: lleva los ids de
+    // la VARIANTE y la marca «en la variante / en el master», que la memoria no sabe.
+    const r = await generateObject({
+      model,
       schema: OfertaPlanSchema,
-      prompt: `${SYS}\n\nAVISO:\n${offerText.slice(0, 16000)}\n\nITEMS:\n${lineasDelPrompt(items)}`,
+      ...mensajesConMemoria({
+        memoria: mem?.memoria,
+        modelo: model,
+        sistema: SYS,
+        usuario: `AVISO:\n${offerText.slice(0, 16000)}\n\nITEMS:\n${lineasDelPrompt(items)}`,
+      }),
       temperature: 0.2,
     });
-    return object;
+    await mem?.alUsar(r);
+    return r.object;
   };
 }
 
@@ -225,7 +235,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       .map((m) => itemTailorDe({ id: m.id, item_id: m.id, kind: m.kind, data: m.data, enVariante: false }));
 
     const items = [...enVariante, ...soloMaster];
-    const analisis = await construirTailor({ offerText: oferta.text, items }, { llm: geminiOfertaLLM(byok, byok3) });
+    const analisis = await construirTailor({ offerText: oferta.text, items }, { llm: geminiOfertaLLM(byok, byok3, await contextoMemoria(sb, user.id, "adaptar-variante")) });
 
     for (const d of analisis.descartados) {
       if (d.tipo === "reformular" || d.tipo === "resumen") {

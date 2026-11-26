@@ -47,6 +47,24 @@ interface ConnResult {
   checkedAt: string;
   services: ConnService[];
 }
+/** GET/POST /api/health/memoria — la memoria del perfil (DA-M2), sin su contenido. */
+interface EstadoMemoriaUI {
+  items: number;
+  tokensAprox: number;
+  actualizadaEn: string | null;
+  persistida: boolean;
+  reconstruida: boolean;
+  ultimaLlamada: { tarea: string; entrada: number | null; salida: number | null; cacheados: number; en: string } | null;
+}
+/** «hace X» con las plantillas de i18n: minutos, horas o días. */
+function haceDe(iso: string | null, t: (k: string) => string): string {
+  if (!iso) return t("ajustes.memoria.sinGuardar");
+  const s = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 1000));
+  if (s < 60) return t("ajustes.memoria.haceMomento");
+  if (s < 3600) return t("ajustes.memoria.haceMin").replace("{n}", String(Math.round(s / 60)));
+  if (s < 86400) return t("ajustes.memoria.haceH").replace("{n}", String(Math.round(s / 3600)));
+  return t("ajustes.memoria.haceD").replace("{n}", String(Math.round(s / 86400)));
+}
 interface WipeCounts {
   items: number;
   variants: number;
@@ -168,6 +186,9 @@ function connMeta(s: ConnService): string | null {
     if (typeof m.latencyMs === "number") parts.push(`${m.latencyMs} ms`);
     return parts.filter(Boolean).join(" · ");
   }
+  if (s.id === "memoria") {
+    return `${String(m.items ?? "?")} items · ~${String(m.tokensAprox ?? "?")} tokens`;
+  }
   if (s.id === "github" && (m.remaining != null || m.limit != null)) {
     return `${m.remaining ?? "?"}/${m.limit ?? "?"} req · sin OAuth`;
   }
@@ -230,6 +251,11 @@ export function AjustesScreen() {
   const [conn, setConn] = useState<ConnResult | null>(null);
   const [connLoading, setConnLoading] = useState(false);
   const [connErr, setConnErr] = useState<string | null>(null);
+
+  // Memoria del perfil (DA-M2): estado + «Reconstruir memoria».
+  const [memoria, setMemoria] = useState<EstadoMemoriaUI | null>(null);
+  const [memoriaErr, setMemoriaErr] = useState<string | null>(null);
+  const [reconstruyendo, setReconstruyendo] = useState(false);
 
   // ★ Selector de modelos probados. `modeloSel` es lo que hay ELEGIDO EN EL
   //   DESPLEGABLE (todavía sin guardar); "" significa «el del registro».
@@ -413,6 +439,22 @@ export function AjustesScreen() {
   useEffect(() => {
     loadConn();
   }, [loadConn]);
+
+  // Memoria: GET lee (y reconstruye solo si el master cambió); POST fuerza.
+  const cargarMemoria = useCallback((forzar: boolean) => {
+    if (!supabaseEnabled) return;
+    if (forzar) setReconstruyendo(true);
+    setMemoriaErr(null);
+    fetch("/api/health/memoria", { method: forzar ? "POST" : "GET" })
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
+      .then((d: EstadoMemoriaUI) => setMemoria(d))
+      .catch((e) => setMemoriaErr(e instanceof Error ? e.message : "error"))
+      .finally(() => setReconstruyendo(false));
+  }, []);
+
+  useEffect(() => {
+    cargarMemoria(false);
+  }, [cargarMemoria]);
 
   /**
    * ★ Estado del modelo. `probar:false` (lo que corre al montar) NO barre nada:
@@ -1004,6 +1046,47 @@ export function AjustesScreen() {
           ) : !connErr ? (
             <p className="cu-nota cu-nota--sutil">{t("ajustes.conn.checking")}</p>
           ) : null}
+        </Card>
+
+        {/* ── 5b · Memoria de la IA (DA-M2): el master serializado sin IA que viaja
+               cacheado en cada redacción. Estado real + reconstrucción forzada. ── */}
+        <Card as="section" grande data-screen-label="ajustes-memoria" aria-labelledby="aj-h-memoria">
+          <PanelHeader
+            id="aj-h-memoria"
+            titulo={t("ajustes.memoria.title")}
+            sub={t("ajustes.memoria.sub")}
+            acciones={
+              <Button variante="grafito" id="btnMemoria" onClick={() => cargarMemoria(true)} disabled={reconstruyendo}>
+                {reconstruyendo ? t("ajustes.memoria.rebuilding") : t("ajustes.memoria.rebuild")}
+              </Button>
+            }
+          />
+          {memoriaErr ? (
+            <div className="cu-aviso" role="status">
+              {t("ajustes.memoria.error")} — {memoriaErr}
+            </div>
+          ) : memoria ? (
+            <div id="memoriaEstado" aria-live="polite">
+              <p className="cu-nota">
+                {t("ajustes.memoria.estado")
+                  .replace("{n}", String(memoria.items))
+                  .replace("{t}", String(memoria.tokensAprox))
+                  .replace("{hace}", haceDe(memoria.actualizadaEn, t))}
+              </p>
+              <p className="cu-nota cu-nota--sutil">
+                {memoria.ultimaLlamada
+                  ? t("ajustes.memoria.ultima")
+                      .replace("{tarea}", memoria.ultimaLlamada.tarea)
+                      .replace("{y}", String(memoria.ultimaLlamada.cacheados))
+                      .replace("{in}", String(memoria.ultimaLlamada.entrada ?? "?"))
+                      .replace("{out}", String(memoria.ultimaLlamada.salida ?? "?"))
+                  : t("ajustes.memoria.sinLlamadas")}
+              </p>
+              {!memoria.persistida ? <p className="cu-aviso">{t("ajustes.memoria.sinTabla")}</p> : null}
+            </div>
+          ) : (
+            <p className="cu-nota cu-nota--sutil">{t("ajustes.conn.checking")}</p>
+          )}
         </Card>
 
         {/* ── 6 · Tus datos: descargarlos no es peligroso, va aparte ── */}

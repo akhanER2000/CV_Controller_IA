@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getMasterItems, type MasterItem } from "@/lib/db/queries";
 import { hayClaveIA, modeloPara } from "@/lib/ai/modelos";
 import { getUserLlmKey, getUserLlmKey3 } from "@/lib/account/byok";
+import { contextoMemoria, mensajesConMemoria, type ContextoMemoria } from "@/lib/ai/memoria";
 import { fetchViaJina } from "@/lib/extract/web";
 import { extractFile, extractDepsFor, type FileKind } from "@/lib/extract/files";
 import {
@@ -42,7 +43,7 @@ const fallo = (msg: string, status: number) => NextResponse.json({ error: msg },
 const motivo = (e: unknown) => (e instanceof Error ? e.message : "Error");
 
 /** El LLM real (Gemini) como función inyectable de construirTailor. */
-function geminiOfertaLLM(apiKey?: string, apiKey3?: string): OfertaLLM {
+function geminiOfertaLLM(apiKey?: string, apiKey3?: string, mem?: ContextoMemoria): OfertaLLM {
   const SYS =
     "Eres un asistente que ADAPTA un CV a una OFERTA de empleo. Te doy el TEXTO DEL AVISO y los items " +
     "del master del candidato (cada uno con su id, tipo y texto). Tu tarea, y NINGUNA parte es escribir " +
@@ -56,15 +57,25 @@ function geminiOfertaLLM(apiKey?: string, apiKey3?: string): OfertaLLM {
     "tecnología que no esté YA en el texto del item. El aviso NO autoriza a añadir hechos al CV.\n" +
     "NUNCA inventes ids, cifras ni tecnologías. NUNCA des un porcentaje ni un score de encaje.";
   return async ({ offerText, items }) => {
-    const { object } = await generateObject({
-      model: modeloPara("redaccion-preserva-hechos", apiKey, undefined, undefined, apiKey3),
+    const model = modeloPara("redaccion-preserva-hechos", apiKey, undefined, undefined, apiKey3);
+    // Sin variante, los items SON el master con sus ids: con memoria (DA-M2) ya
+    // viajan en ella, cacheados, y no se repiten. Sin memoria, la lista de siempre.
+    const lista = mem?.memoria ? "(los de la MEMORIA DEL PERFIL, cada uno con su [id])" : lineasDelPrompt(items);
+    const r = await generateObject({
+      model,
       schema: OfertaPlanSchema,
       // El aviso se recorta para el prompt; la VERIFICACIÓN corre sobre el texto entero
       // (lo que el modelo cite saldrá de lo que vio, que es ⊆ del total).
-      prompt: `${SYS}\n\nAVISO:\n${offerText.slice(0, 16000)}\n\nITEMS DEL MASTER:\n${lineasDelPrompt(items)}`,
+      ...mensajesConMemoria({
+        memoria: mem?.memoria,
+        modelo: model,
+        sistema: SYS,
+        usuario: `AVISO:\n${offerText.slice(0, 16000)}\n\nITEMS DEL MASTER:\n${lista}`,
+      }),
       temperature: 0.2,
     });
-    return object;
+    await mem?.alUsar(r);
+    return r.object;
   };
 }
 
@@ -188,7 +199,7 @@ export async function POST(req: Request) {
       itemTailorDe({ id: m.id, item_id: m.id, kind: m.kind, data: masterData(m), enVariante: false }),
     );
 
-    const analisis = await construirTailor({ offerText: oferta.text, items }, { llm: geminiOfertaLLM(byok, byok3) });
+    const analisis = await construirTailor({ offerText: oferta.text, items }, { llm: geminiOfertaLLM(byok, byok3, await contextoMemoria(sb, user.id, "adaptar-aviso")) });
 
     // Los descartes de reformulación se registran en el servidor: si el modelo empieza
     // a inventar en masa, tiene que verse en los logs, no solo en la pantalla de quien lo sufre.

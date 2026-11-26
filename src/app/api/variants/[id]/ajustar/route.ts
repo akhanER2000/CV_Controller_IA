@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getVariant, getVariantItem, setAiOverride, buildVariantResumeData } from "@/lib/db/variants";
 import { geminiApiKey } from "@/lib/extract/llm";
 import { getUserLlmKey, getUserLlmKey3 } from "@/lib/account/byok";
+import { contextoMemoria, mensajesConMemoria, type ContextoMemoria } from "@/lib/ai/memoria";
 // Cuántas páginas quiere el usuario: 1, 2 o 3 (objetivoDe vive en autofit.ts, con
 // su test; un route.ts de Next no puede exportar nada que no sea del contrato).
 import { autofit, objetivoDe, plantillaDe } from "@/lib/cv/autofit";
@@ -47,7 +48,7 @@ const motivo = (e: unknown) => (e instanceof Error ? e.message : "Error");
  * El LLM real como función inyectable. Clave BYOK del usuario o del servidor.
  * apiKey3 = clave de Anthropic: con ella redacta Claude; sin ella, el fallback Gemini.
  */
-function geminiAjusteLLM(apiKey?: string, apiKey3?: string): AjusteLLM {
+function geminiAjusteLLM(apiKey?: string, apiKey3?: string, mem?: ContextoMemoria): AjusteLLM {
   const key = apiKey || geminiApiKey();
   if (!key) throw new Error("Falta GEMINI_API_KEY");
   // Acortar/seleccionar sin inventar es redaccion-preserva-hechos: por el registro.
@@ -67,16 +68,24 @@ function geminiAjusteLLM(apiKey?: string, apiKey3?: string): AjusteLLM {
     "propuesta que borra el dato que hacía valiosa la viñeta.\n" +
     "No inventes ids. No inventes cifras. No añadas tecnologías que no estén en el texto original.";
   return async ({ items, targetTitle, sobran, paginasObjetivo }) => {
-    const { object } = await generateObject({
+    // La memoria (DA-M2) va primero y cacheada; los items de la VARIANTE (sus ids y
+    // su texto con overrides) siguen en el mensaje: son lo que se acorta.
+    const r = await generateObject({
       model,
       schema: AjustePlanSchema,
-      prompt:
-        `${SYS}\n\nROL OBJETIVO: ${targetTitle || "(sin especificar)"}\n` +
-        `OBJETIVO: ${paginasObjetivo} páginas. SOBRAN ${sobran} LÍNEAS.\n\n` +
-        `ITEMS DE LA VARIANTE:\n${lineasDelPrompt(items)}`,
+      ...mensajesConMemoria({
+        memoria: mem?.memoria,
+        modelo: model,
+        sistema: SYS,
+        usuario:
+          `ROL OBJETIVO: ${targetTitle || "(sin especificar)"}\n` +
+          `OBJETIVO: ${paginasObjetivo} páginas. SOBRAN ${sobran} LÍNEAS.\n\n` +
+          `ITEMS DE LA VARIANTE:\n${lineasDelPrompt(items)}`,
+      }),
       temperature: 0.2,
     });
-    return object;
+    await mem?.alUsar(r);
+    return r.object;
   };
 }
 
@@ -167,7 +176,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
 
     const propuesta = await construirAjuste(
       { targetTitle, items, paginas: medida.porPagina.length, paginasObjetivo, sobran },
-      { llm: geminiAjusteLLM(byok, byok3) },
+      { llm: geminiAjusteLLM(byok, byok3, await contextoMemoria(sb, user.id, "ajustar")) },
     );
 
     // Los descartes se registran EN EL SERVIDOR además de viajar al cliente: si un
