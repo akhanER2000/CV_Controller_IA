@@ -43,6 +43,8 @@ export function BarraEditor({ ed }: { ed: Editor }) {
   const avisos: string[] = [];
   if (pageCount >= 3 && objetivo < 3) avisos.push(t("editor.pagesWarn").replace("{n}", String(pageCount)));
   if (objetivo === 3) avisos.push(t("editor.obj3Note"));
+  // Las reglas OBLIGATORIAS que no se cumplen van también en el chip de estado.
+  const reglasRotas = ed.estadoReglas.filter((r) => r.fuerza === "obligatoria" && r.cumple === false).map((r) => r.motivo);
 
   return (
     <div className="ed-bar" data-screen-label="editor-toolbar" ref={barra}>
@@ -147,6 +149,7 @@ export function BarraEditor({ ed }: { ed: Editor }) {
           err={ed.fitErr}
           notasIA={ed.notasIA}
           avisos={avisos}
+          reglas={reglasRotas}
           // UN CLIC (DA-A4): el servidor prueba todas las plantillas, la plantilla a
           // medida y por último los recortes, y APLICA la primera que cabe.
           onProponer={aj.ajustar}

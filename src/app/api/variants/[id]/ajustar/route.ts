@@ -25,7 +25,7 @@ import {
   type PlantillaUsuario,
 } from "@/lib/cv/plantillas-usuario";
 import { getTemplate } from "@/lib/cv/templates";
-import { obtenerReglas, type Reglas } from "@/lib/cv/reglas-ajuste";
+import { obtenerReglas, type Reglas } from "@/lib/cv/reglas";
 import { renderResumeToBuffer } from "@/lib/cv/ResumePDF";
 import {
   construirAjuste,

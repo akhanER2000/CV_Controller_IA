@@ -50,6 +50,8 @@ export function GuiaAjuste(props: {
   notasIA: string | null;
   /** avisos de páginas que antes iban en rojo sobre la vista previa: viven en el detalle */
   avisos?: readonly string[];
+  /** motivos de las reglas OBLIGATORIAS que el documento no cumple (estadoDeReglas) */
+  reglas?: readonly string[];
   onProponer: () => void;
   onSiguiente: () => void;
   /** lo que va en el hueco «acciones de IA» (Afinar con IA) */
@@ -95,9 +97,23 @@ export function GuiaAjuste(props: {
   const descartados = fit ? fit.descartados.filter((d) => d.tipo === "acortar") : [];
   const urgente = estado === "no-cabe" || estado === "excede";
   const avisos = props.avisos ?? [];
+  const reglasRotas = props.reglas ?? [];
+  const reglasTxt = reglasRotas.length
+    ? t(reglasRotas.length === 1 ? "editor.fluReglas1" : "editor.fluReglasN").replace("{n}", String(reglasRotas.length))
+    : "";
   // UN chip de estado (DA-V5): el color nunca va solo, el texto dice lo mismo.
+  // Una regla obligatoria sin cumplir lo pone en aviso aunque el documento quepa.
   const chip: EstadoChip =
-    estado === "cabe" ? "ok" : estado === "error" ? "error" : urgente || avisos.length ? "aviso" : "neutro";
+    estado === "error"
+      ? "error"
+      : reglasRotas.length
+        ? "aviso"
+        : estado === "cabe"
+          ? "ok"
+          : urgente || avisos.length
+            ? "aviso"
+            : "neutro";
+  const etiqueta = [corto, huecosTxt, reglasTxt].filter(Boolean).join(" · ");
 
   return (
     <div className="flu-guia" id="edGuia" role="group" aria-label={t("editor.fluAria")}>
@@ -106,7 +122,7 @@ export function GuiaAjuste(props: {
         onCambiar={setAbierto}
         botonId="edEstado"
         botonClase="flu-estado"
-        botonEtiqueta={t("editor.edEstadoAria").replace("{e}", huecosTxt ? `${corto} · ${huecosTxt}` : corto)}
+        botonEtiqueta={t("editor.edEstadoAria").replace("{e}", etiqueta)}
         ancho={380}
         boton={
           <>
@@ -114,6 +130,11 @@ export function GuiaAjuste(props: {
               <StatusChip estado={chip}>{corto}</StatusChip>
             </span>
             {huecosTxt && <span className="flu-cuenta">· {huecosTxt}</span>}
+            {reglasTxt && (
+              <span className="flu-cuenta flu-reglas" id="edReglasRotas">
+                · {reglasTxt}
+              </span>
+            )}
             <span className="chev" aria-hidden="true">
               ▾
             </span>
@@ -130,6 +151,16 @@ export function GuiaAjuste(props: {
               {a}
             </p>
           ))}
+          {reglasRotas.length > 0 && (
+            <>
+              <span className="t-overline">{t("editor.fluReglasT")}</span>
+              <ul className="flu-det-reglas">
+                {reglasRotas.map((m) => (
+                  <li key={m}>{m}</li>
+                ))}
+              </ul>
+            </>
+          )}
           {/* LAS MEDIDAS. Todo sale del PDF real o del autofit de ese PDF. */}
           {paginas > 0 && (
             <p>

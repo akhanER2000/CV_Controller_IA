@@ -19,6 +19,7 @@
 /* El indicador ES el StatusChip del sistema (ui.css · .u-status): punto + texto. */
 .flu-doc{display:inline-flex;align-items:center}
 .flu-cuenta{font:400 var(--fs-micro)/1 var(--font-mono);color:var(--text-muted)}
+.flu-cuenta.flu-reglas{color:var(--accent-text)}
 .flu-ajustar{height:32px;padding:0 var(--sp-4);font-size:var(--fs-micro)}
 .flu-pend{display:inline-flex;align-items:center;gap:var(--sp-2);white-space:nowrap;
   font:400 var(--fs-micro)/1 var(--font-mono);color:var(--text-subtle)}
