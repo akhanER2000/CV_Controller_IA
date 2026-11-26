@@ -23,7 +23,7 @@ import type { Editor } from "./useEditorVariante";
    Los avisos de páginas viven en el detalle del chip, no sobre la vista previa.
 
    LA BARRA NO SE MUEVE: lo que cambia de texto mientras algo carga (el chip de
-   estado, «Ajustar páginas») nunca encoge (useSinEncoger), «Afinar con IA» es un
+   estado) nunca encoge (useSinEncoger), «Ajustar páginas» va en AnchoFijo, «Afinar con IA» es un
    botón de ancho fijo con su panel anclado, y el progreso va en UN indicador
    flotante (ui/Progreso) que no ocupa sitio en la barra.
    ============================================================================ */
@@ -32,7 +32,8 @@ export function BarraEditor({ ed }: { ed: Editor }) {
   const { t, meta, variantId, objetivo, pageCount } = ed;
   const af = useAfinar(ed);
   const barra = useRef<HTMLDivElement>(null);
-  useSinEncoger(barra, ["#edEstado", ".flu-ajustar"], t);
+  // «.flu-ajustar» ya no hace falta: su etiqueta va en <AnchoFijo> (DA-EE3, DA-AC4).
+  useSinEncoger(barra, ["#edEstado"], t);
   const progreso = useProgresoBarra(ed, af);
   // Lo que antes se pintaba en rojo sobre el PDF: aquí, dentro del detalle.
   const avisos: string[] = [];
@@ -149,6 +150,8 @@ export function BarraEditor({ ed }: { ed: Editor }) {
             ed.runFit();
           }}
           onSiguiente={ed.irASiguiente}
+          // «Usar esta» de la cascada guarda la plantilla sin recargar (DA-AC4).
+          onUsarPlantilla={(id) => ed.savePresentation({ templateId: id })}
           ia={<AfinarIA ed={ed} af={af} />}
         />
         <span className="ed-bar-sp" />
