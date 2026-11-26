@@ -18,8 +18,10 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { supabaseEnabled } from "@/lib/supabase/config";
 import { useT } from "@/lib/i18n";
-import { Button, Card, EmptyState, PanelHeader } from "@/components/ui";
-import { CabezaPantalla } from "@/components/cuenta/CabezaPantalla";
+import { Button, Card, EmptyState, PageHeader, PanelHeader } from "@/components/ui";
+// Hoja de las pantallas de cuenta (.cu-pagina, .cu-fila…): antes llegaba
+// de rebote con CabezaPantalla; ahora se importa donde se usa.
+import "@/components/cuenta/cuenta.css";
 import "./cuenta.css";
 
 const AVATAR_MAX_BYTES = 2 * 1024 * 1024;
@@ -240,7 +242,7 @@ export function CuentaScreen() {
   return (
     <div className="c-page">
       <main className="cu-pagina cu-pagina--estrecha" data-screen-label="cuenta">
-        <CabezaPantalla titulo={t("cuenta.title")} sub={t("cuenta.subtitle")} />
+        <PageHeader titulo={t("cuenta.title")} sub={t("cuenta.subtitle")} />
 
         {!supabaseEnabled || (ready && !authed) ? (
           <EmptyState icono="ajustes" titulo={t("cuenta.title")} texto={t("cuenta.needAuth")} />

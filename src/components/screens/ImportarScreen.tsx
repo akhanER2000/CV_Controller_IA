@@ -7,7 +7,7 @@ import { AuroraTune, AURORA_HOJEO } from "@/components/Aurora";
 import { DropZone } from "@/components/DropZone";
 import { BloqueCopiable } from "@/components/BloqueCopiable";
 import { Breadcrumb, readOrigin, withOrigin } from "@/components/Breadcrumb";
-import { Button, Card, Chip, Icono, PanelHeader } from "@/components/ui";
+import { Button, Card, Chip, Icono, PageHeader, PanelHeader, StatusChip } from "@/components/ui";
 import { Pasos } from "@/components/cuenta/Pasos";
 import { createClient } from "@/lib/supabase/client";
 import { fileKindFromName, FILE_ACCEPT, type FileKind } from "@/lib/db/sources";
@@ -870,7 +870,7 @@ export function ImportarScreen() {
           de maqueta) se fue; el shell ya pinta todo eso. Lo que era PROPIO de la
           pantalla se queda en la página: la salida (?from=) y el paso en curso,
           que ahora son los pasos 1 · 2 · 3 visibles. */}
-      <div className="cu-pagina imp-pagina">
+      <div className="cu-pagina cu-pagina--estrecha imp-pagina">
         <div className="imp-top">
           {/* La salida: vuelve a donde estabas (?from=), no "al Panel". */}
           <Breadcrumb fallback={FALLBACK} current={t("nav.importar")} />
@@ -879,18 +879,27 @@ export function ImportarScreen() {
 
         {/* ═══ ESTADO: VOLCADO (ventana — la aurora asoma, en calma) ═══ */}
         <main className="imp-main c-window" id="stIdle" data-screen-label="importar-volcado" hidden={screen !== "idle"}>
-          <header className="cu-cabeza imp-cabeza">
-            <span className="cu-rotulo" id="ov" ref={ovRef}>
-              {t("importar.overline")}
-            </span>
-            <h1 className="cu-cabeza-t imp-h1" id="h1" ref={h1Ref}>
-              {t("importar.h1.pre")}
-              <em>{t("importar.h1.em")}</em>
-            </h1>
-            <p className="cu-cabeza-sub imp-sub" data-reveal style={{ "--d": "520ms" } as React.CSSProperties}>
-              {t("importar.sub")}
-            </p>
-          </header>
+          <PageHeader
+            className="imp-cabeza"
+            id="h1"
+            tituloRef={h1Ref}
+            rotulo={
+              <span id="ov" ref={ovRef}>
+                {t("importar.overline")}
+              </span>
+            }
+            titulo={
+              <>
+                {t("importar.h1.pre")}
+                <em>{t("importar.h1.em")}</em>
+              </>
+            }
+            sub={
+              <span className="imp-sub" data-reveal style={{ "--d": "520ms" } as React.CSSProperties}>
+                {t("importar.sub")}
+              </span>
+            }
+          />
 
           {/* ═══ EL ÍNDICE DE LAS TRES PUERTAS ═════════════════════════════
               Las tres van aquí arriba, con el mismo tamaño, y cada una lleva
@@ -1009,11 +1018,10 @@ export function ImportarScreen() {
               <span className="imp-k">{t("importar.detect.overline")}</span>
               <div className="imp-chips" id="chips">
                 {sources.map((s) => (
-                  <span className={`c-chip${s.ok ? " c-chip--ok" : ""}`} key={s.host + s.path}>
-                    <span className="dot" />
+                  <StatusChip estado={s.ok ? "ok" : "neutro"} key={s.host + s.path}>
                     <b>{s.label}</b>
                     <span>· {t(`importar.chip.${s.kind}`)}</span>
-                  </span>
+                  </StatusChip>
                 ))}
               </div>
             </div>

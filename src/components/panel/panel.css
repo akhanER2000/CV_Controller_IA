@@ -244,7 +244,7 @@ a.pn-fila-item:hover {
 
 @media (max-width: 768px) {
   .pn-pagina {
-    padding: var(--sp-3) var(--sp-4) calc(var(--sp-8) + 72px);
+    padding: var(--sp-3) var(--sp-4) var(--sp-8);
     gap: var(--sp-4);
   }
   .pn-kpis {

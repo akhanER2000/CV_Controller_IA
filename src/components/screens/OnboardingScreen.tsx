@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { AuroraTune, AURORA_HOJEO } from "@/components/Aurora";
 import { useT } from "@/lib/i18n";
-import { Chip, Icono, PanelHeader } from "@/components/ui";
+import { Chip, Icono, PageHeader, PanelHeader } from "@/components/ui";
 import { Pasos } from "@/components/cuenta/Pasos";
 import "./onboarding.css";
 
@@ -74,18 +74,27 @@ export function OnboardingScreen() {
           ]}
         />
 
-        <header className="ob-cabeza">
-          <span className="cu-rotulo" id="ov" ref={ovRef}>
-            {t("onboarding.overline")}
-          </span>
-          <h1 className="ob-h1" id="h1" ref={h1Ref}>
-            {t("onboarding.h1.pre")}
-            <em>{t("onboarding.h1.em")}</em>
-          </h1>
-          <p className="ob-sub" data-reveal style={{ "--d": "480ms" } as React.CSSProperties}>
-            {t("onboarding.sub")}
-          </p>
-        </header>
+        <PageHeader
+          className="ob-cabeza"
+          id="h1"
+          tituloRef={h1Ref}
+          rotulo={
+            <span id="ov" ref={ovRef}>
+              {t("onboarding.overline")}
+            </span>
+          }
+          titulo={
+            <>
+              {t("onboarding.h1.pre")}
+              <em>{t("onboarding.h1.em")}</em>
+            </>
+          }
+          sub={
+            <span data-reveal style={{ "--d": "480ms" } as React.CSSProperties}>
+              {t("onboarding.sub")}
+            </span>
+          }
+        />
 
         <div className="ob-doors">
           <button

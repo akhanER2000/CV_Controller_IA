@@ -10,9 +10,10 @@ import { createClient } from "@/lib/supabase/client";
 import { useT } from "@/lib/i18n";
 import { withOrigin } from "@/components/Breadcrumb";
 import { fileKindFromName, safeStorageName, type FileKind } from "@/lib/db/sources";
-import { Button, Card, Chip, EmptyState, PanelHeader } from "@/components/ui";
-import { CabezaPantalla } from "@/components/cuenta/CabezaPantalla";
-import { Estado, type EstadoValor } from "@/components/cuenta/Estado";
+import { Button, Card, Chip, EmptyState, PageHeader, PanelHeader, StatusChip, type EstadoChip } from "@/components/ui";
+// Hoja de las pantallas de cuenta (.cu-pagina, .cu-fila…): antes llegaba
+// de rebote con CabezaPantalla; ahora se importa donde se usa.
+import "@/components/cuenta/cuenta.css";
 import "./fuentes.css";
 
 /* ============================================================================
@@ -37,7 +38,7 @@ import "./fuentes.css";
 
    ★ FORJA v2 (rediseño de cuenta). Mismo cableado, otra piel: la página es
    .cu-pagina, cada fuente y cada puerta es una <Card> grafito, el estado de la
-   lectura es un <Estado> (punto + etiqueta) y el informe son baldosas. El
+   lectura es un <StatusChip> (punto + etiqueta) y el informe son baldosas. El
    <header class="c-header"> duplicado del shell se quitó (solo traía logo/nav).
    En modo local, toda cifra de la maqueta va rotulada «ejemplo».
    ============================================================================ */
@@ -150,13 +151,13 @@ function ReportChip({ v, k, warn, tag }: { v: string; k: string; warn?: boolean;
   );
 }
 
-/* ── Estado de la lectura → <Estado> (punto + etiqueta). ★ Una fuente «extraída»
-   con 0 ítems NO sale en línea: sale «a medias» (punto hueco), y el motivo lo
+/* ── Estado de la lectura → <StatusChip> (punto + etiqueta). ★ Una fuente «extraída»
+   con 0 ítems NO sale en línea: sale «a medias» (aviso), y el motivo lo
    pinta <SourceReport> justo debajo. Un estado desconocido tampoco se da por bueno. */
-function estadoDe(s: SourceView): EstadoValor {
-  if (s.status === "failed") return "fail";
-  if (s.status !== "extracted" && s.status !== "reviewed") return "warn";
-  return s.itemsExtracted === 0 ? "warn" : "ok";
+function estadoDe(s: SourceView): EstadoChip {
+  if (s.status === "failed") return "error";
+  if (s.status !== "extracted" && s.status !== "reviewed") return "aviso";
+  return s.itemsExtracted === 0 ? "aviso" : "ok";
 }
 
 /* ── EL INFORME POR FUENTE (bloque D · §1·§2) ─────────────────────────────────
@@ -166,7 +167,7 @@ function estadoDe(s: SourceView): EstadoValor {
    aparece— en vez de enseñar un cero inventado. Los recuentos del staging
    (ítems / duplicados / sin evidencia) SÍ se conocen siempre, así que sus ceros
    se muestran: «0 sin evidencia» tranquiliza, no es ruido.
-   El estado de la lectura ya no es un chip: va en la cabecera como <Estado>. */
+   El estado de la lectura ya no es un chip: va en la cabecera como <StatusChip>. */
 function SourceReport({ s, t }: { s: SourceView; t: (key: string) => string }) {
   const nf = (n: number) => n.toLocaleString("es-CL");
 
@@ -246,7 +247,7 @@ export function FuentesScreen() {
   const bootRef = useBoot<HTMLElement>();
   const t = useT();
   const kindLabel = (k: string) => (KIND_KEYS.has(k) ? t(`fuentes.kind.${k}`) : k);
-  // El estado de la lectura se rotula en la cabecera de cada tarjeta (<Estado>).
+  // El estado de la lectura se rotula en la cabecera de cada tarjeta (<StatusChip>).
   const statusLabel = (st: string) => (STATUS_KEYS.has(st) ? t(`fuentes.status.${st}`) : st);
 
   // Cliente de Supabase del navegador SOLO en modo Supabase (createClient exige
@@ -494,7 +495,7 @@ export function FuentesScreen() {
   // Cabecera de la pantalla (los dos modos). El nombre de la ruta ya lo pone la
   // barra superior del shell; aquí va la frase que dice qué se decide en Fuentes.
   const cabeza = (suffix: string) => (
-    <CabezaPantalla
+    <PageHeader
       titulo={t("fuentes.titulo")}
       sub={
         <>
@@ -819,7 +820,7 @@ export function FuentesScreen() {
                         <h3 className="nm">{name}</h3>
                         <div className="fu-tags">
                           <Chip>{kindLabel(s.kind)}</Chip>
-                          <Estado valor={estadoDe(s)}>{statusLabel(s.status)}</Estado>
+                          <StatusChip estado={estadoDe(s)}>{statusLabel(s.status)}</StatusChip>
                         </div>
                       </div>
                       <SourceReport s={s} t={t} />

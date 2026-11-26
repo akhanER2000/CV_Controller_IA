@@ -409,11 +409,14 @@ describe("pulido visual · el panel de conexiones en porcelana", () => {
     );
   });
 
+  // DA-V5: el chip de estado de Ajustes es ahora <StatusChip> (ui.css · .u-status).
+  const UI = lee("../src/components/ui/ui.css");
   it("2 · el punto hereda el color de su etiqueta y no declara ninguno propio", () => {
-    expect(AJUSTES).toMatch(/\.aj-dot\{[^}]*background:currentColor/);
+    expect(AJUSTES).not.toMatch(/aj-conn-badge|aj-dot/);
+    expect(UI).toMatch(/\.u-status-p[^{]*\{[^}]*background:\s*currentColor/);
     // Ninguna regla de estado le vuelve a poner un color de relleno a mano.
-    const conRelleno = [...sinComentarios(AJUSTES).matchAll(/([^{}]*\.aj-dot[^{}]*)\{([^{}]*)\}/g)]
-      .filter(([, , cuerpo]) => /background:\s*(?!transparent|currentColor)[^;]/.test(cuerpo!))
+    const conRelleno = [...sinComentarios(UI).matchAll(/([^{}]*\.u-status-p[^{}]*)\{([^{}]*)\}/g)]
+      .filter(([, , cuerpo]) => /background:(?!\s*(?:transparent|currentColor))\s*[^;\s]/.test(cuerpo!))
       .map(([, sel]) => sel!.trim());
     expect(
       conRelleno,
@@ -424,8 +427,9 @@ describe("pulido visual · el panel de conexiones en porcelana", () => {
   it("3 · «a medias» se distingue por FORMA, no solo por tono", () => {
     // Su etiqueta es --text-muted, el mismo gris del motivo que va debajo: sin una
     // diferencia de forma, el estado intermedio no se lee como estado.
-    expect(AJUSTES).toMatch(
-      /\.aj-conn-badge\.is-warn\s+\.aj-dot\{[^}]*background:transparent;[^}]*inset 0 0 0 2px currentColor/,
-    );
+    // «A medias» es aviso: relleno brasa frente al contorno de «en línea»; y el
+    // neutro (sin juicio) lleva el punto HUECO.
+    expect(UI).toMatch(/\.u-status--aviso\s*\{[^}]*background:\s*var\(--brasa-500\)/);
+    expect(UI).toMatch(/\.u-status--neutro\s+\.u-status-p\s*\{[^}]*background:\s*transparent;[^}]*inset 0 0 0 2px currentColor/);
   });
 });

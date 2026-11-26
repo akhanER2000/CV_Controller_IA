@@ -2,8 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { AuroraTune, AURORA_HOJEO } from "@/components/Aurora";
-import { Button, Chip } from "@/components/ui";
-import { CabezaPantalla } from "@/components/cuenta/CabezaPantalla";
+import { Button, Chip, PageHeader } from "@/components/ui";
 import { Pasos } from "@/components/cuenta/Pasos";
 import "./ingesta.css";
 
@@ -249,7 +248,7 @@ export function IngestaScreen() {
       <AuroraTune strength={AURORA_HOJEO} />
 
       <main className="cu-pagina cu-pagina--estrecha in-main c-window" data-screen-label="ingesta">
-        <CabezaPantalla
+        <PageHeader
           rotulo={<span id="hdStep">{hdStep}</span>}
           titulo={phase === "fin" ? "Listo. Ahora, tu turno." : "Leyendo tus fuentes"}
           sub={

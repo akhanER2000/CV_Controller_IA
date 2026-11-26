@@ -7,8 +7,10 @@ import { useLang, useT } from "@/lib/i18n";
 import { createClient } from "@/lib/supabase/client";
 import { AuroraTune, AURORA_HOJEO } from "@/components/Aurora";
 import { supabaseEnabled } from "@/lib/supabase/config";
-import { Button, Card, Chip, PanelHeader } from "@/components/ui";
-import { CabezaPantalla } from "@/components/cuenta/CabezaPantalla";
+import { Button, Card, Chip, PageHeader, PanelHeader, StatusChip } from "@/components/ui";
+// Hoja de las pantallas de cuenta (.cu-pagina, .cu-fila…): antes llegaba
+// de rebote con CabezaPantalla; ahora se importa donde se usa.
+import "@/components/cuenta/cuenta.css";
 import "./ajustes.css";
 
 /* ============================================================================
@@ -534,7 +536,7 @@ export function AjustesScreen() {
       <AuroraTune strength={AURORA_HOJEO} />
 
       <main className="cu-pagina cu-pagina--estrecha" data-screen-label="ajustes" ref={bootRef}>
-        <CabezaPantalla titulo={t("ajustes.title")} sub={t("ajustes.sub")} />
+        <PageHeader titulo={t("ajustes.title")} sub={t("ajustes.sub")} />
         <span role="status" aria-live="polite" className="aj-flash">
           {flash}
         </span>
@@ -891,10 +893,9 @@ export function AjustesScreen() {
                 <span role="list" className="aj-modelos">
                   {modelos.catalogo.modelos.map((m) => (
                     <span role="listitem" key={m.id} className="aj-modelo">
-                      <span className={`aj-conn-badge is-${m.responde ? "ok" : "fail"}`}>
-                        <span className="aj-dot" aria-hidden="true" />
+                      <StatusChip estado={m.responde ? "ok" : "error"}>
                         {m.responde ? t("ajustes.modelo.responde") : t("ajustes.modelo.caido")}
-                      </span>
+                      </StatusChip>
                       <b>{m.id}</b>
                       <span>
                         {m.responde
@@ -991,10 +992,9 @@ export function AjustesScreen() {
                         <p className="aj-conn-t">{t(`ajustes.conn.svc.${s.id}`)}</p>
                         {meta ? <p className="aj-conn-meta">{meta}</p> : null}
                       </div>
-                      <span className={`aj-conn-badge is-${s.status}`}>
-                        <span className="aj-dot" aria-hidden="true" />
+                      <StatusChip estado={s.status === "ok" ? "ok" : s.status === "fail" ? "error" : "aviso"}>
                         {statusLabel}
-                      </span>
+                      </StatusChip>
                     </div>
                     <p className="aj-conn-detail">{s.detail}</p>
                   </li>

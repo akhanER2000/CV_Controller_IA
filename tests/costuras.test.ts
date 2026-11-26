@@ -441,7 +441,8 @@ describe("costuras · «Actualizar»/«Mantener» no pueden volver sin endpoint"
   it("la señal de desactualización sigue existiendo: no se arregló ocultándola", () => {
     // El atajo tentador era quitar el punto y el panel. Eso no es honestidad,
     // es esconder el problema: el master SÍ cambió y el usuario debe saberlo.
-    expect(fuenteVariantes).toContain("c-pulse-dot");
+    // DA-V5: el punto que late vive ahora en <StatusChip pulso> (c-pulse-dot).
+    expect(fuenteVariantes).toMatch(/c-pulse-dot|<StatusChip estado=\S*\s+pulso\b/);
     expect(fuenteVariantes).toContain('t("variantes.metaOutdated")');
     expect(fuenteVariantes).toContain('t("variantes.diffOverline")');
     expect(variantes.es["variantes.metaOutdated"]?.trim()).toBeTruthy();

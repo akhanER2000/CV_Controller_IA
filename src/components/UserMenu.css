@@ -30,6 +30,10 @@
   --lt-w: 248px;
   --lt-gap: 16px;
   --lt-z: 50; /* sobre el header (10), bajo los overlays y modales (100) */
+  /* Alto que la barra inferior móvil le quita al contenido (0 fuera de móvil).
+     .sh-main lo reserva abajo y los flotantes (toasts, «ingesta en curso»,
+     atajos) lo suman a su `bottom` para no quedar debajo de la barra. */
+  --sh-barra-movil: 0px;
 }
 
 .sh-main {
@@ -275,6 +279,11 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+/* Con PageHeader en la pantalla, su h1 ya dice el nombre: la barra se queda
+   con las migas y no lo repite (DA-V5). */
+.sh-main:has(.u-page-h) .tb-titulo {
+  display: none;
+}
 
 .tb-buscar {
   position: relative;
@@ -486,15 +495,19 @@
 
 /* ── Barra inferior (<768px) ───────────────────────────────────────────── */
 @media (max-width: 767px) {
+  :root {
+    /* 64 de barra + 8 de margen inferior + 16 de aire, más la zona segura */
+    --sh-barra-movil: calc(64px + 8px + var(--sp-4) + env(safe-area-inset-bottom, 0px));
+  }
   .sh-main {
     padding-left: 0;
-    padding-bottom: 84px;
+    padding-bottom: var(--sh-barra-movil);
   }
   .lt-side {
     top: auto;
     left: 8px;
     right: 8px;
-    bottom: 8px;
+    bottom: calc(8px + env(safe-area-inset-bottom, 0px));
     width: auto;
     height: 64px;
     flex-direction: row;

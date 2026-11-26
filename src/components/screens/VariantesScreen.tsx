@@ -8,7 +8,7 @@ import { supabaseEnabled } from "@/lib/supabase/config";
 import { AuroraTune, AURORA_HOJEO } from "@/components/Aurora";
 import { useUndoToast } from "@/components/UndoToast";
 import { Breadcrumb, ORIGIN_PARAM, isInternalAppPath } from "@/components/Breadcrumb";
-import { Button, Card, Chip, EmptyState, Icono, Tabs } from "@/components/ui";
+import { Button, Card, Chip, EmptyState, Icono, PageHeader, StatusChip, Tabs } from "@/components/ui";
 import { filtrarVariantes, type EstadoVariante } from "@/components/panel/datos";
 import "@/components/panel/panel.css";
 import "./variantes.css";
@@ -174,6 +174,9 @@ export function VariantesScreen() {
   const [renaming, setRenaming] = useState<number | null>(null);
   const [nameDraft, setNameDraft] = useState("");
   const [busyId, setBusyId] = useState<string | null>(null);
+  // Descarga del PDF de una fila: id en curso y, si falla, el motivo junto al botón.
+  const [pdfId, setPdfId] = useState<string | null>(null);
+  const [pdfErr, setPdfErr] = useState<{ id: string; msg: string } | null>(null);
   const [draftIds, setDraftIds] = useState<Set<string>>(new Set());
   // Conteos reales por variante (GET /api/variants/[id]?counts=1 → variant_items):
   // referencias al master y overrides tuyos. Sin conteo, la tarjeta no pinta cifra.
@@ -587,6 +590,43 @@ export function VariantesScreen() {
     }
   }
 
+  // PDF de una variante: MISMO endpoint que el editor (/api/cv), armado en el
+  // servidor desde la variante (variantId) y con el mismo objetivo de páginas
+  // que guardó el editor (2 si no hay ninguno, como el editor).
+  const descargarPdf = async (v: Variant) => {
+    if (!v.id || pdfId) return;
+    setPdfId(v.id);
+    setPdfErr(null);
+    setAnnounce(t("variantes.pdfGen"));
+    try {
+      const res = await fetch("/api/cv", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ variantId: v.id, download: true, paginas: paginas[v.id] ?? 2 }),
+      });
+      if (!res.ok) {
+        const j = (await res.json().catch(() => null)) as { error?: string } | null;
+        throw new Error(j?.error || `HTTP ${res.status}`);
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      const safe = v.nm.replace(/[^a-z0-9]+/gi, "-").replace(/^-|-$/g, "") || "corpus";
+      a.download = `CV-${safe}.pdf`;
+      a.click();
+      // Revocar en el mismo tick corta la descarga en algunos navegadores.
+      setTimeout(() => URL.revokeObjectURL(url), 30_000);
+      setAnnounce(t("variantes.pdfDone"));
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      setPdfErr({ id: v.id, msg });
+      setAnnounce(t("variantes.pdfErr"));
+    } finally {
+      setPdfId(null);
+    }
+  };
+
   // Objetivo de páginas de cada variante: lo guarda el editor en localStorage
   // (corpus.paginas.<id>, DA-15). Se lee ya montado (leerlo al renderizar haría
   // discrepar servidor y cliente) y puede lanzar en modo privado: entonces no hay
@@ -821,6 +861,7 @@ export function VariantesScreen() {
         <div className="u-sr" aria-live="polite">
           {announce}
         </div>
+        <PageHeader titulo={t("nav.variantes")} sub={t("variantes.v2.pageSub")} />
 
         {loading ? (
           <p className="t-overline" role="status">
@@ -832,9 +873,9 @@ export function VariantesScreen() {
           <Card material="brasa" grande as="section" className="vr-hero" aria-labelledby="vr-hero-t">
             <div className="vr-hero-txt">
               <p className="pn-over">{t("variantes.v2.heroOver")}</p>
-              <h1 className="pn-big" id="vr-hero-t">
+              <h2 className="pn-big" id="vr-hero-t">
                 {t("variantes.v2.heroTitle")}
-              </h1>
+              </h2>
               <p className="pn-sub">{t("variantes.v2.heroSub")}</p>
             </div>
             {createPanel}
@@ -962,17 +1003,16 @@ export function VariantesScreen() {
                         </span>
                         <span className="vr-chips">
                           {v.old ? (
-                            <Chip tono="brasa">
-                              <span className="c-pulse-dot" title={t("variantes.dotTitle")} aria-hidden="true" />{" "}
+                            <StatusChip estado="aviso" pulso title={t("variantes.dotTitle")}>
                               {t("variantes.metaOutdated")}
-                            </Chip>
+                            </StatusChip>
                           ) : (
-                            <Chip>{t("variantes.metaUpToDate")}</Chip>
+                            <StatusChip estado="ok">{t("variantes.metaUpToDate")}</StatusChip>
                           )}
                           {v.id && draftIds.has(v.id) ? (
-                            <span className="vr-chip-draft" title={t("variantes.draftTitle")}>
+                            <StatusChip estado="neutro" title={t("variantes.draftTitle")}>
                               {t("variantes.draftChip")}
-                            </span>
+                            </StatusChip>
                           ) : null}
                           {c ? (
                             <Chip>{t("variantes.v2.refs").replace("{n}", String(c.itemCount))}</Chip>
@@ -999,9 +1039,21 @@ export function VariantesScreen() {
                           <Icono nombre="doc" />
                           {t("variantes.v2.open")}
                         </Link>
-                        <button type="button" className="pdf u-btn u-btn--grafito" title={t("variantes.pdfTitle")}>
-                          {t("variantes.pdfBtn")}
+                        <button
+                          type="button"
+                          className="pdf u-btn u-btn--grafito"
+                          title={t("variantes.pdfTitle")}
+                          disabled={!v.id || pdfId === v.id}
+                          aria-busy={pdfId === v.id}
+                          onClick={() => void descargarPdf(v)}
+                        >
+                          {pdfId === v.id ? t("variantes.pdfGen") : t("variantes.pdfBtn")}
                         </button>
+                        {pdfErr && pdfErr.id === v.id ? (
+                          <span className="vr-pdf-err" role="alert">
+                            {t("variantes.pdfErr")} {pdfErr.msg}
+                          </span>
+                        ) : null}
                         {supabaseEnabled && v.id && (
                           <span className="vr-acts">
                             <button

@@ -69,12 +69,13 @@
 .db-fcell .new:hover{text-decoration:underline}
 .db-fcell .quiet{margin-top:8px;font:400 var(--fs-micro)/1 var(--font-mono);color:var(--text-subtle)}
 /* vacío — día 1: ni deprimente ni fanfarria */
-.db-empty{flex:1;display:none;flex-direction:column;align-items:center;justify-content:center;
-  text-align:center;padding:80px var(--container-pad) 120px}
+/* DA-V5: el día 1 también va a ancho completo y alineado a la izquierda, con
+   el margen de .pn-pagina y su cabecera en PageHeader. */
+.db-empty{flex:1;display:none;flex-direction:column;align-items:flex-start;
+  padding:var(--sp-4) var(--sp-4) var(--sp-8) 8px}
 .db-empty.show{display:flex}
-.db-empty h1{font-size:var(--fs-display);max-width:18ch}
-.db-empty .sub{margin-top:16px;color:var(--text-muted);font-size:var(--fs-lead);max-width:46ch}
-.db-doors{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:44px;width:100%;max-width:720px;text-align:left}
+@media (max-width:768px){.db-empty{padding:var(--sp-3) var(--sp-4) var(--sp-8)}}
+.db-doors{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:var(--sp-6);width:100%;max-width:880px;text-align:left}
 /* Las dos puertas del día 1. ANTES 24px arriba / 26px a los lados y abajo →
    DESPUÉS var(--sp-5)=24px en los cuatro lados: −2px en tres lados. El 26 no
    significaba nada (ni escala ni óptica: la tarjeta no lleva sombra que compensar)

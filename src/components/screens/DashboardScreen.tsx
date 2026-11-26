@@ -6,7 +6,7 @@ import { AuroraTune, AURORA_HOJEO, AURORA_TRABAJO } from "@/components/Aurora";
 import { useT, useLang } from "@/lib/i18n";
 import { useBoot } from "@/lib/corpus/runtime";
 import { supabaseEnabled } from "@/lib/supabase/config";
-import { Anillo, Area, Barras, Button, Card, Chip, EmptyState, Icono, KpiCard, PanelHeader, type Dato } from "@/components/ui";
+import { Anillo, Area, Barras, Button, Card, EmptyState, Icono, KpiCard, PageHeader, PanelHeader, StatusChip, type Dato } from "@/components/ui";
 import { itemsPorTipo, ultimaActualizacion, variantesPorMes, verificacion, type ItemLite } from "@/components/panel/datos";
 import "@/components/panel/panel.css";
 import "./dashboard.css";
@@ -151,9 +151,11 @@ function FilaVariante({ v }: { v: VariantView }) {
           </span>
         </span>
         {v.outdated ? (
-          <Chip tono="brasa">{t("dashboard.variant.outdatedDot")}</Chip>
+          <StatusChip estado="aviso" pulso>
+            {t("dashboard.variant.outdatedDot")}
+          </StatusChip>
         ) : (
-          <Chip>{t("dashboard.variant.upToDate")}</Chip>
+          <StatusChip estado="ok">{t("dashboard.variant.upToDate")}</StatusChip>
         )}
       </Link>
     </li>
@@ -163,12 +165,19 @@ function FilaVariante({ v }: { v: VariantView }) {
 export function DashboardScreen() {
   const t = useT();
   const { lang } = useLang();
-  const [data, setData] = useState<DashData | null>(supabaseEnabled ? null : DEMO);
-  const [loading, setLoading] = useState(supabaseEnabled);
+  // El primer render es SIEMPRE «cargando», en servidor y en cliente: la maqueta
+  // del modo local y los datos reales llegan en efecto. Así el HTML del servidor
+  // y la primera pasada del cliente coinciden (sin aviso de hidratación).
+  const [data, setData] = useState<DashData | null>(null);
+  const [loading, setLoading] = useState(true);
 
   // Carga real (modo Supabase): panel + variantes + fuentes en paralelo.
   useEffect(() => {
-    if (!supabaseEnabled) return;
+    if (!supabaseEnabled) {
+      setData(DEMO);
+      setLoading(false);
+      return;
+    }
     let active = true;
     (async () => {
       try {
@@ -260,6 +269,7 @@ export function DashboardScreen() {
   if (loading || !data) {
     return (
       <main className="pn-pagina" data-screen-label="dashboard-cargando">
+        <PageHeader titulo={t("nav.panel")} sub={t("dashboard.v2.pageSub")} />
         <p className="t-overline" role="status">
           {t("dashboard.loading")}
         </p>
@@ -273,12 +283,17 @@ export function DashboardScreen() {
       <>
         <AuroraTune strength={AURORA_HOJEO} />
         <main className="db-empty c-window show" data-screen-label="dashboard-vacio" ref={emptyRef}>
-          <span className="t-overline">{t("dashboard.empty.overline")}</span>
-          <h1 style={{ marginTop: "20px" }}>
-            {t("dashboard.empty.h1.pre")}
-            <em>{t("dashboard.empty.h1.em")}</em>
-          </h1>
-          <p className="sub">{t("dashboard.empty.sub")}</p>
+          <PageHeader
+            className="db-empty-h"
+            rotulo={t("dashboard.empty.overline")}
+            titulo={
+              <>
+                {t("dashboard.empty.h1.pre")}
+                <em>{t("dashboard.empty.h1.em")}</em>
+              </>
+            }
+            sub={t("dashboard.empty.sub")}
+          />
           <div className="db-doors">
             <Link className="c-panel c-lift db-door" href="/app/importar">
               <span className="t-overline">{t("dashboard.empty.doorA.overline")}</span>
@@ -327,6 +342,7 @@ export function DashboardScreen() {
     <>
       <AuroraTune strength={AURORA_TRABAJO} />
       <main className="pn-pagina db-v2" data-screen-label="dashboard-denso" ref={bootRef}>
+        <PageHeader titulo={t("nav.panel")} sub={t("dashboard.v2.pageSub")} />
         <section className="pn-kpis" aria-label={t("nav.panel")}>
           <KpiCard etiqueta={t("dashboard.v2.kpi.items")} valor={data.masterItems} fuente={fu("master")} icono="master" />
           <KpiCard etiqueta={t("dashboard.v2.kpi.variants")} valor={data.variants.length} fuente={fu("variants")} icono="variantes" />

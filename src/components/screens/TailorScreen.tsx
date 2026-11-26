@@ -10,8 +10,7 @@ import { fileKindFromName, FILE_ACCEPT, type FileKind } from "@/lib/db/sources";
 import { AuroraTune, AURORA_TRABAJO } from "@/components/Aurora";
 import { Breadcrumb } from "@/components/Breadcrumb";
 import { DropZone } from "@/components/DropZone";
-import { Button, Card, Chip, PanelHeader } from "@/components/ui";
-import { CabezaPantalla } from "@/components/cuenta/CabezaPantalla";
+import { Button, Card, Chip, PageHeader, PanelHeader } from "@/components/ui";
 import { Pasos } from "@/components/cuenta/Pasos";
 import "./tailor.css";
 
@@ -288,7 +287,7 @@ export function TailorScreen() {
           <Pasos pasos={pasos} actual={pasoActual} etiqueta={t("tailor.pasos.aria")} />
         </div>
 
-        <CabezaPantalla
+        <PageHeader
           rotulo={t("tailor.voidOverline")}
           titulo={analisis ? t("tailor.resultOverline") : t("tailor.voidTitle")}
           sub={analisis ? undefined : t("tailor.voidBody")}

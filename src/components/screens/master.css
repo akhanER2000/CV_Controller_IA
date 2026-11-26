@@ -435,3 +435,11 @@
 /* Item con algún campo rechazado: se marca la fila entera, para que al aplicar en
    lote se vea CUÁL va incompleto sin abrir nada. */
 .ms-tr__row--parcial{border-style:dashed}
+
+/* DA-V5 · ancho completo dentro del shell, con el margen del Panel (.pn-pagina),
+   y la cabecera de pantalla (PageHeader) arriba de todo. */
+.ms-page .c-container,
+.ms-page .ms-kpis{max-width:none;margin-inline:0;padding-inline:8px var(--sp-4)}
+.ms-cabeza{padding-top:var(--sp-4)}
+.ms-cabeza-b{color:var(--text);font-weight:500}
+@media (max-width:768px){.ms-page .c-container,.ms-page .ms-kpis{padding-inline:var(--sp-4)}}

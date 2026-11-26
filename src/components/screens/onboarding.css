@@ -1,11 +1,9 @@
 /* ── Onboarding · Forja v2 — dos puertas, ninguna de segunda ──
    Página y pasos de cuenta.css; las puertas son tarjetas grafito de ui/ (u-card)
    hechas <button>/<a>. Solo tokens. (Versión anterior en _to_delete/pantallas-cuenta/.) */
-.ob-main{align-items:center;text-align:center}
-.ob-main .cu-pasos{align-self:center}
-.ob-cabeza{display:flex;flex-direction:column;align-items:center;gap:var(--sp-3);margin-top:var(--sp-4)}
-.ob-h1{font:500 var(--fs-display)/1.08 var(--font-display);letter-spacing:-.015em;max-width:20ch;color:var(--text)}
-.ob-sub{color:var(--text-muted);font-size:var(--fs-lead);line-height:1.6;max-width:52ch}
+/* DA-V5: a ancho completo y alineada a la izquierda, como el resto; la
+   cabecera es PageHeader. */
+.ob-main .cu-pasos{align-self:flex-start}
 
 .ob-doors{display:grid;grid-template-columns:1fr 1fr;gap:var(--sp-4);margin-top:var(--sp-5);width:100%;max-width:880px;text-align:left}
 .ob-door{display:flex;flex-direction:column;align-items:flex-start;gap:var(--sp-3);width:100%;text-align:left;font:inherit;cursor:pointer;
@@ -35,5 +33,4 @@
 @media (max-width:767px){
   .ob-doors{grid-template-columns:1fr}
   .ob-tpl-rejilla{grid-template-columns:1fr}
-  .ob-h1{font-size:34px}
 }

@@ -1,6 +1,9 @@
 // C5 · recorrido completo de pantallas-forja-v2 con la cuenta de prueba LOCAL.
-// Panel → Master → Revisión → Variantes → Editor (3 páginas + descargar PDF) →
-// Importar → Ajustes → Salud, en escritorio (1440) y móvil (390).
+// Panel → Master → Revisión → Variantes (PDF de la fila) → Editor (3 páginas +
+// descargar PDF) → Importar → Ajustes → Salud → Fuentes → Ingesta → Adaptar →
+// Onboarding → Cuenta, en escritorio (1440) y móvil (390).
+// coherencia-visual (DA-V5): además mide, en móvil, si la barra inferior tapa
+// contenido al final del scroll (tapados) y guarda esa vista como *-movil-fin.png.
 // Uso: node prompts/lotes-fable5/_diseno/forja-v2/recorrido/recorrido.mjs [baseURL]
 // Requiere `npm run dev:local` (DA-V3: nunca contra el Supabase remoto).
 // Además de la captura, mide en el DOM dos defectos: texto CORTADO (un bloque de
@@ -89,6 +92,28 @@ function medir() {
   return { cortados, superpuestos, anchoDoc: document.documentElement.scrollWidth, anchoVista: innerWidth };
 }
 
+/** Corre en la página ya desplazada al final: hojas de texto o controles que
+ *  quedan debajo de la barra inferior fija (.lt-side) en móvil. */
+function tapadosPorBarra() {
+  const barra = document.querySelector(".lt-side");
+  if (!barra) return [];
+  const b = barra.getBoundingClientRect();
+  if (getComputedStyle(barra).position !== "fixed" || b.top > innerHeight - 10) return [];
+  const out = [];
+  for (const el of document.querySelectorAll(".sh-main main *, .sh-main .c-page *")) {
+    if (barra.contains(el) || el.closest('[aria-hidden="true"], [hidden], .u-sr')) continue;
+    const propio = [...el.childNodes].some((n) => n.nodeType === 3 && n.textContent.trim()) || /^(BUTTON|A|INPUT|TEXTAREA|SELECT)$/.test(el.tagName);
+    if (!propio) continue;
+    const cs = getComputedStyle(el);
+    if (cs.visibility === "hidden" || cs.display === "none" || cs.position === "fixed") continue;
+    const r = el.getBoundingClientRect();
+    if (r.width < 2 || r.height < 2) continue;
+    if (r.bottom > b.top + 2 && r.top < b.bottom) out.push((el.innerText || el.tagName).trim().slice(0, 50));
+    if (out.length > 10) break;
+  }
+  return out;
+}
+
 const navegador = await chromium.launch();
 const informe = { fecha: new Date().toISOString(), base: BASE, vistas: [], errores: [] };
 for (const t of TAMANOS) {
@@ -102,12 +127,12 @@ for (const t of TAMANOS) {
   });
   const pag = await ctx.newPage();
   pag.on("pageerror", (e) => informe.errores.push(`${t.sufijo} ${pag.url()}: ${e.message.slice(0, 200)}`));
-  await pag.goto(BASE + "/login", { waitUntil: "networkidle", timeout: 120_000 });
-  await pag.waitForTimeout(1500);
+  await pag.goto(BASE + "/login", { waitUntil: "load", timeout: 240_000 });
+  await pag.waitForTimeout(4000);
   await pag.locator("#em").fill(cuenta.email);
   await pag.locator("#pw").fill(cuenta.password);
   await pag.locator("#auGo").click();
-  await pag.waitForURL(/\/app/, { timeout: 60_000 });
+  await pag.waitForURL(/\/app/, { timeout: 240_000 });
 
   const { variants = [] } = await (await pag.request.get(BASE + "/api/variants")).json();
   if (!variants.length) throw new Error("la cuenta de prueba no tiene variantes: corre antes pantallas/capturas.mjs");
@@ -122,13 +147,24 @@ for (const t of TAMANOS) {
     { n: "06-importar", ruta: "/app/importar" },
     { n: "07-ajustes", ruta: "/app/ajustes" },
     { n: "08-salud", ruta: `/app/variantes/${varId}/salud` },
+    { n: "09-fuentes", ruta: "/app/fuentes" },
+    { n: "10-ingesta", ruta: "/app/ingesta" },
+    { n: "11-adaptar", ruta: `/app/variantes/${varId}/tailor` },
+    { n: "12-onboarding", ruta: "/app/onboarding" },
+    { n: "13-cuenta", ruta: "/app/cuenta" },
   ];
   for (const p of PASOS) {
     for (let intento = 1; intento <= 3; intento++) {
       let fallo = false;
       const alFallar = () => (fallo = true);
       pag.on("pageerror", alFallar);
-      const r = await pag.goto(BASE + p.ruta, { waitUntil: "networkidle", timeout: 120_000 });
+      // `load` y no `networkidle`: Variantes mantiene peticiones vivas y nunca
+      // queda en reposo de red; lo que importa es que la pantalla termine de cargar.
+      const r = await pag.goto(BASE + p.ruta, { waitUntil: "load", timeout: 180_000 }).catch((e) => {
+        fallo = true;
+        informe.errores.push(`${t.sufijo} ${p.ruta}: ${String(e.message).split(/\r?\n/)[0]}`);
+        return null;
+      });
       if (!r || r.status() >= 400) informe.errores.push(`${p.ruta} → HTTP ${r?.status()}`);
       const cargo = await pag
         .waitForFunction(() => !/Leyendo|Cargando|Reading|Loading/i.test(document.querySelector("main")?.innerText ?? ""), null, { timeout: 30_000 })
@@ -174,8 +210,31 @@ for (const t of TAMANOS) {
       } else extra.pdf = "botón no visible";
       await pag.waitForTimeout(1000);
     }
+    if (p.n === "04-variantes") {
+      // El botón PDF de la fila descarga el PDF de ESA variante (mismo /api/cv).
+      const pdf = pag.locator(".vr-acciones .pdf").first();
+      if (await pdf.isVisible().catch(() => false)) {
+        const espera = pag.waitForEvent("download", { timeout: 60_000 }).catch(() => null);
+        await pdf.click();
+        const d = await espera;
+        if (d) {
+          await d.saveAs(path.join(OUT, `04-variantes-${t.sufijo}.pdf`));
+          extra.pdf = d.suggestedFilename();
+        } else {
+          extra.pdf = "SIN descarga";
+          informe.errores.push(`${t.sufijo} variantes: el botón PDF no descargó`);
+        }
+      } else extra.pdf = "botón no visible";
+    }
     await pag.waitForTimeout(1200);
     const m = await pag.evaluate(medir);
+    if (t.movil) {
+      await pag.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+      await pag.waitForTimeout(500);
+      m.tapados = await pag.evaluate(tapadosPorBarra);
+      await pag.screenshot({ path: path.join(OUT, `${p.n}-${t.sufijo}-fin.png`) });
+      await pag.evaluate(() => window.scrollTo(0, 0));
+    }
     informe.vistas.push({ vista: `${p.n}-${t.sufijo}`, ...extra, ...m });
     await pag.screenshot({ path: path.join(OUT, `${p.n}-${t.sufijo}.png`), fullPage: true });
   }
@@ -185,6 +244,7 @@ await navegador.close();
 writeFileSync(path.join(OUT, "informe.json"), JSON.stringify(informe, null, 2) + "\n", "utf8");
 for (const v of informe.vistas) {
   const desborde = v.anchoDoc > v.anchoVista ? ` DESBORDE ${v.anchoDoc}>${v.anchoVista}` : "";
-  console.log(`${v.vista}: cortados ${v.cortados.filter((c) => !c.clamp).length} · superpuestos ${v.superpuestos.length}${desborde}${v.pdf ? ` · pdf ${v.pdf} · 3 págs ${v.tresPaginas}` : ""}`);
+  const tap = v.tapados ? ` · tapados ${v.tapados.length}` : "";
+  console.log(`${v.vista}: cortados ${v.cortados.filter((c) => !c.clamp).length} · superpuestos ${v.superpuestos.length}${tap}${desborde}${v.pdf ? ` · pdf ${v.pdf}${v.tresPaginas ? ` · 3 págs ${v.tresPaginas}` : ""}` : ""}`);
 }
 console.log(informe.errores.length ? "ERRORES:\n" + informe.errores.join("\n") : "sin errores de página");

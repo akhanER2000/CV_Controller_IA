@@ -268,3 +268,9 @@ body{background:var(--bg)}
 .stg-kpis{margin-top:var(--sp-4);margin-bottom:var(--sp-4)}
 .stg-buscar{flex:0 1 280px}
 .stg-g .stg-card{margin-top:var(--sp-3)}
+
+/* DA-V5 · ancho completo dentro del shell, con el margen del Panel (.pn-pagina);
+   la cabecera de pantalla es PageHeader. */
+.stg-page .c-container{max-width:none;margin-inline:0;padding-inline:8px var(--sp-4)}
+.stg-cabeza{padding-top:var(--sp-3);padding-bottom:var(--sp-4)}
+@media (max-width:768px){.stg-page .c-container{padding-inline:var(--sp-4)}}

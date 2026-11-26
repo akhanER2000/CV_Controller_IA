@@ -8,7 +8,7 @@ import { supabaseEnabled } from "@/lib/supabase/config";
 import { normalizeDateRange, type DateRange } from "@/lib/extract/dates";
 import { AuroraTune, AURORA_HOJEO, AURORA_TRABAJO } from "@/components/Aurora";
 import { useUndoToast } from "@/components/UndoToast";
-import { Card, KpiCard } from "@/components/ui";
+import { Card, KpiCard, PageHeader } from "@/components/ui";
 import { SeccionPlegable } from "@/components/panel/SeccionPlegable";
 import "@/components/panel/panel.css";
 import {
@@ -3705,6 +3705,17 @@ export function MasterScreen() {
       {/* El registro poblado es trabajo denso; vacío es una sala de puertas. */}
       <AuroraTune strength={isEmpty ? AURORA_HOJEO : AURORA_TRABAJO} />
 
+      <div className="c-container ms-cabeza">
+        <PageHeader
+          titulo={t("nav.master")}
+          sub={
+            <>
+              {t("master.intro.a")} <b className="ms-cabeza-b">{t("master.intro.b")}</b>
+              {t("master.intro.c")}
+            </>
+          }
+        />
+      </div>
 
       {/* Fila KPI (Forja v2). Cada cifra sale del registro cargado de
           GET /api/master (getMasterItems): la misma vista `v` que pinta la página. */}
@@ -3754,13 +3765,8 @@ export function MasterScreen() {
       <main className="ms-main c-wall" data-screen-label="master" ref={mainRef}>
         <div className="c-container" id="body">
           <div
-            style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: "16px", flexWrap: "wrap" }}
+            style={{ display: "flex", alignItems: "baseline", justifyContent: "flex-start", gap: "16px", flexWrap: "wrap" }}
           >
-            <p style={{ color: "var(--text-muted)", fontSize: "var(--fs-ui)", maxWidth: "64ch" }}>
-              {t("master.intro.a")}{" "}
-              <b style={{ color: "var(--text)", fontWeight: 500 }}>{t("master.intro.b")}</b>
-              {t("master.intro.c")}
-            </p>
             <div className="ms-actions">
               {/* C · LA TERCERA VÍA, también desde aquí. El .md en formato
                   corpus/1 es el mismo fichero que Corpus vuelve a leer SIN IA:

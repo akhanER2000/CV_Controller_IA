@@ -7,7 +7,7 @@ import { AuroraTune, AURORA_TRABAJO } from "@/components/Aurora";
 import { Breadcrumb, withOrigin } from "@/components/Breadcrumb";
 import { stagingProgress, ZERO_COUNTS, type StagingCounts } from "@/lib/db/staging-counts";
 import { readMergeProposal, type MergeProposal } from "@/lib/db/sources";
-import { Icono, KpiCard } from "@/components/ui";
+import { Icono, KpiCard, PageHeader } from "@/components/ui";
 import { SeccionPlegable } from "@/components/panel/SeccionPlegable";
 import "@/components/panel/panel.css";
 import "./staging.css";
@@ -754,8 +754,9 @@ export function StagingScreen() {
             ya escribió en el servidor, así que al regresar la cola se
             recarga con exactamente lo que quedaba pendiente. */}
         <Breadcrumb fallback={FALLBACK} current={t("nav.staging")} />
-        <span className="stg-hd-sep stg-hd-sep--step" aria-hidden="true" />
-        <span className="stg-hd-step">{t("staging.microStep")}</span>
+      </div>
+      <div className="c-container stg-cabeza">
+        <PageHeader titulo={t("nav.staging")} rotulo={t("staging.microStep")} />
       </div>
 
       {/* Fila KPI (Forja v2). Las tres cifras salen de GET /api/staging: la cola
@@ -771,7 +772,6 @@ export function StagingScreen() {
 
       <div className="stg-sub" data-screen-label="staging-cabecera">
         <div className="c-container">
-          <span className="stg-title">{t("staging.title")}</span>
           <div className="stg-nums">
             <span>
               <b>{pend}</b> {t("staging.pending")}

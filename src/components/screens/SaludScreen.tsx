@@ -4,8 +4,10 @@ import { useParams } from "next/navigation";
 import { useT } from "@/lib/i18n";
 import { AuroraTune, AURORA_TRABAJO } from "@/components/Aurora";
 import { Breadcrumb } from "@/components/Breadcrumb";
-import { Button, Card, Chip, Icono } from "@/components/ui";
-import { CabezaPantalla } from "@/components/cuenta/CabezaPantalla";
+import { Button, Card, Icono, PageHeader, StatusChip } from "@/components/ui";
+// Hoja de las pantallas de cuenta (.cu-pagina, .cu-fila…): antes llegaba
+// de rebote con CabezaPantalla; ahora se importa donde se usa.
+import "@/components/cuenta/cuenta.css";
 import "./salud.css";
 
 /* ============================================================================
@@ -89,12 +91,12 @@ export function SaludScreen() {
           <Breadcrumb fallback={volverA} />
           {/* Donde antes iba «4 hallazgos · 0 bloqueantes» —un conteo derivado de
               datos inventados— va la verdad: no hay análisis todavía. */}
-          <Chip>
+          <StatusChip estado="neutro">
             <span id="slN">{t("salud.barPending")}</span>
-          </Chip>
+          </StatusChip>
         </div>
 
-        <CabezaPantalla
+        <PageHeader
           rotulo={t("salud.voidOverline")}
           titulo={t("salud.voidTitle")}
           sub={
