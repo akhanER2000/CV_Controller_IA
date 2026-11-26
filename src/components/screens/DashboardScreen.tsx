@@ -191,11 +191,15 @@ export function DashboardScreen() {
           updatedAt: x.updatedAt,
         }));
         const numLocale = lang === "en" ? "en-US" : "es-CL";
-        const rawSources = (s.sources ?? []) as { kind: string; originalName: string | null; sourceUrl: string | null; status: string; rawTextLength: number; createdAt: string }[];
+        const rawSources = (s.sources ?? []) as { kind: string; originalName: string | null; sourceUrl: string | null; status: string; charsRead: number | null; createdAt: string }[];
         const sources = rawSources.map((x) => ({
           nm: x.originalName || x.sourceUrl || kindLabel(x.kind, t),
           factsLines: [
-            `${kindLabel(x.kind, t)} · ${x.rawTextLength.toLocaleString(numLocale)} ${t("dashboard.source.chars")}`,
+            // Caracteres leídos solo si la telemetría los midió (charsRead); sin
+            // dato no se pinta «0 caracteres», que sería una cifra falsa.
+            x.charsRead != null
+              ? `${kindLabel(x.kind, t)} · ${x.charsRead.toLocaleString(numLocale)} ${t("dashboard.source.chars")}`
+              : kindLabel(x.kind, t),
             t("dashboard.source.read").replace("{rel}", rel(x.createdAt, t)),
           ],
           quietText: x.status === "extracted" ? t("dashboard.source.extracted") : t("dashboard.source.static"),

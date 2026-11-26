@@ -265,3 +265,19 @@ a.pn-fila-item:hover {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
 }
+
+/* ui.css pinta los <a> dentro de brasa/crema con `color: inherit` (tinta), y un
+   <Button variante="tinta" href> —que es un <a>— quedaba tinta sobre tinta,
+   invisible (DA-PU3). Arreglo con alcance de las pantallas de panel-datos; el
+   sitio natural es ui.css (DA-PD8). */
+.u-card--brasa a.u-btn--tinta,
+.u-card--crema a.u-btn--tinta {
+  color: var(--brasa-300);
+  text-decoration: none;
+}
+.u-card--brasa a.u-btn--tinta:hover,
+.u-card--brasa a.u-btn--tinta:focus-visible,
+.u-card--crema a.u-btn--tinta:hover,
+.u-card--crema a.u-btn--tinta:focus-visible {
+  color: var(--brasa-100);
+}

@@ -144,6 +144,12 @@ export const dashboard = {
     "dashboard.v2.recent.seeAll": "Ver todas",
     "dashboard.v2.sources.title": "Fuentes",
     "dashboard.v2.sources.seeAll": "Ver fuentes",
+    // ── Forja v2 (panel-datos) ──
+    "dashboard.v2.tipo.language": "Idiomas",
+    "dashboard.v2.tipo.link": "Enlaces",
+    "dashboard.v2.tipo.publication": "Publicaciones",
+    "dashboard.v2.tipo.award": "Premios",
+    "dashboard.v2.tipo.volunteer": "Voluntariado",
   } as Record<string, string>,
   en: {
     // ── Loading ───────────────────────────────────────────────────────────────
@@ -284,5 +290,11 @@ export const dashboard = {
     "dashboard.v2.recent.seeAll": "See all",
     "dashboard.v2.sources.title": "Sources",
     "dashboard.v2.sources.seeAll": "See sources",
+    // ── Forja v2 (panel-datos) ──
+    "dashboard.v2.tipo.language": "Languages",
+    "dashboard.v2.tipo.link": "Links",
+    "dashboard.v2.tipo.publication": "Publications",
+    "dashboard.v2.tipo.award": "Awards",
+    "dashboard.v2.tipo.volunteer": "Volunteering",
   } as Record<string, string>,
 } as const;
