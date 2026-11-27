@@ -1,8 +1,9 @@
 import { describe, it, expect } from "vitest";
 import {
   casarConMaster, huella, nombreSinExtension, ordenPropio, ordenarComoElCv, seccionesEnOrden,
-  textoCorto, tituloDelCv, type ItemMaster,
+  textoCorto, tituloDelCv, idsSegunReglas, type ItemMaster,
 } from "../src/app/api/variants/desde-cv/plan";
+import { REGLAS_VACIAS, FUERZA_POR_DEFECTO, type Reglas } from "../src/lib/cv/reglas";
 import type { StagedRow } from "../src/lib/extract/types";
 
 /* DA-V7 · «Partir de mi CV anterior»: orden del documento, página, casado con el
@@ -117,5 +118,26 @@ describe("casarConMaster", () => {
 
   it("la huella ignora metadatos y fechas derivadas", () => {
     expect(huella({ text: "Hola  Mundo", _orden: 3, dateStart: "2020-01" })).toBe(huella({ text: "hola mundo" }));
+  });
+});
+
+describe("idsSegunReglas (C12: la cuarta puerta respeta las reglas)", () => {
+  const master = [
+    { id: "r1", kind: "work", data: { name: "PharmIQ", position: "Dev" } },
+    { id: "r2", kind: "work", data: { name: "3DLab", summary: "Juegos en Unity 6" } },
+    { id: "p1", kind: "project", data: { name: "Corpus" } },
+    { id: "s1", kind: "skill", data: { name: "Unity" } },
+  ];
+  const reglas = (o: Partial<Reglas>): Reglas => ({ ...REGLAS_VACIAS, fuerza: { ...FUERZA_POR_DEFECTO }, ...o });
+
+  it("sin reglas no cambia nada", () => {
+    expect(idsSegunReglas(["r1", "r2", "s1"], master, reglas({}))).toEqual(["r1", "r2", "s1"]);
+  });
+  it("un término excluido deja fuera el item, salvo que sea «incluir siempre»", () => {
+    expect(idsSegunReglas(["r1", "r2", "s1"], master, reglas({ excluirTerminos: ["Unity"] }))).toEqual(["r1"]);
+    expect(idsSegunReglas(["r1", "r2", "s1"], master, reglas({ excluirTerminos: ["Unity"], incluirSiempre: ["r2"] }))).toEqual(["r1", "r2"]);
+  });
+  it("los obligatorios que el CV no traía entran al final, sin repetir; los que no existen, no", () => {
+    expect(idsSegunReglas(["r1"], master, reglas({ incluirSiempre: ["p1", "r1", "x9"] }))).toEqual(["r1", "p1"]);
   });
 });

@@ -743,6 +743,7 @@ export function VariantesScreen() {
       bloqueado={creating !== null && creating !== "cv"}
       alOcupar={(o) => setCreating(o ? "cv" : null)}
       alProgreso={setProg}
+      reglas={reglas}
     />
   );
 

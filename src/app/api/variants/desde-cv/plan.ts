@@ -2,6 +2,7 @@ import { normalize } from "@/lib/verify";
 import { matchStagedAgainstMaster, type MasterItemLite } from "@/lib/db/sources";
 import { DEFAULT_SECTION_ORDER, type SectionId } from "@/lib/cv/templates";
 import type { StagedRow } from "@/lib/extract/types";
+import { esObligatorio, terminoExcluidoEn, type Reglas } from "@/lib/cv/reglas";
 
 /* ============================================================================
    «PARTIR DE MI CV ANTERIOR» (DA-V7) — la parte PURA del plan.
@@ -233,4 +234,35 @@ export function textoCorto(kind: string, data: Record<string, unknown>): string 
   const p = (partes[kind] ?? [d("name"), d("title"), d("language"), d("text")]).filter(Boolean);
   const t = p.join(" · ") || Object.values(data).filter((v): v is string => typeof v === "string" && !!v.trim())[0] || "";
   return t.length > 140 ? t.slice(0, 139) + "…" : t;
+}
+
+/* ── Las REGLAS de la variante (C12) ──────────────────────────────────────────
+   La cuarta puerta respeta las mismas reglas que las otras tres (variants/route.ts):
+   un item con un término excluido no entra, salvo que sea «incluir siempre», y los
+   «incluir siempre» que el CV no traía entran al final. El texto con el que se mira
+   el término es el mismo que allí (todos los campos de texto del item). */
+
+export interface ItemParaReglasCv {
+  id: string;
+  kind: string;
+  data: Record<string, unknown> | null;
+}
+
+function textoParaReglas(m: ItemParaReglasCv): string {
+  const parts = Object.values(m.data ?? {})
+    .filter((v): v is string => typeof v === "string" && v.trim().length > 0)
+    .map((v) => v.trim());
+  return `${m.kind}: ${parts.join(" · ")}`.trim();
+}
+
+/** Los ids del CV (en su orden), filtrados por las reglas y con los obligatorios que falten al final. */
+export function idsSegunReglas(ids: readonly string[], master: readonly ItemParaReglasCv[], reglas: Reglas): string[] {
+  const porId = new Map(master.map((m) => [m.id, m]));
+  const admitido = (id: string) => {
+    const m = porId.get(id);
+    return !!m && (esObligatorio(reglas, id) || !terminoExcluidoEn(textoParaReglas(m), reglas));
+  };
+  const out = ids.filter(admitido);
+  for (const id of reglas.incluirSiempre) if (porId.has(id) && !out.includes(id)) out.push(id);
+  return out;
 }

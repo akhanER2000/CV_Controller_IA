@@ -8,11 +8,13 @@ import { makeGeminiExtractor } from "@/lib/extract/llm";
 import { extractFile, extractDepsFor } from "@/lib/extract/files";
 import { fileKindFromName, sourceKindFor, isOwnedPath, insertStagedTwoPhase } from "@/lib/db/sources";
 import { ensureMaster, getMasterItems, promoteStaged } from "@/lib/db/queries";
-import { createVariant, updateVariant, setVariantPresentation } from "@/lib/db/variants";
+import { createVariant, updateVariant, setVariantPresentation, guardarReglas, guardarPaginasObjetivo } from "@/lib/db/variants";
+import { validarReglas, type Reglas } from "@/lib/cv/reglas";
+import { puertaPaginas } from "@/lib/cv/ajuste-variante";
 import { registrarIngesta } from "@/lib/db/telemetria";
 import {
   CAMPO_ORDEN, CAMPO_PAGINA, casarConMaster, nombreSinExtension, ordenPropio, ordenarComoElCv,
-  seccionesEnOrden, textoCorto, tituloDelCv,
+  seccionesEnOrden, textoCorto, tituloDelCv, idsSegunReglas,
 } from "./plan";
 
 export const runtime = "nodejs";
@@ -49,7 +51,7 @@ type SB = Awaited<ReturnType<typeof createClient>>;
 const msg = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
 export async function POST(req: Request) {
-  let body: { accion?: string; path?: string; name?: string; sourceId?: string };
+  let body: { accion?: string; path?: string; name?: string; sourceId?: string; reglas?: unknown };
   try {
     body = await req.json();
   } catch {
@@ -65,7 +67,13 @@ export async function POST(req: Request) {
     const sourceId = typeof body.sourceId === "string" ? body.sourceId : "";
     if (!sourceId) return NextResponse.json({ error: "Falta sourceId." }, { status: 400 });
     try {
-      return NextResponse.json(await crear(sb, user.id, sourceId));
+      // Las REGLAS (DA-R1, C12): como en las otras tres puertas, se validan contra el
+      // master REAL antes de crear o promover nada.
+      const conReglas = body.reglas != null;
+      const masterAntes = conReglas ? await getMasterItems(sb, user.id) : [];
+      const vr = validarReglas(body.reglas, { masterIds: new Set(masterAntes.map((m) => m.id)) });
+      if (!vr.ok) return NextResponse.json({ error: vr.errores.join(" ") }, { status: 400 });
+      return NextResponse.json(await crear(sb, user.id, sourceId, conReglas ? vr.reglas : null));
     } catch (e) {
       return NextResponse.json({ error: msg(e) }, { status: 500 });
     }
@@ -211,7 +219,7 @@ interface FilaStaged {
  * Crea la variante desde el staging de la fuente. Idempotente ante un reintento:
  * lo que ya se promovió o se reusó lleva promoted_to y no se vuelve a crear.
  */
-async function crear(sb: SB, userId: string, sourceId: string) {
+async function crear(sb: SB, userId: string, sourceId: string, reglas: Reglas | null) {
   const { data: src, error: sErr } = await sb
     .from("ingestion_sources")
     .select("id,original_name")
@@ -284,11 +292,14 @@ async function crear(sb: SB, userId: string, sourceId: string) {
   if (titulo) await updateVariant(sb, userId, variant.id, { target_title: titulo });
 
   // Los items, en el orden del CV y sin repetir (dos filas pueden caer en el mismo item del master).
-  const ids: string[] = [];
+  let ids: string[] = [];
   for (const f of filas) {
     const id = itemDe.get(f.id);
     if (id && !ids.includes(id)) ids.push(id);
   }
+  // Con reglas: fuera lo que nombra un término excluido (salvo «incluir siempre») y
+  // dentro los obligatorios que el CV no traía, contra el master ya con lo nuevo.
+  if (reglas) ids = idsSegunReglas(ids, await getMasterItems(sb, userId), reglas);
   if (ids.length) {
     const { error: vErr } = await sb
       .from("variant_items")
@@ -307,9 +318,22 @@ async function crear(sb: SB, userId: string, sourceId: string) {
     .insert({ source_id: sourceId, user_id: userId, message: EVENTO_VARIANTE, payload: { variantId: variant.id } });
   await sb.from("ingestion_sources").update({ status: "reviewed" }).eq("id", sourceId).eq("user_id", userId);
 
+  // Las reglas y su objetivo de páginas («Máximo N» fija también el objetivo con
+  // el que nace), y la puerta de páginas (DA-A6) AL FINAL: el orden de secciones
+  // ya guardado cambia las páginas.
+  let reglasPersistidas = true;
+  let ajuste: Awaited<ReturnType<typeof puertaPaginas>> | null = null;
+  if (reglas) {
+    if (reglas.paginasMax) await guardarPaginasObjetivo(sb, userId, variant.id, reglas.paginasMax);
+    reglasPersistidas = (await guardarReglas(sb, userId, variant.id, reglas)).persistido;
+    ajuste = await puertaPaginas(sb, userId, variant.id);
+  }
+
   return {
     variant: { id: variant.id, name: nombre, target_title: titulo || null },
     items: ids.length,
     nuevos,
+    reglasPersistidas,
+    ajuste,
   };
 }

@@ -7,6 +7,7 @@ import { createClient } from "@/lib/supabase/client";
 import { fileKindFromName, safeStorageName } from "@/lib/db/sources";
 import { useT } from "@/lib/i18n";
 import { CLAVE_AVISO_DESDE_CV } from "./AvisoDesdeCv";
+import { hayReglas, type Reglas } from "@/lib/cv/reglas";
 
 /* ============================================================================
    CUARTA PUERTA · «Partir de mi CV anterior» (DA-V7)
@@ -71,9 +72,11 @@ export interface PuertaCvAnteriorProps {
   alOcupar(ocupada: boolean): void;
   /** el paso real en curso para el <Progreso> de la pantalla; null = nada en vuelo */
   alProgreso(p: { pasos: string[]; paso: number } | null): void;
+  /** las REGLAS del panel de la pantalla (DA-R1): valen también para esta puerta */
+  reglas?: Reglas;
 }
 
-export function PuertaCvAnterior({ bloqueado, alOcupar, alProgreso }: PuertaCvAnteriorProps) {
+export function PuertaCvAnterior({ bloqueado, alOcupar, alProgreso, reglas }: PuertaCvAnteriorProps) {
   const t = useT();
   const router = useRouter();
   const input = useRef<HTMLInputElement>(null);
@@ -155,7 +158,7 @@ export function PuertaCvAnterior({ bloqueado, alOcupar, alProgreso }: PuertaCvAn
       const res = await fetch("/api/variants/desde-cv", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ accion: "crear", sourceId: rev.sourceId }),
+        body: JSON.stringify({ accion: "crear", sourceId: rev.sourceId, ...(reglas && hayReglas(reglas) ? { reglas } : {}) }),
       });
       const j = (await res.json()) as { variant?: { id: string }; items?: number; nuevos?: number; error?: string };
       if (!res.ok || !j.variant) throw new Error(j.error || t("variantes.cv.errCrear"));
