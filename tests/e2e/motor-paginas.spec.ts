@@ -144,7 +144,7 @@ function unicosDelMaster(items: MItem[]) {
 test.use({ viewport: { width: 1440, height: 960 } });
 
 test("motor de páginas · el caso real: Máximo 2 + Sin foto + sin DIAKONOS + sin Referencias/Publicaciones + Incluir siempre PharmIQ, AeroFit y Corpus", async ({ page }) => {
-  test.setTimeout(2_400_000);
+  test.setTimeout(3_600_000);
   mkdirSync(DISENO, { recursive: true });
   const supabaseVisto = new Set<string>();
   page.on("request", (r) => {
@@ -360,6 +360,56 @@ test("motor de páginas · el caso real: Máximo 2 + Sin foto + sin DIAKONOS + s
       expect((await forma(req, variantId)).items, `objetivo ${n}: Deshacer repone todo`).toEqual(formaAntes.items);
     }
   }
+
+  // ── 9 · C12: sobre la plantilla a medida resultante, paleta, tipografía, QR y
+  //    orden siguen funcionando y siguen en 2 páginas (si no, Ajustar lo devuelve a 2).
+  expect((await req.patch(`/api/variants/${variantId}`, { timeout: 300_000, data: { reglas: reglasDe(2) } })).ok()).toBeTruthy();
+  expect((await req.patch(`/api/variants/${variantId}`, { timeout: 300_000, data: { paginas_objetivo: 2 } })).ok()).toBeTruthy();
+  const plantillaActual = async () => {
+    const j = (await (await req.get(`/api/variants/${variantId}`, { timeout: 300_000 })).json()) as { items: VItem[] };
+    return String(j.items.find((i) => i.kind === "basics")?.override_data?.templateId ?? "");
+  };
+  const ajustarA2 = async (etiqueta: string) => {
+    await page.goto(`/app/variantes/${variantId}`);
+    await expect(ajustar).toBeVisible({ timeout: 120_000 });
+    await page.locator("#pvObjetivo button").nth(1).click();
+    await expect(page.locator("#pvObjetivo button").nth(1)).toHaveAttribute("aria-pressed", "true");
+    await page.waitForTimeout(2_000);
+    await ajustar.click();
+    await expect(panel.locator(".flu-cas-res")).toBeVisible({ timeout: 900_000 });
+    await expect(ajustar).toBeEnabled({ timeout: 900_000 });
+    console.log(`[c12] ${etiqueta} · ${await panel.getAttribute("data-resuelto-por")} · ${await panel.locator(".flu-cas-res").textContent()}`);
+  };
+  await ajustarA2("un clic");
+  await cumple(2, "C12 · un clic");
+  const medida = await plantillaActual();
+  console.log(`[c12] plantilla resultante ${medida}`);
+  const cambiosDiseno: [string, Record<string, unknown>][] = [
+    ["paleta", { paletteId: "oro" }],
+    ["tipografía", { typographyId: "editorial" }],
+    ["QR", { qrUrl: "corpus.cl/c12-paginas" }],
+    ["orden", { sectionOrder: ["work", "projects", "education", "skills", "summary"] }],
+  ];
+  const trasDiseno: Record<string, unknown> = {};
+  for (const [nombre, patch] of cambiosDiseno) {
+    const r = await req.patch(`/api/variants/${variantId}`, { timeout: 300_000, data: { presentation: patch } });
+    expect(r.ok(), `${nombre}: ${await r.text()}`).toBeTruthy();
+    expect(await plantillaActual(), `${nombre}: la plantilla a medida no se pierde`).toBe(medida);
+    let d = await pdf(req, variantId, 2);
+    if (nombre === "QR") expect(d.plano, "el QR imprime su enlace").toContain("corpus.cl/c12-paginas");
+    let reajustado = false;
+    if (d.pages > 2 || d.autofit.noCabe) {
+      // Con «Máximo 2» rota, la descarga no entrega PDF; Ajustar lo devuelve a 2.
+      const p = await req.post("/api/cv", { timeout: 300_000, data: { variantId, as: "pdf", download: true, paginas: 2 } });
+      expect(p.status(), `${nombre}: la puerta no entrega el PDF que rompe «Máximo 2»`).toBe(409);
+      await ajustarA2(`tras ${nombre}`);
+      reajustado = true;
+    }
+    d = await cumple(2, `C12 · tras ${nombre}`);
+    trasDiseno[nombre] = { paginas: d.pages, cuerpo: d.autofit.bodySize, reajustado };
+  }
+  await page.screenshot({ path: path.join(DISENO, "08-c12-diseno-sobre-medida.png") });
+  console.log(`[c12] RESUMEN ${JSON.stringify({ medida, trasDiseno })}`);
 
   for (const h of supabaseVisto) expect(h, "solo el Supabase local").toMatch(/^(127\.0\.0\.1|localhost):/);
   console.log(`[motor] RESUMEN ${JSON.stringify({ variantId, items: includeIds.length, antes: antes.pages, resumen })}`);

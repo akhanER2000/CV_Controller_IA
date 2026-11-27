@@ -246,4 +246,32 @@ test("cuarta puerta: CV anterior en PDF y en DOCX → variante igual al CV, sin 
   // En DOCX no hay páginas: no se inventa ninguna.
   const { data: nuevosDocx } = await a.from("profile_items").select("evidence_page").eq("source_id", docx.sourceId);
   expect((nuevosDocx ?? []).every((n) => n.evidence_page == null)).toBe(true);
+
+  /* ── 3 · C12: con REGLAS, la variante desde el CV las respeta ─────────────
+     Crear es idempotente sobre el staging ya promovido: se re-crea desde la
+     fuente del DOCX sin volver a leer (sin IA de extracción). */
+  const extra = await post("project", { name: "Faro Abierto", description: "Mapa de faros del litoral." });
+  const reglas = { paginasMax: 1, excluirTerminos: ["Valle Hondo"], incluirSiempre: [extra] };
+  const cr = await page.request.post("/api/variants/desde-cv", {
+    data: { accion: "crear", sourceId: docx.sourceId, reglas },
+    timeout: 900_000,
+  });
+  expect(cr.ok(), await cr.text()).toBeTruthy();
+  const jr = (await cr.json()) as { variant: { id: string }; items: number; reglasPersistidas: boolean; ajuste: unknown };
+  expect(jr.reglasPersistidas, "0012 aplicada en local").toBe(true);
+  expect(jr.ajuste, "la puerta de páginas corrió").toBeTruthy();
+  const { data: fila } = await a.from("cv_variants").select("reglas,paginas_objetivo").eq("id", jr.variant.id).single();
+  expect(fila!.paginas_objetivo, "«Máximo 1» fija el objetivo con el que nace").toBe(1);
+  expect((fila!.reglas as { paginasMax?: number }).paginasMax).toBe(1);
+  const { data: vr } = await a.from("variant_items").select("item_id,visible").eq("variant_id", jr.variant.id);
+  const enR = new Set((vr ?? []).map((v) => v.item_id as string));
+  expect(enR.has(extra), "«incluir siempre» entra aunque el CV no lo traía").toBe(true);
+  const { data: rolesR } = await a.from("profile_items").select("id,data").eq("kind", "work").in("id", [...enR]);
+  expect(rolesR!.some((r) => norm((r.data as Record<string, unknown>).company).includes("valle hondo")), "el término excluido deja fuera su rol").toBe(false);
+  const txt = await page.request.post("/api/cv", { data: { variantId: jr.variant.id, as: "text", paginas: 1 }, timeout: 300_000 });
+  expect(txt.ok(), await txt.text()).toBeTruthy();
+  const t = (await txt.json()) as { text: string; pages: number };
+  expect(t.pages, "la variante nace dentro de «Máximo 1»").toBeLessThanOrEqual(1);
+  expect(t.text).not.toMatch(/valle hondo/i);
+  console.log(`[c12] desde-cv con reglas · ${jr.items} items · ${t.pages} pág · ajuste ${JSON.stringify(jr.ajuste).slice(0, 200)}`);
 });
