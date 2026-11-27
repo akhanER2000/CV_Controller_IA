@@ -15,6 +15,14 @@
  *     del perfil largo (incluido un rol más largo que una página, que va en un
  *     bloque wrap={false}) aparecen en el PDF.
  * Escribe la tabla con miniaturas en prompts/lotes-fable5/_diseno/plantillas/.
+ *
+ * Además de las 65 del catálogo audita las PERSONALIZADAS (plantillas-programables):
+ * cada modo de densidad solo sobre tres bases (derecha, línea propia, colgante) y
+ * la plantilla a medida EN SU LÍMITE (todos los modos + métricas al máximo) sobre
+ * esas mismas bases. A las personalizadas se les exige lo del núcleo ATS de la
+ * plantilla a medida: round-trip, p90 ≤ 90 y máx ≤ 110 (la mediana ≤ 75 es una
+ * regla de curación del catálogo, no un límite ATS: DA-PP).
+ *   AUDIT_EXTRAS=solo   → solo las personalizadas · AUDIT_EXTRAS=no → solo el catálogo
  */
 import { describe, it, expect } from "vitest";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -24,7 +32,17 @@ import { autofit } from "../../src/lib/cv/autofit";
 import { lineasDe } from "../../src/lib/cv/medir";
 import { contrastRatio } from "../../src/lib/cv/contrast";
 import { toPlainText, type ResumeData } from "../../src/lib/cv/resume";
-import { CUERPO_MIN_PT, getTemplate, listTemplates, paperOf, type CvTemplate } from "../../src/lib/cv/templates";
+import {
+  CUERPO_MIN_PT,
+  getTemplate,
+  listTemplates,
+  modosDe,
+  paperOf,
+  plantillaDeEspec,
+  registrarPlantillaUsuario,
+  type CvTemplate,
+} from "../../src/lib/cv/templates";
+import { modosUtiles, plantillaEnElLimite } from "../../src/lib/cv/plantilla-medida";
 
 const ROOT = process.cwd();
 const OUT = path.join(ROOT, "prompts/lotes-fable5/_diseno/plantillas");
@@ -197,13 +215,33 @@ interface Fila {
 }
 
 const SOLO = (process.env.AUDIT_ONLY ?? "").split(",").map((s) => s.trim()).filter(Boolean);
-const PLANTILLAS = listTemplates().filter((t) => !SOLO.length || SOLO.includes(t.id));
+const EXTRAS = process.env.AUDIT_EXTRAS ?? "si";
+
+/** Las personalizadas que se auditan: cada modo solo y el límite, sobre tres bases. */
+async function personalizadas(): Promise<CvTemplate[]> {
+  const out: CvTemplate[] = [];
+  for (const base of ["ats-clasica", "ats-expediente", "ats-veterana"]) {
+    for (const modo of modosUtiles(getTemplate(base))) {
+      const t = plantillaDeEspec({ base, modos: [modo] }, `u:audit-${base}-${modo}`, `${getTemplate(base).name} + ${modo}`);
+      registrarPlantillaUsuario(t);
+      out.push(t);
+    }
+    const lim = await plantillaEnElLimite(PERFILES.medio, getTemplate(base), true);
+    out.push({ ...lim, name: `${getTemplate(base).name} · a medida en su límite` });
+  }
+  return out;
+}
+const esPersonalizada = (t: CvTemplate) => t.id.startsWith("u:");
 
 describe("auditoría del catálogo de plantillas", () => {
   it("renderiza, mide y escribe auditoria.md", async () => {
     mkdirSync(THUMBS, { recursive: true });
     const filas: Fila[] = [];
     const t0 = Date.now();
+    const PLANTILLAS = [
+      ...(EXTRAS === "solo" ? [] : listTemplates()),
+      ...(EXTRAS === "no" ? [] : await personalizadas()),
+    ].filter((t) => !SOLO.length || SOLO.includes(t.id));
     for (const tpl of PLANTILLAS) {
       const casos: Caso[] = [];
       const fallos: string[] = [];
@@ -250,12 +288,14 @@ describe("auditoría del catálogo de plantillas", () => {
           // p90 y mediana se exigen sobre el perfil CORTO (texto real, como el del
           // test medida-linea); el largo es texto sintético de párrafo lleno, donde
           // el p90 coincide con la medida máxima — ahí solo se exige el máximo.
-          const medidaMal = caso.max > 110 || (perfil === "corto" && (caso.p90 > 90 || caso.mediana > 75));
+          const medidaMal =
+            caso.max > 110 || (perfil === "corto" && (caso.p90 > 90 || (!esPersonalizada(tpl) && caso.mediana > 75)));
           if (tpl.gama === "ats" && medidaMal) fallos.push(`medida ${tag}`);
           if (caso.cuerpo < CUERPO_MIN_PT) fallos.push(`cuerpo<10 ${tag}`);
           if (caso.fuera > 0) fallos.push(`fuera ${tag}`);
           if (caso.faltanVinetas > 0) fallos.push(`viñetas ${tag}`);
-          if (!process.env.NO_THUMBS && perfil === "corto" && objetivo === 2) await miniatura(r.buf, path.join(THUMBS, `${tpl.id}.png`));
+          if (!process.env.NO_THUMBS && perfil === "corto" && objetivo === 2)
+            await miniatura(r.buf, path.join(THUMBS, `${tpl.id.replace(/[:]/g, "_")}.png`));
         }
       }
       filas.push({ tpl, casos, contraste, fallos: [...new Set(fallos)] });
@@ -272,7 +312,7 @@ describe("auditoría del catálogo de plantillas", () => {
       "# Auditoría del catálogo de plantillas",
       "",
       `Generado por \`scripts/plantillas/auditoria.audit.ts\` (${new Date().toISOString().slice(0, 10)}, ${Math.round((Date.now() - t0) / 1000)} s). ` +
-        `${filas.length} plantillas × 3 perfiles × 1/2/3 páginas con el autofit de producción.`,
+        `${filas.filter((f) => !esPersonalizada(f.tpl)).length} plantillas del catálogo + ${filas.filter((f) => esPersonalizada(f.tpl)).length} personalizadas (cada modo de densidad y la a medida en su límite) × 3 perfiles × 1/2/3 páginas con el autofit de producción.`,
       "",
       "Columnas por objetivo: `páginas reales · cuerpo elegido` (✂ = ni a 10 pt cabe: pasa al recorte manual, que es el comportamiento previsto, no un fallo). " +
         "Medida = p90/mediana/máx de caracteres por línea de cuerpo (perfil corto, 2 páginas; umbrales 90/75/110, y máx ≤ 110 también en el largo). Contraste = acento/tinta/apagado sobre el papel. " +
@@ -287,7 +327,8 @@ describe("auditoría del catálogo de plantillas", () => {
       ...filas.map((f) => {
         const m = caso(f, "corto", 2);
         const estado = f.fallos.length ? `**falla**: ${f.fallos.join(", ")}` : "pasa";
-        return `| ![](miniaturas/${f.tpl.id}.png) | **${f.tpl.name}**<br>\`${f.tpl.id}\`<br>${f.tpl.typography.name} · ${f.tpl.palette.name} | ${f.tpl.gama}${f.tpl.gama === "visual" ? " (round-trip exento)" : ""} | ${estado} | ${[1, 2, 3].map((o) => celda(caso(f, "corto", o))).join(" / ")} | ${[1, 2, 3].map((o) => celda(caso(f, "medio", o))).join(" / ")} | ${[1, 2, 3].map((o) => celda(caso(f, "largo", o))).join(" / ")} | ${m.p90}/${m.mediana}/${m.max} | ${fx(f.contraste.acento)}/${fx(f.contraste.tinta)}/${fx(f.contraste.apagado)} |`;
+        const modos = modosDe(f.tpl);
+        return `| ![](miniaturas/${f.tpl.id.replace(/[:]/g, "_")}.png) | **${f.tpl.name}**<br>\`${f.tpl.id}\`<br>${f.tpl.typography.name} · ${f.tpl.palette.name}${modos.length ? `<br>modos: ${modos.join(" · ")}` : ""} | ${f.tpl.gama}${f.tpl.gama === "visual" ? " (round-trip exento)" : ""} | ${estado} | ${[1, 2, 3].map((o) => celda(caso(f, "corto", o))).join(" / ")} | ${[1, 2, 3].map((o) => celda(caso(f, "medio", o))).join(" / ")} | ${[1, 2, 3].map((o) => celda(caso(f, "largo", o))).join(" / ")} | ${m.p90}/${m.mediana}/${m.max} | ${fx(f.contraste.acento)}/${fx(f.contraste.tinta)}/${fx(f.contraste.apagado)} |`;
       }),
       "",
     ];

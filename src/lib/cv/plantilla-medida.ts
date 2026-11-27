@@ -32,7 +32,12 @@ import { toPlainText, type ResumeData } from "./resume";
 import { AA_NORMAL, contrastRatio } from "./contrast";
 import {
   CUERPO_MIN_PT,
+  FACTOR_ESPACIO_COMPACTO,
+  MODOS_DENSIDAD,
   PREFIJO_PLANTILLA_USUARIO,
+  aplicarModos,
+  normalizarModos,
+  plantillaDeEspec,
   getPalette,
   getTemplate,
   getTypography,
@@ -41,6 +46,7 @@ import {
   registrarPlantillaUsuario,
   resolveMetrics,
   type CvTemplate,
+  type ModoDensidad,
   type ResolvedMetrics,
   type TemplateMetrics,
 } from "./templates";
@@ -87,6 +93,11 @@ export interface ParamsMedida {
   titulos: number;
   paletteId: string;
   typographyId: string;
+  /**
+   * Modos de densidad encendidos (EspecPlantilla). Opcional: las filas guardadas
+   * antes de que existieran no lo traen y salen como entonces (sin modos).
+   */
+  modos?: ModoDensidad[];
 }
 
 /** Medida de un margen de la plantilla en mm (acepta mm, pt, cm, in). */
@@ -125,6 +136,8 @@ export function paramsDeEscalon(
   sel: { paletteId?: string | null; typographyId?: string | null } = {},
   /** p90 medido con la base tal cual; sin él, la medida se conserva (no se ensancha) */
   p90Base?: number,
+  /** modos de densidad encendidos en este escalón */
+  modos: readonly ModoDensidad[] = [],
 ): ParamsMedida {
   const r = resolveMetrics(base.metrics);
   const L = LIMITES_MEDIDA;
@@ -154,7 +167,18 @@ export function paramsDeEscalon(
     titulos: r2(1 - k * (1 - L.titulosMin)),
     paletteId: (sel.paletteId && getPalette(sel.paletteId)?.id) || base.palette.id,
     typographyId: (sel.typographyId && getTypography(sel.typographyId)?.id) || base.typography.id,
+    ...(modos.length ? { modos: normalizarModos(modos) } : null),
   };
+}
+
+/**
+ * Los modos que de verdad cambian algo sobre esta base, en el orden canónico. Un
+ * modo que la base ya cumple (cabecera ya en línea, fechas ya en la columna
+ * colgante…) no gasta un escalón de la búsqueda ni se anuncia en la galería.
+ */
+export function modosUtiles(base: CvTemplate): ModoDensidad[] {
+  const antes = JSON.stringify(resolveMetrics(base.metrics));
+  return MODOS_DENSIDAD.filter((m) => JSON.stringify(resolveMetrics(aplicarModos(base.metrics, [m]))) !== antes);
 }
 
 /** Los límites, comprobados sobre los parámetros (lo que llega de la base también pasa por aquí). */
@@ -170,24 +194,34 @@ export function validarParams(p: ParamsMedida): { ok: true } | { ok: false; razo
   if (!(p.titulos >= L.titulosMin && p.titulos <= 1)) return { ok: false, razon: "escala de títulos fuera de rango" };
   if (!getPalette(p.paletteId)) return { ok: false, razon: "paleta no registrada" };
   if (!getTypography(p.typographyId)) return { ok: false, razon: "tipografía no registrada" };
+  if (p.modos !== undefined && (!Array.isArray(p.modos) || normalizarModos(p.modos).length !== p.modos.length))
+    return { ok: false, razon: "modo de densidad desconocido" };
   return { ok: true };
 }
 
-/** La métrica de la plantilla a medida. Los títulos nunca bajan del cuerpo. */
+/**
+ * La métrica de la plantilla a medida, SIN los modos (los pone plantillaDeEspec
+ * encima). Los títulos nunca bajan del cuerpo. Con `espacioCompacto` el aire entre
+ * secciones y roles ya sale × 0,7 del modo: aquí se frena para que, sumados, no
+ * bajen de la mitad del de la base (el mismo suelo de siempre).
+ */
 export function metricasDeParams(p: ParamsMedida): TemplateMetrics {
   const base = getTemplate(p.base);
   const r = resolveMetrics(base.metrics);
   const k = (p.cuerpo / r.bodySize) * p.titulos;
   const tit = (v: number, piso: number) => r2(Math.max(piso, v * k));
   const esp = (v: number) => r2(v * p.espacio);
+  const compacto = normalizarModos(p.modos).includes("espacioCompacto");
+  const espBloque = (v: number) =>
+    compacto ? r2(v * Math.max(p.espacio, LIMITES_MEDIDA.espacioMin / FACTOR_ESPACIO_COMPACTO)) : esp(v);
   return {
     ...base.metrics,
     bodySize: p.cuerpo,
     bodyLeading: p.interlineado,
     pageMarginV: `${p.margenVmm}mm`,
     pageMarginH: `${p.margenHmm}mm`,
-    sectionGap: esp(r.sectionGap),
-    entryGap: esp(r.entryGap),
+    sectionGap: espBloque(r.sectionGap),
+    entryGap: espBloque(r.entryGap),
     summaryGap: esp(r.summaryGap),
     bulletGap: esp(r.bulletGap),
     skillGap: esp(r.skillGap),
@@ -213,18 +247,15 @@ export function idBorrador(p: ParamsMedida): string {
 /** La plantilla completa (y registrada, para que getTemplate la resuelva) de unos parámetros. */
 export function plantillaDeParams(p: ParamsMedida, id = idBorrador(p), nombre = "A medida"): CvTemplate {
   const base = getTemplate(p.base);
-  const t: CvTemplate = {
-    ...base,
+  // La plantilla a medida ES una EspecPlantilla: base + métricas + modos. El motor
+  // de siempre la renderiza; la paleta y la pareja de la variante la sobreescriben
+  // como a cualquier otra (resolveTemplate).
+  const t = plantillaDeEspec(
+    { base: base.id, metricas: metricasDeParams(p), modos: p.modos, paletteId: p.paletteId, typographyId: p.typographyId },
     id,
-    name: nombre,
-    gama: "ats",
-    description: `A medida, a partir de «${base.name}»: ${p.cuerpo} pt, márgenes ${p.margenVmm}/${p.margenHmm} mm.`,
-    warning: undefined,
-    layout: { columns: 1, photo: false, sidebar: false },
-    palette: getPalette(p.paletteId) ?? base.palette,
-    typography: getTypography(p.typographyId) ?? base.typography,
-    metrics: { ...metricasDeParams(p), photoSlot: "none" },
-  };
+    nombre,
+    `A medida, a partir de «${base.name}»: ${p.cuerpo} pt, márgenes ${p.margenVmm}/${p.margenHmm} mm.`,
+  );
   registrarPlantillaUsuario(t);
   return t;
 }
@@ -311,6 +342,13 @@ const DEPS: MedidaDeps = {
 /**
  * Busca la plantilla a medida MENOS apretada con la que `data` cabe en `objetivo`
  * páginas reales. Devuelve el escalón más apretado (y `ok:false`) si ni así cabe.
+ *
+ * ★ PRIMERO LA DENSIDAD, DESPUÉS LAS MÉTRICAS (DA-A7). La escalera tiene dos
+ * tramos: los modos de densidad útiles para esta base, encendidos de uno en uno y
+ * acumulados (no cambian la lectura: cuerpo, interlineado y márgenes intactos), y
+ * después, con todos ellos puestos, los 8 escalones de métricas de siempre. Cada
+ * peldaño aprieta más que el anterior, así que «cabe» sigue siendo monótono y la
+ * búsqueda sigue siendo binaria y determinista.
  */
 export async function buscarPlantillaMedida(
   data: ResumeData,
@@ -321,14 +359,21 @@ export async function buscarPlantillaMedida(
 ): Promise<ResultadoMedida> {
   const base = baseParaMedida(actual);
   const sel = { paletteId: opts.paletteId ?? data.paletteId, typographyId: opts.typographyId ?? data.typographyId };
+  const modos = modosUtiles(base);
+  const M = modos.length;
   let renders = 0;
   const cache = new Map<number, Omit<ResultadoMedida, "ok" | "comprobaciones" | "renders">>();
   let p90Base: number | undefined;
 
+  // Peldaño → parámetros: 0…M = los M primeros modos sin tocar métricas;
+  // M+1…M+ESCALONES = todos los modos y el escalón de métricas correspondiente.
   const probar = async (paso: number) => {
     const hit = cache.get(paso);
     if (hit) return hit;
-    const params = paramsDeEscalon(base, paso / ESCALONES, sel, p90Base);
+    const params =
+      paso <= M
+        ? paramsDeEscalon(base, 0, sel, undefined, modos.slice(0, paso))
+        : paramsDeEscalon(base, (paso - M) / ESCALONES, sel, p90Base, modos);
     const plantilla = plantillaDeParams(params);
     // El documento se renderiza CON la plantilla a medida y sin overrides de paleta
     // ni pareja (ya van dentro): lo mismo que verá el usuario al elegirla.
@@ -340,34 +385,55 @@ export async function buscarPlantillaMedida(
     cache.set(paso, r);
     return r;
   };
+  const doc: ResumeData = { ...data, paletteId: undefined, typographyId: undefined };
+  const cerrar = async (r: Awaited<ReturnType<typeof probar>>): Promise<ResultadoMedida> => {
+    const val = validarParams(r.params);
+    const comprobaciones = await deps.comprobar(doc, r.plantilla, r.buf, opts.locale);
+    const razon = !val.ok ? val.razon : comprobaciones.razon;
+    return { ...r, ok: val.ok && !razon, comprobaciones, renders, razon };
+  };
+  /** El menor peldaño de (lo, hi] que cabe, sabiendo que `lo` no cabe y `hi` sí. */
+  const binaria = async (lo: number, hi: number, mejor: Awaited<ReturnType<typeof probar>>) => {
+    while (hi - lo > 1) {
+      const mid = (lo + hi) >> 1;
+      const r = await probar(mid);
+      if (r.paginas <= objetivo) {
+        hi = mid;
+        mejor = r;
+      } else lo = mid;
+    }
+    return mejor;
+  };
 
-  // Calibración: la medida de la base con ESTE contenido (el escalón 0 no ensancha).
   const cero = await probar(0);
-  p90Base = await p90DeLinea(cero.buf);
-  if (cero.paginas <= objetivo) {
-    const doc0: ResumeData = { ...data, paletteId: undefined, typographyId: undefined };
-    const c0 = await deps.comprobar(doc0, cero.plantilla, cero.buf, opts.locale);
-    return { ...cero, ok: !c0.razon, comprobaciones: c0, renders, razon: c0.razon };
-  }
-  const tope = await probar(ESCALONES);
+  if (cero.paginas <= objetivo) return cerrar(cero);
+  // Tramo de densidad: con todos los modos y las métricas de la base.
+  const densa = M > 0 ? await probar(M) : cero;
+  if (densa.paginas <= objetivo) return cerrar(await binaria(0, M, densa));
+  // Tramo de métricas. Calibración: la medida de ESTE contenido con los modos ya
+  // puestos (el peldaño M no ensancha la caja): la caja se ensancha desde ahí.
+  p90Base = await p90DeLinea(densa.buf);
+  const tope = await probar(M + ESCALONES);
   if (tope.paginas > objetivo) {
     return { ...tope, ok: false, comprobaciones: null, renders, razon: "ni con todo en su límite cabe" };
   }
-  // Binaria: `hi` cabe y `lo` (el 0) no; se busca el menor escalón que cabe.
-  let lo = 0;
-  let hi = ESCALONES;
-  let mejor = tope;
-  while (hi - lo > 1) {
-    const mid = (lo + hi) >> 1;
-    const r = await probar(mid);
-    if (r.paginas <= objetivo) {
-      hi = mid;
-      mejor = r;
-    } else lo = mid;
-  }
-  const doc: ResumeData = { ...data, paletteId: undefined, typographyId: undefined };
-  const val = validarParams(mejor.params);
-  const comprobaciones = await deps.comprobar(doc, mejor.plantilla, mejor.buf, opts.locale);
-  const razon = !val.ok ? val.razon : comprobaciones.razon;
-  return { ...mejor, ok: val.ok && !razon, comprobaciones, renders, razon };
+  return cerrar(await binaria(M, M + ESCALONES, tope));
+}
+
+/**
+ * La plantilla a medida EN SU LÍMITE (todo al máximo que permiten los límites ATS)
+ * para una base: la que usa el último peldaño de la búsqueda. `conModos: false` da
+ * el límite de antes de los modos de densidad (para medir cuánto ganan).
+ */
+export async function plantillaEnElLimite(
+  data: ResumeData,
+  actual: CvTemplate,
+  conModos = true,
+  render: MedidaDeps["render"] = DEPS.render,
+): Promise<CvTemplate> {
+  const base = baseParaMedida(actual);
+  const modos = conModos ? modosUtiles(base) : [];
+  const cal = plantillaDeParams(paramsDeEscalon(base, 0, {}, undefined, modos));
+  const buf = await render({ ...data, templateId: cal.id, paletteId: undefined, typographyId: undefined }, {});
+  return plantillaDeParams(paramsDeEscalon(base, 1, {}, await p90DeLinea(buf), modos));
 }

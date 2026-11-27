@@ -169,6 +169,9 @@ Font.registerHyphenationCallback((word) => [word]);
  */
 const HUECO_CABECERA = "   ";
 
+/** Caracteres máximos de una línea de contacto con «contacto en una línea» (DA-PP). */
+const CONTACTO_MAX = 100;
+
 /**
  * La hoja de estilos DEL DOCUMENTO, derivada de la plantilla. Los valores por
  * defecto NO están aquí: los pone resolveMetrics/resolveTypography (templates.ts),
@@ -423,7 +426,10 @@ function stylesFor(tpl: CvTemplate) {
 /** Una hoja por combinación plantilla+paleta+pareja (el render se repite mucho). */
 const SHEETS = new Map<string, ReturnType<typeof stylesFor>>();
 function sheetFor(tpl: CvTemplate) {
-  const key = `${tpl.id}|${tpl.palette.id}|${tpl.typography.id}|${tpl.metrics.bodySize}`;
+  // Las personalizadas ("u:…") llevan su espec: si dos especs distintas llegaran con
+  // el mismo id (un borrador recalculado), la hoja vieja no puede colarse.
+  const espec = tpl.espec ? `|${JSON.stringify(tpl.metrics)}` : "";
+  const key = `${tpl.id}|${tpl.palette.id}|${tpl.typography.id}|${tpl.metrics.bodySize}${espec}`;
   let sheet = SHEETS.get(key);
   if (!sheet) {
     sheet = stylesFor(tpl);
@@ -534,7 +540,58 @@ export function ResumePDF({
     </>
   );
 
-  const contactBlock = (
+  /* CONTACTO EN UNA LÍNEA (modo cabecera compacta): los mismos trozos y los mismos
+     enlaces, en UN párrafo. Entre bloque y bloque, « · » — el texto plano los sigue
+     emitiendo como líneas propias y el round-trip exige cada una, en orden.
+     Se empaqueta en párrafos de ≤ CONTACTO_MAX caracteres: a ancho completo y a 9,5 pt
+     una línea llena pasa de 110 caracteres (el techo de medida del catálogo), así que
+     lo que no cabe en una línea legible baja a la siguiente en vez de estirarse. */
+  const contactOneLine = m.contactOneLine
+    ? (() => {
+        // Cada BLOQUE es atómico (una línea de datos, o la línea entera de enlaces con
+        // sus « · »): partirlo cambiaría el texto que el rayos-X espera de corrido.
+        type Trozo = { texto: string; url: boolean };
+        const bloques: Trozo[][] = [
+          ...contacto.info.map((linea) => [{ texto: linea.join(""), url: false }]),
+          ...contacto.links.map((linea) => linea.map((u) => ({ texto: u, url: true }))),
+        ].filter((bl) => bl.some((x) => x.texto.trim()));
+        const largoDe = (bl: Trozo[]) => bl.reduce((n, x) => n + x.texto.length, 0) + 3 * (bl.length - 1);
+        const lineas: Trozo[][][] = [];
+        let largo = 0;
+        for (const bl of bloques) {
+          const l = largoDe(bl);
+          if (!lineas.length || largo + 3 + l > CONTACTO_MAX) {
+            lineas.push([bl]);
+            largo = l;
+          } else {
+            lineas[lineas.length - 1]!.push(bl);
+            largo += 3 + l;
+          }
+        }
+        return (
+          <>
+            {lineas.map((linea, i) => (
+              <Text key={i} style={i === 0 ? s.contact : s.contact2}>
+                {linea.flat().map((x, k) => (
+                  <Fragment key={k}>
+                    {k > 0 ? " · " : ""}
+                    {x.url ? (
+                      <Link src={hrefOf(x.texto)} style={s.linkContact}>
+                        {x.texto}
+                      </Link>
+                    ) : (
+                      x.texto
+                    )}
+                  </Fragment>
+                ))}
+              </Text>
+            ))}
+          </>
+        );
+      })()
+    : null;
+
+  const contactBlock = contactOneLine ?? (
     <>
       {/* Un hijo por TROZO (los separadores ya vienen dentro): @react-pdf emite un
           operador de texto por hijo, así que este reparto es parte del PDF. */}
@@ -662,6 +719,9 @@ export function ResumePDF({
         </View>
       );
     }
+    // Modo «fecha y lugar a la derecha»: la ubicación del empleo sigue a las fechas
+    // en la misma fila y su línea propia desaparece. Solo en experiencia (`!edu`).
+    const lugarConFecha = m.placeWithDate && m.dateStyle === "right" && !edu && !!pie.trim();
     const cuerpo =
       m.dateStyle === "right" ? (
         <View style={s.erow}>
@@ -670,7 +730,7 @@ export function ResumePDF({
               que separa cargo y fecha cuando el cargo se parte en dos líneas: sin
               él, el PDF re-parseado decía "S.A. (etapa 1)ene 2020" (auditoría). Un
               espacio normal no sirve: el motor lo recorta al inicio de línea. */}
-          <Text style={s.d}>{` ${fechas}`}</Text>
+          <Text style={s.d}>{` ${fechas}`}{lugarConFecha ? `${HUECO_CABECERA}${pie}` : ""}</Text>
         </View>
       ) : m.dateStyle === "inline" ? (
         <Text style={edu ? s.tEduSolo : s.tSolo}>
@@ -692,7 +752,7 @@ export function ResumePDF({
       <View key={key} wrap={!entera}>
         <View wrap={false} minPresenceAhead={sinHuerfano}>
           {cuerpo}
-          <Text style={s.org}>{pie}</Text>
+          {lugarConFecha ? null : <Text style={s.org}>{pie}</Text>}
         </View>
         {hijos}
       </View>

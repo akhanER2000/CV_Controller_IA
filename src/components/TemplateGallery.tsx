@@ -41,6 +41,7 @@ import { useAuroraTune, AURORA_HOJEO } from "@/components/Aurora";
 import type { ResumeData } from "@/lib/cv/resume";
 import {
   TEMPLATE_TAGS,
+  normalizarModos,
   tagsOf,
   templatesByTags,
   type CvTemplate,
@@ -593,7 +594,7 @@ interface PlantillaPropia {
   id: string;
   nombre: string;
   base: string;
-  params: { cuerpo?: number };
+  params: { cuerpo?: number; modos?: string[] };
 }
 
 /**
@@ -654,6 +655,27 @@ function PlantillasPropias({
     } catch (e) {
       setError(reason(e));
     }
+  };
+  /** Duplicar = la misma espec (base, métricas y modos) con otro id: POST /api/plantillas. */
+  const duplicar = async (p: PlantillaPropia) => {
+    try {
+      const res = await fetch("/api/plantillas", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ desde: p.id, nombre: t("ajuste.copiaDe").replace("{n}", p.nombre).slice(0, 60) }),
+      });
+      if (!res.ok) throw new Error(await readApiError(res));
+      await cargar();
+    } catch (e) {
+      setError(reason(e));
+    }
+  };
+  /** Los modos de densidad de una personalizada, en palabras («cabecera compacta · habilidades en línea»). */
+  const modosTexto = (p: PlantillaPropia) => {
+    const modos = normalizarModos(p.params.modos);
+    return modos.length
+      ? t("ajuste.modos").replace("{m}", modos.map((m) => t(`ajuste.modo_${m}`)).join(" · "))
+      : t("ajuste.modosNinguno");
   };
   const eliminar = async (id: string) => {
     try {
@@ -729,6 +751,9 @@ function PlantillasPropias({
                       .replace("{b}", nombreBase(p.base))
                       .replace("{s}", String(p.params.cuerpo ?? "").replace(".", ","))}
                   </p>
+                  <p className="tg-desc tg-modos" data-modos={normalizarModos(p.params.modos).join(",")}>
+                    {modosTexto(p)}
+                  </p>
                   {borrando === p.id ? (
                     <p className="tg-acts" role="group">
                       <span>{t("ajuste.eliminarConfirma")}</span>
@@ -753,6 +778,9 @@ function PlantillasPropias({
                         }}
                       >
                         {t("ajuste.renombrar")}
+                      </button>
+                      <button type="button" className="c-btn c-btn--quiet" onClick={() => void duplicar(p)}>
+                        {t("ajuste.duplicar")}
                       </button>
                       <button type="button" className="c-btn c-btn--quiet" onClick={() => setBorrando(p.id)}>
                         {t("ajuste.eliminar")}

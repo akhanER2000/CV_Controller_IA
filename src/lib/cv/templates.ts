@@ -403,6 +403,134 @@ export interface TemplateMetrics {
 
   /** Orden de las secciones. Defecto DEFAULT_SECTION_ORDER. */
   sectionOrder?: readonly SectionId[];
+
+  // ── EJES DE DENSIDAD (los encienden los modos de EspecPlantilla) ────────────
+  /**
+   * CONTACTO EN UNA LÍNEA: los datos (email, teléfono, ciudad) y los enlaces van en
+   * UN solo párrafo en vez de en dos o tres. Defecto false. No añade texto: entre los
+   * dos bloques solo hay un « · », y el texto plano sigue emitiéndolos como líneas
+   * propias — el round-trip exige cada una de ellas, en orden, dentro del PDF.
+   */
+  contactOneLine?: boolean;
+  /**
+   * LUGAR JUNTO A LA FECHA: en una entrada de experiencia con `dateStyle: "right"`,
+   * la ubicación cae a la derecha del cargo, detrás de las fechas, en la MISMA fila
+   * — y desaparece la línea propia de la ubicación. Defecto false. Solo en
+   * experiencia: en formación el «pie» es la institución, que es larga y tiene que
+   * leerse entera.
+   */
+  placeWithDate?: boolean;
+}
+
+// ── ESPECIFICACIÓN DECLARATIVA (plantillas «programables», DA-A7) ─────────────
+/**
+ * Los MODOS DE DENSIDAD: formas de ganar sitio que NO cambian cómo se lee el
+ * documento. Ninguno toca el cuerpo, el interlineado ni los márgenes (eso es de las
+ * métricas), ninguno parte la columna y ninguno inventa texto. Todos dejan la
+ * plantilla dentro de los límites ATS (una columna, cuerpo ≥ 10 pt, p90 ≤ 90,
+ * márgenes ≥ 12 mm) y cada uno se prueba con el round-trip (plantillas-programables).
+ *
+ * El ORDEN de la lista es el orden en que los enciende la plantilla a medida: del
+ * que menos se nota al que más cambia la cabecera.
+ */
+export type ModoDensidad =
+  /** sangría de viñetas reducida: el marcador cuelga del margen */
+  | "sangriaReducida"
+  /** menos aire entre secciones y entre roles (× 0,7) */
+  | "espacioCompacto"
+  /** habilidades «grupo: lista», un párrafo por grupo, con el interlineado del cuerpo */
+  | "habilidadesEnLinea"
+  /** fecha y lugar a la derecha del cargo, en la misma línea */
+  | "fechaLugarDerecha"
+  /** cabecera compacta: nombre y título en una línea, contacto en una línea */
+  | "cabeceraCompacta";
+
+export const MODOS_DENSIDAD: readonly ModoDensidad[] = [
+  "sangriaReducida",
+  "espacioCompacto",
+  "habilidadesEnLinea",
+  "fechaLugarDerecha",
+  "cabeceraCompacta",
+] as const;
+
+/** Factor del aire entre secciones y entre roles con `espacioCompacto`. */
+export const FACTOR_ESPACIO_COMPACTO = 0.7;
+
+/**
+ * La ESPECIFICACIÓN de una plantilla: de qué plantilla del catálogo parte, qué
+ * métricas le cambia y qué modos de densidad enciende. Es lo que guarda una
+ * plantilla personalizada; el motor de siempre (ResumePDF y toPlainText) la
+ * renderiza sin saber que existe, porque `plantillaDeEspec` la traduce a un
+ * CvTemplate normal. La paleta y la pareja que elija la variante la sobreescriben
+ * igual que sobre cualquier plantilla del catálogo (resolveTemplate).
+ */
+export interface EspecPlantilla {
+  /** plantilla del catálogo de la que parte */
+  base: string;
+  /** afinaciones de métrica sobre la base (cuerpo, márgenes, aire, títulos…) */
+  metricas?: Partial<TemplateMetrics>;
+  /** modos de densidad encendidos (se aplican DESPUÉS de las métricas) */
+  modos?: readonly ModoDensidad[];
+  paletteId?: string;
+  typographyId?: string;
+}
+
+/** Los modos válidos de una lista que llega de fuera (base de datos, petición), en el orden canónico. */
+export function normalizarModos(modos?: readonly unknown[] | null): ModoDensidad[] {
+  const pedidos = new Set(Array.isArray(modos) ? modos : []);
+  return MODOS_DENSIDAD.filter((m) => pedidos.has(m));
+}
+
+/**
+ * La métrica con los modos encendidos. Pura y por AÑADIDO: sin modos devuelve la
+ * misma métrica (el mismo objeto), así que una plantilla sin modos sale con los
+ * bytes de siempre. Un modo que la plantilla ya cumple no cambia nada.
+ */
+export function aplicarModos(m: TemplateMetrics, modos?: readonly ModoDensidad[] | null): TemplateMetrics {
+  const lista = normalizarModos(modos);
+  if (!lista.length) return m;
+  const r = resolveMetrics(m);
+  const out: TemplateMetrics = { ...m };
+  const r2 = (v: number) => Math.round(v * 100) / 100;
+  for (const modo of lista) {
+    switch (modo) {
+      case "sangriaReducida":
+        // Con marcador, el glifo cuelga del margen: la sangría es justo el ancho
+        // que cuelga (el texto de la 2.ª línea casa con el de la 1.ª). Sin marcador
+        // no hay glifo que colgar: la sangría se queda en la mitad.
+        out.bulletIndent = r.bulletMarker === "none" ? r2(r.bulletIndent / 2) : Math.min(r.bulletIndent, r.bulletHang);
+        out.bulletHang = Math.min(r.bulletHang, out.bulletIndent);
+        break;
+      case "espacioCompacto":
+        out.sectionGap = r2(r.sectionGap * FACTOR_ESPACIO_COMPACTO);
+        out.entryGap = r2(r.entryGap * FACTOR_ESPACIO_COMPACTO);
+        break;
+      case "habilidadesEnLinea":
+        // «grupo: lista», un párrafo por grupo; si la plantilla ya junta grupos en
+        // una línea (inline / paired), se respeta. Lo que se gana es el aire de
+        // lista: el interlineado pasa a ser el del cuerpo.
+        out.skillLeading = Math.min(r.skillLeading, r.bodyLeading);
+        out.skillGap = Math.min(r.skillGap, 1);
+        break;
+      case "fechaLugarDerecha":
+        // En la columna colgante la fecha y el lugar YA comparten columna.
+        if (r.skeleton !== "hanging") {
+          out.dateStyle = "right";
+          out.placeWithDate = true;
+        }
+        break;
+      case "cabeceraCompacta":
+        out.headerInline = true;
+        out.contactOneLine = true;
+        break;
+    }
+  }
+  return out;
+}
+
+/** Los modos que una plantilla lleva encendidos (los de su espec; las del catálogo, ninguno). */
+export function modosDe(t: CvTemplate): ModoDensidad[] {
+  return normalizarModos(t.espec?.modos);
 }
 
 export interface CvTemplate {
@@ -435,6 +563,12 @@ export interface CvTemplate {
    * La gama (ats|visual) NO va aquí: ya es un campo propio.
    */
   tags?: TemplateTag[];
+  /**
+   * La especificación de la que salió (solo las personalizadas "u:…"). La plantilla
+   * guarda su espec para que la galería diga qué modos usa y para poder duplicarla;
+   * el render no la lee: `metrics` ya la lleva aplicada.
+   */
+  espec?: EspecPlantilla;
 }
 
 /** Vocabulario cerrado de etiquetas: si no está aquí, no es una etiqueta válida. */
@@ -544,6 +678,8 @@ export function resolveMetrics(m: TemplateMetrics): ResolvedMetrics {
     photoSize: m.photoSize ?? 92,
     photoBorder: m.photoBorder ?? false,
     headingBand: m.headingBand ?? false,
+    contactOneLine: m.contactOneLine ?? false,
+    placeWithDate: m.placeWithDate ?? false,
   };
 }
 
@@ -732,6 +868,31 @@ export function olvidarPlantillaUsuario(id: string): void {
 }
 export function plantillaUsuarioRegistrada(id: string): CvTemplate | undefined {
   return USER_REGISTRY.get(id);
+}
+
+/**
+ * Una EspecPlantilla traducida a plantilla: la base del catálogo, sus métricas
+ * afinadas y los modos encima. Siempre gama ATS de una columna y sin hueco de foto
+ * (la foto que suba el usuario se dibuja arriba, como en cualquier ATS del catálogo).
+ * No la registra: eso lo decide quien la crea (registrarPlantillaUsuario).
+ */
+export function plantillaDeEspec(e: EspecPlantilla, id: string, nombre: string, descripcion?: string): CvTemplate {
+  const base = getTemplate(e.base);
+  const modos = normalizarModos(e.modos);
+  const metrics = aplicarModos({ ...base.metrics, ...e.metricas }, modos);
+  return {
+    ...base,
+    id,
+    name: nombre,
+    gama: "ats",
+    description: descripcion ?? `A partir de «${base.name}».`,
+    warning: undefined,
+    layout: { columns: 1, photo: false, sidebar: false },
+    palette: getPalette(e.paletteId) ?? base.palette,
+    typography: getTypography(e.typographyId) ?? base.typography,
+    metrics: { ...metrics, photoSlot: "none" },
+    espec: { ...e, base: base.id, modos },
+  };
 }
 
 /** Id de la plantilla por defecto: la gama ATS manda. */
