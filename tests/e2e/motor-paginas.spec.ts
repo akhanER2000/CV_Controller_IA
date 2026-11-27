@@ -96,9 +96,15 @@ async function pdf(req: APIRequestContext, variantId: string, paginas: number) {
 
 /** Los bytes del PDF que se descargaría (sin la puerta: `download` no va). ¿Lleva una imagen? */
 async function llevaImagen(req: APIRequestContext, variantId: string, paginas: number) {
+  return (await imagenes(req, variantId, paginas)) > 0;
+}
+
+/** Cuántas imágenes lleva ese PDF, sin contar las máscaras alfa (el QR es una imagen + su SMask: C12). */
+async function imagenes(req: APIRequestContext, variantId: string, paginas: number) {
   const r = await req.post("/api/cv", { timeout: 300_000, data: { variantId, as: "pdf", paginas } });
   expect(r.ok(), await r.text()).toBeTruthy();
-  return /\/Subtype\s*\/Image/.test((await r.body()).toString("latin1"));
+  const t = (await r.body()).toString("latin1");
+  return (t.match(/\/Subtype\s*\/Image/g) ?? []).length - (t.match(/\/SMask\s+\d+\s+0\s+R/g) ?? []).length;
 }
 
 async function forma(req: APIRequestContext, id: string) {
@@ -206,7 +212,7 @@ test("motor de páginas · el caso real: Máximo 2 + Sin foto + sin DIAKONOS + s
     .filter((s) => s.length > 6);
 
   /** Lo que el PDF real debe cumplir tras cualquier ajuste a `n` páginas. */
-  async function cumple(n: number, etiqueta: string) {
+  async function cumple(n: number, etiqueta: string, conQr = false) {
     const d = await pdf(req, variantId, n);
     expect(d.pages, `${etiqueta}: el PDF real mide ${n} páginas`).toBeLessThanOrEqual(n);
     expect(d.autofit.noCabe, etiqueta).toBe(false);
@@ -214,7 +220,9 @@ test("motor de páginas · el caso real: Máximo 2 + Sin foto + sin DIAKONOS + s
     for (const s of ["PharmIQ", "AeroFit", "Corpus"]) expect(d.plano, `${etiqueta}: «${s}» sigue`).toContain(s);
     expect(d.plano, `${etiqueta}: sin DIAKONOS`).not.toMatch(/diakonos/i);
     for (const s of textosOcultos) expect(d.plano, `${etiqueta}: sin «${s}» (sección oculta)`).not.toContain(s);
-    expect(await llevaImagen(req, variantId, n), `${etiqueta}: sin foto`).toBe(false);
+    // Con QR, su imagen es la única: la foto sigue fuera.
+    if (conQr) expect(await imagenes(req, variantId, n), `${etiqueta}: sin foto (solo el QR)`).toBe(1);
+    else expect(await llevaImagen(req, variantId, n), `${etiqueta}: sin foto`).toBe(false);
     const f = await forma(req, variantId);
     for (const id of incluirSiempre) expect(f.visibles, `${etiqueta}: «incluir siempre» sobrevive`).toContain(id);
     for (const v of f.visibles) expect(formaAntes.visibles, `${etiqueta}: nada oculto vuelve`).toContain(v);
@@ -405,7 +413,7 @@ test("motor de páginas · el caso real: Máximo 2 + Sin foto + sin DIAKONOS + s
       await ajustarA2(`tras ${nombre}`);
       reajustado = true;
     }
-    d = await cumple(2, `C12 · tras ${nombre}`);
+    d = await cumple(2, `C12 · tras ${nombre}`, "qrUrl" in patch || nombre === "orden");
     trasDiseno[nombre] = { paginas: d.pages, cuerpo: d.autofit.bodySize, reajustado };
   }
   await page.screenshot({ path: path.join(DISENO, "08-c12-diseno-sobre-medida.png") });
