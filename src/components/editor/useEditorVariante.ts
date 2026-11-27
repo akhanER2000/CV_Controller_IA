@@ -1701,15 +1701,33 @@ export function useEditorVariante(variantId: string) {
   // que se descarga es, byte a byte, el que estás viendo. Funciona igual sin
   // Supabase, porque el documento viaja en `data`, no en un id de la base.
   const [pdfBusy, setPdfBusy] = useState(false);
+  // LA PUERTA (DA-A6): con «Máximo N páginas» obligatoria el servidor no entrega un
+  // PDF de más de N (409 paginas-max); el panel de ajuste ofrece «Ajustar ahora».
+  const [bloqueoPdf, setBloqueoPdf] = useState<{ paginas: number; max: number } | null>(null);
   const downloadPdf = useCallback(async () => {
     flash(t("editor.stPdfGen"));
     setPdfBusy(true);
+    setBloqueoPdf(null);
     try {
       const res = await fetch("/api/cv", {
         method: "POST",
         headers: JSON_HEADERS,
-        body: JSON.stringify({ data: resumeRef.current, download: true, paginas: objetivoRef.current }),
+        body: JSON.stringify({
+          data: resumeRef.current,
+          download: true,
+          paginas: objetivoRef.current,
+          ...(supabaseEnabled ? { reglasDe: variantId } : {}),
+        }),
       });
+      if (res.status === 409) {
+        const j = (await res.json().catch(() => ({}))) as { codigo?: string; paginas?: number; max?: number; error?: string };
+        if (j.codigo === "paginas-max") {
+          setBloqueoPdf({ paginas: Number(j.paginas ?? 0), max: Number(j.max ?? 0) });
+          flash(j.error ?? t("editor.stPdfErr"));
+          return;
+        }
+        throw new Error(j.error ?? "409");
+      }
       if (!res.ok) throw new Error(await readApiError(res));
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
@@ -1726,7 +1744,7 @@ export function useEditorVariante(variantId: string) {
     } finally {
       setPdfBusy(false);
     }
-  }, [flash, t, fail]);
+  }, [flash, t, fail, variantId]);
 
   // ── Nombre / título objetivo ──
   const onNameBlur = useCallback(
@@ -1855,7 +1873,7 @@ export function useEditorVariante(variantId: string) {
     // afinar con IA (useAfinar): pinta la variante que devuelve el servidor y avisa
     setItems, flash, aviso,
     // barra
-    onNameBlur, stMsg, stAccent, objetivo, elegirObjetivo, downloadPdf, doDeleteVariant,
+    onNameBlur, stMsg, stAccent, objetivo, elegirObjetivo, downloadPdf, bloqueoPdf, setBloqueoPdf, doDeleteVariant,
     confirmDelete, setConfirmDelete, masAbierto, setMasAbierto, atajosAbierto, setAtajosAbierto,
     estado, pageCount, autofitInfo, faltas, huecosTipo, pendientes, fit, fitBusy, fitErr, notasIA,
     runFit, irASiguiente, setView, view, noCabe,

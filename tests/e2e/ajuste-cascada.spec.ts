@@ -278,13 +278,6 @@ test("ajustar de un clic · la variante grande con foto y QR queda en 2 páginas
   expect(formaDespues.previo, "la instantánea queda guardada").toBe(true);
   if (vinetaProtegida) expect(formaDespues.visibles).toContain(vinetaProtegida);
 
-  // ── 5 · Ver otras opciones ───────────────────────────────────────────────────
-  await panel.locator("#edAjusteOpciones").click();
-  const lista = panel.locator("#edAjusteLista li, .flu-cas-hint");
-  await expect(lista.first()).toBeVisible({ timeout: 300_000 });
-  await page.waitForTimeout(2_000); // las miniaturas se rasterizan en el cliente
-  await panel.screenshot({ path: path.join(DISENO, "05-otras-opciones.png") });
-
   // ── 6 · Deshacer ajuste: plantilla, items y huella como antes ───────────────
   const deshacer = page.waitForResponse(
     (res) => res.url().includes(`/api/variants/${variantId}/ajustar`) && res.request().method() === "POST",
@@ -301,6 +294,14 @@ test("ajustar de un clic · la variante grande con foto y QR queda en 2 páginas
   expect(formaDeshecha.basics, "Deshacer repone la plantilla y el diseño").toEqual(formaAntes.basics);
   expect(formaDeshecha.previo, "la instantánea se retira").toBe(false);
   expect(await huella(req, variantId), "Deshacer repone la huella del PDF").toBe(huellaAntes);
+
+  // ── 7 · «Elegir cómo ajustar» (DA-A6: reemplaza «Ver otras opciones»): A-D medidas ──
+  // Desde lo deshecho no hay nada que deshacer antes de medir: la variante no cambia.
+  await panel.locator("#edAjusteElegir").click();
+  await expect(panel.locator("#edAjusteOpcionesAD > li")).toHaveCount(4, { timeout: 600_000 });
+  await page.waitForTimeout(2_000); // las miniaturas se rasterizan en el cliente
+  await panel.screenshot({ path: path.join(DISENO, "05-otras-opciones.png") });
+  expect((await forma(req, variantId)).items, "medir las opciones no toca la variante").toEqual(formaAntes.items);
 
   // Nunca el remoto (DA-V3).
   for (const h of supabaseVisto) expect(h, "solo el Supabase local").toMatch(/^(127\.0\.0\.1|localhost):/);
@@ -344,7 +345,10 @@ test("ajustar de un clic · «casi todo» (8 páginas) no cabe en 2 sin recortar
   console.log(`[ajuste-un-clic] casi todo ${JSON.stringify(r)} · ${await panel.locator(".flu-cas-res").textContent()}`);
   await page.waitForTimeout(2_000);
   await panel.screenshot({ path: path.join(DISENO, "07-casi-todo-no-cabe.png") });
-  expect(await cajasBarra(page), "la barra no se mueve").toEqual(barraAntes);
+  // DA-A6: el motor sí lo deja en 2 (condensa y deja fuera); el chip de estado cambia de
+  // TEXTO por el contenido nuevo (huecos), no por el ajuste en curso. Sin cambios, la
+  // barra queda exactamente igual.
+  if (r.resueltoPor === "ninguno") expect(await cajasBarra(page), "la barra no se mueve").toEqual(barraAntes);
 
   if (r.resueltoPor === "ninguno") {
     // Honesto: lo dice, no ofrece deshacer y el documento queda EXACTAMENTE igual.
@@ -395,10 +399,17 @@ test("ajustar de un clic · si solo recortando cabe, recorta todo de una vez y n
   await page.waitForTimeout(2_000);
   await panel.screenshot({ path: path.join(DISENO, "08-recortes-aplicados.png") });
 
-  expect(["recortes", "ninguno"], "solo recortando podía caber").toContain(resuelto);
+  // DA-A6: lo que antes eran «recortes» ahora es el motor de páginas («motor»). Si una
+  // disposición sola ya alcanza (p. ej. una personalizada guardada antes, ahora con modos
+  // de densidad), mejor: cabe sin quitar nada.
+  expect(["recortes", "motor", "ninguno", "plantilla", "medida"], "lo resolvió").toContain(resuelto);
   const despues = await forma(req, variantId);
   expect(despues.visibles, "«incluir siempre» sobrevive al ajuste").toContain(protegido);
-  if (resuelto === "recortes") {
+  if (resuelto === "plantilla" || resuelto === "medida") {
+    expect((await medir(req, variantId)).pages).toBeLessThanOrEqual(2);
+    expect(despues.visibles, "solo disposición: no se quitó nada").toEqual(formaAntes.visibles);
+  }
+  if (resuelto === "recortes" || resuelto === "motor") {
     expect((await medir(req, variantId)).pages).toBeLessThanOrEqual(2);
     expect(despues.visibles.length).toBeLessThan(formaAntes.visibles.length);
     // Deshacer repone los items ocultados y los textos acortados.

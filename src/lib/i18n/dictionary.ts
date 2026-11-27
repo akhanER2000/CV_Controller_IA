@@ -26,6 +26,7 @@ import { fuentes } from "./dict/fuentes";
 import { ajustes } from "./dict/ajustes";
 import { ajusteCascada } from "./dict/ajuste-cascada";
 import { reglas } from "./dict/reglas";
+import { motorPaginas } from "./dict/motor-paginas";
 
 type Table = Record<string, string>;
 interface Namespace {
@@ -35,7 +36,7 @@ interface Namespace {
 
 const parts: Namespace[] = [
   menuCuenta, common, landing, auth, onboarding, importar, staging, dashboard,
-  master, variantes, editor, tailor, salud, fuentes, ajustes, ajusteCascada, reglas,
+  master, variantes, editor, tailor, salud, fuentes, ajustes, ajusteCascada, reglas, motorPaginas,
 ];
 
 const merge = (lang: "es" | "en"): Table => Object.assign({}, ...parts.map((p) => p[lang]));

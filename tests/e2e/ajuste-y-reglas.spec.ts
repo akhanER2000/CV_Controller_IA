@@ -182,7 +182,8 @@ test("ajuste + reglas · Máximo 2 + Incluir siempre PharmIQ + No mencionar Unit
   await expect(ajustar).toBeEnabled({ timeout: 600_000 });
   const resuelto = (await panel.getAttribute("data-resuelto-por")) ?? "";
   console.log(`[C11] resuelto por ${resuelto} · ${await panel.locator(".flu-cas-res").textContent()}`);
-  expect(["plantilla", "medida", "recortes"], `lo resolvió: ${resuelto}`).toContain(resuelto);
+  // DA-A6: el ajuste de un clic es el motor de páginas («motor» = combinó palancas).
+  expect(["plantilla", "medida", "motor"], `lo resolvió: ${resuelto}`).toContain(resuelto);
   await expect(rotas).toHaveCount(0, { timeout: 120_000 });
   await page.waitForTimeout(3_000);
   expect(await cajasBarra(page), "la barra no se mueve tras ajustar").toEqual(barraAntes);

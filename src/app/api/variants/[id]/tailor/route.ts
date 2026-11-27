@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { puertaPaginas } from "@/lib/cv/ajuste-variante";
 import { generateObject } from "ai";
 import { createClient } from "@/lib/supabase/server";
 import { getVariant, getVariantItem, setAiOverride, leerReglas } from "@/lib/db/variants";
@@ -196,7 +197,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         sourceItem: it.itemId,
         reason: "Reformulado por IA para un aviso; cifras y entidades del original preservadas (verify.ts).",
       });
-      return NextResponse.json({ ok: true, id: vitemId, campo, original, propuesto });
+      // La puerta de páginas (DA-A6): con «Máximo N» obligatoria, el motor corre ANTES de responder.
+      const ajuste = await puertaPaginas(sb, user.id, variantId);
+      return NextResponse.json({ ok: true, id: vitemId, campo, original, propuesto, ajuste });
     } catch (e) {
       console.error("[api/variants/tailor] no se pudo aplicar la reformulación", vitemId, e);
       return fallo(motivo(e), 500);

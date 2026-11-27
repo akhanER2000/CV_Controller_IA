@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { puertaPaginas } from "@/lib/cv/ajuste-variante";
 import { generateObject } from "ai";
 import { hayClaveIA, modeloPara } from "@/lib/ai/modelos";
 import { createClient } from "@/lib/supabase/server";
@@ -222,10 +223,13 @@ export async function POST(req: Request) {
         }
       }
 
+      // La puerta de páginas (DA-A6): con «Máximo N» obligatoria, el motor corre ANTES de responder.
+      const ajuste = await puertaPaginas(sb, user.id, variant.id);
       return NextResponse.json({
         variant: { ...variant, target_title: targetTitle || variant.target_title },
         notes: (body.notes ?? "").trim() || null,
         reglasPersistidas,
+        ajuste,
       });
     }
 
@@ -276,10 +280,13 @@ export async function POST(req: Request) {
       }
     }
 
+    // La puerta de páginas (DA-A6): con «Máximo N» obligatoria, el motor corre ANTES de responder.
+    const ajuste = await puertaPaginas(sb, user.id, variant.id);
     return NextResponse.json({
       variant: { ...variant, target_title: plan.targetTitle || variant.target_title },
       notes: plan.notes,
       reglasPersistidas,
+      ajuste,
     });
   } catch (e) {
     return NextResponse.json({ error: e instanceof Error ? e.message : "Error" }, { status: 500 });

@@ -28,12 +28,13 @@ import { tailor } from "../src/lib/i18n/dict/tailor";
 import { salud } from "../src/lib/i18n/dict/salud";
 import { fuentes } from "../src/lib/i18n/dict/fuentes";
 import { ajustes } from "../src/lib/i18n/dict/ajustes";
+import { motorPaginas } from "../src/lib/i18n/dict/motor-paginas";
 
 type Namespace = { es: Record<string, string>; en: Record<string, string> };
 
 const namespaces: Record<string, Namespace> = {
   menuCuenta, common, auth, onboarding, importar, staging, dashboard,
-  master, variantes, editor, tailor, salud, fuentes, ajustes,
+  master, variantes, editor, tailor, salud, fuentes, ajustes, motorPaginas,
 };
 
 describe("i18n · paridad de claves ES/EN", () => {

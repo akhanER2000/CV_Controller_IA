@@ -8,6 +8,7 @@ import { buildVariantResumeData } from "@/lib/db/variants";
 import { autofit, plantillaDe, type ResultadoAutofit } from "@/lib/cv/autofit";
 import { esPlantillaUsuario } from "@/lib/cv/templates";
 import { resolverPlantillaDelDocumento } from "@/lib/cv/plantillas-usuario";
+import { obtenerReglas } from "@/lib/cv/reglas";
 
 // react-pdf necesita el runtime de Node (fontkit, streams). unpdf también.
 export const runtime = "nodejs";
@@ -40,6 +41,11 @@ export const runtime = "nodejs";
  * descarga mandan el mismo `paginas`, así que siguen siendo el mismo artefacto.
  * 'text'/'preview' añaden `autofit: { bodySize, base, noCabe, objetivo, sobran }`.
  *
+ * LA PUERTA (DA-A6): una DESCARGA de una variante (`variantId`, o `reglasDe` con el
+ * id de la variante cuando el documento viaja en `data`) con «Máximo N páginas»
+ * OBLIGATORIA no entrega un PDF de más de N páginas: responde 409
+ * { codigo:'paginas-max', paginas, max } y el editor ofrece «Ajustar ahora».
+ *
  * Errores: SIEMPRE con el motivo real en el cuerpo → { error }. Un preview en
  * blanco y mudo es peor que un error legible (documento-cv.md §7).
  */
@@ -55,6 +61,8 @@ interface CvBody {
   as?: As;
   /** Páginas objetivo (1, 2 o 3). Sin él, el cuerpo de la plantilla tal cual. */
   paginas?: number;
+  /** id de la variante cuyas reglas cumple la descarga cuando el documento va en `data` */
+  reglasDe?: string;
 }
 
 /** El motivo REAL de un fallo, en texto. Nunca "algo salió mal". */
@@ -129,6 +137,40 @@ export async function POST(req: Request) {
     // El usuario tiene derecho a leer QUÉ falló.
     console.error("[api/cv] falló el render del PDF", e);
     return failure(reason(e), 500);
+  }
+
+  // ── 2b · La puerta: «Máximo N páginas» obligatoria no se descarga rota ──────
+  const idReglas = body.variantId ?? body.reglasDe;
+  if (as === "pdf" && body.download && typeof idReglas === "string" && idReglas) {
+    try {
+      const sb = await createClient();
+      const {
+        data: { user },
+      } = await sb.auth.getUser();
+      if (user) {
+        const { data: fila } = await sb.from("cv_variants").select("*").eq("id", idReglas).eq("user_id", user.id).maybeSingle();
+        const reglas = obtenerReglas((fila as { reglas?: unknown } | null) ?? null);
+        const max = reglas.paginasMax && reglas.fuerza.paginasMax === "obligatoria" ? reglas.paginasMax : null;
+        if (max) {
+          const paginas = ajuste ? ajuste.medida.porPagina.length : (await getDocumentProxy(new Uint8Array(buf))).numPages;
+          if (paginas > max) {
+            return Response.json(
+              {
+                error: `No se descargó: el PDF mide ${paginas} páginas y la regla obligatoria es «Máximo ${max}». Ajusta antes de descargar.`,
+                codigo: "paginas-max",
+                paginas,
+                max,
+              },
+              { status: 409, headers: { "Cache-Control": "no-store" } },
+            );
+          }
+        }
+      }
+    } catch (e) {
+      // La puerta no se salta en silencio: si no se pueden leer las reglas, se dice.
+      console.error("[api/cv] no se pudieron comprobar las reglas de la descarga", idReglas, e);
+      return failure(`No se pudieron comprobar las reglas antes de descargar: ${reason(e)}`, 500);
+    }
   }
 
   // ── 3 · Rayos-X / paginación: se RE-PARSEA ese mismo buffer con unpdf ───────

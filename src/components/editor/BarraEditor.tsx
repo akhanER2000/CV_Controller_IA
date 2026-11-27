@@ -216,9 +216,9 @@ function useProgresoBarra(ed: Editor, af: ReturnType<typeof useAfinar>, aj: Ajus
   if (ed.pdfBusy) return { activo: true, etiqueta: t("editor.progPdf") };
   if (af.busy) return { activo: true, pasos: [paso1.current, medir], paso: 0 };
   if (ed.pvSigue?.motivo === "afinar") return { activo: true, pasos: [paso1.current || t("editor.progAfinar"), medir], paso: 1 };
-  if (aj.busy) {
+  if (aj.busy || aj.eligiendo) {
     const p = aj.progreso ?? { paso: 0 };
-    const pasos = [t("ajuste.progMedir"), t("ajuste.progPlantillas"), t("ajuste.progMedida"), t("ajuste.progRecortes")];
+    const pasos = [t("ajuste.progMedir"), t("ajuste.progPlantillas"), t("ajuste.progMedida"), t("motor.progMotor")];
     const pc = p.paso === 1 && p.total ? Math.round(((p.hechas ?? 0) / p.total) * 100) : null;
     return { activo: true, pasos, paso: p.paso, porcentaje: pc };
   }

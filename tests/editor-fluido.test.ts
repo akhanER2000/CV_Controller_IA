@@ -112,7 +112,11 @@ describe("editor fluido · vista previa", () => {
     const src = sinComentarios(leeEditor());
     expect(src).toContain('<iframe className="pv-frame" src={pdfUrl}');
     expect(src).toContain('body: JSON.stringify({ data: resumeRef.current, as: "preview", paginas: objetivoRef.current })');
-    expect(src).toContain('body: JSON.stringify({ data: resumeRef.current, download: true, paginas: objetivoRef.current })');
+    // La descarga manda el MISMO documento y objetivo, más las reglas de la variante
+    // (la puerta de «Máximo N páginas», DA-A6).
+    expect(src).toMatch(
+      /body: JSON\.stringify\(\{\s*data: resumeRef\.current,\s*download: true,\s*paginas: objetivoRef\.current,\s*\.\.\.\(supabaseEnabled \? \{ reglasDe: variantId \} : \{\}\),\s*\}\)/,
+    );
   });
 });
 

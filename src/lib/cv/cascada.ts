@@ -15,8 +15,13 @@
  *
  * Nada aquí escribe en la base ni llama a un modelo: entra el documento (y una
  * función que trae los recortes, que solo se llama si hace falta), sale el
- * resultado. La ruta (api/variants/[id]/ajustar) aplica, guarda la instantánea y
- * deshace.
+ * resultado.
+ *
+ * ★ DA-A6: el ajuste de un clic ya NO es esta cascada (se rendía en el paso 3 y
+ * escondía que la plantilla a medida había fallado): es el MOTOR DE PÁGINAS
+ * (motor-paginas.ts), que combina e itera las palancas hasta caber. Aquí quedan
+ * sus piezas (capacidad, parecido, docCon, simularRecortes, sinProtegidos) y
+ * resolverAjuste para la acción «opciones» (solo plantillas).
  */
 
 import { renderResumeToBuffer, type RenderOpts } from "./ResumePDF";
@@ -131,16 +136,19 @@ export function simularRecortes(
 
   // Lo que el documento NO imprime (viñetas de proyecto, enlaces de la variante,
   // referencias apagadas…) no ocupa líneas: quitarlo no cambia nada y no es un fallo.
+  // DA-A6: se busca por lo que el PDF IMPRIME (el texto o el nombre; la URL solo en un
+  // enlace). Con la URL primero, un proyecto o certificado cuya URL no sale en el PDF
+  // se daba por «no impreso» y la simulación no lo quitaba.
   const impreso = JSON.stringify(data);
-  const noSeImprime = (x: Record<string, unknown>) => {
-    const h = n(x.text ?? x.url ?? x.name ?? "").replace(/["\\]/g, "").slice(0, 40);
+  const noSeImprime = (x: Record<string, unknown>, kind?: string) => {
+    const h = n((kind === "link" ? x.url : (x.text ?? x.name ?? x.url)) ?? "").replace(/["\\]/g, "").slice(0, 40);
     return !!h && !impreso.includes(h);
   };
 
   for (const q of propuesta.quitar) {
     const it = porId.get(q.id);
     const x = it?.datos ?? {};
-    let hecho = !!it && noSeImprime(x);
+    let hecho = !!it && noSeImprime(x, it.kind);
     if (!hecho) switch (it?.kind) {
       case "bullet": {
         const t = n(x.text);
@@ -544,6 +552,7 @@ export async function resolverAjuste(input: AjusteInput, motor: MotorAjuste = MO
     sinSimular: sim.sinSimular,
   };
   if (!r.noCabe) res.resueltoPor = "recortes";
-  else res.razon = `ni con los ${filtrada.quitar.length + filtrada.acortar.length} recortes cabe: quedan ${r.medida.porPagina.length} páginas`;
+  // Sin esconder por qué el paso 2 no sirvió (DA-A6).
+  else res.razon = `${razonMedida}; ni con los ${filtrada.quitar.length + filtrada.acortar.length} recortes cabe: quedan ${r.medida.porPagina.length} páginas`;
   return fin();
 }

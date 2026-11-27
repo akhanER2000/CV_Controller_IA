@@ -568,6 +568,79 @@ export function verificarAcortado(
   return v.ok ? { ok: true } : { ok: false, razon: razonDelCandado(v) };
 }
 
+// ── CONDENSAR (motor de páginas, DA-A6) ──────────────────────────────────────
+/**
+ * Lo que se le pide al modelo para que un item QUEPA en su presupuesto de
+ * caracteres. A diferencia de acortar, condensar PUEDE omitir (una cifra
+ * secundaria, una tecnología de relleno): lo que no puede es AÑADIR. Candado
+ * «condensar» = nada nuevo (cifra, nombre o tecnología que no esté en el texto o
+ * en su evidencia), más corto, y sin ningún término excluido por las reglas.
+ */
+export const CondensarSchema = z.object({
+  items: z
+    .array(
+      z.object({
+        id: z.string().describe("id EXACTO de la lista dada. No inventes ids."),
+        texto: z
+          .string()
+          .describe(
+            "El MISMO contenido, condensado a como mucho los caracteres pedidos. Puedes OMITIR detalles " +
+              "secundarios; JAMÁS añadas una cifra, un nombre, una sigla o una tecnología que no esté en el " +
+              "texto o en su evidencia. Mismo idioma que el original. Si no puedes, NO lo incluyas.",
+          ),
+      }),
+    )
+    .describe("Los textos condensados. Los que no se puedan condensar sin inventar, fuera de la lista."),
+});
+export type CondensarPlan = z.infer<typeof CondensarSchema>;
+
+export interface PedidoCondensar {
+  id: string;
+  kind: string;
+  /** el texto de AHORA (el que se condensa) */
+  texto: string;
+  /** caracteres como mucho */
+  max: number;
+  /** de dónde sale lo que se puede decir además del texto (p. ej. el rol de una viñeta) */
+  evidencia: string;
+}
+
+/** La función inyectable que condensa (el LLM real se arma en la ruta). */
+export type CondensarLLM = (input: {
+  targetTitle: string;
+  items: PedidoCondensar[];
+  /** las reglas ya como texto de prompt (reglasParaPrompt); vacío si no hay */
+  reglas: string;
+}) => Promise<CondensarPlan>;
+
+/**
+ * ★ EL CANDADO «CONDENSAR». Se corre al proponer Y al escribir (la ruta lo vuelve
+ * a correr contra el texto de la base). `excluido` es el término obligatorio que
+ * nombra el texto (terminoExcluidoEn), si lo hay: viene de fuera para que este
+ * módulo no dependa de reglas.ts.
+ */
+export function verificarCondensado(
+  original: string,
+  propuesto: string,
+  evidencia = "",
+  excluido: (texto: string) => string | null = () => null,
+): { ok: true } | { ok: false; razon: string; nuevas?: { cifras: string[]; entidades: string[] } } {
+  const p = (propuesto ?? "").trim();
+  const o = (original ?? "").trim();
+  if (!p) return { ok: false, razon: "la propuesta está vacía" };
+  if (p.length >= o.length) return { ok: false, razon: "la propuesta no es más corta que el original" };
+  const v = preservesFacts(o, p, evidencia);
+  if (!v.ok) {
+    const partes: string[] = [];
+    if (v.newNumbers.length) partes.push(`aparecen cifras que no estaban (${v.newNumbers.join(", ")})`);
+    if (v.newEntities.length) partes.push(`aparecen nombres que no estaban (${v.newEntities.join(", ")})`);
+    return { ok: false, razon: partes.join("; "), nuevas: { cifras: v.newNumbers, entidades: v.newEntities } };
+  }
+  const t = excluido(p);
+  if (t) return { ok: false, razon: `nombra «${t}», que las reglas excluyen` };
+  return { ok: true };
+}
+
 /** Las líneas del prompt: un id por línea con su tipo y su texto. */
 export function lineasDelPrompt(items: AjusteItem[]): string {
   return items

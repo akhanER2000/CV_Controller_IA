@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { puertaPaginas } from "@/lib/cv/ajuste-variante";
 import { generateObject } from "ai";
 import { hayClaveIA, modeloPara } from "@/lib/ai/modelos";
 import { createClient } from "@/lib/supabase/server";
@@ -244,7 +245,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
           aplicados.push({ ...a, kind: "skill", antes });
         }
       }
-      return NextResponse.json({ aplicado: aplicados, descartado: [], items: await frescos() });
+      // La puerta de páginas (DA-A6): con «Máximo N» obligatoria, el motor corre ANTES de responder.
+      const ajuste = await puertaPaginas(sb, user.id, variantId);
+      return NextResponse.json({ aplicado: aplicados, descartado: [], ajuste, items: await frescos() });
     }
 
     // ── APLICAR (volver al afinado desde el selector) ────────────────────────
@@ -254,7 +257,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       for (const p of Array.isArray(body.propuestas) ? body.propuestas : []) {
         await escribirTexto(String(p?.id ?? ""), String(p?.propuesto ?? ""), "", aplicados, descartados);
       }
-      return NextResponse.json({ aplicado: aplicados, descartado: descartados, items: await frescos() });
+      // La puerta de páginas (DA-A6): con «Máximo N» obligatoria, el motor corre ANTES de responder.
+      const ajuste = await puertaPaginas(sb, user.id, variantId);
+      return NextResponse.json({ aplicado: aplicados, descartado: descartados, ajuste, items: await frescos() });
     }
 
     // ── AFINAR ───────────────────────────────────────────────────────────────
@@ -295,9 +300,12 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     //     confirmación del editor (DA-M5).
     const respaldo = incluyeAptitudes(alcance) ? resumenRespaldo(sinRespaldo()) : null;
 
+    // La puerta de páginas (DA-A6): con «Máximo N» obligatoria, el motor corre ANTES de responder.
+    const ajuste = await puertaPaginas(sb, user.id, variantId);
     return NextResponse.json({
       aplicado: aplicados,
       descartado: descartados,
+      ajuste,
       notas,
       uso: uso.v,
       respaldo: respaldo && respaldo.anadir + respaldo.ocultar > 0 ? respaldo : null,

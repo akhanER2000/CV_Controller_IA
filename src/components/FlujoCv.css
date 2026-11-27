@@ -124,9 +124,28 @@
 .flu-un-revisar{border:0;background:none;padding:4px 2px;color:var(--text-muted);font:inherit;font-size:var(--fs-micro);text-decoration:underline;text-underline-offset:3px;cursor:pointer;margin-left:auto}
 .flu-un-revisar:hover{color:var(--text)}
 .flu-un-revisar:focus-visible{outline:2px solid var(--focus-ring, currentColor);outline-offset:2px;border-radius:4px}
+/* Motor de páginas (DA-A6): qué cambió (revertir por item), «Elegir cómo ajustar» (A-D) y la puerta de la descarga. */
+.flu-bloqueo{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;padding:10px 12px;border:1px solid var(--border-strong);border-radius:8px;background:var(--surface)}
+.flu-bloqueo p{margin:0;flex:1 1 220px;font-size:var(--fs-micro)}
+.flu-cambios{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px}
+.flu-cambios>li{display:grid;grid-template-columns:1fr auto;align-items:start;gap:10px;padding:8px 10px;border:1px solid var(--border);border-radius:8px}
+.flu-cambios>li[data-revertido]{opacity:.6}
+.flu-cambio-t{display:flex;flex-direction:column;gap:2px;min-width:0;font-size:var(--fs-micro);overflow-wrap:anywhere}
+.flu-cambio-antes{color:var(--text-muted);text-decoration:line-through;text-decoration-thickness:1px}
+.flu-cambio-nuevo{color:var(--text)}
+.flu-cambio-why{color:var(--text-muted)}
+.flu-cambio-ok{font-size:var(--fs-micro);color:var(--text-muted)}
+.flu-elegir{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.flu-elegir>li{display:grid;grid-template-columns:72px 1fr;grid-template-rows:auto auto;align-items:start;gap:8px 10px;padding:10px;border:1px solid var(--border);border-radius:8px}
+.flu-elegir>li[data-cabe="1"]{border-color:var(--border-strong)}
+.flu-elegir>li .c-btn{grid-column:1 / -1;justify-self:start}
+.flu-op-cabe{font-style:normal;font-weight:600}
+.flu-op-cabe[data-cabe="0"]{font-weight:400}
 @media (max-width:767px){
   .flu-cascada{position:fixed;left:16px;right:16px;top:auto;bottom:96px;width:auto}
   .flu-cas-cands>li,.flu-cas-medida{grid-template-columns:56px 1fr}
   .flu-cas-cands>li .c-btn,.flu-cas-medida .c-btn{grid-column:1 / -1}
   .flu-cas-mini{width:56px}
+  .flu-elegir{grid-template-columns:1fr}
+  .flu-elegir>li{grid-template-columns:56px 1fr}
 }

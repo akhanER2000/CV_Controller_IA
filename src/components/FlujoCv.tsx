@@ -263,13 +263,15 @@ export function GuiaAjuste(props: {
   );
 }
 
-// ── «Ajustar páginas» de un clic (DA-A4) ────────────────────────────────────
+// ── «Ajustar páginas» de un clic (DA-A6) ────────────────────────────────────
 /**
  * El panel ANCLADO bajo la guía (posición absoluta: la barra no se mueve) con lo
- * que el ajuste YA aplicó, dicho en una frase con su medida real, y las salidas:
- * «Deshacer ajuste», «Ver otras opciones» (las demás plantillas donde el contenido
- * cabe tal cual, con la miniatura del MISMO PDF medido) y, como enlace secundario,
- * «Revisar uno por uno» (la propuesta item a item de siempre).
+ * que el motor de páginas YA aplicó, dicho con su medida real: qué palancas usó
+ * (disposición, reescritura para caber, selección) y QUÉ cambió, cada cambio con
+ * su «Revertir». Las salidas: «Deshacer ajuste» (todo), «Elegir cómo ajustar»
+ * (A-D medidas con la miniatura del MISMO PDF medido) y, como enlace secundario,
+ * «Revisar uno por uno». Si la descarga se bloqueó por la regla obligatoria,
+ * arriba va «Ajustar ahora».
  */
 export function PanelAjuste({
   aj,
@@ -287,55 +289,73 @@ export function PanelAjuste({
   const coma = (n: number) => String(n).replace(".", ",");
   const r = aj.resultado;
   const p = (n: number) => paginasTxt(n);
+  const plan = r?.plan;
+  const cambios = r?.cambios ?? [];
+  const real = aj.real ?? r?.real ?? null;
+  const resuelto = !!r && !!r.resueltoPor && r.resueltoPor !== "ya-cabe" && (r.cabe ?? true);
+  const palancas = r?.palancas ?? [];
 
   let frase = "";
-  let detalle = "";
+  const detalle: string[] = [];
   if (r) {
-    const m = r.medicion;
-    const medicion =
-      m.medidas > 0
-        ? t("ajuste.unMedicion")
+    if (aj.deshecho) frase = t("ajuste.deshecho").replace("{n}", r.antes.nombre);
+    else if (r.resueltoPor === "ya-cabe") frase = t("ajuste.unYaCabe").replace("{p}", p(r.antes.paginas));
+    else if (r.choque) {
+      const c = r.choque;
+      frase = t("motor.choque")
+        .replace("{o}", p(c.objetivo))
+        .replace("{con}", t(c.con === "incluirSiempre" ? "motor.conIncluir" : "motor.conContacto"))
+        .replace("{f}", String(c.fijos))
+        .replace("{p}", String(c.paginas))
+        .replace("{l}", String(c.lineas))
+        .replace("{c}", String(c.caben))
+        .replace("{d}", c.disposicion);
+    } else if (resuelto) {
+      const pags = p(real?.paginas ?? r.paginas ?? objetivo);
+      const cuerpo = coma(real?.cuerpo ?? r.cuerpo ?? 10);
+      // Solo disposición (paso 1 o 2): la frase de DA-A4, sin tocar el contenido.
+      if (r.resueltoPor === "plantilla" && plan)
+        frase = t(plan.disposicion.propia ? "ajuste.unPropia" : "ajuste.unPlantilla")
+          .replace("{n}", plan.disposicion.nombre)
+          .replace("{p}", pags);
+      else if (r.resueltoPor === "medida")
+        frase = t("ajuste.unMedida").replace("{n}", r.medidaNombre ?? t("ajuste.paso3")).replace("{p}", pags);
+      else frase = t("motor.listo").replace("{p}", pags).replace("{s}", cuerpo);
+      if (r.resueltoPor !== "motor") detalle.push(t("ajuste.unCuerpo").replace("{s}", cuerpo));
+      const m = r.medicion;
+      if (m && m.medidas > 0)
+        detalle.push(
+          t("ajuste.unMedicion")
             .replace("{m}", String(m.medidas))
             .replace("{c}", String(m.consideradas))
             .replace("{s}", coma(Math.round(m.ms / 100) / 10))
-            .replace("{k}", String(m.caben)) + (m.tope ? ` ${t("ajuste.unTope")}` : "")
-        : "";
-    if (aj.deshecho) frase = t("ajuste.deshecho").replace("{n}", r.antes.nombre);
-    else if (r.resueltoPor === "ya-cabe") frase = t("ajuste.unYaCabe").replace("{p}", p(r.antes.paginas));
-    else if (r.resueltoPor === "plantilla" && r.plantilla)
-      frase = t(r.plantilla.propia ? "ajuste.unPropia" : "ajuste.unPlantilla")
-        .replace("{n}", r.plantilla.nombre)
-        .replace("{p}", p(r.plantilla.paginas));
-    else if (r.resueltoPor === "medida" && r.medida)
-      frase = t("ajuste.unMedida")
-        .replace("{n}", r.medidaNombre ?? t("ajuste.paso3"))
-        .replace("{p}", p(r.medida.paginas));
-    else if (r.resueltoPor === "recortes" && r.recortes)
-      frase = t("ajuste.unRecortes")
-        .replace("{r}", String(r.recortes.quitar.length + r.recortes.acortar.length))
-        .replace("{q}", String(r.recortes.quitar.length))
-        .replace("{a}", String(r.recortes.acortar.length))
-        .replace("{p}", p(r.recortes.paginas));
-    else frase = t("ajuste.unNoCabe").replace("{p}", p(objetivo)).replace("{r}", r.razon ?? "");
-    const cuerpo =
-      !aj.deshecho && r.resueltoPor === "plantilla" && r.plantilla
-        ? r.plantilla.cuerpo
-        : !aj.deshecho && r.resueltoPor === "medida" && r.medida
-          ? r.medida.cuerpo
-          : !aj.deshecho && r.resueltoPor === "recortes" && r.recortes
-            ? r.recortes.cuerpo
-            : null;
-    detalle = [
-      cuerpo != null ? t("ajuste.unCuerpo").replace("{s}", coma(cuerpo)) : "",
-      r.resueltoPor !== "ya-cabe" ? medicion : "",
-      r.recortes?.protegidos ? t("ajuste.unProtegidos").replace("{x}", String(r.recortes.protegidos)) : "",
-    ]
-      .filter(Boolean)
-      .join(" ");
+            .replace("{k}", String(m.caben)) + (m.tope ? ` ${t("ajuste.unTope")}` : ""),
+        );
+      if (palancas.length && r.resueltoPor === "motor")
+        detalle.push(t("motor.palancas").replace("{l}", palancas.map((x) => t(`motor.palanca_${x}`)).join(" + ")));
+      const rs = plan?.reescribir ?? [];
+      if (rs.length)
+        detalle.push(
+          t("motor.cuentaReescritos")
+            .replace("{n}", String(rs.length))
+            .replace("{a}", String(rs.reduce((a, x) => a + x.original.length, 0)))
+            .replace("{d}", String(rs.reduce((a, x) => a + x.propuesto.length, 0))),
+        );
+      if (plan?.ocultar.length) detalle.push(t("motor.cuentaFuera").replace("{n}", String(plan.ocultar.length)));
+      if (!rs.length && !plan?.ocultar.length && r.resueltoPor === "motor") detalle.push(t("motor.sinContenido"));
+    } else frase = t("ajuste.unNoCabe").replace("{p}", p(objetivo)).replace("{r}", r.razon ?? "");
+    if (!aj.deshecho && real && !real.cabe && resuelto) detalle.push(t("motor.realNoCabe").replace("{n}", String(real.paginas)));
+    if (r.rechazados?.length) detalle.push(t("motor.rechazados").replace("{n}", String(r.rechazados.length)));
+    const desc = r.reescritura?.descartados.length ?? 0;
+    if (desc) detalle.push(t("motor.descartados").replace("{n}", String(desc)));
   }
-  const resuelto = !!r && !!r.resueltoPor;
   const puedeDeshacer = aj.aplicado && !aj.deshecho;
-  const cuantas = r?.alternativas.length ?? 0;
+  const textoCambio = (c: (typeof cambios)[number]) =>
+    c.tipo === "plantilla"
+      ? t("motor.cambioPlantilla").replace("{a}", c.texto).replace("{b}", c.nuevo ?? "")
+      : c.tipo === "medida"
+        ? t("motor.cambioMedida").replace("{a}", c.texto).replace("{b}", r?.medidaNombre ?? c.nuevo ?? "")
+        : c.texto;
 
   return (
     <section
@@ -344,13 +364,19 @@ export function PanelAjuste({
       aria-label={t("ajuste.unTitulo").replace("{p}", p(objetivo))}
       // La medida que respalda la frase, legible para pruebas y soporte.
       data-resuelto-por={r?.resueltoPor ?? (aj.err ? "error" : "ninguno")}
-      data-plantilla={r?.plantilla?.templateId ?? r?.medidaId ?? ""}
-      data-medidas={r?.medicion.medidas ?? 0}
-      data-consideradas={r?.medicion.consideradas ?? 0}
-      data-caben={r?.medicion.caben ?? 0}
-      data-ms={r?.medicion.ms ?? 0}
-      data-tope={r?.medicion.tope ? "1" : "0"}
-      data-recortes={r?.recortes ? r.recortes.quitar.length + r.recortes.acortar.length : 0}
+      data-palancas={palancas.join(",")}
+      data-paginas={real?.paginas ?? r?.paginas ?? 0}
+      data-cuerpo={real?.cuerpo ?? r?.cuerpo ?? 0}
+      data-reescritos={plan?.reescribir.length ?? 0}
+      data-fuera={plan?.ocultar.length ?? 0}
+      data-choque={r?.choque ? "1" : "0"}
+      data-plantilla={r?.medidaId ?? plan?.disposicion.templateId ?? ""}
+      data-medidas={r?.medicion?.medidas ?? 0}
+      data-consideradas={r?.medicion?.consideradas ?? 0}
+      data-caben={r?.medicion?.caben ?? 0}
+      data-renders={r?.medicion?.renders ?? 0}
+      data-ms={r?.medicion?.ms ?? 0}
+      data-tope={r?.medicion?.tope ? "1" : "0"}
     >
       <header>
         <span className="t-overline">{t("ajuste.unTitulo").replace("{p}", p(objetivo))}</span>
@@ -358,6 +384,14 @@ export function PanelAjuste({
           ×
         </button>
       </header>
+      {aj.bloqueo && (
+        <div className="flu-bloqueo" id="edBloqueoPdf" role="alert">
+          <p>{t("motor.bloqueo").replace("{n}", String(aj.bloqueo.paginas)).replace("{m}", p(aj.bloqueo.max))}</p>
+          <button type="button" className="c-btn c-btn--patina" id="edAjustarAhora" disabled={aj.busy} onClick={aj.ajustar}>
+            <AnchoFijo ocupado={aj.busy} reposo={t("motor.ajustarAhora")} carga={t("editor.edAjustando")} />
+          </button>
+        </div>
+      )}
       {aj.err ? (
         <p className="flu-cas-res" role="status" data-resuelto="error">
           {aj.err}
@@ -369,61 +403,125 @@ export function PanelAjuste({
           </p>
         )
       )}
-      {detalle && <p className="flu-cas-hint">{detalle}</p>}
-      {r && !resuelto && !aj.err && <p className="flu-cas-hint">{t("ajuste.unNoCabeHint")}</p>}
+      {detalle.length > 0 && <p className="flu-cas-hint">{detalle.join(" ")}</p>}
+      {r && !resuelto && !r.choque && r.resueltoPor !== "ya-cabe" && !aj.err && (
+        <p className="flu-cas-hint">{t("ajuste.unNoCabeHint")}</p>
+      )}
+      {resuelto && !aj.deshecho && cambios.length > 0 && (
+        <>
+          <span className="t-overline">{t("motor.cambiosT")}</span>
+          <ul className="flu-cambios" id="edAjusteCambios">
+            {cambios.map((c) => {
+              const hecho = aj.revertidos.has(c.id);
+              return (
+                <li key={`${c.tipo}:${c.id}`} data-cambio={c.id} data-tipo={c.tipo} data-revertido={hecho ? "" : undefined}>
+                  <span className="flu-cambio-t">
+                    <b>
+                      {c.tipo === "reescrito"
+                        ? t("motor.cambioReescrito")
+                        : c.tipo === "fuera"
+                          ? t("motor.cambioFuera")
+                          : t("motor.cambioDisposicion")}
+                    </b>
+                    <span className={c.tipo === "reescrito" ? "flu-cambio-antes" : undefined}>{textoCambio(c)}</span>
+                    {c.tipo === "reescrito" && c.nuevo && <span className="flu-cambio-nuevo">{c.nuevo}</span>}
+                    {c.tipo === "fuera" && c.motivo && <span className="flu-cambio-why">{t(`motor.motivo_${c.motivo}`)}</span>}
+                  </span>
+                  {hecho ? (
+                    <span className="flu-cambio-ok">{t("motor.revertido")}</span>
+                  ) : (
+                    <button
+                      type="button"
+                      className="c-btn c-btn--quiet"
+                      disabled={aj.revirtiendo != null || !puedeDeshacer}
+                      onClick={() => aj.revertir(c.id)}
+                    >
+                      <AnchoFijo ocupado={aj.revirtiendo === c.id} reposo={t("motor.revertir")} carga={t("motor.revirtiendo")} />
+                    </button>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+        </>
+      )}
       <div className="flu-un-acts">
         {puedeDeshacer && (
           <button type="button" className="c-btn" id="edAjusteDeshacer" disabled={aj.deshaciendo} onClick={aj.deshacer}>
             <AnchoFijo ocupado={aj.deshaciendo} reposo={t("ajuste.deshacer")} carga={t("ajuste.deshaciendo")} />
           </button>
         )}
-        {r && r.resueltoPor !== "ya-cabe" && (
+        {(!r || r.resueltoPor !== "ya-cabe") && (
           <button
             type="button"
             className="c-btn c-btn--quiet"
-            id="edAjusteOpciones"
-            aria-expanded={aj.opciones != null}
-            disabled={aj.buscandoOpciones}
-            onClick={aj.verOpciones}
+            id="edAjusteElegir"
+            aria-expanded={aj.elegir != null}
+            disabled={aj.eligiendo || aj.busy}
+            onClick={aj.verElegir}
           >
-            <AnchoFijo
-              ocupado={aj.buscandoOpciones}
-              reposo={aj.opciones ? t("ajuste.ocultarOpciones") : cuantas ? t("ajuste.verOpcionesN").replace("{n}", String(cuantas)) : t("ajuste.verOpciones")}
-              carga={t("ajuste.opcionesBuscando")}
-            />
+            <AnchoFijo ocupado={aj.eligiendo} reposo={t("motor.elegir")} carga={t("motor.elegirBuscando")} />
           </button>
         )}
         <button type="button" className="flu-un-revisar" id="edAjusteRevisar" onClick={onRevisar}>
           {t("ajuste.revisar")}
         </button>
       </div>
-      {aj.opciones &&
-        (aj.opciones.length ? (
-          <ul className="flu-cas-cands" id="edAjusteLista">
-            {aj.opciones.map((o) => {
-              const enUso = aj.usada === o.templateId;
-              return (
-                <li key={o.templateId} data-tpl={o.templateId}>
-                  <span className="flu-cas-mini">
-                    {o.pdf && <MiniaturaPdf pdf={o.pdf} alt={t("ajuste.miniAria").replace("{n}", String(o.paginas))} />}
-                  </span>
-                  <span className="flu-cas-nom">
-                    <b>{o.nombre}</b>
-                    <span>
-                      {t("ajuste.p2Cand").replace("{p}", p(o.paginas)).replace("{s}", coma(o.cuerpo))}
-                      {o.propia && <> · {t("ajuste.propiaEt")}</>}
+      {aj.elegir && (
+        <>
+          <span className="t-overline">{t("motor.elegirT").replace("{p}", p(aj.elegir.objetivo))}</span>
+          {aj.elegir.deshecho && <p className="flu-cas-hint">{t("motor.elegirDeshecho")}</p>}
+          {aj.elegir.yaCabe ? (
+            <p className="flu-cas-hint">{t("motor.elegirYaCabe").replace("{p}", p(aj.elegir.objetivo))}</p>
+          ) : (
+            <ul className="flu-elegir" id="edAjusteOpcionesAD">
+              {aj.elegir.opciones.map((o) => {
+                const enUso = aj.aplicada === o.clave;
+                return (
+                  <li key={o.clave} data-op={o.clave} data-cabe={o.cabe ? "1" : "0"} data-paginas={o.paginas} data-cuerpo={o.cuerpo}>
+                    <span className="flu-cas-mini">
+                      {o.pdf && <MiniaturaPdf pdf={o.pdf} alt={t("ajuste.miniAria").replace("{n}", String(o.paginas))} />}
                     </span>
-                  </span>
-                  <button type="button" className="c-btn" disabled={enUso} onClick={() => aj.usar(o)}>
-                    {enUso ? t("ajuste.enUso") : t("ajuste.usarEsta")}
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
-        ) : (
-          <p className="flu-cas-hint">{t("ajuste.opcionesNinguna")}</p>
-        ))}
+                    <span className="flu-cas-nom">
+                      <b>{t(`motor.op_${o.clave}`)}</b>
+                      {o.nombre && <span>{o.nombre}</span>}
+                      {o.plan ? (
+                        <>
+                          <span>
+                            {t("motor.opMide").replace("{p}", p(o.paginas)).replace("{s}", coma(o.cuerpo))} ·{" "}
+                            <em className="flu-op-cabe" data-cabe={o.cabe ? "1" : "0"}>
+                              {t(o.cabe ? "motor.opCabe" : "motor.opNoCabe")}
+                            </em>
+                          </span>
+                          <span>
+                            {o.reescritos || o.fuera
+                              ? t("motor.opCambios").replace("{r}", String(o.reescritos)).replace("{q}", String(o.fuera))
+                              : t("motor.opSinContenido")}
+                          </span>
+                        </>
+                      ) : (
+                        <span>{t("motor.opNada").replace("{r}", o.razon ?? "")}</span>
+                      )}
+                    </span>
+                    <button
+                      type="button"
+                      className="c-btn"
+                      disabled={!o.plan || enUso || aj.aplicando != null}
+                      onClick={() => aj.usarOpcion(o)}
+                    >
+                      <AnchoFijo
+                        ocupado={aj.aplicando === o.clave}
+                        reposo={enUso ? t("motor.aplicada") : t("motor.usar")}
+                        carga={t("motor.aplicando")}
+                      />
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </>
+      )}
     </section>
   );
 }
