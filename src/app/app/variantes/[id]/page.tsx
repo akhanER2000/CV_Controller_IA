@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { EditorVarianteScreen } from "@/components/screens/EditorVarianteScreen";
+import { AvisoDesdeCv } from "@/components/variantes/AvisoDesdeCv";
 
 export const metadata: Metadata = { title: "Corpus — Editor de variante" };
 
@@ -8,5 +9,11 @@ export const metadata: Metadata = { title: "Corpus — Editor de variante" };
 // El [id] se ignora como dato (maqueta): solo alimenta los enlaces por-variante.
 export default async function EditorVariantePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  return <EditorVarianteScreen variantId={id} />;
+  return (
+    <>
+      <EditorVarianteScreen variantId={id} />
+      {/* DA-V7: el aviso de «creada desde tu CV anterior», junto al editor, sin tocarlo. */}
+      <AvisoDesdeCv variantId={id} />
+    </>
+  );
 }

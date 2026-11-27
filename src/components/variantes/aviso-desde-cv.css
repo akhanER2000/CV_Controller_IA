@@ -1,0 +1,33 @@
+/* Aviso «Variante creada desde tu CV anterior» (DA-V7). Arriba al centro, fijo:
+   no empuja nada del editor ni se cruza con el toast de deshacer (abajo). */
+.aviso-desde-cv {
+  position: fixed;
+  left: 50%;
+  top: 72px;
+  transform: translateX(-50%);
+  z-index: calc(var(--z-overlay) + 1);
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  max-width: min(560px, calc(100vw - 32px));
+  padding: var(--sp-2) var(--sp-2) var(--sp-2) var(--sp-4);
+  border-radius: var(--radius-xl);
+  border: 1px solid var(--glass-border);
+  background: var(--glass-bg);
+  backdrop-filter: blur(var(--glass-blur)) saturate(1.2);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(1.2);
+  box-shadow: var(--elev-3);
+  font: 400 var(--fs-ui) / 1.4 var(--font-sans);
+  color: var(--text);
+}
+.aviso-desde-cv-x {
+  min-width: 32px;
+  min-height: 32px;
+  border: 0;
+  border-radius: var(--radius-lg);
+  background: transparent;
+  color: var(--text-muted);
+  font: 400 18px/1 var(--font-sans);
+  cursor: pointer;
+}
+.aviso-desde-cv-x:hover { color: var(--text); background: var(--glass-border); }

@@ -26,6 +26,7 @@ import "./variantes.css";
 import { ReglasPanel, type ItemParaReglas } from "@/components/ReglasPanel";
 import { REGLAS_VACIAS, hayReglas, type Reglas } from "@/lib/cv/reglas";
 import { textoDeItem } from "@/lib/cv/ajuste";
+import { PuertaCvAnterior } from "@/components/variantes/PuertaCvAnterior";
 
 /* ============================================================================
    Variantes — porte de corpus-design/04-pantallas/variantes.html
@@ -213,7 +214,7 @@ export function VariantesScreen() {
   // así que ampliar el tipo basta para que las tres puertas se bloqueen entre sí.
   const [newName, setNewName] = useState("");
   const [aiPrompt, setAiPrompt] = useState("");
-  const [creating, setCreating] = useState<"manual" | "ai" | "tailor" | null>(null);
+  const [creating, setCreating] = useState<"manual" | "ai" | "tailor" | "cv" | null>(null);
   const [createErr, setCreateErr] = useState("");
   const [aiResult, setAiResult] = useState<{ id: string; name: string; notes: string | null } | null>(null);
   // Progreso por PASOS REALES de lo que está en vuelo (crear, analizar, duplicar):
@@ -736,6 +737,15 @@ export function VariantesScreen() {
     }
   }
 
+  // Cuarta puerta (DA-V7): también sin master — es la forma más corta de empezar.
+  const puertaCv = (
+    <PuertaCvAnterior
+      bloqueado={creating !== null && creating !== "cv"}
+      alOcupar={(o) => setCreating(o ? "cv" : null)}
+      alProgreso={setProg}
+    />
+  );
+
   // Panel de creación (se muestra en el lead y, con master, también en el vacío).
   const createPanel = (
     <div className="vr-create">
@@ -825,6 +835,9 @@ export function VariantesScreen() {
             </span>
           </div>
         </div>
+
+        {/* CUARTA PUERTA (DA-V7): partir de mi CV anterior. */}
+        {puertaCv}
 
         {/* REGLAS (DA-R1): plegable, valen para la puerta que uses. */}
         <ReglasPanel
@@ -1266,6 +1279,9 @@ export function VariantesScreen() {
                 <Button variante="brasa" tamano="lg" icono="fuentes" href="/app/importar">
                   {t("variantes.emptyDumpCta")}
                 </Button>
+                <div className="c-card vr-create-cv" style={{ marginTop: "22px", padding: "4px 20px 18px", textAlign: "left" }}>
+                  {puertaCv}
+                </div>
               </div>
             )}
           </div>

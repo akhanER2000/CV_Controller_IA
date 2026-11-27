@@ -101,3 +101,25 @@
   .vr-filtros .u-tabs-lista{grid-row:2}
   .vr-filtros .u-tabs-panel{grid-row:3}
 }
+/* ── Cuarta puerta · partir de mi CV anterior (DA-V7) ─────────────────────────
+   Mismo separador que las demás puertas; en el hero de escritorio, a lo ancho. */
+.vr-puerta--cv{border-top:1px solid var(--border);padding-top:14px;display:grid;gap:10px}
+.vr-cv-over{display:block}
+.vr-cv-fila{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.vr-cv-input{position:absolute;width:1px;height:1px;opacity:0;pointer-events:none}
+.vr-cv-hint{font:400 var(--fs-micro)/1.5 var(--font-mono);color:var(--text-subtle);max-width:52ch}
+.vr-cv-rev{display:grid;gap:10px;padding:14px 16px;border:1px solid var(--border);border-radius:var(--radius-lg)}
+.vr-cv-rev-t{margin:0;font:600 var(--fs-ui)/1.4 var(--font-sans)}
+.vr-cv-rev-sub{margin:0;font:400 var(--fs-micro)/1.6 var(--font-mono);color:var(--text-muted)}
+.vr-cv-lista{list-style:none;margin:0;padding:0;display:grid;gap:6px;max-height:280px;overflow:auto}
+.vr-cv-item{display:grid;grid-template-columns:110px minmax(0,1fr) auto;gap:10px;align-items:baseline;font:400 var(--fs-micro)/1.5 var(--font-sans)}
+.vr-cv-item[data-ya="si"]{color:var(--text-subtle)}
+.vr-cv-kind{font:400 var(--fs-micro)/1.5 var(--font-mono);color:var(--text-subtle);text-transform:uppercase;letter-spacing:.04em}
+.vr-cv-txt{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.vr-cv-proc{font:400 var(--fs-micro)/1.5 var(--font-mono);color:var(--text-subtle);white-space:nowrap}
+.vr-cv-ya summary{cursor:pointer;font:400 var(--fs-micro)/1.6 var(--font-mono);color:var(--text-muted)}
+.vr-cv-ya .vr-cv-lista{margin-top:6px}
+.vr-cv-acts{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.vr-cv-err{margin:0;font:400 var(--fs-micro)/1.6 var(--font-mono);color:var(--danger)}
+@media (min-width:1101px){.vr-hero .vr-puerta--cv{grid-column:1/-1}}
+@media (max-width:600px){.vr-cv-item{grid-template-columns:minmax(0,1fr)}.vr-cv-proc{white-space:normal}}
